@@ -398,3 +398,49 @@ A player joins the game and sees:
 - Phase 2.5 (Creature AI) can use `CreatureState.currentState` as FSM state and `CREATURE_TYPES` for behavior parameters.
 - Client needs rendering updates for resources on tiles and creatures on map (Gately's domain).
 - Adding new resource types requires: enum value in ResourceType, field on PlayerState schema, case in GATHER switch, biome mapping in both mapGenerator and GameRoom.getDefaultResourceType.
+
+## 2026-02-25: Phase 2.6 — Ecosystem Integration: Creature Respawning
+
+**Date:** 2026-02-25  
+**Author:** Pemulis (Systems Dev)  
+**Status:** Active
+
+### Decisions
+
+1. **Population threshold respawn** — Per architecture decision A8, creatures respawn via population threshold, NOT breeding. When creature count of a type drops below `minPopulation`, new creatures spawn in preferred biomes using existing spawn logic.
+
+2. **minPopulation on CreatureTypeDef** — Respawn thresholds are data-driven per creature type (`minPopulation` field): herbivore=4, carnivore=2. Adding new creature types automatically gets respawn behavior by setting this field.
+
+3. **CHECK_INTERVAL = 100 ticks (25s)** — Respawn check runs every 100 game ticks. Infrequent enough to avoid spawn spam, frequent enough to prevent prolonged extinction. Configurable in `CREATURE_RESPAWN` constants.
+
+4. **Persistent creature ID counter** — `nextCreatureId` on GameRoom instance ensures unique IDs across initial spawn and respawns. Includes null guard for test compatibility (tests use `Object.create` to skip constructor).
+
+### Implications
+
+- New creature types must include `minPopulation` in their `CreatureTypeDef`.
+- Respawn uses the same biome-preferred placement as initial spawn.
+- Ecosystem is self-sustaining: grazing depletes resources → regen restores them → respawn restores populations.
+
+## 2026-02-25: Phase 2.6 — Creature State Visual Feedback Conventions
+
+**Date:** 2026-02-25  
+**Author:** Gately (Game Dev)  
+**Status:** Active
+
+### Decisions
+
+1. **Creature state color palette** — Each FSM state maps to a color variant per creature type. Eat = brighter/lighter, Hunt = darker/saturated, Idle/Wander = base color. Keeps the visual language consistent with Phase 2.2/2.4 creature shapes.
+
+2. **State indicator symbols** — Flee = "!" (white, above creature), Hunt = "⚔" (white, above creature). Other states have no text indicator. Indicators are pre-allocated PixiJS Text objects toggled via `visible` for zero allocation overhead.
+
+3. **Health opacity threshold at 50%** — Creatures below 50% health render at alpha 0.6. Binary threshold, not continuous gradient — keeps the visual simple and avoids per-frame alpha recalculation.
+
+4. **HUD creature counts use emoji** — `🦕 {herbivores}  🦖 {carnivores}` displayed below hunger bar. Counts derived from `state.creatures` collection in the same `onStateChange` callback as player stats.
+
+5. **Graphic rebuild gating** — CreatureRenderer only clears and redraws a creature's Graphics object when `currentState` or `creatureType` actually changes (tracked via `lastType`/`lastState`). Position updates are always applied.
+
+### Impact
+
+- Future creature types need color entries added to `getCreatureColor()` in CreatureRenderer.
+- Future FSM states need indicator mappings in `updateIndicator()`.
+- HUD creature count text style is monospace 12px, #cccccc — matches existing HUD text conventions.
