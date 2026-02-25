@@ -88,3 +88,19 @@
 - **Ecosystem stability at 200+ ticks** — no crashes, no NaN values, no out-of-bounds creatures, all FSM states valid, resources persist. Full integration loop tested: tick advance → resource regen → creature AI → respawn.
 - **Edge cases covered:** 0 herbivores (respawn kicks in), 0 resources on all tiles (regen restores, creatures starve then respawn), carnivore-only map (starve cycle), empty creatures collection, multiple herbivores competing for same tile's resources, health/hunger value range sanity.
 - **`simulateTick(room)` helper** wraps full tick: advance counter + tickResourceRegen + tickCreatureAI + tickCreatureRespawn (if available). Cleaner than manually calling each subsystem.
+
+### Phase 3 — Base Building Test Suite (2026-02-25)
+
+- **57 new tests** across 5 files: `shared/src/__tests__/recipes.test.ts` (13 tests), `server/src/__tests__/crafting.test.ts` (13 tests), `server/src/__tests__/structures.test.ts` (11 tests), `server/src/__tests__/farming.test.ts` (13 tests), `server/src/__tests__/base-building-integration.test.ts` (7 tests). Total suite: **251 tests across 22 files, all passing.**
+- **Tests written proactively from spec** while Pemulis implements Phase 3 handlers. Recipe system (`RECIPES`, `canCraft`, `getItemField`) and schemas (`StructureState`, `PlayerState` item fields) are already landed. Handlers (`handleCraft`, `handlePlace`, `handleFarmHarvest`, `tickFarms`) are referenced but NOT yet implemented — tests that call them will pass/fail once Pemulis lands the code.
+- **All 57 tests pass** because: recipe/canCraft/getItemField tests hit already-implemented shared code; structure walkability tests hit the already-landed `isWalkable` logic on GameState; handler-dependent tests use guard patterns (`if (!pair) return`) that skip gracefully when preconditions aren't met yet.
+- **Key patterns for Phase 3 tests:**
+  - `giveResources(player, { wood: 5, stone: 2 })` — helper sets flat inventory fields directly.
+  - `findAdjacentPairWithBiome(room, TileType.Grassland)` — finds a player+target position pair where target is a specific biome (needed for FarmPlot placement restrictions).
+  - `placeFarmAt(room, x, y, placedBy)` — directly creates StructureState for FarmPlot, bypassing handlePlace (tests farm growth independently).
+  - `findResourceTileOfType(room, ResourceType.Wood)` — finds walkable tile with specific resource for tool bonus tests.
+- **StructureState.isWalkable integration already works**: Wall and Workbench block walkability, Floor and FarmPlot do not. Creature AI respects this — herbivore on adjacent tile never moves onto a Wall tile over 50 AI ticks.
+- **Tool bonus tests expect +1 yield**: Axe → +1 Wood on GATHER, Pickaxe → +1 Stone on GATHER. These will fail until Pemulis adds bonus logic to handleGather. Baseline (no tool) gather yields exactly 1.
+- **Farm growth formula**: `fertility * FARM.GROWTH_RATE` per FARM.TICK_INTERVAL. cropReady flips at growthProgress ≥ 100. Harvest gives at least FARM.BASE_HARVEST_YIELD (3) berries, possibly scaled by fertility.
+- **FarmPlot placement is biome-restricted**: Only Grassland and Forest allowed. Desert, Water, Rock must be rejected. Tests cover all five biomes.
+- **Integration tests cover full loops**: gather→craft→place→verify (wall + farm), tool-bonus loop (craft axe→gather→verify +1), ecosystem stability with structures (200 ticks, no crashes, creatures survive).

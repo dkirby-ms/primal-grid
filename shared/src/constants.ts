@@ -89,3 +89,15 @@ export const CREATURE_AI = {
   /** Health damage dealt by carnivore per hunt attack. */
   HUNT_DAMAGE: 25,
 } as const;
+
+/** Farm system constants. */
+export const FARM = {
+  /** Ticks between farm growth updates (8 ticks = 2s at 4 ticks/sec). */
+  TICK_INTERVAL: 8,
+  /** Base growth rate per tick (multiplied by tile fertility). */
+  GROWTH_RATE: 5,
+  /** Growth threshold at which crop becomes ready (0-100). */
+  READY_THRESHOLD: 100,
+  /** Base berry yield on harvest. */
+  BASE_HARVEST_YIELD: 3,
+} as const;
