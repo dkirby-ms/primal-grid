@@ -1,5 +1,5 @@
 import { Schema, type, ArraySchema, MapSchema } from "@colyseus/schema";
-import { TileType, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED } from "@primal-grid/shared";
+import { TileType, ItemType, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED } from "@primal-grid/shared";
 
 export class TileState extends Schema {
   @type("number")
@@ -54,6 +54,24 @@ export class PlayerState extends Schema {
 
   @type("number")
   health: number = 100;
+
+  @type("number")
+  walls: number = 0;
+
+  @type("number")
+  floors: number = 0;
+
+  @type("number")
+  workbenches: number = 0;
+
+  @type("number")
+  axes: number = 0;
+
+  @type("number")
+  pickaxes: number = 0;
+
+  @type("number")
+  farmPlots: number = 0;
 }
 
 export class CreatureState extends Schema {
@@ -79,6 +97,29 @@ export class CreatureState extends Schema {
   currentState: string = "idle";
 }
 
+export class StructureState extends Schema {
+  @type("string")
+  id: string = "";
+
+  @type("number")
+  structureType: number = ItemType.Wall;
+
+  @type("number")
+  x: number = 0;
+
+  @type("number")
+  y: number = 0;
+
+  @type("string")
+  placedBy: string = "";
+
+  @type("number")
+  growthProgress: number = 0;
+
+  @type("boolean")
+  cropReady: boolean = false;
+}
+
 export class GameState extends Schema {
   @type("number")
   tick: number = 0;
@@ -91,6 +132,9 @@ export class GameState extends Schema {
 
   @type({ map: CreatureState })
   creatures = new MapSchema<CreatureState>();
+
+  @type({ map: StructureState })
+  structures = new MapSchema<StructureState>();
 
   @type("number")
   mapWidth: number = DEFAULT_MAP_SIZE;
@@ -109,10 +153,21 @@ export class GameState extends Schema {
     return this.tiles.at(y * this.mapWidth + x);
   }
 
-  /** Check if tile at (x, y) is walkable (not water, not rock). */
+  /** Check if tile at (x, y) is walkable (not water, not rock, no blocking structure). */
   isWalkable(x: number, y: number): boolean {
     const tile = this.getTile(x, y);
     if (!tile) return false;
-    return tile.type !== TileType.Water && tile.type !== TileType.Rock;
+    if (tile.type === TileType.Water || tile.type === TileType.Rock) return false;
+
+    // Check for blocking structures (Wall, Workbench block; Floor, FarmPlot do not)
+    let blocked = false;
+    this.structures.forEach((s) => {
+      if (s.x === x && s.y === y) {
+        if (s.structureType === ItemType.Wall || s.structureType === ItemType.Workbench) {
+          blocked = true;
+        }
+      }
+    });
+    return !blocked;
   }
 }

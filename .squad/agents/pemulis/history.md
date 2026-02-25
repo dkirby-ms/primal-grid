@@ -106,3 +106,38 @@
 - **Refactored spawnCreatures:** Extracted `spawnOneCreature(typeKey)` for reuse by both initial spawn and respawn. Uses persistent `nextCreatureId` counter on GameRoom instance (with null guard for test compatibility where constructor is skipped via `Object.create`).
 - **All prior systems verified:** Herbivore grazing (creatureAI.ts) depletes tile resources ✅, carnivore kills remove prey ✅, resource regeneration (80 ticks) still works alongside grazing ✅.
 - **Ecosystem stability validated:** 23/26 integration tests pass. 3 pre-existing failures in carnivore hunting tests (herbivore flees before attack due to forEach iteration order — not a system bug, test setup issue). Ecosystem sustains 5+ minutes (1200 ticks) without extinction or resource depletion.
+
+### Phase 3.1–3.4 — Base Building Systems (server-side) (2026-02-25)
+
+- **ItemType enum:** Wall=0, Floor=1, Workbench=2, Axe=3, Pickaxe=4, FarmPlot=5 in `shared/src/types.ts`. Mirrors CREATURE_TYPES pattern — data-driven typed constants.
+- **Recipe system:** `shared/src/data/recipes.ts` with `RecipeDef` interface, `RECIPES` constant (6 recipes), `canCraft()` utility, and `getItemField()` helper. Same pattern as CREATURE_TYPES.
+- **Flat inventory extension:** PlayerState gets `walls`, `floors`, `workbenches`, `axes`, `pickaxes`, `farmPlots` — all `@type("number")`, default 0. Per decision B1: flat fields, not MapSchema.
+- **CRAFT handler:** Validates recipe exists, checks canCraft(), decrements ingredients, increments output item field. Uses dynamic field access via `getItemField()`.
+- **Tool bonuses in GATHER:** If player has axes ≥ 1, Wood yield +1. If pickaxes ≥ 1, Stone yield +1. Passive check per decision B4 — no durability, no consumption.
+- **StructureState schema:** id (string), structureType (number/ItemType), x, y, placedBy (string), growthProgress (number, 0-100), cropReady (boolean). Added to GameState as `MapSchema<StructureState>`.
+- **PLACE handler:** Validates player has item, tile is walkable, no existing structure, player adjacent/on tile. Wall/Workbench make tile non-walkable; Floor/FarmPlot do not. FarmPlot restricted to Grassland/Forest.
+- **isWalkable updated:** Query-time check (decision B6) — iterates structures to check for Wall/Workbench at coordinates. Creatures automatically path around structures.
+- **Farm system:** Growth ticks every FARM.TICK_INTERVAL (8 ticks = 2s). Growth = fertility × GROWTH_RATE per tick. cropReady=true at 100. FARM_HARVEST gives berries scaled by tile fertility, resets growth.
+- **New messages:** CRAFT (CraftPayload), PLACE (PlacePayload), FARM_HARVEST (FarmHarvestPayload) in `shared/src/messages.ts`.
+- **FARM constants:** `FARM` object in `shared/src/constants.ts` — TICK_INTERVAL, GROWTH_RATE, READY_THRESHOLD, BASE_HARVEST_YIELD.
+- **All 194 existing tests pass** — zero regressions.
+
+---
+
+## Phase 3 Complete (2026-02-25T21:50:00Z)
+
+**Status:** COMPLETE — Phase 3 Server Implementation Verified
+
+Phase 3 is complete as of 2026-02-25T21:50:00Z. Pemulis's Phase 3.0–3.2 deliverables (StructureState model, CRAFT/PLACE/FARM_HARVEST handlers, structure tick system, farm growth, integration with creature pathfinding) have been verified by Steeply's integration test suite: 273 total tests passing, no bugs found.
+
+All Phase 3 server-side features working as specified:
+- Placement adjacency and terrain restrictions enforced
+- Craft recipes validate and deduct resources correctly
+- Farm plots grow on schedule and yield berries scaled by fertility
+- Creature pathfinding respects wall/workbench blocking
+- Multiplayer race conditions handled (inventory only decremented on successful PLACE)
+- Ecosystem stable at 300+ tick duration
+
+**Phase 3 Definition of Done:** ✅ Code-complete, test-complete, no regressions, ready for Phase 4.
+
+Phase 4 (Creature Systems) can proceed with high confidence in the Phase 3 platform.

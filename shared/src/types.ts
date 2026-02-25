@@ -45,6 +45,29 @@ export interface ICreatureState {
   currentState: string;
 }
 
+/** Craftable / placeable item types. */
+export enum ItemType {
+  Wall = 0,
+  Floor = 1,
+  Workbench = 2,
+  Axe = 3,
+  Pickaxe = 4,
+  FarmPlot = 5,
+}
+
+/** State of a structure placed in the world. */
+export interface IStructureState {
+  id: string;
+  structureType: number;
+  x: number;
+  y: number;
+  placedBy: string;
+  /** Growth progress for farm plots (0-100). */
+  growthProgress?: number;
+  /** Whether a farm plot crop is ready for harvest. */
+  cropReady?: boolean;
+}
+
 /** State of a player in the game world. */
 export interface IPlayerState {
   id: string;
@@ -57,4 +80,10 @@ export interface IPlayerState {
   berries: number;
   hunger: number;
   health: number;
+  walls: number;
+  floors: number;
+  workbenches: number;
+  axes: number;
+  pickaxes: number;
+  farmPlots: number;
 }

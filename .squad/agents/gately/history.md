@@ -87,3 +87,36 @@
 - **HUD bindToRoom refactored**: Player stats and creature counts now both read from the same `onStateChange` callback. Guard changed from early-return to conditional blocks so both sections execute.
 - **Performance**: Graphic rebuilds are gated by `lastType`/`lastState` diffing. Alpha updates gated by `lastHealthLow` boolean. Indicator Text objects pre-allocated and toggled via `visible` — no allocation churn.
 - **168 tests passing** after changes, no regressions.
+
+### Phase 3.5+3.6 Structure Rendering, Inventory HUD & Build Mode (2026-02-25)
+- **StructureRenderer** (`client/src/renderer/StructureRenderer.ts`): Reactive rendering of structures using same CreatureRenderer pattern — `bindToRoom()`, `onStateChange`, seen-set cleanup for add/remove. Pre-allocated Graphics per structure, positioned at tile coordinates.
+- **Structure visuals**: Wall = brown square outline (3px stroke, 4px padding). Floor = translucent tan overlay (alpha 0.4). Workbench = brown filled square with white "T" text marker. FarmPlot = brown soil base with growth indicator graphics.
+- **Farm growth stages**: Growth progress drives visual: 0-33 = empty soil (brown base only), 34-66 = small light green sprout dot, 67-99 = medium green rectangle, cropReady=true = bright green background with orchid berry dots. Growth indicator is a separate pre-allocated Graphics object updated only when growthProgress or cropReady changes.
+- **HudRenderer extended**: Added inventory display (🪵 Wood, 🪨 Stone, 🌿 Fiber, 🫐 Berries) and crafted item counts (Wall, Floor, Axe, Pickaxe, WB, Farm) below creature counts. Added build mode indicator text. Added `onInventoryUpdate` callback for feeding resource data to CraftMenu. Tracks local player position (`localPlayerX`, `localPlayerY`) for farm harvest.
+- **CraftMenu** (`client/src/ui/CraftMenu.ts`): PixiJS overlay toggled by C key. Displays all 6 recipes from `shared/src/data/recipes.ts` with emoji cost labels. Number keys (1-6) craft by index. Uses `canCraft()` from shared to gray out unaffordable recipes. Semi-transparent black background (alpha 0.8).
+- **InputHandler extended**: Added C (craft menu toggle), B (build mode toggle), H (farm harvest), and number key (1-9) bindings. Build mode intercepts click to send PLACE message instead of MOVE. Number keys context-sensitive: craft if menu open, cycle build item if in build mode.
+- **Build mode**: 4 placeable items (Wall, Floor, Workbench, FarmPlot). Number keys select item, click sends PLACE with tile coordinates. HUD shows "🔨 BUILD MODE [ItemName]" indicator. B key toggles on/off.
+- **Wiring in main.ts**: StructureRenderer added to grid.container after CreatureRenderer. CraftMenu added to app.stage (screen-fixed). InputHandler receives CraftMenu and HudRenderer references via setter methods. HUD.onInventoryUpdate feeds CraftMenu.updateResources for live affordability.
+- **Architecture**: All new code follows existing duck-typed `Record<string, unknown>` state access pattern. No coupling to Pemulis's exact Colyseus schema classes. Recipes imported from shared package (already defined by Pemulis).
+- **244 tests passing**, build clean, no regressions.
+
+---
+
+## Phase 3 Complete (2026-02-25T21:50:00Z)
+
+**Status:** COMPLETE — Phase 3 Client UI Verified
+
+Phase 3 is complete as of 2026-02-25T21:50:00Z. Gately's Phase 3.5–3.6 deliverables (StructureRenderer, CraftMenu, inventory HUD, build mode, farm visualization) have been verified by Steeply's integration test suite: 273 total tests passing, no bugs found in client implementation.
+
+All Phase 3 client-side features working as specified:
+- StructureRenderer renders walls, floors, workbenches, and farm plots with correct visuals
+- Farm growth stages visualized (empty soil → sprout → medium growth → harvest-ready)
+- CraftMenu accessible via C key, shows all recipes with affordability checks
+- Build mode (B key) with item selection (1-4) and placement UI working
+- Inventory HUD shows all resource types with emoji labels
+- Harvest action (H key) sends correct coordinates to server
+- Full gameplay loop: gather → craft → build → harvest working end-to-end
+
+**Phase 3 Definition of Done:** ✅ Code-complete, test-complete, no regressions, ready for Phase 4.
+
+Client infrastructure is stable. Ready for Phase 4 creature UI extensions.

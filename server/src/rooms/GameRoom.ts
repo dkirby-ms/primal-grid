@@ -1,15 +1,16 @@
 import { Room, Client, CloseCode } from "colyseus";
-import { GameState, PlayerState, CreatureState } from "./GameState.js";
+import { GameState, PlayerState, CreatureState, StructureState } from "./GameState.js";
 import { generateProceduralMap } from "./mapGenerator.js";
 import { tickCreatureAI } from "./creatureAI.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
-  MOVE, GATHER, EAT,
-  ResourceType, TileType,
+  MOVE, GATHER, EAT, CRAFT, PLACE, FARM_HARVEST,
+  ResourceType, TileType, ItemType,
   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
-  PLAYER_SURVIVAL, CREATURE_AI, CREATURE_RESPAWN,
+  PLAYER_SURVIVAL, CREATURE_AI, CREATURE_RESPAWN, FARM,
+  RECIPES, canCraft, getItemField,
 } from "@primal-grid/shared";
-import type { MovePayload, GatherPayload } from "@primal-grid/shared";
+import type { MovePayload, GatherPayload, CraftPayload, PlacePayload, FarmHarvestPayload } from "@primal-grid/shared";
 
 const PLAYER_COLORS = [
   "#e6194b", "#3cb44b", "#4363d8", "#f58231",
@@ -20,6 +21,7 @@ const PLAYER_COLORS = [
 export class GameRoom extends Room {
   state = new GameState();
   private nextCreatureId = 0;
+  private nextStructureId = 0;
 
   override onCreate(options: Record<string, unknown>) {
     const seed = typeof options?.seed === "number" ? options.seed : DEFAULT_MAP_SEED;
@@ -32,6 +34,7 @@ export class GameRoom extends Room {
       this.tickResourceRegen();
       this.tickCreatureAI();
       this.tickCreatureRespawn();
+      this.tickFarms();
     }, 1000 / TICK_RATE);
 
     this.onMessage(MOVE, (client, message: MovePayload) => {
@@ -44,6 +47,18 @@ export class GameRoom extends Room {
 
     this.onMessage(EAT, (client) => {
       this.handleEat(client);
+    });
+
+    this.onMessage(CRAFT, (client, message: CraftPayload) => {
+      this.handleCraft(client, message);
+    });
+
+    this.onMessage(PLACE, (client, message: PlacePayload) => {
+      this.handlePlace(client, message);
+    });
+
+    this.onMessage(FARM_HARVEST, (client, message: FarmHarvestPayload) => {
+      this.handleFarmHarvest(client, message);
     });
 
     console.log("[GameRoom] Room created.");
@@ -114,9 +129,14 @@ export class GameRoom extends Room {
 
     // Decrement resource, increment player inventory
     tile.resourceAmount -= 1;
+    // Tool bonus: +1 yield if player has appropriate tool
+    let bonus = 0;
+    if (tile.resourceType === ResourceType.Wood && player.axes >= 1) bonus = 1;
+    if (tile.resourceType === ResourceType.Stone && player.pickaxes >= 1) bonus = 1;
+    const yield_ = 1 + bonus;
     switch (tile.resourceType) {
-      case ResourceType.Wood: player.wood += 1; break;
-      case ResourceType.Stone: player.stone += 1; break;
+      case ResourceType.Wood: player.wood += yield_; break;
+      case ResourceType.Stone: player.stone += yield_; break;
       case ResourceType.Fiber: player.fiber += 1; break;
       case ResourceType.Berries: player.berries += 1; break;
     }
@@ -139,6 +159,137 @@ export class GameRoom extends Room {
       player.hunger + PLAYER_SURVIVAL.BERRY_HUNGER_RESTORE,
       PLAYER_SURVIVAL.MAX_HUNGER,
     );
+  }
+
+  private handleCraft(client: Client, message: CraftPayload) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    const { recipeId } = message;
+    const recipe = RECIPES[recipeId];
+    if (!recipe) return;
+
+    // Check resources
+    if (!canCraft(player as unknown as Record<string, number>, recipeId)) return;
+
+    // Decrement ingredients
+    for (const ing of recipe.ingredients) {
+      (player as unknown as Record<string, number>)[ing.resource] -= ing.amount;
+    }
+
+    // Increment output
+    const field = getItemField(recipe.output);
+    if (field) {
+      (player as unknown as Record<string, number>)[field] += recipe.outputCount;
+    }
+  }
+
+  private handlePlace(client: Client, message: PlacePayload) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+
+    const { itemType, x, y } = message;
+    if (!Number.isInteger(x) || !Number.isInteger(y)) return;
+    if (!Number.isInteger(itemType)) return;
+
+    // Validate item type is placeable (Wall, Floor, Workbench, FarmPlot)
+    const placeableTypes = [ItemType.Wall, ItemType.Floor, ItemType.Workbench, ItemType.FarmPlot];
+    if (!placeableTypes.includes(itemType)) return;
+
+    // Check player has the item
+    const field = getItemField(itemType);
+    if (!field) return;
+    const count = (player as unknown as Record<string, number>)[field];
+    if (!count || count < 1) return;
+
+    // Validate tile is walkable (before placement)
+    if (!this.state.isWalkable(x, y)) return;
+
+    // Check no existing structure on this tile
+    let occupied = false;
+    this.state.structures.forEach((s) => {
+      if (s.x === x && s.y === y) occupied = true;
+    });
+    if (occupied) return;
+
+    // Validate player is adjacent or on tile
+    const dx = Math.abs(player.x - x);
+    const dy = Math.abs(player.y - y);
+    if (dx > 1 || dy > 1) return;
+
+    // FarmPlot restricted to Grassland/Forest tiles
+    if (itemType === ItemType.FarmPlot) {
+      const tile = this.state.getTile(x, y);
+      if (!tile) return;
+      if (tile.type !== TileType.Grassland && tile.type !== TileType.Forest) return;
+    }
+
+    // Decrement player inventory
+    (player as unknown as Record<string, number>)[field] -= 1;
+
+    // Create structure
+    if (this.nextStructureId == null) this.nextStructureId = 0;
+    const structure = new StructureState();
+    structure.id = `structure_${this.nextStructureId++}`;
+    structure.structureType = itemType;
+    structure.x = x;
+    structure.y = y;
+    structure.placedBy = client.sessionId;
+    if (itemType === ItemType.FarmPlot) {
+      structure.growthProgress = 0;
+      structure.cropReady = false;
+    }
+    this.state.structures.set(structure.id, structure);
+  }
+
+  private handleFarmHarvest(client: Client, message: FarmHarvestPayload) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+
+    const { x, y } = message;
+    if (!Number.isInteger(x) || !Number.isInteger(y)) return;
+
+    // Player must be adjacent or on tile
+    const dx = Math.abs(player.x - x);
+    const dy = Math.abs(player.y - y);
+    if (dx > 1 || dy > 1) return;
+
+    // Find farm plot at this tile
+    let farm: StructureState | undefined;
+    this.state.structures.forEach((s) => {
+      if (s.x === x && s.y === y && s.structureType === ItemType.FarmPlot) {
+        farm = s;
+      }
+    });
+    if (!farm || !farm.cropReady) return;
+
+    // Harvest: give berries scaled by tile fertility
+    const tile = this.state.getTile(x, y);
+    const fertility = tile ? tile.fertility : 0.5;
+    const yield_ = Math.max(1, Math.round(FARM.BASE_HARVEST_YIELD * fertility));
+    player.berries += yield_;
+
+    // Reset farm
+    farm.growthProgress = 0;
+    farm.cropReady = false;
+  }
+
+  private tickFarms() {
+    if (this.state.tick % FARM.TICK_INTERVAL !== 0) return;
+
+    this.state.structures.forEach((structure) => {
+      if (structure.structureType !== ItemType.FarmPlot) return;
+      if (structure.cropReady) return;
+
+      const tile = this.state.getTile(structure.x, structure.y);
+      const fertility = tile ? tile.fertility : 0;
+      structure.growthProgress = Math.min(
+        FARM.READY_THRESHOLD,
+        structure.growthProgress + fertility * FARM.GROWTH_RATE,
+      );
+      if (structure.growthProgress >= FARM.READY_THRESHOLD) {
+        structure.cropReady = true;
+      }
+    });
   }
 
   private tickPlayerSurvival() {

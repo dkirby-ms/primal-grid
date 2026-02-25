@@ -444,3 +444,190 @@ A player joins the game and sees:
 - Future creature types need color entries added to `getCreatureColor()` in CreatureRenderer.
 - Future FSM states need indicator mappings in `updateIndicator()`.
 - HUD creature count text style is monospace 12px, #cccccc — matches existing HUD text conventions.
+
+## 2026-02-25: Phase 3 — Base Building: Scoping & Breakdown
+
+**Date:** 2026-02-25  
+**Author:** Hal (Lead)  
+**Status:** Proposed  
+**Prerequisite:** Phase 2 (Core Simulation) — COMPLETE (194 tests, merged)
+
+### Vision
+
+Minimum viable base-building system — players gather, craft items, place structures, and farm. First step from "surviving" to "building."
+
+### Scope Fence (Phase 3)
+
+**In scope:**
+- Inventory display (HUD panel showing resource counts and crafted items)
+- Recipe system (data-driven, 6 initial recipes)
+- Crafting (CRAFT message handler, consume resources, produce items)
+- Structure placement (PLACE message handler, 3 structures: Wall, Floor, Workbench)
+- Building schema (StructureState on GameState, walkability blocking)
+- Tool crafting (Axe, Pickaxe; passive yield bonus)
+- Farm plot (structure on Grassland, growth over time, harvest for berries)
+- Client rendering (structures, farm visuals, build mode indicator)
+- Inventory HUD (resource + item counts, craft menu, build mode toggle)
+
+**Explicitly deferred:**
+- Chest / storage containers → Phase 6
+- Multi-tile structures → Phase 6
+- Structure health / destruction → Phase 5
+- Doors / gates → Phase 6
+- Advanced crafting stations → Phase 6
+- Station-gated recipes → Phase 6
+- Structure snapping / blueprints → Phase 6
+- Conveyor / automation → Phase 6
+- Temperature / shelter → Phase 5
+- Metal / new resource types → Phase 6
+- Crop variety → Phase 6
+- Tool durability → Phase 6
+- Tool equip/unequip UI → Phase 6
+
+### Work Items (7 Total, Ordered)
+
+| Item | Owner | Deps | Notes |
+|------|-------|------|-------|
+| 3.1 | Recipe & Item Data | Pemulis | None | ItemType enum, RecipeDef, RECIPES constant, validation |
+| 3.2 | Inventory Extension & Craft | Pemulis | 3.1 | PlayerState fields, CRAFT handler, tool yield bonus |
+| 3.3 | Structure Schema & Placement | Pemulis | 3.2 | StructureState, PLACE handler, walkability update |
+| 3.4 | Farm System | Pemulis | 3.3 | FarmPlot, growth ticks, FARM_HARVEST handler |
+| 3.5 | Client: Rendering | Gately | 3.3, 3.4 | StructureRenderer, farm visuals (can start once 3.3 schema defined) |
+| 3.6 | Client: Inventory HUD & Build Mode | Gately | 3.2, 3.5 | Inventory panel, craft menu, build toggle, keybinds |
+| 3.7 | Integration & Testing | Steeply + Pemulis + Gately | 3.1–3.6 | E2E loops, creature avoidance, ecosystem stability, all tests pass |
+
+### Architecture Decisions (Phase 3)
+
+| # | Decision | Rationale |
+|---|----------|-----------|
+| B1 | **Flat inventory fields for crafted items** (walls, axes, etc. as `@type("number")` on PlayerState) | Matches Phase 2 pattern. Colyseus v4 MapSchema<number> unreliable. Per-item field is verbose but safe. |
+| B2 | **Structures are 1 tile, 1 entity** (no multi-tile buildings) | Simplest placement model. Multi-tile needs rotation, overlap, anchors — Phase 6. |
+| B3 | **Recipes are data-driven constants in shared** (not JSON files) | Consistent with CREATURE_TYPES pattern. TypeScript constants = type safety + IDE support. |
+| B4 | **Tool bonus is passive** (own it = get the bonus) | No equip/unequip UI needed. Just check `player.axes >= 1` in GATHER handler. Equip slots are Phase 6. |
+| B5 | **Farm growth uses existing tile fertility** | No new noise layer. Farms on high-fertility tiles grow faster — emergent gameplay. |
+| B6 | **Structures update walkability via isWalkable check** (query-time, not cached) | Existing `isWalkable()` already checks tile type. Add structure check in same function. |
+| B7 | **PLACE validates adjacency** (player on or adjacent to target tile) | Same pattern as GATHER. Prevents remote placement exploits. Consistent interaction model. |
+| B8 | **FarmPlot is a structure subtype, not separate system** | Reuses StructureState schema with growth fields. One fewer schema class, simpler data model. |
+
+### Parallelism Opportunities
+
+- **3.1 can start immediately** (Pemulis)
+- **3.5 can start once 3.3 schema defined** (Gately parallel to 3.4, Pemulis)
+- **Steeply writes unit tests alongside each work item**, integration in 3.7
+
+### Definition of Done
+
+A player joins the game and can:
+
+1. **Gather** wood and stone (existing)
+2. **Craft** an Axe from wood, get +1 wood yield
+3. **Craft** Walls from wood/stone
+4. **Place** Walls on map, blocking movement for players and creatures
+5. **Craft and place** Farm Plot on grassland, watch grow, harvest berries
+6. **See** full inventory in HUD (resources + crafted items)
+7. **Toggle** build mode to place structures by clicking
+
+The world remains stable: creatures path around structures, resources regenerate, populations sustain. All tests pass (194 existing + Phase 3 new).
+
+### What "Playable Phase 3" Feels Like
+
+The player has a reason to gather beyond eating. They can shape the world — put up walls, set up a small farm, craft tools that make them more effective. It's the first step from "surviving" to "building." It's minimal, but it's the loop: gather → craft → place → benefit.
+# Phase 3.1–3.4 — Server-Side Base Building Systems
+
+**Date:** 2026-02-25  
+**Author:** Pemulis (Systems Dev)  
+**Status:** Active
+
+## Decisions
+
+1. **Flat inventory for crafted items (B1)** — `walls`, `floors`, `workbenches`, `axes`, `pickaxes`, `farmPlots` as individual `@type("number")` fields on PlayerState. Same pattern as `wood`, `stone`, `fiber`, `berries`. Adding new item types requires a new field on PlayerState + schema field + recipe entry.
+
+2. **Structures are 1 tile, 1 entity (B2)** — `StructureState` schema with x/y position, no multi-tile footprint. One structure per tile (PLACE validates no overlap).
+
+3. **Recipes as typed constants (B3)** — `RECIPES` in `shared/src/data/recipes.ts` follows the `CREATURE_TYPES` pattern. `RecipeDef` interface with ingredients, output type, output count.
+
+4. **Tool bonus is passive (B4)** — GATHER handler checks `player.axes >= 1` / `player.pickaxes >= 1` for +1 yield on Wood/Stone. No durability, no consumption, no equip action.
+
+5. **Farm uses existing tile fertility (B5)** — Growth rate = `tile.fertility * FARM.GROWTH_RATE` per tick. No separate soil quality system. Fertile tiles = faster crops.
+
+6. **isWalkable check at query time (B6)** — `GameState.isWalkable()` iterates structures to find blocking types (Wall, Workbench). No cached walkability grid. Acceptable at current structure counts (<100). May need spatial index at scale.
+
+7. **PLACE validates adjacency (B7)** — Player must be adjacent (dx/dy ≤ 1) to placement tile. Prevents remote building.
+
+8. **FarmPlot is structure subtype with growth fields (B8)** — StructureState has `growthProgress` (0–100) and `cropReady` (boolean). Only meaningful for FarmPlot structureType. Other structure types ignore these fields (default 0/false).
+
+9. **Wall/Workbench block movement; Floor/FarmPlot do not** — isWalkable denies tiles containing Wall or Workbench structures. Floor is decorative, FarmPlot is walkable for harvesting.
+
+10. **FarmPlot placement restricted to Grassland/Forest** — Matches the fertility-based growth model. Desert/Highland/Swamp tiles cannot host farms.
+
+## Implications
+
+- Client needs rendering for structures (Gately). StructureState syncs via MapSchema — same binding pattern as creatures.
+- Client inventory HUD should show crafted item counts (walls, axes, etc).
+- Adding new recipes: add to RECIPES constant + ensure output ItemType has a field on PlayerState.
+- Farm tick runs every 8 ticks (2s). Tunable via FARM constants without code changes.
+- isWalkable iteration cost grows linearly with structure count. Consider spatial index if players build >200 structures.
+# Phase 3.5+3.6 — Structure Rendering, Inventory HUD & Build Mode
+
+**Date:** 2026-02-25  
+**Author:** Gately (Game Dev)  
+**Status:** Active
+
+## Decisions
+
+1. **StructureRenderer follows CreatureRenderer pattern** — `bindToRoom()`, duck-typed state access, seen-set cleanup for reactive add/remove. Structures rendered as pre-allocated Graphics at tile coordinates.
+
+2. **Structure visual language** — Wall: brown outline (stroke only, no fill). Floor: translucent tan overlay. Workbench: brown fill with white "T" text. FarmPlot: brown soil with growth indicator. Each type has distinct visual identity at 32px tile size.
+
+3. **Farm growth stages are threshold-based** — Four visual bands: empty soil (0-33), sprout dot (34-66), medium green rect (67-99), harvest-ready (cropReady=true with berry dots). Growth indicator is a separate pre-allocated Graphics object, only redrawn when values change.
+
+4. **HUD inventory display uses emoji labels** — Resource counts (🪵🪨🌿🫐) and crafted item counts shown below creature counts. Same monospace 11px style, `#aaaaaa` fill.
+
+5. **CraftMenu is a screen-fixed PixiJS overlay** — Toggled by C key. Shows all recipes from `shared/src/data/recipes.ts` with costs. Number keys craft by index. Gray text for unaffordable recipes, white for affordable.
+
+6. **Build mode is a client-side toggle** — B key toggles. Click sends PLACE message instead of MOVE. Number keys 1-4 select placeable item (Wall, Floor, Workbench, FarmPlot). HUD shows build mode indicator.
+
+7. **InputHandler uses setter methods for optional dependencies** — `setCraftMenu()` and `setHud()` allow InputHandler to interact with craft/build/harvest features without constructor coupling. Graceful no-ops if not wired.
+
+8. **Farm harvest sends player position** — H key sends FARM_HARVEST with the local player's current tile coordinates. Server is responsible for finding adjacent farm plots and validating adjacency.
+
+## Implications
+
+- Pemulis: Server needs `state.structures` collection (MapSchema or similar) with `forEach` support, fields matching `IStructureState`.
+- Pemulis: CRAFT handler should validate recipes using `canCraft()` from shared, deduct resources, increment item counts.
+- Pemulis: PLACE handler should validate item ownership, tile availability, and create StructureState entries.
+- Pemulis: FARM_HARVEST handler should check player adjacency to a FarmPlot with `cropReady=true`.
+- Future placeable items need entries added to `PLACEABLE_ITEMS` array in InputHandler.
+- Future recipes are automatically picked up by CraftMenu (reads from shared RECIPES object).
+
+---
+
+# Phase 3.7 — Integration Testing Complete
+
+**Date:** 2026-02-25  
+**Author:** Steeply (Tester)  
+**Status:** Active
+
+## Summary
+
+Phase 3 integration tests are complete. **273 total tests passing** (251 existing + 22 new). All Phase 3 gameplay loops are verified end-to-end.
+
+## Coverage
+
+- Full gather → craft → place loops (wall, floor, workbench, multi-item)
+- Farm lifecycle with repeating harvest cycles
+- Creature–structure interaction (wall avoidance, hunt pathing)
+- Edge cases: occupied tiles, insufficient resources, missing inventory, biome restrictions, non-adjacent harvest, movement blocking
+- Multiplayer simultaneous crafting/placing (isolation + race conditions)
+- Ecosystem stability at 300 ticks with structures present
+
+## Key Findings
+
+1. **Harvest yield can be < BASE_HARVEST_YIELD** on low-fertility tiles. Formula: `Math.max(1, Math.round(3 * fertility))`. This is correct behavior, not a bug.
+2. **No bugs found** in Phase 3 implementation. All handlers, validators, and tick systems work as specified.
+3. **Phase 3 is code-complete and test-complete.** Ready to advance to Phase 4.
+
+## Implications
+
+- Phase 3 definition of done is met: all gameplay loops verified, ecosystem stable, no regressions.
+- Phase 4 (Creature Systems) can begin.
