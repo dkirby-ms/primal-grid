@@ -5,11 +5,9 @@
     "A Clockwork Orange",
     "One Flew Over the Cuckoo's Nest",
     "Slaughterhouse-Five",
-    "The Catcher in the Rye",
     "Catch-22",
     "Gravity's Rainbow",
     "Fear and Loathing in Las Vegas",
-    "The Bell Jar",
     "Naked Lunch"
   ],
   "universe_capacity": {
@@ -17,11 +15,9 @@
     "A Clockwork Orange": 8,
     "One Flew Over the Cuckoo's Nest": 10,
     "Slaughterhouse-Five": 8,
-    "The Catcher in the Rye": 6,
     "Catch-22": 14,
     "Gravity's Rainbow": 15,
     "Fear and Loathing in Las Vegas": 6,
-    "The Bell Jar": 8,
     "Naked Lunch": 8
   }
 }
