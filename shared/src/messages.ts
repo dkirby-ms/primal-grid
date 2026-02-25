@@ -6,6 +6,10 @@ export const EAT = "eat" as const;
 export const CRAFT = "craft" as const;
 export const PLACE = "place" as const;
 export const FARM_HARVEST = "farm_harvest" as const;
+export const TAME = "tame" as const;
+export const ABANDON = "abandon" as const;
+export const SELECT_CREATURE = "select_creature" as const;
+export const BREED = "breed" as const;
 
 // --- Message payload interfaces ---
 
@@ -46,4 +50,24 @@ export interface FarmHarvestPayload {
   x: number;
   /** Tile Y coordinate of the farm plot. */
   y: number;
+}
+
+export interface TamePayload {
+  /** ID of the creature to tame. */
+  creatureId: string;
+}
+
+export interface AbandonPayload {
+  /** ID of the creature to abandon. */
+  creatureId: string;
+}
+
+export interface SelectCreaturePayload {
+  /** ID of the creature to select/deselect. */
+  creatureId: string;
+}
+
+export interface BreedPayload {
+  /** ID of the target creature to breed. Server auto-finds mate within 1 tile. */
+  creatureId: string;
 }

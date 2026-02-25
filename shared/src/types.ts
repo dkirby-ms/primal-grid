@@ -34,6 +34,13 @@ export interface ITileState {
 /** Creature type identifiers. */
 export type CreatureType = 'herbivore' | 'carnivore';
 
+/** Creature personality types — affects taming speed and behavior. */
+export enum Personality {
+  Docile = "docile",
+  Neutral = "neutral",
+  Aggressive = "aggressive",
+}
+
 /** State of a creature in the game world. */
 export interface ICreatureState {
   id: string;
@@ -43,6 +50,11 @@ export interface ICreatureState {
   health: number;
   hunger: number;
   currentState: string;
+  ownerID: string;
+  trust: number;
+  speed: number;
+  personality: string;
+  lastBredTick: number;
 }
 
 /** Craftable / placeable item types. */
@@ -78,6 +90,7 @@ export interface IPlayerState {
   stone: number;
   fiber: number;
   berries: number;
+  meat: number;
   hunger: number;
   health: number;
   walls: number;

@@ -141,3 +141,77 @@ All Phase 3 server-side features working as specified:
 **Phase 3 Definition of Done:** ✅ Code-complete, test-complete, no regressions, ready for Phase 4.
 
 Phase 4 (Creature Systems) can proceed with high confidence in the Phase 3 platform.
+
+### Phase 4.1+4.2 — Taming Schema & Interaction Handlers (2026-02-25)
+
+- **CreatureState schema extended:** Added `ownerID` (string, default ""), `trust` (number, default 0), `speed` (number, default 0), `personality` (string, default "neutral"), `zeroTrustTicks` (number, non-synced, for auto-abandon tracking). All `@type()` decorated except zeroTrustTicks (internal counter).
+- **PlayerState schema extended:** Added `meat` field (`@type("number")`, default 0) following flat inventory pattern (same as wood/stone/fiber/berries).
+- **Personality enum:** `Docile = "docile"`, `Neutral = "neutral"`, `Aggressive = "aggressive"` in `shared/src/types.ts`. String-valued enum for Colyseus schema compatibility.
+- **TAMING constants:** New object in `shared/src/constants.ts` — TRUST_PER_FEED (5), TRUST_PER_PROXIMITY_TICK (1), TRUST_DECAY_ALONE (1), TRUST_DAMAGE_PENALTY (10), TRUST_AT_OBEDIENT (70), MAX_PACK_SIZE (8), ZERO_TRUST_ABANDON_TICKS (50).
+- **New messages:** TAME, ABANDON, SELECT_CREATURE, BREED in `shared/src/messages.ts` with typed payloads (TamePayload, AbandonPayload, SelectCreaturePayload, BreedPayload).
+- **personalityChart on CreatureTypeDef:** Weighted [Docile%, Neutral%, Aggressive%] tuple. Herbivore: [40, 40, 20], Carnivore: [10, 30, 60]. Personality assigned at spawn via `rollPersonality()`.
+- **TAME handler:** Validates adjacency (Manhattan ≤ 1), wild creature, food cost (1 berry for herbivore, 1 meat for carnivore), pack size limit (8). Sets ownerID, applies personality-based initial trust (Docile=10, Neutral=0, Aggressive=0 clamped from -5).
+- **ABANDON handler:** Validates ownership, resets ownerID and trust to 0.
+- **Trust tick (`tickTrustDecay`):** Proximity gain (+1 per 10 ticks if owner ≤ 3 tiles), decay (-1 per 20 ticks if owner > 3 tiles), auto-abandon (50 consecutive ticks at trust=0 → goes wild).
+- **Creature AI modification:** Tamed herbivores skip flee behavior — they don't flee from carnivores, trusting their owner's pack.
+- **All 274 tests pass** — 273 existing + 1 new personality test. 15 pre-written taming tests by Steeply all pass.
+- **ICreatureState and IPlayerState interfaces** updated in shared types to match new schema fields.
+
+### Phase 4.3+4.4 — Pack Follow & Breeding (2026-02-25)
+
+- **SELECT_CREATURE handler:** Toggles creature in/out of player's server-side selected pack (Map<playerId, Set<creatureId>>). Validates ownership, trust ≥ 70, and MAX_PACK_SIZE (8). Pack state stored on GameRoom via `playerSelectedPacks`, not schema — pure session state.
+- **Pack follow tick:** Runs every game tick. Creatures in a player's selected pack move one step toward owner via greedy Manhattan if distance > 1, otherwise idle at `currentState = "follow"`. Pack creatures are excluded from creature AI (no flee, no hunt, no wander).
+- **AI exclusion pattern:** `tickCreatureAI()` now accepts optional `skipIds: Set<string>`. GameRoom collects all pack creature IDs and passes them to the AI, preventing double-movement and overriding FSM behaviors for pack members.
+- **BREED handler:** Player specifies one creature ID; server auto-finds mate (same type, same owner, trust ≥ 70, within Manhattan distance 1, not on cooldown). Cost: 10 berries. 50% success chance (Math.random). On success: offspring spawns on adjacent empty walkable tile with ownerID = player, trust = 50, speed = avg(parent speeds) + mutation ±1 (capped ±3), random personality from type chart.
+- **Breeding cooldown:** `lastBredTick` field added to CreatureState schema (default 0, `@type("number")`). Both parents get cooldown set on attempt (success or failure). Reject if either parent bred within last 100 ticks (BREEDING.COOLDOWN_TICKS).
+- **BREEDING constants:** New `BREEDING` object in shared constants — FOOD_COST (10), COOLDOWN_TICKS (100), OFFSPRING_TRUST (50), TRAIT_MUTATION_RANGE (1), TRAIT_CAP (3).
+- **BreedPayload simplified:** Changed from `{creatureId1, creatureId2}` to `{creatureId}` (single ID) per spec — server auto-discovers mate. Steeply's guard-patterned breeding tests pass cleanly with this approach.
+- **Pack cleanup:** Creatures removed from selected packs on abandon, auto-abandon, death, and player leave. `ensurePacks()` helper handles null guard for test compatibility (Object.create skips constructor).
+- **moveToward exported:** Creature AI's `moveToward()` function exported for reuse by pack follow tick. No duplication.
+- **All 274 tests pass** — including all 8 of Steeply's breeding tests (guard patterns activated). Zero regressions.
+
+---
+
+## Phase 4 Kickoff (2026-02-25T22:48:00Z)
+
+**Status:** ACTIVE — Hal scoping complete, Pemulis beginning 4.1 immediately
+
+**Scope:** 8 work items (4.1–4.8), 5–6d critical path (Pemulis 4.1→4.4), 3d Gately (4.5–4.7), 2d Steeply (4.8 integration). 9 architecture decisions (C1–C9) finalized in `.squad/decisions.md`.
+
+**Pemulis tasks (begin immediately):**
+- **4.1 Schema** (1d): Add `ownerID`, `trust`, `speed`, `personality`, `traits` to CreatureState. Add TAMING constants to shared. Create CREATURE_TRAITS constants (Speed, Health, HungerDrain deltas).
+- **4.2 Taming** (2d after 4.1): TAME message handler (I key, cost 1 berry/meat, trust=0). ABANDON handler. Trust decay logic (±1 per 20 ticks alone, -10 on hit). Lock creatures to owner.
+- **4.3 Pack Follow** (2d after 4.2): SELECT_CREATURE message. `playerSelectedPacks: Map<playerId, Set<creatureId>>` tracking. Tick: move selected creatures toward player if distance > 1, follow within 1 tile radius.
+- **4.4 Breeding** (2d parallel with 4.3): BREED message handler (B key, trust≥70, same owner, same type, adjacent, 50% chance). Offspring spawns with averaged parent traits + mutation (±1d2), inherits ownership, trust=50, costs 10 berries.
+
+**Blocking constraint:** 4.1 schema lands first. Gately unblocks at 4.1. Steeply writes anticipatory unit tests in parallel.
+
+**Architecture decisions locked:** C1 (ownerID), C2 (trust 0–100, 70+ obedient), C3 (personality enum), C4 (traits as deltas), C5 (pack selection set), C6 (breeding peer interaction), C7 (greedy movement + A* stub), C8 (taming cost), C9 (trust decay loneliness).
+
+**Orchestration complete:**
+- ✅ Hal scoping document merged to decisions.md
+- ✅ Session log written
+- ✅ Orchestration log written
+- ✅ Agent history updated
+
+### Phase 4.1+4.2 — Taming Schema & Trust Decay (2026-02-25)
+
+**Status:** ✅ COMPLETE (2026-02-25T22:55:00Z)
+
+- **4.1 Schema:** Added `ownerID` (string, "" = wild), `trust` (0–100), `personality` (enum: Docile/Neutral/Aggressive), `speed` (base trait) to CreatureState. Added `zeroTrustTicks` internal counter (non-synced). Added `meat` field to PlayerState for flat inventory pattern.
+- **4.2 Handlers:** `handleTame()` validates trust ≥70 (removed — can tame any), pack size <8, food cost (1 berry/meat). Sets ownerID and initializes trust. `handleAbandon()` clears ownerID, resets trust to 0. `tickTrustDecay()` runs every tick: proximity gain (+1 per 10 ticks if ≤3 tiles from owner), decay (-1 per 20 ticks if >3 tiles), auto-abandon after 50 consecutive zero-trust ticks.
+- **Personality system:** `personalityChart` on CreatureTypeDef specifies weights (Docile/Neutral/Aggressive). Assigned immutably at spawn. Affects initial trust boost only (Docile=+10, others=0). Stored as string enum on CreatureState for client UI.
+- **Test coverage:** 15 anticipatory tests from Steeply covering trust decay modulo gates, auto-abandon logic, taming cost deduction, pack limit enforcement, personality trust effects.
+- **Files landed:** `shared/src/types.ts` (Personality enum), `shared/src/constants.ts` (TAMING object), `shared/src/messages.ts` (TAME/ABANDON payloads), `server/src/rooms/GameState.ts` (schema fields), `server/src/rooms/GameRoom.ts` (all handlers), `shared/src/data/creatures.ts` (personalityChart).
+- **Key decision:** Taming costs food (not time). Single interaction. Trust is server-only counter, decays at predictable rate. Simplest possible ownership model.
+
+### Phase 4.3+4.4 — Pack Follow & Breeding (2026-02-25)
+
+**Status:** ✅ COMPLETE (2026-02-25T22:55:00Z)
+
+- **4.3 Pack Follow:** `playerSelectedPacks: Map<string, Set<string>>` server-only session state (not in schema). `SELECT_CREATURE` message validates trust ≥70, adds creature ID to player's pack set. Pack follow tick runs after creature AI: skips selected creatures from AI logic via `skipIds` parameter, moves pack members toward player if >1 tile away (Manhattan), sets `currentState = "follow"` for synced visual feedback. `moveToward()` exported from creatureAI for reuse. Pack cleanup on creature death/abandon.
+- **4.4 Breeding:** `BREED` message uses single creature ID. Server auto-discovers mate: within Manhattan distance 1, same type, same owner, trust ≥70, not on cooldown (checked via `lastBredTick`). 50% offspring roll on successful discovery. Cooldown (100 ticks) applied on attempt (not success) to both parents. Offspring inherits: type, owner, speed trait (avg parent speeds + mutation ±1, capped ±3), base trust=0 (not inherited). Schema ready for future health/hungerDrain deltas (guard-pattern graceful tests).
+- **Test coverage:** 8 breeding tests from Steeply covering single-ID mate discovery, trust ≥70 eligibility, cooldown mechanics (on attempt), 50% roll, speed trait averaging + mutation bounds, zero cooldown prevents immediate re-breed.
+- **Key decisions:** Pack selection is server-side state (client observes via `currentState`). Single-ID BREED simplifies client API (no mate picker UI needed). Speed-only trait inheritance keeps schema lean; extensible for future traits. Cooldown on attempt prevents rapid-fire food/berry spam.
+- **Files landed:** `server/src/rooms/GameRoom.ts` (SELECT_CREATURE + ensurePacks null guard, BREED handler, pack follow tick), `server/src/rooms/creatureAI.ts` (moveToward export), `shared/src/messages.ts` (BreedPayload changed from two IDs to one), `server/src/rooms/GameState.ts` (lastBredTick field).
+- **Schema stability:** No breaking changes. Backward compatible with Phase 3. Ready for Gately (4.5–4.7) UI work and Steeply (4.8) integration tests.

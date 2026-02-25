@@ -55,7 +55,7 @@ async function connectToServer(app: Application, grid: GridRenderer): Promise<vo
     grid.container.addChild(players.container);
     players.bindToRoom(room);
 
-    const creatures = new CreatureRenderer();
+    const creatures = new CreatureRenderer(room.sessionId);
     grid.container.addChild(creatures.container);
     creatures.bindToRoom(room);
 
@@ -80,6 +80,7 @@ async function connectToServer(app: Application, grid: GridRenderer): Promise<vo
     const input = new InputHandler(room, grid.container);
     input.setCraftMenu(craftMenu);
     input.setHud(hud);
+    input.setCreatureRenderer(creatures);
   } catch {
     console.warn('[main] Server unavailable — running in offline mode.');
   }

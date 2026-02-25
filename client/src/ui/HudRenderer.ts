@@ -25,6 +25,9 @@ export class HudRenderer {
   private inventoryText: Text;
   private craftedText: Text;
   private buildModeText: Text;
+  private tamedText: Text;
+  private trustText: Text;
+  private packText: Text;
 
   /** Callback invoked with latest player resources for craft menu updates. */
   public onInventoryUpdate: ((resources: Record<string, number>) => void) | null = null;
@@ -32,6 +35,7 @@ export class HudRenderer {
   /** Readable player position for farm harvest. */
   public localPlayerX = 0;
   public localPlayerY = 0;
+  public packSize = 0;
 
   constructor(localSessionId: string) {
     this.localSessionId = localSessionId;
@@ -101,8 +105,31 @@ export class HudRenderer {
     this.creatureCountText.position.set(0, creatureY);
     this.container.addChild(this.creatureCountText);
 
+    // --- Tamed creature display ---
+    const tamedY = creatureY + 18;
+    this.tamedText = new Text({
+      text: '',
+      style: { fontSize: 11, fill: '#aaaaaa', fontFamily: 'monospace' },
+    });
+    this.tamedText.position.set(0, tamedY);
+    this.container.addChild(this.tamedText);
+
+    this.trustText = new Text({
+      text: '',
+      style: { fontSize: 11, fill: '#aaaaaa', fontFamily: 'monospace' },
+    });
+    this.trustText.position.set(0, tamedY + 14);
+    this.container.addChild(this.trustText);
+
+    this.packText = new Text({
+      text: '',
+      style: { fontSize: 11, fill: '#ffd700', fontFamily: 'monospace' },
+    });
+    this.packText.position.set(0, tamedY + 28);
+    this.container.addChild(this.packText);
+
     // --- Inventory display ---
-    const invY = creatureY + 20;
+    const invY = tamedY + 46;
     this.inventoryText = new Text({
       text: '\uD83E\uDEB5 0  \uD83E\uDEA8 0  \uD83C\uDF3F 0  \uD83E\uDED0 0',
       style: { fontSize: 11, fill: '#aaaaaa', fontFamily: 'monospace' },
@@ -166,8 +193,9 @@ export class HudRenderer {
           const stone = (player['stone'] as number) ?? 0;
           const fiber = (player['fiber'] as number) ?? 0;
           const berries = (player['berries'] as number) ?? 0;
+          const meat = (player['meat'] as number) ?? 0;
           this.inventoryText.text =
-            `\uD83E\uDEB5 ${wood}  \uD83E\uDEA8 ${stone}  \uD83C\uDF3F ${fiber}  \uD83E\uDED0 ${berries}`;
+            `\uD83E\uDEB5 ${wood}  \uD83E\uDEA8 ${stone}  \uD83C\uDF3F ${fiber}  \uD83E\uDED0 ${berries}  🥩 ${meat}`;
 
           // Crafted items
           const walls = (player['walls'] as number) ?? 0;
@@ -193,14 +221,36 @@ export class HudRenderer {
       if (creatures && typeof creatures.forEach === 'function') {
         let herbs = 0;
         let carns = 0;
+        let ownedHerbs = 0;
+        let ownedCarns = 0;
+        const herbTrusts: number[] = [];
+        const carnTrusts: number[] = [];
         creatures.forEach((creature) => {
           const t = (creature['creatureType'] as string) ?? 'herbivore';
           if (t === 'carnivore') carns++;
           else herbs++;
+          const ownerId = (creature['ownerID'] as string) ?? '';
+          if (ownerId === this.localSessionId) {
+            const trust = (creature['trust'] as number) ?? 0;
+            if (t === 'carnivore') {
+              ownedCarns++;
+              carnTrusts.push(trust);
+            } else {
+              ownedHerbs++;
+              herbTrusts.push(trust);
+            }
+          }
         });
         this.updateCreatureCounts(herbs, carns);
+        this.updateTamedDisplay(ownedHerbs, ownedCarns, herbTrusts, carnTrusts);
       }
     });
+  }
+
+  /** Update the pack size display immediately (called by InputHandler on F key). */
+  public updatePackSize(size: number): void {
+    this.packSize = size;
+    this.packText.text = `Pack: ${size}/8`;
   }
 
   private updateHealth(value: number): void {
@@ -230,5 +280,28 @@ export class HudRenderer {
 
   private updateCreatureCounts(herbivores: number, carnivores: number): void {
     this.creatureCountText.text = `\uD83E\uDD95 ${herbivores}  \uD83E\uDD96 ${carnivores}`;
+  }
+
+  private updateTamedDisplay(
+    ownedHerbs: number,
+    ownedCarns: number,
+    herbTrusts: number[],
+    carnTrusts: number[],
+  ): void {
+    if (ownedHerbs === 0 && ownedCarns === 0) {
+      this.tamedText.text = '';
+      this.trustText.text = '';
+      this.packText.text = this.packSize > 0 ? `Pack: ${this.packSize}/8` : '';
+      return;
+    }
+    const parts: string[] = [];
+    if (ownedHerbs > 0) parts.push(`${ownedHerbs} herbivore`);
+    if (ownedCarns > 0) parts.push(`${ownedCarns} carnivore`);
+    this.tamedText.text = `🦕 Tamed: ${parts.join(', ')}`;
+    const trustParts: string[] = [];
+    if (herbTrusts.length) trustParts.push(`h:${herbTrusts.map((t) => `${t}/100`).join(' ')}`);
+    if (carnTrusts.length) trustParts.push(`c:${carnTrusts.map((t) => `${t}/100`).join(' ')}`);
+    this.trustText.text = `Trust: ${trustParts.join(' | ')}`;
+    this.packText.text = `Pack: ${this.packSize}/8`;
   }
 }

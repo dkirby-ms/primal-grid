@@ -90,6 +90,38 @@ export const CREATURE_AI = {
   HUNT_DAMAGE: 25,
 } as const;
 
+/** Taming system constants. */
+export const TAMING = {
+  /** Trust gained per feed interaction (docile creatures get double). */
+  TRUST_PER_FEED: 5,
+  /** Trust gained per proximity tick (every 10 ticks within detection radius). */
+  TRUST_PER_PROXIMITY_TICK: 1,
+  /** Trust lost per decay tick (every 20 ticks if owner distance > 3). */
+  TRUST_DECAY_ALONE: 1,
+  /** Trust penalty when creature takes damage. */
+  TRUST_DAMAGE_PENALTY: 10,
+  /** Trust threshold at which creature obeys commands. */
+  TRUST_AT_OBEDIENT: 70,
+  /** Maximum tamed creatures per player. */
+  MAX_PACK_SIZE: 8,
+  /** Ticks of zero trust before auto-abandon. */
+  ZERO_TRUST_ABANDON_TICKS: 50,
+} as const;
+
+/** Breeding system constants. */
+export const BREEDING = {
+  /** Berry cost per breeding attempt. */
+  FOOD_COST: 10,
+  /** Cooldown ticks between breeding attempts per creature. */
+  COOLDOWN_TICKS: 100,
+  /** Offspring initial trust (pre-bonded). */
+  OFFSPRING_TRUST: 50,
+  /** Maximum trait mutation per breeding (±1 per trait). */
+  TRAIT_MUTATION_RANGE: 1,
+  /** Hard cap on trait delta values. */
+  TRAIT_CAP: 3,
+} as const;
+
 /** Farm system constants. */
 export const FARM = {
   /** Ticks between farm growth updates (8 ticks = 2s at 4 ticks/sec). */
