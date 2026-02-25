@@ -21,6 +21,8 @@ export class HudRenderer {
   private hungerLabel: Text;
   private hungerValue: Text;
 
+  private creatureCountText: Text;
+
   constructor(localSessionId: string) {
     this.localSessionId = localSessionId;
     this.container = new Container();
@@ -80,6 +82,15 @@ export class HudRenderer {
     this.hungerValue.position.set(LABEL_WIDTH + BAR_WIDTH + 6, hungerY);
     this.container.addChild(this.hungerValue);
 
+    // --- Creature count ---
+    const creatureY = hungerY + BAR_HEIGHT + BAR_GAP + 4;
+    this.creatureCountText = new Text({
+      text: '\uD83E\uDD95 0  \uD83E\uDD96 0',
+      style: { fontSize: 12, fill: '#cccccc', fontFamily: 'monospace' },
+    });
+    this.creatureCountText.position.set(0, creatureY);
+    this.container.addChild(this.creatureCountText);
+
     // Draw initial full bars
     this.drawBar(this.healthBarFill, 1, 0x2ecc71);
     this.drawBar(this.hungerBarFill, 1, 0xf39c12);
@@ -91,18 +102,33 @@ export class HudRenderer {
       const players = state['players'] as
         | { forEach: (cb: (player: Record<string, unknown>, key: string) => void) => void }
         | undefined;
-      if (!players || typeof players.forEach !== 'function') return;
+      if (players && typeof players.forEach === 'function') {
+        players.forEach((player, key) => {
+          const id = (player['id'] as string) ?? key;
+          if (id !== this.localSessionId) return;
 
-      players.forEach((player, key) => {
-        const id = (player['id'] as string) ?? key;
-        if (id !== this.localSessionId) return;
+          const health = (player['health'] as number) ?? 100;
+          const hunger = (player['hunger'] as number) ?? 100;
 
-        const health = (player['health'] as number) ?? 100;
-        const hunger = (player['hunger'] as number) ?? 100;
+          this.updateHealth(health);
+          this.updateHunger(hunger);
+        });
+      }
 
-        this.updateHealth(health);
-        this.updateHunger(hunger);
-      });
+      // Count creatures
+      const creatures = state['creatures'] as
+        | { forEach: (cb: (creature: Record<string, unknown>, key: string) => void) => void }
+        | undefined;
+      if (creatures && typeof creatures.forEach === 'function') {
+        let herbs = 0;
+        let carns = 0;
+        creatures.forEach((creature) => {
+          const t = (creature['creatureType'] as string) ?? 'herbivore';
+          if (t === 'carnivore') carns++;
+          else herbs++;
+        });
+        this.updateCreatureCounts(herbs, carns);
+      }
     });
   }
 
@@ -129,5 +155,9 @@ export class HudRenderer {
       bar.rect(0, 0, BAR_WIDTH * ratio, BAR_HEIGHT);
       bar.fill(color);
     }
+  }
+
+  private updateCreatureCounts(herbivores: number, carnivores: number): void {
+    this.creatureCountText.text = `\uD83E\uDD95 ${herbivores}  \uD83E\uDD96 ${carnivores}`;
   }
 }

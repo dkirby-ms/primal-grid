@@ -77,3 +77,14 @@
 - **Greedy Manhattan** works for both `moveToward` and `moveAwayFrom`. Candidate moves try primary axis first, then secondary. Tests must set carnivore hunger below HUNGRY_THRESHOLD for hunt behavior to trigger.
 - **Creature death** removes from `state.creatures` MapSchema. Starvation: hunger 0 → health -= STARVATION_DAMAGE (2) per AI tick → removal at health ≤ 0. Tests for starvation death must place creature on barren tile (no resources) to prevent eating restoring hunger.
 - **Carnivore hunt attack**: when adjacent (Manhattan ≤ 1) to prey, deals HUNT_DAMAGE (25) and restores hunger. If prey health ≤ 0, prey is immediately deleted.
+
+### Phase 2.6 — Ecosystem Integration & Stability Tests (2026-02-25)
+
+- **26 new tests** in `server/src/__tests__/ecosystem-integration.test.ts`. Total suite: **194 tests across 17 files, all passing.**
+- **Pemulis already landed `tickCreatureRespawn()`** on GameRoom before tests ran. The method respawns creatures when populations drop below threshold. All respawn tests pass immediately.
+- **Creature iteration order matters for hunting tests.** In MapSchema.forEach, insertion order determines which creature acts first. Carnivore must be inserted before herbivore prey to ensure attack lands before prey flees. Tests that add prey first will fail because herbivore's flee priority beats carnivore's attack timing.
+- **Herbivore grazing already works** via `stepHerbivore` in creatureAI.ts — depletes tile resources when hungry and on a resource tile. No Phase 2.6 code needed for this behavior.
+- **Resource regen + consumption equilibrium verified** — after 500 ticks with active grazing and regeneration, total resources stay positive and within bounds. No permanent depletion.
+- **Ecosystem stability at 200+ ticks** — no crashes, no NaN values, no out-of-bounds creatures, all FSM states valid, resources persist. Full integration loop tested: tick advance → resource regen → creature AI → respawn.
+- **Edge cases covered:** 0 herbivores (respawn kicks in), 0 resources on all tiles (regen restores, creatures starve then respawn), carnivore-only map (starve cycle), empty creatures collection, multiple herbivores competing for same tile's resources, health/hunger value range sanity.
+- **`simulateTick(room)` helper** wraps full tick: advance counter + tickResourceRegen + tickCreatureAI + tickCreatureRespawn (if available). Cleaner than manually calling each subsystem.

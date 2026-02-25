@@ -77,3 +77,13 @@
 - **Wiring**: `main.ts` passes `app` into `connectToServer()` so the HUD container can be added to `app.stage` (not `grid.container`). HUD binds to room state via same duck-typed `onStateChange` pattern as other renderers.
 - **Same binding pattern**: Uses `Record<string, unknown>` duck-typing for state access, finds local player by matching `room.sessionId`, reads `player['health']` and `player['hunger']` with nullish defaults.
 - **126 tests passing** after changes, no regressions.
+
+### Phase 2.6 Creature State Visual Feedback (2026-02-25)
+- **CreatureRenderer state-aware rendering**: Each creature now tracked as a `CreatureEntry` (Container + Graphics + Text indicator) instead of a plain Graphics sprite. Graphics rebuilt only when `currentState` changes — no per-frame redraws.
+- **State color variations**: Eat state uses brighter/lighter colors (herbivore: #81C784, carnivore: #EF9A9A). Hunt state uses darker carnivore red (#C62828). Idle/Wander use default base colors.
+- **State indicators**: Flee state shows "!" above creature, Hunt state shows "⚔" above creature. Text indicators hidden when idle/wander/eat for clean visuals.
+- **Health opacity**: Creatures below 50% health render at 0.6 alpha — subtle visual degradation without cluttering the grid.
+- **HUD creature counts**: Added `🦕 {herbivores}  🦖 {carnivores}` text below hunger bar in HudRenderer. Counts updated every state change from `state.creatures` collection.
+- **HUD bindToRoom refactored**: Player stats and creature counts now both read from the same `onStateChange` callback. Guard changed from early-return to conditional blocks so both sections execute.
+- **Performance**: Graphic rebuilds are gated by `lastType`/`lastState` diffing. Alpha updates gated by `lastHealthLow` boolean. Indicator Text objects pre-allocated and toggled via `visible` — no allocation churn.
+- **168 tests passing** after changes, no regressions.
