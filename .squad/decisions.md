@@ -714,3 +714,63 @@ Player can:
 - ✅ No regressions in wild creature behavior or base building
 - ✅ 15-minute demo: tame → breed → command (polished, no crashes)
 
+## 2026-02-25: Phase 4.1+4.2 — Taming Schema Extensions & Interaction Handlers
+
+**Date:** 2026-02-25  
+**Author:** Pemulis (Systems Dev)  
+**Status:** Active
+
+### Decisions
+
+1. **Ownership via `ownerID` string field** — empty string = wild, player sessionId = owned. No separate roster or inventory. Creatures stay in `state.creatures` MapSchema; ownership is a field filter.
+2. **Trust is linear 0–100** — proximity gain (+1/10 ticks ≤3 tiles), decay (-1/20 ticks >3 tiles), auto-abandon at 50 consecutive ticks at zero trust. Simple and predictable.
+3. **Personality as string enum** — `Personality.Docile | Neutral | Aggressive`. Assigned immutably at spawn via weighted `personalityChart` on `CreatureTypeDef`. Affects initial taming trust only (Docile=10, Neutral=0, Aggressive=0).
+4. **Flat `meat` field on PlayerState** — same pattern as wood/stone/fiber/berries. No MapSchema for inventory items per established convention (B1).
+5. **Taming costs food, not time** — 1 berry (herbivore) or 1 meat (carnivore). Single interaction, no progress bar. Cheap enough to encourage experimentation, expensive enough to gate mass-taming.
+6. **Pack size limit enforced at tame time** — MAX_PACK_SIZE=8 checked before taming succeeds. No after-the-fact culling.
+7. **Tamed herbivores don't flee** — wild herbivores flee from carnivores; tamed ones skip flee entirely, standing their ground. This is the simplest behavioral change that makes tamed creatures feel different.
+8. **Trust tick runs every game tick** — `tickTrustDecay()` called each tick in sim loop. Proximity/decay checks are gated by modulo (10 and 20 ticks respectively) inside the method.
+9. **`zeroTrustTicks` is non-synced** — internal counter on CreatureState without `@type()` decorator. Client doesn't need it; it's purely for auto-abandon logic.
+
+### Implications
+
+- Gately: `ownerID`, `trust`, `personality` fields are now on CreatureState schema — client can read them for UI (4.5). `meat` field on PlayerState for inventory display.
+- Steeply: 15 taming tests already pass. Trust tick method is `tickTrustDecay()` (callable directly for testing).
+- Phase 4.3 (Pack Follow): `ownerID` filter is ready. Selected pack tracking can layer on top without schema changes.
+- Phase 4.4 (Breeding): `trust` field and `TAMING.TRUST_AT_OBEDIENT` (70) are ready for breed eligibility checks.
+- TAME/ABANDON/SELECT_CREATURE/BREED message constants and payloads are exported from shared — client can import immediately.
+
+### Files Changed
+
+- `shared/src/types.ts` — Personality enum, ICreatureState + IPlayerState updated
+- `shared/src/constants.ts` — TAMING constants object
+- `shared/src/messages.ts` — TAME, ABANDON, SELECT_CREATURE, BREED + payloads
+- `shared/src/data/creatures.ts` — personalityChart on CreatureTypeDef
+- `server/src/rooms/GameState.ts` — CreatureState (ownerID, trust, speed, personality, zeroTrustTicks), PlayerState (meat)
+- `server/src/rooms/GameRoom.ts` — handleTame, handleAbandon, tickTrustDecay, rollPersonality, personality at spawn
+- `server/src/rooms/creatureAI.ts` — tamed herbivores skip flee
+
+## 2026-02-25: Phase 4.3+4.4 — Pack Follow & Commands + Breeding Logic
+
+**Date:** 2026-02-25  
+**Author:** Pemulis (Systems Dev)  
+**Status:** Active
+
+### Decisions
+
+1. **Selected pack is server-only session state** — `playerSelectedPacks: Map<string, Set<string>>` on GameRoom, not in Colyseus schema. Client doesn't need to know which creatures are "selected" — it observes follow behavior via `currentState = "follow"`.
+2. **Pack follow overrides creature AI** — Pack creature IDs are passed to `tickCreatureAI()` as `skipIds` set. AI skips them entirely. Pack follow tick runs after AI and sets `currentState = "follow"` unconditionally for pack members.
+3. **SELECT_CREATURE validates trust ≥ 70** — Only obedient creatures (per C2) can be added to the selected pack. If trust drops below 70 while in pack, creature stays in pack but won't be auto-removed (trust can recover). Pack cleanup only on abandon/death/leave.
+4. **BREED uses single creature ID** — Player specifies one target creature; server auto-discovers mate within Manhattan distance 1 matching same type, same owner, trust ≥ 70, and not on cooldown. Simpler client API than two-ID approach.
+5. **BreedPayload changed** — From `{creatureId1, creatureId2}` to `{creatureId}`. Any client code importing BreedPayload will need updating.
+6. **Breeding cooldown on attempt, not success** — Both parents get `lastBredTick` set regardless of the 50% roll. Prevents rapid-fire berry burning. 100-tick cooldown.
+7. **Speed is the only trait delta** — Offspring speed = avg(parent speeds) + mutation ±1, capped ±3. No health or hungerDrain trait deltas on schema (not needed yet). Steeply's trait tests guard-pattern out gracefully.
+8. **moveToward exported from creatureAI.ts** — Reused by pack follow tick. No movement logic duplication.
+9. **ensurePacks() null guard pattern** — Same pattern as `nextCreatureId` null guard. Tests using `Object.create(GameRoom.prototype)` skip constructor, so `playerSelectedPacks` must be lazily initialized.
+
+### Implications
+
+- Gately (client): Can display `currentState = "follow"` as a visual indicator. SELECT_CREATURE message sends `{ creatureId: string }`. BREED message sends `{ creatureId: string }`.
+- Steeply: All 8 breeding tests pass. Consider adding pack follow tests (select/deselect, follow movement, AI exclusion).
+- Future: If health/hungerDrain trait deltas are needed, add schema fields and extend breeding averaging logic.
+

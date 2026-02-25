@@ -121,6 +121,16 @@ All Phase 3 client-side features working as specified:
 
 Client infrastructure is stable. Ready for Phase 4 creature UI extensions.
 
+- CraftMenu accessible via C key, shows all recipes with affordability checks
+- Build mode (B key) with item selection (1-4) and placement UI working
+- Inventory HUD shows all resource types with emoji labels
+- Harvest action (H key) sends correct coordinates to server
+- Full gameplay loop: gather → craft → build → harvest working end-to-end
+
+**Phase 3 Definition of Done:** ✅ Code-complete, test-complete, no regressions, ready for Phase 4.
+
+Client infrastructure is stable. Ready for Phase 4 creature UI extensions.
+
 ---
 
 ## Phase 4 Kickoff (2026-02-25T22:48:00Z)
@@ -141,3 +151,27 @@ Client infrastructure is stable. Ready for Phase 4 creature UI extensions.
 - ✅ Session log written
 - ✅ Orchestration log written
 - ✅ Agent history updated
+
+### Phase 4.5–4.7 — Creature Ownership & Breeding UI (2026-02-25)
+
+**Status:** ✅ COMPLETE (2026-02-25T22:55:00Z)
+
+- **4.5 CreatureRenderer Updates:** Ownership markers rendered on tamed creatures (white/gold glow ring or color tint). Trust bar below each creature name (0–100 linear, color threshold: red <30, yellow 30–60, green ≥60). `currentState` string displayed as label (idle, wander, eat, hunt, flee, follow — changes dynamically). Personality indicator shown on hover (Docile/Neutral/Aggressive label). All markers update in real-time as creature state changes.
+- **4.6 InputHandler Keybinds:** **I** key opens/closes creature inspection panel (selected creature details: trust value, personality, breed eligibility check, speed stat, ownership info). **F** key toggles pack follow selection (single-click select, multi-select with Shift held). Visual feedback: creatures in selected pack get white outline ring. HUD displays "N/8 creatures selected" counter. **B** key triggers breed action (if target creature in interaction range and trust ≥70, server auto-discovers mate and handles roll).
+- **4.7 TamingPanel HUD:** New panel "My Creatures" listing owned creatures in sortable grid (grouped by type). Each creature shows: name/type, trust bar with color coding, personality icon, speed stat (±X notation), breed cooldown countdown (if applicable). Taming action button (E key or UI button) with food cost display (🍎 = berry, 🥩 = meat). Pack roster with "N/8 Full" indicator. Breed success notification (offspring toast with parent names and inherited speed).
+- **HudManager:** Panel lifecycle: hidden by default, toggles with hotkey, auto-closes if creature dies/abandons, updates trust bars every tick, refreshes pack roster on creature selection change. No visual glitch on state updates. Responsive layout works 800×600 and larger.
+- **Test coverage:** Manual smoke tests validating E key tames creature, F key selects creatures (visual outline appears), B key enables breed button at trust ≥70, trust bar updates in real-time, offspring notification appears on successful breed. Pack follow keybind responsive, UI elements don't overlap, no crashes on rapid selection/deselection.
+- **Files landed:** `client/src/rendering/CreatureRenderer.ts` (ownership markers, trust bar, currentState label), `client/src/input/InputHandler.ts` (I/F/B keybinds, pack selection state tracking), `client/src/hud/TamingPanel.ts` (new panel with roster, trust display, breed UI), `client/src/hud/HudManager.ts` (panel lifecycle management).
+- **Key design:** Ownership markers use simple glow ring (white for owned, brighter gold for selected pack). Trust bar color-coded for quick visual scanning. Pack selection persists across camera pans. Breed button only enabled if both creatures present in world AND trust ≥70 AND not on cooldown.
+- **Integration:** All creature state fields (ownerID, trust, personality, currentState) are read from server schema. No local state duplication. Client responds to state changes immediately (no sync lag).
+
+### Phase 4 Summary (2026-02-25T22:55:00Z)
+
+**All agents delivered on schedule:**
+- ✅ Pemulis: 4.1+4.2 schema + taming (274 tests)
+- ✅ Steeply: 23 anticipatory tests (15 taming + 8 breeding)
+- ✅ Pemulis: 4.3+4.4 pack follow + breeding (297+ tests)
+- ✅ Gately: 4.5–4.7 client UI (ownership markers, keybinds, HUD panel)
+- 🟡 Steeply: 4.8 integration tests (in progress, full demo validation)
+
+**Phase 4 code-complete. Ready for Phase 5 kickoff (World Events: weather, migration, disasters, ruins, day/night cycle).**

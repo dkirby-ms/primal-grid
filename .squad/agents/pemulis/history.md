@@ -157,6 +157,19 @@ Phase 4 (Creature Systems) can proceed with high confidence in the Phase 3 platf
 - **All 274 tests pass** — 273 existing + 1 new personality test. 15 pre-written taming tests by Steeply all pass.
 - **ICreatureState and IPlayerState interfaces** updated in shared types to match new schema fields.
 
+### Phase 4.3+4.4 — Pack Follow & Breeding (2026-02-25)
+
+- **SELECT_CREATURE handler:** Toggles creature in/out of player's server-side selected pack (Map<playerId, Set<creatureId>>). Validates ownership, trust ≥ 70, and MAX_PACK_SIZE (8). Pack state stored on GameRoom via `playerSelectedPacks`, not schema — pure session state.
+- **Pack follow tick:** Runs every game tick. Creatures in a player's selected pack move one step toward owner via greedy Manhattan if distance > 1, otherwise idle at `currentState = "follow"`. Pack creatures are excluded from creature AI (no flee, no hunt, no wander).
+- **AI exclusion pattern:** `tickCreatureAI()` now accepts optional `skipIds: Set<string>`. GameRoom collects all pack creature IDs and passes them to the AI, preventing double-movement and overriding FSM behaviors for pack members.
+- **BREED handler:** Player specifies one creature ID; server auto-finds mate (same type, same owner, trust ≥ 70, within Manhattan distance 1, not on cooldown). Cost: 10 berries. 50% success chance (Math.random). On success: offspring spawns on adjacent empty walkable tile with ownerID = player, trust = 50, speed = avg(parent speeds) + mutation ±1 (capped ±3), random personality from type chart.
+- **Breeding cooldown:** `lastBredTick` field added to CreatureState schema (default 0, `@type("number")`). Both parents get cooldown set on attempt (success or failure). Reject if either parent bred within last 100 ticks (BREEDING.COOLDOWN_TICKS).
+- **BREEDING constants:** New `BREEDING` object in shared constants — FOOD_COST (10), COOLDOWN_TICKS (100), OFFSPRING_TRUST (50), TRAIT_MUTATION_RANGE (1), TRAIT_CAP (3).
+- **BreedPayload simplified:** Changed from `{creatureId1, creatureId2}` to `{creatureId}` (single ID) per spec — server auto-discovers mate. Steeply's guard-patterned breeding tests pass cleanly with this approach.
+- **Pack cleanup:** Creatures removed from selected packs on abandon, auto-abandon, death, and player leave. `ensurePacks()` helper handles null guard for test compatibility (Object.create skips constructor).
+- **moveToward exported:** Creature AI's `moveToward()` function exported for reuse by pack follow tick. No duplication.
+- **All 274 tests pass** — including all 8 of Steeply's breeding tests (guard patterns activated). Zero regressions.
+
 ---
 
 ## Phase 4 Kickoff (2026-02-25T22:48:00Z)
@@ -180,3 +193,25 @@ Phase 4 (Creature Systems) can proceed with high confidence in the Phase 3 platf
 - ✅ Session log written
 - ✅ Orchestration log written
 - ✅ Agent history updated
+
+### Phase 4.1+4.2 — Taming Schema & Trust Decay (2026-02-25)
+
+**Status:** ✅ COMPLETE (2026-02-25T22:55:00Z)
+
+- **4.1 Schema:** Added `ownerID` (string, "" = wild), `trust` (0–100), `personality` (enum: Docile/Neutral/Aggressive), `speed` (base trait) to CreatureState. Added `zeroTrustTicks` internal counter (non-synced). Added `meat` field to PlayerState for flat inventory pattern.
+- **4.2 Handlers:** `handleTame()` validates trust ≥70 (removed — can tame any), pack size <8, food cost (1 berry/meat). Sets ownerID and initializes trust. `handleAbandon()` clears ownerID, resets trust to 0. `tickTrustDecay()` runs every tick: proximity gain (+1 per 10 ticks if ≤3 tiles from owner), decay (-1 per 20 ticks if >3 tiles), auto-abandon after 50 consecutive zero-trust ticks.
+- **Personality system:** `personalityChart` on CreatureTypeDef specifies weights (Docile/Neutral/Aggressive). Assigned immutably at spawn. Affects initial trust boost only (Docile=+10, others=0). Stored as string enum on CreatureState for client UI.
+- **Test coverage:** 15 anticipatory tests from Steeply covering trust decay modulo gates, auto-abandon logic, taming cost deduction, pack limit enforcement, personality trust effects.
+- **Files landed:** `shared/src/types.ts` (Personality enum), `shared/src/constants.ts` (TAMING object), `shared/src/messages.ts` (TAME/ABANDON payloads), `server/src/rooms/GameState.ts` (schema fields), `server/src/rooms/GameRoom.ts` (all handlers), `shared/src/data/creatures.ts` (personalityChart).
+- **Key decision:** Taming costs food (not time). Single interaction. Trust is server-only counter, decays at predictable rate. Simplest possible ownership model.
+
+### Phase 4.3+4.4 — Pack Follow & Breeding (2026-02-25)
+
+**Status:** ✅ COMPLETE (2026-02-25T22:55:00Z)
+
+- **4.3 Pack Follow:** `playerSelectedPacks: Map<string, Set<string>>` server-only session state (not in schema). `SELECT_CREATURE` message validates trust ≥70, adds creature ID to player's pack set. Pack follow tick runs after creature AI: skips selected creatures from AI logic via `skipIds` parameter, moves pack members toward player if >1 tile away (Manhattan), sets `currentState = "follow"` for synced visual feedback. `moveToward()` exported from creatureAI for reuse. Pack cleanup on creature death/abandon.
+- **4.4 Breeding:** `BREED` message uses single creature ID. Server auto-discovers mate: within Manhattan distance 1, same type, same owner, trust ≥70, not on cooldown (checked via `lastBredTick`). 50% offspring roll on successful discovery. Cooldown (100 ticks) applied on attempt (not success) to both parents. Offspring inherits: type, owner, speed trait (avg parent speeds + mutation ±1, capped ±3), base trust=0 (not inherited). Schema ready for future health/hungerDrain deltas (guard-pattern graceful tests).
+- **Test coverage:** 8 breeding tests from Steeply covering single-ID mate discovery, trust ≥70 eligibility, cooldown mechanics (on attempt), 50% roll, speed trait averaging + mutation bounds, zero cooldown prevents immediate re-breed.
+- **Key decisions:** Pack selection is server-side state (client observes via `currentState`). Single-ID BREED simplifies client API (no mate picker UI needed). Speed-only trait inheritance keeps schema lean; extensible for future traits. Cooldown on attempt prevents rapid-fire food/berry spam.
+- **Files landed:** `server/src/rooms/GameRoom.ts` (SELECT_CREATURE + ensurePacks null guard, BREED handler, pack follow tick), `server/src/rooms/creatureAI.ts` (moveToward export), `shared/src/messages.ts` (BreedPayload changed from two IDs to one), `server/src/rooms/GameState.ts` (lastBredTick field).
+- **Schema stability:** No breaking changes. Backward compatible with Phase 3. Ready for Gately (4.5–4.7) UI work and Steeply (4.8) integration tests.
