@@ -15,7 +15,8 @@
     "Lost",
     "Marvel Cinematic Universe",
     "DC Universe",
-    "Star Trek"
+    "Star Trek",
+    "Infinite Jest"
   ],
   "universe_capacity": {
     "The Usual Suspects": 6,
@@ -32,6 +33,7 @@
     "Lost": 18,
     "Marvel Cinematic Universe": 25,
     "DC Universe": 18,
-    "Star Trek": 14
+    "Star Trek": 14,
+    "Infinite Jest": 12
   }
 }

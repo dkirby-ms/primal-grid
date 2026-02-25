@@ -1,7 +1,7 @@
 {
   "universe_usage_history": [
     {
-      "universe": "Alien",
+      "universe": "Infinite Jest",
       "first_used": "2026-02-25T00:45:00Z",
       "repo": "primal-grid"
     }
@@ -9,13 +9,13 @@
   "assignment_cast_snapshots": {
     "primal-grid-001": {
       "assignment_id": "primal-grid-001",
-      "universe": "Alien",
+      "universe": "Infinite Jest",
       "created_at": "2026-02-25T00:45:00Z",
       "agents": [
-        { "name": "Ripley", "role": "Lead" },
-        { "name": "Dallas", "role": "Game Dev" },
-        { "name": "Lambert", "role": "Systems Dev" },
-        { "name": "Parker", "role": "Tester" }
+        { "name": "Hal", "role": "Lead" },
+        { "name": "Gately", "role": "Game Dev" },
+        { "name": "Pemulis", "role": "Systems Dev" },
+        { "name": "Steeply", "role": "Tester" }
       ]
     }
   }

@@ -12,10 +12,10 @@
 
 | Name | Role | Charter | Status |
 |------|------|---------|--------|
-| Ripley | Lead | `.squad/agents/ripley/charter.md` | ✅ Active |
-| Dallas | Game Dev | `.squad/agents/dallas/charter.md` | ✅ Active |
-| Lambert | Systems Dev | `.squad/agents/lambert/charter.md` | ✅ Active |
-| Parker | Tester | `.squad/agents/parker/charter.md` | ✅ Active |
+| Hal | Lead | `.squad/agents/hal/charter.md` | ✅ Active |
+| Gately | Game Dev | `.squad/agents/gately/charter.md` | ✅ Active |
+| Pemulis | Systems Dev | `.squad/agents/pemulis/charter.md` | ✅ Active |
+| Steeply | Tester | `.squad/agents/steeply/charter.md` | ✅ Active |
 | Scribe | Session Logger | `.squad/agents/scribe/charter.md` | 📋 Silent |
 | Ralph | Work Monitor | — | 🔄 Monitor |
 
