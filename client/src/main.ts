@@ -2,10 +2,12 @@ import { Application } from 'pixi.js';
 import { GridRenderer } from './renderer/GridRenderer.js';
 import { PlayerRenderer } from './renderer/PlayerRenderer.js';
 import { CreatureRenderer } from './renderer/CreatureRenderer.js';
+import { StructureRenderer } from './renderer/StructureRenderer.js';
 import { Camera } from './renderer/Camera.js';
 import { InputHandler } from './input/InputHandler.js';
 import { ConnectionStatusUI } from './ui/ConnectionStatus.js';
 import { HudRenderer } from './ui/HudRenderer.js';
+import { CraftMenu } from './ui/CraftMenu.js';
 import { connect, disconnect, onConnectionStatus } from './network.js';
 
 const WIDTH = 800;
@@ -57,13 +59,27 @@ async function connectToServer(app: Application, grid: GridRenderer): Promise<vo
     grid.container.addChild(creatures.container);
     creatures.bindToRoom(room);
 
+    // Structure renderer (walls, floors, workbenches, farm plots)
+    const structures = new StructureRenderer();
+    grid.container.addChild(structures.container);
+    structures.bindToRoom(room);
+
     // HUD (fixed on screen, not in world space)
     const hud = new HudRenderer(room.sessionId);
     app.stage.addChild(hud.container);
     hud.bindToRoom(room);
 
-    // Input handler (arrow keys + click)
-    new InputHandler(room, grid.container);
+    // Craft menu overlay (screen-fixed)
+    const craftMenu = new CraftMenu(room);
+    app.stage.addChild(craftMenu.container);
+
+    // Feed inventory updates to craft menu for affordability display
+    hud.onInventoryUpdate = (resources) => craftMenu.updateResources(resources);
+
+    // Input handler (arrow keys + click + craft/build/harvest)
+    const input = new InputHandler(room, grid.container);
+    input.setCraftMenu(craftMenu);
+    input.setHud(hud);
   } catch {
     console.warn('[main] Server unavailable — running in offline mode.');
   }

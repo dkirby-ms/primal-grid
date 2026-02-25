@@ -22,6 +22,16 @@ export class HudRenderer {
   private hungerValue: Text;
 
   private creatureCountText: Text;
+  private inventoryText: Text;
+  private craftedText: Text;
+  private buildModeText: Text;
+
+  /** Callback invoked with latest player resources for craft menu updates. */
+  public onInventoryUpdate: ((resources: Record<string, number>) => void) | null = null;
+
+  /** Readable player position for farm harvest. */
+  public localPlayerX = 0;
+  public localPlayerY = 0;
 
   constructor(localSessionId: string) {
     this.localSessionId = localSessionId;
@@ -91,9 +101,43 @@ export class HudRenderer {
     this.creatureCountText.position.set(0, creatureY);
     this.container.addChild(this.creatureCountText);
 
+    // --- Inventory display ---
+    const invY = creatureY + 20;
+    this.inventoryText = new Text({
+      text: '\uD83E\uDEB5 0  \uD83E\uDEA8 0  \uD83C\uDF3F 0  \uD83E\uDED0 0',
+      style: { fontSize: 11, fill: '#aaaaaa', fontFamily: 'monospace' },
+    });
+    this.inventoryText.position.set(0, invY);
+    this.container.addChild(this.inventoryText);
+
+    const craftedY = invY + 18;
+    this.craftedText = new Text({
+      text: '',
+      style: { fontSize: 11, fill: '#aaaaaa', fontFamily: 'monospace' },
+    });
+    this.craftedText.position.set(0, craftedY);
+    this.container.addChild(this.craftedText);
+
+    // --- Build mode indicator ---
+    this.buildModeText = new Text({
+      text: '',
+      style: { fontSize: 14, fill: '#ffcc00', fontFamily: 'monospace', fontWeight: 'bold' },
+    });
+    this.buildModeText.position.set(0, craftedY + 22);
+    this.buildModeText.visible = false;
+    this.container.addChild(this.buildModeText);
+
     // Draw initial full bars
     this.drawBar(this.healthBarFill, 1, 0x2ecc71);
     this.drawBar(this.hungerBarFill, 1, 0xf39c12);
+  }
+
+  /** Show or hide build mode indicator with selected item name. */
+  public setBuildMode(active: boolean, itemName?: string): void {
+    this.buildModeText.visible = active;
+    if (active) {
+      this.buildModeText.text = `🔨 BUILD MODE [${itemName ?? ''}]`;
+    }
   }
 
   /** Listen to Colyseus state and update HUD bars for the local player. */
@@ -112,6 +156,33 @@ export class HudRenderer {
 
           this.updateHealth(health);
           this.updateHunger(hunger);
+
+          // Track position for farm harvest
+          this.localPlayerX = (player['x'] as number) ?? 0;
+          this.localPlayerY = (player['y'] as number) ?? 0;
+
+          // Update inventory display
+          const wood = (player['wood'] as number) ?? 0;
+          const stone = (player['stone'] as number) ?? 0;
+          const fiber = (player['fiber'] as number) ?? 0;
+          const berries = (player['berries'] as number) ?? 0;
+          this.inventoryText.text =
+            `\uD83E\uDEB5 ${wood}  \uD83E\uDEA8 ${stone}  \uD83C\uDF3F ${fiber}  \uD83E\uDED0 ${berries}`;
+
+          // Crafted items
+          const walls = (player['walls'] as number) ?? 0;
+          const floors = (player['floors'] as number) ?? 0;
+          const axes = (player['axes'] as number) ?? 0;
+          const pickaxes = (player['pickaxes'] as number) ?? 0;
+          const workbenches = (player['workbenches'] as number) ?? 0;
+          const farmPlots = (player['farmPlots'] as number) ?? 0;
+          this.craftedText.text =
+            `Wall:${walls} Floor:${floors} Axe:${axes} Pick:${pickaxes} WB:${workbenches} Farm:${farmPlots}`;
+
+          // Notify craft menu of resource changes
+          if (this.onInventoryUpdate) {
+            this.onInventoryUpdate({ wood, stone, fiber, berries });
+          }
         });
       }
 
