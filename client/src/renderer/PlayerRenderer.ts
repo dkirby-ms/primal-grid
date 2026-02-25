@@ -1,6 +1,6 @@
 import { Container, Graphics } from 'pixi.js';
 import { TILE_SIZE } from './GridRenderer.js';
-import type { Room } from 'colyseus.js';
+import type { Room } from '@colyseus/sdk';
 
 const PLAYER_RADIUS = 12;
 

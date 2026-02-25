@@ -1,4 +1,4 @@
-import { Room, Client } from "colyseus";
+import { Room, Client, CloseCode } from "colyseus";
 import { GameState, TileState, PlayerState } from "./GameState.js";
 import { TICK_RATE, DEFAULT_MAP_SIZE, TileType, MOVE } from "@primal-grid/shared";
 import type { MovePayload } from "@primal-grid/shared";
@@ -9,9 +9,10 @@ const PLAYER_COLORS = [
   "#fabed4", "#469990", "#dcbeff", "#9a6324",
 ];
 
-export class GameRoom extends Room<GameState> {
+export class GameRoom extends Room {
+  state = new GameState();
+
   override onCreate(_options: Record<string, unknown>) {
-    this.setState(new GameState());
     this.generateMap();
 
     this.setSimulationInterval((_deltaTime) => {
@@ -38,8 +39,9 @@ export class GameRoom extends Room<GameState> {
     console.log(`[GameRoom] Client joined: ${client.sessionId} at (${spawn.x}, ${spawn.y})`);
   }
 
-  override onLeave(client: Client, consented: boolean) {
+  override onLeave(client: Client, code: number) {
     this.state.players.delete(client.sessionId);
+    const consented = code === CloseCode.CONSENTED;
     console.log(
       `[GameRoom] Client left: ${client.sessionId} (consented: ${consented})`
     );

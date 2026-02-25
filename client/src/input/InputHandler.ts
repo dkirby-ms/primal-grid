@@ -1,4 +1,4 @@
-import type { Room } from 'colyseus.js';
+import type { Room } from '@colyseus/sdk';
 import { MOVE } from '@primal-grid/shared';
 import { TILE_SIZE } from '../renderer/GridRenderer.js';
 import type { Container } from 'pixi.js';

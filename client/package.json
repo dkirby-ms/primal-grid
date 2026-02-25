@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "pixi.js": "^8.0.0",
-    "colyseus.js": "^0.15.0"
+    "@colyseus/sdk": "^0.17.26"
   },
   "devDependencies": {
     "vite": "^6.0.0",

@@ -1,4 +1,4 @@
-import { Client, Room } from 'colyseus.js';
+import { Client, Room } from '@colyseus/sdk';
 import { SERVER_PORT } from '@primal-grid/shared';
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';

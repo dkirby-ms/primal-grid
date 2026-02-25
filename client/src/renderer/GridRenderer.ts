@@ -1,6 +1,6 @@
 import { Container, Graphics } from 'pixi.js';
 import { TileType, DEFAULT_MAP_SIZE } from '@primal-grid/shared';
-import type { Room } from 'colyseus.js';
+import type { Room } from '@colyseus/sdk';
 
 export const TILE_SIZE = 32;
 
