@@ -48,3 +48,10 @@
 - **Biome diversity** — seed 42 produces at least 3 distinct biome types including both Water and Rock (elevation layer).
 - **Player spawn** still works correctly with new biomes — 10-player stress test passes, all spawns on walkable non-Water non-Rock tiles.
 - **Test helper pattern** — `createRoomWithMap(seed)` wraps the `Object.create(GameRoom.prototype)` + `generateMap(seed)` pattern. Seed parameter is optional (mirrors the implementation).
+
+### Phase 2.1 Completion & Handoff (2026-02-25)
+
+- **Phase 2.1 complete:** 30 new tests for biome types and procedural map generation. Suite now at 60 tests, all passing. No regressions. Tests use dynamic tile scanning, seed determinism verified.
+- **Decision records merged:** `.squad/decisions.md` updated with full Phase 2 architecture. Inbox files deleted.
+- **Orchestration logs written:** Hal, Pemulis, Gately, Steeply orchestration logs at `.squad/orchestration-log/2026-02-25T15:23:41Z-*.md`.
+- **Next:** Phase 2.2 (Resources) and 2.4 (Creatures) start parallel. Steeply will expand tests for resource system, creature spawning, creature AI as agents deliver.

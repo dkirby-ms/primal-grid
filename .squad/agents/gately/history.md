@@ -54,3 +54,9 @@
 - Added Vite HMR dispose handler in `main.ts` — calls `disconnect()` on hot reload to prevent duplicate Colyseus connections.
 - Added `"types": ["vite/client"]` to client tsconfig for `import.meta.hot` type support.
 - `isWalkable` uses deny-list (Water/Rock), so new biomes are automatically walkable — no server-side changes needed.
+
+### Phase 2.1 Completion & Handoff (2026-02-25)
+
+- **Phase 2.1 complete:** Biome colors, HMR cleanup, 60 tests passing. Pemulis completed server-side map generation. Steeply expanded test coverage.
+- **Decision record merged:** `.squad/decisions.md` now contains full Phase 2 scoping + Phase 2.1 architecture from Pemulis and Gately. Inbox files deleted. Orchestration logs written.
+- **Team status:** 60 tests passing. Biome world rendering live. HMR dev loop clean. Ready for Phase 2.2 (Resources) and 2.4 (Creatures) parallel tracks.

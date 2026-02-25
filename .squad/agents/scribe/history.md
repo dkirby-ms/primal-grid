@@ -8,3 +8,5 @@
 ## Learnings
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
+
+- **First orchestration (2026-02-25 Phase 2 Kickoff):** Scribe wrote 4 orchestration logs (Hal, Pemulis, Gately, Steeply) for Phase 2.1 completion. Merged 3 inbox decision files into `.squad/decisions.md` (hal-phase2-scoping, pemulis-procedural-map-gen, gately-biome-colors-and-hmr). Deleted inbox files. Updated agent history.md files with team updates. Session log: `.squad/log/2026-02-25T15-phase2-kickoff.md`. All artifacts use ISO 8601 UTC timestamps. Git commit pending.
