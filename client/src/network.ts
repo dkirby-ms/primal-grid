@@ -43,3 +43,10 @@ export async function connect(): Promise<Room> {
 export function getRoom(): Room | null {
   return room;
 }
+
+export async function disconnect(): Promise<void> {
+  if (room) {
+    await room.leave();
+    room = null;
+  }
+}

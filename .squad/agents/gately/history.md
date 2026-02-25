@@ -60,3 +60,11 @@
 - **Phase 2.1 complete:** Biome colors, HMR cleanup, 60 tests passing. Pemulis completed server-side map generation. Steeply expanded test coverage.
 - **Decision record merged:** `.squad/decisions.md` now contains full Phase 2 scoping + Phase 2.1 architecture from Pemulis and Gately. Inbox files deleted. Orchestration logs written.
 - **Team status:** 60 tests passing. Biome world rendering live. HMR dev loop clean. Ready for Phase 2.2 (Resources) and 2.4 (Creatures) parallel tracks.
+
+### Phase 2.2/2.4 Client Rendering (2026-02-25)
+- **CreatureRenderer** (`client/src/renderer/CreatureRenderer.ts`): Renders herbivores as green circles (#4CAF50, radius 6px) and carnivores as red triangles (#F44336, radius 6px). Follows same duck-typed `onStateChange` binding pattern as PlayerRenderer — iterates `state.creatures.forEach()`, creates/removes sprites reactively.
+- **Resource indicators in GridRenderer**: Each tile now has a pre-allocated resource dot (5×5px square, top-right corner of tile). Hidden by default; shown when `resourceAmount > 0`. Color-coded by type: Wood=brown (#8B4513), Stone=gray (#999999), Fiber=light green (#90EE90), Berries=orchid (#DA70D6).
+- **Shared types expanded**: Added `ResourceType` enum (Wood=0, Stone=1, Fiber=2, Berries=3), `CreatureType` type alias, `ICreatureState` interface, and optional `resourceType`/`resourceAmount` fields on `ITileState`.
+- **Wiring**: `main.ts` creates and binds CreatureRenderer after PlayerRenderer, adds creature container to grid container (same z-order pattern).
+- **Architecture note**: Both renderers use generic `Record<string, unknown>` duck-typing for state access. No coupling to Pemulis's exact Colyseus schema classes — adapts at runtime to whatever collection shape `.creatures` or tile fields have.
+- **89 tests passing** after changes, no regressions.

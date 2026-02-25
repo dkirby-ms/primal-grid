@@ -57,3 +57,22 @@
 - **Phase 2.1 complete:** Biome types, procedural map generation, tile properties (fertility/moisture), mapSeed. 60 tests passing. Gately completed client colors + HMR cleanup. Steeply added 30 tests for biome distribution and seed determinism.
 - **Decision record merged:** `hal-phase2-scoping.md`, `pemulis-procedural-map-gen.md`, `gately-biome-colors-and-hmr.md` merged to `.squad/decisions.md` (orchestration log at `.squad/orchestration-log/2026-02-25T15:23:41Z-pemulis.md`).
 - **Next:** Phase 2.2 (Resources & Gathering) is next parallel track. Pemulis leads. Depends on 2.1 (biomes ready). 2.3 and 2.4 also parallel-ready after their prereqs.
+
+### Phase 2.2 — Resources & Gathering (2026-02-25)
+
+- **ResourceType enum:** Wood=0, Stone=1, Fiber=2, Berries=3 in `shared/src/types.ts`. Uses number representation (-1 = none) in schema fields for Colyseus compatibility.
+- **TileState resource fields:** `resourceType` (number, -1 for none) and `resourceAmount` (number, 0-10) added with `@type("number")` decorators.
+- **Biome→resource mapping:** Deterministic via seeded RNG in `mapGenerator.ts`. Forest→Wood, Grassland→Fiber|Berries (50/50), Highland→Stone, Sand→Fiber (30% chance). Desert/Swamp/Water/Rock get no resources.
+- **Player inventory:** Individual `@type("number")` fields (wood, stone, fiber, berries) on PlayerState — NOT MapSchema. MapSchema<number> doesn't serialize well in Colyseus schema v4.
+- **GATHER handler:** Validates adjacency (dx/dy ≤ 1), decrements tile resource, increments player inventory field via switch on ResourceType. Depleted tiles get resourceType set to -1.
+- **Resource regeneration:** Runs every `RESOURCE_REGEN.INTERVAL_TICKS` (80 ticks = 20s). Existing resources regen +1 toward MAX_AMOUNT (10). Depleted tiles regrow based on biome mapping. Constants in `shared/src/constants.ts`.
+- **ITileState/IPlayerState interfaces updated:** Added resourceType, resourceAmount to ITileState; wood, stone, fiber, berries to IPlayerState.
+
+### Phase 2.4 — Creature Schema & Spawning (2026-02-25)
+
+- **CREATURE_TYPES data:** Typed constants (not JSON) in `shared/src/data/creatures.ts`. Herbivore (Parasaurolophus, 100hp, preferred Grassland/Forest, green) and Carnivore (Raptor, 80hp, preferred Forest/Highland, red).
+- **CreatureState schema:** id (string), creatureType (string), x/y (number), health (number), hunger (number), currentState (string, default "idle"). All `@type()` decorated.
+- **GameState.creatures:** `MapSchema<CreatureState>` keyed by creature id string.
+- **Spawn strategy:** 8 herbivores + 4 carnivores (constants in CREATURE_SPAWN). Preferred-biome-first placement (100 random attempts in preferred biomes, then fallback to any walkable tile). Uses same pattern as player spawn.
+- **No AI yet:** Creatures spawn with currentState="idle" and don't move. AI is Phase 2.5.
+- **All 89 existing tests pass** after both phases.

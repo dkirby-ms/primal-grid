@@ -55,3 +55,14 @@
 - **Decision records merged:** `.squad/decisions.md` updated with full Phase 2 architecture. Inbox files deleted.
 - **Orchestration logs written:** Hal, Pemulis, Gately, Steeply orchestration logs at `.squad/orchestration-log/2026-02-25T15:23:41Z-*.md`.
 - **Next:** Phase 2.2 (Resources) and 2.4 (Creatures) start parallel. Steeply will expand tests for resource system, creature spawning, creature AI as agents deliver.
+
+### Phase 2.2 & 2.4 — Resources, Gathering, Creatures (2026-02-25)
+
+- **37 new tests** across 4 files: `shared/src/__tests__/resource-types.test.ts` (5 tests), `shared/src/__tests__/creature-types.test.ts` (10 tests), `server/src/__tests__/resources-gathering.test.ts` (12 tests), `server/src/__tests__/creature-spawning.test.ts` (10 tests). Total suite: **126 tests, all passing.**
+- **Pemulis already landed both phases** when tests were written. ResourceType enum (4 types: Wood, Stone, Fiber, Berries), CREATURE_TYPES (herbivore "Parasaurolophus", carnivore "Raptor"), CreatureState schema, creature spawning, gather handler, and resource regeneration all present.
+- **Inventory is flat fields** (not MapSchema): `player.wood`, `player.stone`, `player.fiber`, `player.berries`. Decision A6 said MapSchema but implementation chose simpler flat fields. Tests adapted accordingly.
+- **CREATURE_TYPES** lives in `shared/src/data/creatures.ts`, exported via `shared/src/index.ts`. CreatureTypeDef interface has: name, health, hunger, speed, detectionRadius, preferredBiomes, color.
+- **Gathering adjacency**: Player must be on tile or adjacent (Chebyshev distance ≤ 1). `handleGather` validates this, rejects far-away gathers, handles depleted tiles (resourceAmount=0) gracefully by early-returning.
+- **Resource regeneration**: `tickResourceRegen()` runs every RESOURCE_REGEN.INTERVAL_TICKS (80 ticks = 20 seconds). Depleted tiles (resourceType=-1) can regrow based on biome. Existing resources regenerate +1 per interval, capped at MAX_AMOUNT=10.
+- **Known flaky test**: "no two creatures spawn on exact same tile" — `findWalkableTileInBiomes` does NOT deduplicate positions. With 12 creatures on ~200-300 preferred tiles, birthday-problem collisions happen ~20% of the time. Test is spec-correct; implementation gap. Usually passes but will occasionally flake.
+- **Creature spawn count**: 8 herbivores + 4 carnivores = 12 total (CREATURE_SPAWN constants). Matches the ~12 target for 32×32 maps.
