@@ -38,3 +38,13 @@
 - **Deterministic map generation** makes tile-position assertions reliable. Known coordinates: water pond at (4-8,4-8), sand beach around it, rock formation at (22-26,22-26), scattered edge rocks.
 - **Player spawn** always lands on walkable tiles — verified with 10-player stress test.
 - Coverage gaps to address in Phase 2+: no tick/simulation interval tests, no gather message handling, no network-level multi-client sync tests (would need Colyseus test server).
+
+### Phase 2.1 — Biome Types & Procedural Map Generation (2026-02-25)
+
+- **30 new tests** across 2 files: `shared/src/__tests__/biome-types.test.ts` (4 tests), `server/src/__tests__/procedural-map-generation.test.ts` (26 tests). Total suite: **89 tests, all passing.**
+- **Pemulis already landed Phase 2.1** when tests were written — `TileType` enum expanded to 8 biomes (Grassland, Forest, Swamp, Desert, Highland, Water, Rock, Sand), `generateMap(seed)` accepts a seed for reproducible noise-based generation, tiles gained `fertility` and `moisture` properties (both 0–1 range).
+- **Seed reproducibility verified** — same seed ⇒ identical tile types, fertility, and moisture. Different seeds ⇒ different maps. This is the foundation for deterministic replay.
+- **Walkability rule unchanged** — only Water and Rock are non-walkable. All 6 other biomes (Grassland, Forest, Swamp, Desert, Highland, Sand) are walkable. Comprehensive test checks ALL 1024 tiles for consistency.
+- **Biome diversity** — seed 42 produces at least 3 distinct biome types including both Water and Rock (elevation layer).
+- **Player spawn** still works correctly with new biomes — 10-player stress test passes, all spawns on walkable non-Water non-Rock tiles.
+- **Test helper pattern** — `createRoomWithMap(seed)` wraps the `Object.create(GameRoom.prototype)` + `generateMap(seed)` pattern. Seed parameter is optional (mirrors the implementation).

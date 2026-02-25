@@ -45,3 +45,12 @@
 - **Wiring in main.ts:** Bootstrap creates app → grid → camera → status UI → async connects to server. On connect: binds grid, creates player renderer, attaches input handler. On failure: logs warning, client stays up with default grid.
 - **Architecture note:** State binding uses generic `Record<string, unknown>` typing to avoid coupling to Pemulis's exact schema shape. Works with any collection that has `.forEach()`.
 - **Files created:** `client/src/network.ts`, `client/src/renderer/GridRenderer.ts`, `client/src/renderer/Camera.ts`, `client/src/renderer/PlayerRenderer.ts`, `client/src/input/InputHandler.ts`, `client/src/ui/ConnectionStatus.ts`. Modified: `client/src/main.ts`.
+
+### Phase 2.1 Biome Tile Rendering (2026-02-25)
+- Expanded TILE_COLORS map in GridRenderer to support 8 biome types: Grassland (0x4a7c4f), Forest (0x2d5a27), Swamp (0x556b2f), Desert (0xd2b48c), Highland (0x8b7d6b), Water (0x3498db), Rock (0x7f8c8d), Sand (0xf0d9a0).
+- Renamed all `TileType.Grass` references to `TileType.Grassland` across client, server, and shared packages.
+- Updated shared TileType enum to include new biomes (Forest, Swamp, Desert, Highland). Enum values shifted: Water=5, Rock=6, Sand=7. No issues since all code uses symbolic names.
+- Added `disconnect()` export to `network.ts` for clean room teardown.
+- Added Vite HMR dispose handler in `main.ts` — calls `disconnect()` on hot reload to prevent duplicate Colyseus connections.
+- Added `"types": ["vite/client"]` to client tsconfig for `import.meta.hot` type support.
+- `isWalkable` uses deny-list (Water/Rock), so new biomes are automatically walkable — no server-side changes needed.
