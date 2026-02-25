@@ -19,3 +19,12 @@
 ## Learnings
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
+
+### Phase 0 — Baseline Test Setup (2026-02-25)
+
+- **Vitest** already declared in root `devDependencies` and test script (`vitest run`). Added `vitest.config.ts` at root with explicit include patterns for `shared` and `server` test dirs.
+- Test convention: `<package>/src/__tests__/*.test.ts`. TypeScript source imports (not dist).
+- Scaffolding was clean — all shared exports (`TileType`, constants, message types) and server schemas (`GameState`, `GameRoom`) worked without fixes.
+- Colyseus `@colyseus/schema` decorators (`@type`) work fine under Vitest with `experimentalDecorators` in server tsconfig.
+- **12 tests across 5 files** passing: types (2), constants (3), messages (4), GameState (2), GameRoom (1).
+- Build pipeline (`npm run build`) still succeeds after adding test files and vitest config.
