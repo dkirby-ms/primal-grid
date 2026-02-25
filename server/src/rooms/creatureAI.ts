@@ -45,13 +45,16 @@ export function tickCreatureAI(state: GameState): void {
 
 function stepHerbivore(creature: CreatureState, state: GameState): void {
   const typeDef = CREATURE_TYPES["herbivore"];
-  const nearestCarnivore = findNearestOfType(creature, state, "carnivore", typeDef.detectionRadius);
 
-  // Priority 1: Flee from carnivores
-  if (nearestCarnivore) {
-    creature.currentState = "flee";
-    moveAwayFrom(creature, nearestCarnivore.x, nearestCarnivore.y, state);
-    return;
+  // Tamed herbivores skip flee behavior (they trust their owner's pack)
+  if (creature.ownerID === "") {
+    const nearestCarnivore = findNearestOfType(creature, state, "carnivore", typeDef.detectionRadius);
+    // Priority 1: Flee from carnivores (wild only)
+    if (nearestCarnivore) {
+      creature.currentState = "flee";
+      moveAwayFrom(creature, nearestCarnivore.x, nearestCarnivore.y, state);
+      return;
+    }
   }
 
   // Priority 2: Eat when hungry and on a resource tile

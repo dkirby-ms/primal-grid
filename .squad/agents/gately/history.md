@@ -120,3 +120,24 @@ All Phase 3 client-side features working as specified:
 **Phase 3 Definition of Done:** ✅ Code-complete, test-complete, no regressions, ready for Phase 4.
 
 Client infrastructure is stable. Ready for Phase 4 creature UI extensions.
+
+---
+
+## Phase 4 Kickoff (2026-02-25T22:48:00Z)
+
+**Status:** ACTIVE — Waiting on Pemulis 4.1 schema
+
+**Scope:** Gately owns client work: 4.5 Tame UI (1d), 4.6 Command Binding (1d), 4.7 Trait Rendering (1d). Total 3d after 4.1 lands. Depends on: Pemulis 4.1 schema (ownerID, trust, personality, traits fields).
+
+**Gately tasks (begin when 4.1 schema lands):**
+- **4.5 Tame UI** (1d): New HUD panel "My Creatures" listing owned creatures grouped by type. Show trust bar (0–100) below each creature name. Click creature → highlight in world.
+- **4.6 Command Binding** (1d after 4.5): F key toggles select/deselect creatures (Shift for multi-select). Visual indicator: owned creatures have gold ring when in selected pack. Display "N/8 creatures selected" in HUD.
+- **4.7 Trait Rendering** (1d after 4.5): Hover creature → tooltip showing Personality, Speed (±X), Health (+X), Hunger Drain (±X). On breeding, offspring tooltip shows "Bred 2 ticks ago" + parent info.
+
+**Blocking:** Pemulis 4.1 schema (ownerID, trust, personality, traits fields). Once 4.1 lands, unblock and start 4.5 immediately.
+
+**Orchestration complete:**
+- ✅ Hal scoping document merged to decisions.md
+- ✅ Session log written
+- ✅ Orchestration log written
+- ✅ Agent history updated

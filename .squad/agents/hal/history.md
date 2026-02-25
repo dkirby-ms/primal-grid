@@ -31,6 +31,26 @@
 - **2026-02-25 Phase 3 scoped:** Broke Phase 3 (Base Building) into 7 ordered work items: 3.1 Recipe/Item Data, 3.2 Inventory/Craft Handler, 3.3 Structure Schema/Placement, 3.4 Farm System, 3.5 Client Structure Rendering, 3.6 Inventory HUD/Build Mode, 3.7 Integration Testing. Linear server pipeline (3.1→3.4), client work parallelizes at 3.5 once 3.3 schema lands. 8 architecture decisions (B1–B8). Key constraint: flat inventory fields (no MapSchema) per Colyseus v4 limitation.
 - **Scope fence (Phase 3):** No multi-tile structures, no storage containers, no doors, no advanced crafting stations, no tool durability/equip, no crop variety, no structure health/destruction. All deferred to Phase 5/6. MVP = wall + floor + workbench + axe + pickaxe + farm plot. 6 recipes total.
 - **Pattern confirmed:** Data-driven constants in shared (RECIPES table matches CREATURE_TYPES pattern). Passive tool bonuses (no equip UI). FarmPlot reuses StructureState schema with optional growth fields rather than a parallel system.
+- **2026-02-25 Phase 4 scoped:** Phase 3 complete (273 tests). Phase 4 (Creature Systems) breaks into 8 work items: 4.1 Schema (ownerID, trust, traits), 4.2 Taming (I key, trust progression), 4.3 Pack Follow (F key, selected set), 4.4 Breeding (offspring traits), 4.5 Tame UI (owned creature list), 4.6 Command Binding (visual feedback), 4.7 Trait Rendering, 4.8 Integration & A* prep. Pemulis owns server (4.1–4.4, ~5d). Gately owns client (4.5–4.7, ~3d). Steeply integration 4.8 (~2d). Key deferral: A* pathfinding (stub only, full Phase 5 work). Trust scalar 0–100, 70+ obedient. Pack limit 8/player. 9 architecture decisions (C1–C9). Greedy movement persists.
+- **Schema pattern (Phase 4):** Add to CreatureState: ownerID (string), trust (0–100), speed/personality/traits (deltas). Ownership model = creatureID in player's selected pack set + server tracks selectedPacks per player. Wild creature respawn unaffected.
+- **Breeding logic (Phase 4):** Two creatures same type, trust≥70, same owner, adjacent, 50% chance/tick → offspring with averaged parent traits + mutation (±1d2). Offspring inherits owner, starts trust=50. Costs 10 berries. Cooldown 100 ticks between breeding same pair.
+
+---
+
+## Phase 4 Kickoff (2026-02-25T22:48:00Z)
+
+**Status:** ACTIVE — Hal scoping complete, Pemulis & Steeply in-progress, Gately waiting on 4.1
+
+**Hal work (complete):**
+- ✅ Phase 4 scoping document (17.8 KB, 9 architecture decisions C1–C9)
+- ✅ Work breakdown (8 items, 5–6d critical path, Pemulis 4.1→4.4, Gately 4.5→4.7, Steeply 4.8)
+- ✅ Dependency graph (Pemulis blocks Gately & Steeply)
+- ✅ Definition of done (7-point gameplay + 300+ tests)
+- ✅ Orchestration log written (`.squad/orchestration-log/2026-02-25T22:48:00Z-hal.md`)
+- ✅ Session log written (`.squad/log/2026-02-25T22:48:00Z-phase4-kickoff.md`)
+- ✅ Decision inbox merged to decisions.md
+
+**Next:** Pemulis begins 4.1 immediately. Scribe monitors PR merges, updates agent history on each landing.
 
 ---
 

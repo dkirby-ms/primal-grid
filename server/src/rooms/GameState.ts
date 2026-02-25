@@ -50,6 +50,9 @@ export class PlayerState extends Schema {
   berries: number = 0;
 
   @type("number")
+  meat: number = 0;
+
+  @type("number")
   hunger: number = 100;
 
   @type("number")
@@ -95,6 +98,21 @@ export class CreatureState extends Schema {
 
   @type("string")
   currentState: string = "idle";
+
+  @type("string")
+  ownerID: string = "";
+
+  @type("number")
+  trust: number = 0;
+
+  @type("number")
+  speed: number = 0;
+
+  @type("string")
+  personality: string = "neutral";
+
+  /** Consecutive ticks at trust=0 (for auto-abandon). Not synced to client. */
+  zeroTrustTicks: number = 0;
 }
 
 export class StructureState extends Schema {

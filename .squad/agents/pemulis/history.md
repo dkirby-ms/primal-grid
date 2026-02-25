@@ -141,3 +141,42 @@ All Phase 3 server-side features working as specified:
 **Phase 3 Definition of Done:** ✅ Code-complete, test-complete, no regressions, ready for Phase 4.
 
 Phase 4 (Creature Systems) can proceed with high confidence in the Phase 3 platform.
+
+### Phase 4.1+4.2 — Taming Schema & Interaction Handlers (2026-02-25)
+
+- **CreatureState schema extended:** Added `ownerID` (string, default ""), `trust` (number, default 0), `speed` (number, default 0), `personality` (string, default "neutral"), `zeroTrustTicks` (number, non-synced, for auto-abandon tracking). All `@type()` decorated except zeroTrustTicks (internal counter).
+- **PlayerState schema extended:** Added `meat` field (`@type("number")`, default 0) following flat inventory pattern (same as wood/stone/fiber/berries).
+- **Personality enum:** `Docile = "docile"`, `Neutral = "neutral"`, `Aggressive = "aggressive"` in `shared/src/types.ts`. String-valued enum for Colyseus schema compatibility.
+- **TAMING constants:** New object in `shared/src/constants.ts` — TRUST_PER_FEED (5), TRUST_PER_PROXIMITY_TICK (1), TRUST_DECAY_ALONE (1), TRUST_DAMAGE_PENALTY (10), TRUST_AT_OBEDIENT (70), MAX_PACK_SIZE (8), ZERO_TRUST_ABANDON_TICKS (50).
+- **New messages:** TAME, ABANDON, SELECT_CREATURE, BREED in `shared/src/messages.ts` with typed payloads (TamePayload, AbandonPayload, SelectCreaturePayload, BreedPayload).
+- **personalityChart on CreatureTypeDef:** Weighted [Docile%, Neutral%, Aggressive%] tuple. Herbivore: [40, 40, 20], Carnivore: [10, 30, 60]. Personality assigned at spawn via `rollPersonality()`.
+- **TAME handler:** Validates adjacency (Manhattan ≤ 1), wild creature, food cost (1 berry for herbivore, 1 meat for carnivore), pack size limit (8). Sets ownerID, applies personality-based initial trust (Docile=10, Neutral=0, Aggressive=0 clamped from -5).
+- **ABANDON handler:** Validates ownership, resets ownerID and trust to 0.
+- **Trust tick (`tickTrustDecay`):** Proximity gain (+1 per 10 ticks if owner ≤ 3 tiles), decay (-1 per 20 ticks if owner > 3 tiles), auto-abandon (50 consecutive ticks at trust=0 → goes wild).
+- **Creature AI modification:** Tamed herbivores skip flee behavior — they don't flee from carnivores, trusting their owner's pack.
+- **All 274 tests pass** — 273 existing + 1 new personality test. 15 pre-written taming tests by Steeply all pass.
+- **ICreatureState and IPlayerState interfaces** updated in shared types to match new schema fields.
+
+---
+
+## Phase 4 Kickoff (2026-02-25T22:48:00Z)
+
+**Status:** ACTIVE — Hal scoping complete, Pemulis beginning 4.1 immediately
+
+**Scope:** 8 work items (4.1–4.8), 5–6d critical path (Pemulis 4.1→4.4), 3d Gately (4.5–4.7), 2d Steeply (4.8 integration). 9 architecture decisions (C1–C9) finalized in `.squad/decisions.md`.
+
+**Pemulis tasks (begin immediately):**
+- **4.1 Schema** (1d): Add `ownerID`, `trust`, `speed`, `personality`, `traits` to CreatureState. Add TAMING constants to shared. Create CREATURE_TRAITS constants (Speed, Health, HungerDrain deltas).
+- **4.2 Taming** (2d after 4.1): TAME message handler (I key, cost 1 berry/meat, trust=0). ABANDON handler. Trust decay logic (±1 per 20 ticks alone, -10 on hit). Lock creatures to owner.
+- **4.3 Pack Follow** (2d after 4.2): SELECT_CREATURE message. `playerSelectedPacks: Map<playerId, Set<creatureId>>` tracking. Tick: move selected creatures toward player if distance > 1, follow within 1 tile radius.
+- **4.4 Breeding** (2d parallel with 4.3): BREED message handler (B key, trust≥70, same owner, same type, adjacent, 50% chance). Offspring spawns with averaged parent traits + mutation (±1d2), inherits ownership, trust=50, costs 10 berries.
+
+**Blocking constraint:** 4.1 schema lands first. Gately unblocks at 4.1. Steeply writes anticipatory unit tests in parallel.
+
+**Architecture decisions locked:** C1 (ownerID), C2 (trust 0–100, 70+ obedient), C3 (personality enum), C4 (traits as deltas), C5 (pack selection set), C6 (breeding peer interaction), C7 (greedy movement + A* stub), C8 (taming cost), C9 (trust decay loneliness).
+
+**Orchestration complete:**
+- ✅ Hal scoping document merged to decisions.md
+- ✅ Session log written
+- ✅ Orchestration log written
+- ✅ Agent history updated

@@ -139,3 +139,23 @@ Steeply completed Phase 3.7 integration testing on 2026-02-25T21:50:00Z. All 22 
 - Ready to advance to Phase 4 (Creature Systems).
 
 **Phase 3 Definition of Done:** ✅ All 7 work items complete, all gameplay loops verified, ecosystem stable, 273 tests passing, no blockers for Phase 4.
+
+---
+
+## Phase 4 Kickoff (2026-02-25T22:48:00Z)
+
+**Status:** ACTIVE — Steeply writing anticipatory tests in parallel
+
+**Scope:** Steeply owns integration testing + verification: 4.8 Integration & A* Prep (2d). Anticipatory unit tests written in parallel to Pemulis's 4.1–4.4 implementation. Steeply blocks on 4.1 schema landing for test execution.
+
+**Steeply tasks (parallel to Pemulis 4.1–4.4):**
+- **Anticipatory unit tests (now):** Write full taming cycle tests, trust progression, breeding with trait inheritance, pack commands, trust decay, edge cases (over-capacity, wrong types, missing cost), ecosystem stability.
+- **4.8 Integration Testing** (2d after 4.1–4.7 code lands): Execute full taming→breeding→pack command cycle end-to-end. Verify ecosystem stable at 300+ ticks. Verify multiplayer packs don't interfere. Establish A* stub in schema (comment + empty `pathfindAStar()` function).
+
+**Blocking:** Pemulis 4.1 schema lands first. Steeply runs anticipatory tests once 4.1 merges. Full integration 4.8 ready when code from Pemulis & Gately lands.
+
+**Orchestration complete:**
+- ✅ Hal scoping document merged to decisions.md
+- ✅ Session log written
+- ✅ Orchestration log written
+- ✅ Agent history updated

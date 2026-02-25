@@ -4,13 +4,13 @@ import { generateProceduralMap } from "./mapGenerator.js";
 import { tickCreatureAI } from "./creatureAI.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
-  MOVE, GATHER, EAT, CRAFT, PLACE, FARM_HARVEST,
-  ResourceType, TileType, ItemType,
+  MOVE, GATHER, EAT, CRAFT, PLACE, FARM_HARVEST, TAME, ABANDON,
+  ResourceType, TileType, ItemType, Personality,
   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
-  PLAYER_SURVIVAL, CREATURE_AI, CREATURE_RESPAWN, FARM,
+  PLAYER_SURVIVAL, CREATURE_AI, CREATURE_RESPAWN, FARM, TAMING,
   RECIPES, canCraft, getItemField,
 } from "@primal-grid/shared";
-import type { MovePayload, GatherPayload, CraftPayload, PlacePayload, FarmHarvestPayload } from "@primal-grid/shared";
+import type { MovePayload, GatherPayload, CraftPayload, PlacePayload, FarmHarvestPayload, TamePayload, AbandonPayload } from "@primal-grid/shared";
 
 const PLAYER_COLORS = [
   "#e6194b", "#3cb44b", "#4363d8", "#f58231",
@@ -34,6 +34,7 @@ export class GameRoom extends Room {
       this.tickResourceRegen();
       this.tickCreatureAI();
       this.tickCreatureRespawn();
+      this.tickTrustDecay();
       this.tickFarms();
     }, 1000 / TICK_RATE);
 
@@ -59,6 +60,14 @@ export class GameRoom extends Room {
 
     this.onMessage(FARM_HARVEST, (client, message: FarmHarvestPayload) => {
       this.handleFarmHarvest(client, message);
+    });
+
+    this.onMessage(TAME, (client, message: TamePayload) => {
+      this.handleTame(client, message);
+    });
+
+    this.onMessage(ABANDON, (client, message: AbandonPayload) => {
+      this.handleAbandon(client, message);
     });
 
     console.log("[GameRoom] Room created.");
@@ -273,6 +282,99 @@ export class GameRoom extends Room {
     farm.cropReady = false;
   }
 
+  private handleTame(client: Client, message: TamePayload) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+
+    const { creatureId } = message;
+    if (!creatureId) return;
+    const creature = this.state.creatures.get(creatureId);
+    if (!creature) return;
+
+    // Must be wild
+    if (creature.ownerID !== "") return;
+
+    // Must be adjacent (Manhattan distance <= 1)
+    const dist = Math.abs(player.x - creature.x) + Math.abs(player.y - creature.y);
+    if (dist > 1) return;
+
+    // Check pack size limit
+    let ownedCount = 0;
+    this.state.creatures.forEach((c) => {
+      if (c.ownerID === client.sessionId) ownedCount++;
+    });
+    if (ownedCount >= TAMING.MAX_PACK_SIZE) return;
+
+    // Cost: 1 berry (herbivore) or 1 meat (carnivore)
+    if (creature.creatureType === "herbivore") {
+      if (player.berries < 1) return;
+      player.berries -= 1;
+    } else {
+      if (player.meat < 1) return;
+      player.meat -= 1;
+    }
+
+    // Tame: set owner, apply personality-based initial trust
+    creature.ownerID = client.sessionId;
+    let initialTrust = 0;
+    if (creature.personality === Personality.Docile) {
+      initialTrust = 10;
+    } else if (creature.personality === Personality.Aggressive) {
+      initialTrust = 0; // clamped from -5
+    }
+    creature.trust = initialTrust;
+    creature.zeroTrustTicks = 0;
+  }
+
+  private handleAbandon(client: Client, message: AbandonPayload) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+
+    const { creatureId } = message;
+    if (!creatureId) return;
+    const creature = this.state.creatures.get(creatureId);
+    if (!creature) return;
+
+    // Must own the creature
+    if (creature.ownerID !== client.sessionId) return;
+
+    creature.ownerID = "";
+    creature.trust = 0;
+    creature.zeroTrustTicks = 0;
+  }
+
+  private tickTrustDecay() {
+    this.state.creatures.forEach((creature) => {
+      if (creature.ownerID === "") return;
+
+      const owner = this.state.players.get(creature.ownerID);
+      if (!owner) return;
+
+      const dist = Math.abs(creature.x - owner.x) + Math.abs(creature.y - owner.y);
+
+      // Proximity trust gain: +1 per 10 ticks if within 3 tiles
+      if (dist <= 3 && this.state.tick % 10 === 0) {
+        creature.trust = Math.min(100, creature.trust + TAMING.TRUST_PER_PROXIMITY_TICK);
+      }
+
+      // Trust decay: -1 per 20 ticks if owner > 3 tiles away
+      if (dist > 3 && this.state.tick % 20 === 0) {
+        creature.trust = Math.max(0, creature.trust - TAMING.TRUST_DECAY_ALONE);
+      }
+
+      // Auto-abandon: if trust at 0 for 50+ consecutive ticks
+      if (creature.trust === 0) {
+        creature.zeroTrustTicks++;
+        if (creature.zeroTrustTicks >= TAMING.ZERO_TRUST_ABANDON_TICKS) {
+          creature.ownerID = "";
+          creature.zeroTrustTicks = 0;
+        }
+      } else {
+        creature.zeroTrustTicks = 0;
+      }
+    });
+  }
+
   private tickFarms() {
     if (this.state.tick % FARM.TICK_INTERVAL !== 0) return;
 
@@ -374,7 +476,16 @@ export class GameRoom extends Room {
     creature.health = typeDef.health;
     creature.hunger = typeDef.hunger;
     creature.currentState = "idle";
+    creature.personality = this.rollPersonality(typeDef.personalityChart);
     this.state.creatures.set(creature.id, creature);
+  }
+
+  /** Pick a personality from weighted chart [Docile%, Neutral%, Aggressive%]. */
+  private rollPersonality(chart: readonly [number, number, number]): string {
+    const roll = Math.random() * 100;
+    if (roll < chart[0]) return Personality.Docile;
+    if (roll < chart[0] + chart[1]) return Personality.Neutral;
+    return Personality.Aggressive;
   }
 
   private tickCreatureRespawn() {

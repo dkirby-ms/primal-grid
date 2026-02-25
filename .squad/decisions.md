@@ -631,3 +631,86 @@ Phase 3 integration tests are complete. **273 total tests passing** (251 existin
 
 - Phase 3 definition of done is met: all gameplay loops verified, ecosystem stable, no regressions.
 - Phase 4 (Creature Systems) can begin.
+
+---
+
+## 2026-02-25: Phase 4 — Creature Systems (Taming, Breeding, Pack Commands)
+
+**Date:** 2026-02-25  
+**Author:** Hal (Lead)  
+**Status:** Active  
+
+### Vision
+
+Enable players to tame wild creatures, breed them for traits, and command pack behavior — turning creatures from environmental hazards into strategic allies.
+
+### Scope
+
+**IN Scope:** Taming (I key, trust progression), ownership (`ownerID` field), pack follow (F key, max 8), basic breeding (B key, trait inheritance), trait system (Speed, Health, Hunger drain), personality (Docile/Neutral/Aggressive), pack size limit (8 max), A* pathfinding stub for Phase 5.
+
+**DEFERRED to Phase 5+:** Advanced breeding (genetic lineage, mutation pools), pack tactics AI, creature training/jobs, creature equipment, death/respawn penalties, behavioral customization, multi-creature formation orders, creature-creature diplomacy.
+
+### Architecture Decisions (C1–C9)
+
+| ID | Title | Rationale |
+|----|----|-----------|
+| **C1** | **Ownership Model — `ownerID` Field** | Tamed creatures are player-specific. Use string field `ownerID` on CreatureState (null = wild, player ID = owner). Creatures live in same collection; behavior/rendering differ by ownership. |
+| **C2** | **Trust as Linear Scalar (0–100)** | Simple, deterministic, visible. +5 per feed, +1 per 10 ticks proximity. -1 per 20 ticks alone, -10 if hit. At ≥70, creature obeys follow. |
+| **C3** | **Personality as Enum (Docile/Neutral/Aggressive)** | Placeholder for behavioral variety. Docile tame faster (+10/feed) but lower damage. Aggressive tame slower (-5/feed) but hunt better. Immutable per spawn. |
+| **C4** | **Traits as Deltas from Base (Speed, Health, Hunger Drain)** | Each tamed creature has optional `traits` object. Offspring inherits averaged parent traits + random mutation (±1 per trait). Range cap ±3. |
+| **C5** | **Pack as Stateful Selection Set Per Player** | Each player has `selectedPack: Set<creatureId>` (max 8). F key toggles. Server tracks which creatures follow which player. Per-tick: move selected creatures toward player if distance > 1. |
+| **C6** | **Breeding as Peer Interaction (No Pens)** | Two tamed creatures at trust≥70, adjacent, same owner, same type, interact (B key) → 50% chance offspring spawns on empty adjacent tile. Offspring inherits ownership, starts trust=50. |
+| **C7** | **Greedy Movement Persists; A* Stub for Phase 5** | Phase 4 uses existing greedy Manhattan pathfinding. Leave `moveToward()`/`moveAwayFrom()` unchanged. Add comment + TODO stub `pathfindAStar()` (compiler pass). Phase 5 swaps without breaking Phase 4. |
+| **C8** | **Taming Cost — Berries or Meat** | Taming costs 1 berry (herbivore) or 1 meat (carnivore). Meat drops from slain creatures (Phase 4 adds stub). Encourages hunting/farming to sustain pack. Prevents trivial taming of entire map. |
+| **C9** | **Trust Decay in Absence (Loneliness Mechanic)** | Tamed creature loses 1 trust per 20 ticks if owner >3 tiles away. Max decay per interaction: -10 (damage). Encourages periodic feeding; neglected creatures can abandon. Adds gameplay depth. |
+
+### Work Breakdown (8 Items, 5–6 Day Critical Path)
+
+| # | Item | Owner | Timeline | Prereq | Notes |
+|---|------|-------|----------|--------|-------|
+| **4.1** | Schema: Tame Fields | Pemulis | 1d | — | Add ownerID, trust, speed, personality, traits to CreatureState |
+| **4.2** | Taming Interaction Handler | Pemulis | 2d | 4.1 | TAME (I key), ABANDON, trust decay logic, lock to owner |
+| **4.3** | Pack Follow & Commands | Pemulis | 2d | 4.2 | SELECT_CREATURE, follow tick, trust decay, command dispatcher |
+| **4.4** | Breeding Logic | Pemulis | 2d | 4.1, 4.2 | BREED (B key), validation, offspring spawn, trait inheritance + mutation |
+| **4.5** | Client Tame UI | Gately | 1d | 4.1 | Show owned creature list, trust bars, select/deselect, owned-creature marker |
+| **4.6** | Creature Command Binding | Gately | 1d | 4.5 | F key toggles follow, visual feedback on selected pack |
+| **4.7** | Trait Rendering & HUD | Gately | 1d | 4.5 | Show creature stat overlay (Speed, Health, Hunger), trait inheritance tooltips |
+| **4.8** | Integration & A* Prep | Steeply | 2d | 4.1–4.7 | Full taming → breeding → pack command cycle; A* stub in schema |
+
+### Definition of Done
+
+Player can:
+
+1. **Encounter and tame a creature** — Approach wild herbivore → I key → tame (cost 1 berry, trust starts 0)
+2. **Build trust through feeding** — Feed → trust increases (visible bar). At ≥70, creature responds to commands.
+3. **Command a pack to follow** — Select 1–8 creatures → F key → pack follows; unselect → stops.
+4. **Breed two creatures** — Two at trust≥70, same type, same owner, adjacent → B key → 50% chance offspring spawns.
+5. **See creature stats** — Owned creature shows tooltip: Speed, Health, Hunger drain (traits visible).
+6. **Hybrid gameplay** — Tame herbivore pack + use as allies + breed for better offspring.
+7. **Ecosystem stable** — 273 tests pass; wild creatures still spawn; tamed coexist.
+8. **Playable & demonstrable** — 15-minute demo: gather berries → tame → trust → breed → follow → defend base.
+
+### Implications
+
+- **Server (Pemulis):** Add `ownerID`, `trust`, `speed`, `personality`, `traits` fields to CreatureState. Implement TAME, ABANDON, SELECT_CREATURE, BREED messages. Extend GameRoom to track `playerSelectedPacks`. Add TAMING and CREATURE_TRAITS constants to shared.
+- **Client (Gately):** Add "My Creatures" HUD panel with trust bars and selection. Bind F key to SELECT_CREATURE, B key to BREED. Show owned creature markers and trait tooltips.
+- **Testing (Steeply):** Full taming cycle, trust progression, breeding with trait inheritance, pack commands, trust decay, edge cases (over-capacity, wrong types, missing cost), ecosystem stability, multiplayer packs.
+- **Phase 3 compatibility:** Existing creature AI FSM (Idle/Wander/Eat/Flee/Hunt) unchanged. New ownership layer sits on top. Backward compat: ownerID defaults to "" (wild).
+
+### Rollout Plan
+
+**Week 1:** Pemulis 4.1 schema lands (Mon). Gately unblocks on 4.5 (Tue). Pemulis 4.2 + 4.3 + 4.4 (Wed–Fri, parallel).  
+**Week 2:** Gately 4.5 + 4.6 + 4.7 (Mon–Wed). Steeply integration (Wed).  
+**Week 3:** Steeply 4.8 complete. All agents pair-test. Ship Phase 4 with 300+ tests, full demo.
+
+### Success Criteria
+
+- ✅ Schema lands without breaking Phase 3 (backward compat)
+- ✅ Taming interaction works; players can own creatures
+- ✅ Trust system drives behavior change (obedience at ≥70)
+- ✅ Pack follow is intuitive (F key, visual feedback)
+- ✅ Breeding works; offspring inherit traits
+- ✅ 300+ tests passing (273 Phase 3 + 30+ Phase 4)
+- ✅ No regressions in wild creature behavior or base building
+- ✅ 15-minute demo: tame → breed → command (polished, no crashes)
+
