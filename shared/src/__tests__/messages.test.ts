@@ -12,9 +12,9 @@ describe("message types", () => {
   });
 
   it("MovePayload shape is usable", () => {
-    const payload: MovePayload = { x: 1, y: 2 };
-    expect(payload.x).toBe(1);
-    expect(payload.y).toBe(2);
+    const payload: MovePayload = { dx: 1, dy: -1 };
+    expect(payload.dx).toBe(1);
+    expect(payload.dy).toBe(-1);
   });
 
   it("GatherPayload shape is usable", () => {

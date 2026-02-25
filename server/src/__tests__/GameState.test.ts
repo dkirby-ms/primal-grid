@@ -1,5 +1,25 @@
 import { describe, it, expect } from "vitest";
-import { GameState } from "../rooms/GameState.js";
+import { GameState, TileState, PlayerState } from "../rooms/GameState.js";
+import { TileType, DEFAULT_MAP_SIZE } from "@primal-grid/shared";
+
+describe("TileState", () => {
+  it("can be instantiated with defaults", () => {
+    const tile = new TileState();
+    expect(tile.type).toBe(TileType.Grass);
+    expect(tile.x).toBe(0);
+    expect(tile.y).toBe(0);
+  });
+});
+
+describe("PlayerState", () => {
+  it("can be instantiated with defaults", () => {
+    const player = new PlayerState();
+    expect(player.id).toBe("");
+    expect(player.x).toBe(0);
+    expect(player.y).toBe(0);
+    expect(player.color).toBe("#ffffff");
+  });
+});
 
 describe("GameState", () => {
   it("can be instantiated", () => {
@@ -10,5 +30,42 @@ describe("GameState", () => {
   it("initializes tick to 0", () => {
     const state = new GameState();
     expect(state.tick).toBe(0);
+  });
+
+  it("has default map dimensions", () => {
+    const state = new GameState();
+    expect(state.mapWidth).toBe(DEFAULT_MAP_SIZE);
+    expect(state.mapHeight).toBe(DEFAULT_MAP_SIZE);
+  });
+
+  it("getTile returns undefined for out-of-bounds", () => {
+    const state = new GameState();
+    expect(state.getTile(-1, 0)).toBeUndefined();
+    expect(state.getTile(0, -1)).toBeUndefined();
+    expect(state.getTile(DEFAULT_MAP_SIZE, 0)).toBeUndefined();
+  });
+
+  it("isWalkable returns false for out-of-bounds", () => {
+    const state = new GameState();
+    expect(state.isWalkable(-1, 0)).toBe(false);
+  });
+
+  it("isWalkable returns true for grass, false for water/rock", () => {
+    const state = new GameState();
+    // Populate a small 2x2 grid for testing
+    state.mapWidth = 2;
+    state.mapHeight = 2;
+    const types = [TileType.Grass, TileType.Water, TileType.Rock, TileType.Sand];
+    for (let i = 0; i < 4; i++) {
+      const t = new TileState();
+      t.x = i % 2;
+      t.y = Math.floor(i / 2);
+      t.type = types[i];
+      state.tiles.push(t);
+    }
+    expect(state.isWalkable(0, 0)).toBe(true);  // Grass
+    expect(state.isWalkable(1, 0)).toBe(false); // Water
+    expect(state.isWalkable(0, 1)).toBe(false); // Rock
+    expect(state.isWalkable(1, 1)).toBe(true);  // Sand
   });
 });

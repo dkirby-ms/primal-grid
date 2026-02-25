@@ -5,12 +5,16 @@ export const GATHER = "gather" as const;
 
 // --- Message payload interfaces ---
 
+/** Direction-based movement: -1, 0, or 1 per axis. */
 export interface MovePayload {
-  /** Target tile X coordinate. */
-  x: number;
-  /** Target tile Y coordinate. */
-  y: number;
+  /** Horizontal direction (-1 = left, 0 = none, 1 = right). */
+  dx: number;
+  /** Vertical direction (-1 = up, 0 = none, 1 = down). */
+  dy: number;
 }
+
+/** Alias for move message sent from client to server. */
+export type MoveMessage = MovePayload;
 
 export interface GatherPayload {
   /** Tile X coordinate to gather from. */

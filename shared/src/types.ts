@@ -8,10 +8,15 @@ export enum TileType {
 
 /** State of a single tile on the grid. */
 export interface ITileState {
-  // Populated in Phase 1
+  type: TileType;
+  x: number;
+  y: number;
 }
 
 /** State of a player in the game world. */
 export interface IPlayerState {
-  // Populated in Phase 1
+  id: string;
+  x: number;
+  y: number;
+  color: string;
 }
