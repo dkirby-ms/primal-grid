@@ -19,3 +19,6 @@
 - **User preference:** User wants clear phase boundaries. Ship smallest playable thing at each phase. Defer aggressively.
 - **Key file:** Session plan at `/home/saitcho/.copilot/session-state/3694625c-de11-4cc1-ae47-11fe7a04c4e2/plan.md`
 - **Key file:** Architecture decision at `.squad/decisions/inbox/hal-phased-plan.md`
+- **2026-02-25 — Revised plan:** Expanded from 6 to 8 phases (0–7). Phase 0 is pure scaffolding (no running game). Phase 1 is walking skeleton (minimal client-server proof). Auth moved to Phase 7 (separate from late game). NPC factions also Phase 7 (basic only — settlements, trading, disposition). Full plan rewritten to session `plan.md` and architecture decisions to `.squad/decisions/inbox/hal-architecture-plan.md`.
+- **User preference confirmed:** Phases must be independently demonstrable. Walking skeleton = the simplest thing proving the architecture. Defer aggressively.
+- **Scope fence expanded:** Added explicit exclusions for mobile, i18n, multiplayer co-op beyond shared room, matchmaking/lobbies.

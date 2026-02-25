@@ -4,42 +4,53 @@
 
 <!-- New decisions are appended below by Scribe from .squad/decisions/inbox/ -->
 
-## 2026-02-25: User Directives & Phased Implementation Plan
+## 2026-02-25: User Directives & Phased Implementation Plan (Consolidated)
 
 **Date:** 2026-02-25  
 **Authors:** dkirby-ms (user), Hal (Lead)  
-**Status:** Active
+**Status:** Active  
+**Last Updated:** 2026-02-25T01:42Z (Scribe consolidated from inbox)
 
-### User Directives (Architecture)
+### User Directives (Foundational)
 
-- **Client-server** architecture; users play over a browser
-- **Rendering:** 2D canvas using PixiJS (v8) or similar
+**Client-server architecture, browser-based multiplayer:**
+- **Rendering:** 2D canvas using PixiJS v8 (not Phaser)
 - **Backend:** Colyseus (multiplayer game server framework)
-- **Auth:** OAuth/OIDC support (Entra ID, Google) — deferred to Phase 5
+- **Auth:** OAuth/OIDC support (Entra ID, Google) — Phase 7
+- **Perspective:** Top-down only; isometric deferred indefinitely
 
-### Phased Implementation Plan
+### Phased Implementation Plan (8 Phases)
 
-| Phase | Focus | Lead |
-|-------|-------|------|
-| **0** | Scaffolding — monorepo, Colyseus room, PixiJS grid, CI | Gately, Pemulis |
-| **1** | Core simulation — tile state, biomes, creature AI, survival | Gately |
-| **2** | Base building — inventory, crafting, buildings, farming | Gately, Pemulis |
-| **3** | Creature systems — taming, breeding, pack AI, personality | Gately |
-| **4** | World events — weather, disasters, migration, ruins | Gately |
-| **5** | Late game + auth — tech tree, automation, OAuth/OIDC, NPCs, persistence | Pemulis |
+| Phase | Name | Focus | Deliverable |
+|-------|------|-------|-------------|
+| **0** | Scaffolding | Monorepo setup, CI/build | npm workspaces, CI passes |
+| **1** | Walking Skeleton | Client-server grid, two-player sync | Grid rendering, player movement |
+| **2** | Core Simulation | Creatures, biomes, survival | Living world with AI |
+| **3** | Base Building | Crafting, buildings, farming | Inventory, recipes, structures |
+| **4** | Creature Systems | Taming, breeding, pack AI | Personality, behavioral hierarchy |
+| **5** | World Events | Weather, disasters, migration, ruins | Dynamic environmental changes |
+| **6** | Late Game | Tech tree, automation, terraforming | Long-term progression |
+| **7** | Auth & NPCs | OAuth/OIDC, persistence, settlements | Multi-player persistence, NPCs |
 
-### Technical Decisions
+### Architecture Decisions (Consolidated from Hal)
 
-- **Server-authoritative** game state; client renders + sends input
-- **Shared types:** TypeScript `shared` package (monorepo) — single source of truth for enums, schemas, messages
-- **Monorepo:** `client`, `server`, `shared` packages (npm workspaces or Turborepo)
-- **State sync:** Colyseus schema deltas; viewport-based chunking for large maps
-- **Tick-based** simulation loop on server
+1. **Monorepo:** npm workspaces (three packages: `client`, `server`, `shared`)
+2. **Rendering:** PixiJS v8, top-down 2D canvas
+3. **Server:** Colyseus with WebSocket schema-delta state sync
+4. **Bundler:** Vite (HMR, ESM, PixiJS-friendly)
+5. **Testing:** Vitest (server + shared); manual smoke tests for client
+6. **Game Simulation:** Tick-based (4 ticks/sec, configurable per deployment)
+7. **State Sync:** Viewport-based chunking; client receives only entities/tiles within radius
+8. **Creature AI:** Finite state machine; simple, debuggable, extensible per phase
+9. **Game Content:** Data-driven (JSON configs in `shared` package); no hardcoded gameplay data
+10. **Auth Service:** Separate Express/Fastify app; issues JWTs; game server validates only (Phase 7)
+11. **Persistence:** SQLite initially (zero-config); migration path to Postgres for multi-server scaling
+12. **NPCs:** Basic factions only (settlements, trading, disposition); full diplomacy deferred
 
 ### Scope Fence
 
-**Explicitly deferred beyond Phase 5:** modding, aquatic/arctic biomes, mythical creatures, PvP, audio, isometric view, full faction diplomacy, tactical combat system.
+**Explicitly out of scope for this plan:** modding, aquatic/arctic biomes, mythical creatures, PvP, audio, isometric view, full faction diplomacy, tactical combat, DLC, mobile, i18n.
 
 ### Key Principle
 
-Each phase must be **playable** before advancing. Ship the core loop first; no speculative features.
+**Each phase must be playable/demonstrable before advancing.** Ship the core loop first; defer all speculative features.
