@@ -25,3 +25,23 @@ export const NOISE_PARAMS = {
   DESERT_MOISTURE: 0.25,
   SAND_MOISTURE: 0.35,
 } as const;
+
+/** Resource regeneration constants. */
+export const RESOURCE_REGEN = {
+  /** Ticks between regeneration checks (80 ticks = 20 seconds at 4 ticks/sec). */
+  INTERVAL_TICKS: 80,
+  /** Maximum resource amount per tile. */
+  MAX_AMOUNT: 10,
+  /** Amount regenerated per interval. */
+  REGEN_AMOUNT: 1,
+  /** Chance (0-1) of Sand tiles having Fiber. */
+  SAND_FIBER_CHANCE: 0.3,
+} as const;
+
+/** Creature spawning constants. */
+export const CREATURE_SPAWN = {
+  /** Number of herbivores to spawn on 32×32 map. */
+  HERBIVORE_COUNT: 8,
+  /** Number of carnivores to spawn on 32×32 map. */
+  CARNIVORE_COUNT: 4,
+} as const;

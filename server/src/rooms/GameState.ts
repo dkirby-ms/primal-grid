@@ -16,6 +16,12 @@ export class TileState extends Schema {
 
   @type("number")
   moisture: number = 0;
+
+  @type("number")
+  resourceType: number = -1;
+
+  @type("number")
+  resourceAmount: number = 0;
 }
 
 export class PlayerState extends Schema {
@@ -30,6 +36,41 @@ export class PlayerState extends Schema {
 
   @type("string")
   color: string = "#ffffff";
+
+  @type("number")
+  wood: number = 0;
+
+  @type("number")
+  stone: number = 0;
+
+  @type("number")
+  fiber: number = 0;
+
+  @type("number")
+  berries: number = 0;
+}
+
+export class CreatureState extends Schema {
+  @type("string")
+  id: string = "";
+
+  @type("string")
+  creatureType: string = "herbivore";
+
+  @type("number")
+  x: number = 0;
+
+  @type("number")
+  y: number = 0;
+
+  @type("number")
+  health: number = 100;
+
+  @type("number")
+  hunger: number = 100;
+
+  @type("string")
+  currentState: string = "idle";
 }
 
 export class GameState extends Schema {
@@ -41,6 +82,9 @@ export class GameState extends Schema {
 
   @type({ map: PlayerState })
   players = new MapSchema<PlayerState>();
+
+  @type({ map: CreatureState })
+  creatures = new MapSchema<CreatureState>();
 
   @type("number")
   mapWidth: number = DEFAULT_MAP_SIZE;

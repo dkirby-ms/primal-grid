@@ -1,5 +1,5 @@
 import { TileState, GameState } from "./GameState.js";
-import { TileType, NOISE_PARAMS } from "@primal-grid/shared";
+import { TileType, ResourceType, NOISE_PARAMS, RESOURCE_REGEN } from "@primal-grid/shared";
 
 // --- Simplex noise implementation (inline, no deps) ---
 
@@ -119,6 +119,28 @@ function calculateFertility(type: TileType, moisture: number): number {
   }
 }
 
+/** Determine resource type for a tile based on biome. Returns -1 for none. */
+function assignResource(biome: TileType, rng: () => number): { type: number; amount: number } {
+  switch (biome) {
+    case TileType.Forest:
+      return { type: ResourceType.Wood, amount: Math.floor(rng() * RESOURCE_REGEN.MAX_AMOUNT) + 1 };
+    case TileType.Grassland:
+      return {
+        type: rng() < 0.5 ? ResourceType.Fiber : ResourceType.Berries,
+        amount: Math.floor(rng() * RESOURCE_REGEN.MAX_AMOUNT) + 1,
+      };
+    case TileType.Highland:
+      return { type: ResourceType.Stone, amount: Math.floor(rng() * RESOURCE_REGEN.MAX_AMOUNT) + 1 };
+    case TileType.Sand:
+      if (rng() < RESOURCE_REGEN.SAND_FIBER_CHANCE) {
+        return { type: ResourceType.Fiber, amount: Math.floor(rng() * 5) + 1 };
+      }
+      return { type: -1, amount: 0 };
+    default:
+      return { type: -1, amount: 0 };
+  }
+}
+
 /** Generate a procedural tile map using dual-layer simplex noise. */
 export function generateProceduralMap(
   state: GameState,
@@ -132,6 +154,13 @@ export function generateProceduralMap(
 
   const elevPerm = createPermTable(seed);
   const moistPerm = createPermTable(seed + 31337);
+
+  // Seeded RNG for resource assignment
+  let rngState = seed + 99991;
+  const rng = (): number => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) | 0;
+    return (rngState >>> 0) / 4294967296;
+  };
 
   const p = NOISE_PARAMS;
 
@@ -149,6 +178,10 @@ export function generateProceduralMap(
       tile.type = biome;
       tile.fertility = Math.round(fertility * 100) / 100;
       tile.moisture = Math.round(moisture * 100) / 100;
+
+      const resource = assignResource(biome, rng);
+      tile.resourceType = resource.type;
+      tile.resourceAmount = resource.amount;
 
       state.tiles.push(tile);
     }
