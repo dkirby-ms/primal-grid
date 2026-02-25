@@ -6,6 +6,16 @@
 - **Design Document:** docs/design-sketch.md
 - **Created:** 2026-02-25T00:45:00Z
 
+## Current Phase
+
+**Hal (Lead)** has decomposed the design sketch into a **6-phase build plan** (2026-02-25):
+- **Phase 0:** Scaffolding (Gately + Pemulis lead)
+- **Phase 1–2, 4:** Core simulation, base building, world events (Gately lead)
+- **Phase 3:** Creature systems (Gately lead)
+- **Phase 5:** Late game + auth (Pemulis lead)
+
+**Your Role (Steeply):** Tester — validate each phase is **playable** before advancing. Core principle: no speculative features. See `.squad/decisions.md` for full architecture and scope fence.
+
 ## Learnings
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
