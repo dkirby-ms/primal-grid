@@ -111,6 +111,9 @@ export class CreatureState extends Schema {
   @type("string")
   personality: string = "neutral";
 
+  @type("number")
+  lastBredTick: number = 0;
+
   /** Consecutive ticks at trust=0 (for auto-abandon). Not synced to client. */
   zeroTrustTicks: number = 0;
 }

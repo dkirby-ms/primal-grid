@@ -108,6 +108,20 @@ export const TAMING = {
   ZERO_TRUST_ABANDON_TICKS: 50,
 } as const;
 
+/** Breeding system constants. */
+export const BREEDING = {
+  /** Berry cost per breeding attempt. */
+  FOOD_COST: 10,
+  /** Cooldown ticks between breeding attempts per creature. */
+  COOLDOWN_TICKS: 100,
+  /** Offspring initial trust (pre-bonded). */
+  OFFSPRING_TRUST: 50,
+  /** Maximum trait mutation per breeding (±1 per trait). */
+  TRAIT_MUTATION_RANGE: 1,
+  /** Hard cap on trait delta values. */
+  TRAIT_CAP: 3,
+} as const;
+
 /** Farm system constants. */
 export const FARM = {
   /** Ticks between farm growth updates (8 ticks = 2s at 4 ticks/sec). */

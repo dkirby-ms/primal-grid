@@ -1,16 +1,16 @@
 import { Room, Client, CloseCode } from "colyseus";
 import { GameState, PlayerState, CreatureState, StructureState } from "./GameState.js";
 import { generateProceduralMap } from "./mapGenerator.js";
-import { tickCreatureAI } from "./creatureAI.js";
+import { tickCreatureAI, moveToward } from "./creatureAI.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
-  MOVE, GATHER, EAT, CRAFT, PLACE, FARM_HARVEST, TAME, ABANDON,
+  MOVE, GATHER, EAT, CRAFT, PLACE, FARM_HARVEST, TAME, ABANDON, SELECT_CREATURE, BREED,
   ResourceType, TileType, ItemType, Personality,
   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
-  PLAYER_SURVIVAL, CREATURE_AI, CREATURE_RESPAWN, FARM, TAMING,
+  PLAYER_SURVIVAL, CREATURE_AI, CREATURE_RESPAWN, FARM, TAMING, BREEDING,
   RECIPES, canCraft, getItemField,
 } from "@primal-grid/shared";
-import type { MovePayload, GatherPayload, CraftPayload, PlacePayload, FarmHarvestPayload, TamePayload, AbandonPayload } from "@primal-grid/shared";
+import type { MovePayload, GatherPayload, CraftPayload, PlacePayload, FarmHarvestPayload, TamePayload, AbandonPayload, SelectCreaturePayload, BreedPayload } from "@primal-grid/shared";
 
 const PLAYER_COLORS = [
   "#e6194b", "#3cb44b", "#4363d8", "#f58231",
@@ -22,6 +22,8 @@ export class GameRoom extends Room {
   state = new GameState();
   private nextCreatureId = 0;
   private nextStructureId = 0;
+  /** Server-only session state: selected pack per player (not synced to client). */
+  playerSelectedPacks = new Map<string, Set<string>>();
 
   override onCreate(options: Record<string, unknown>) {
     const seed = typeof options?.seed === "number" ? options.seed : DEFAULT_MAP_SEED;
@@ -36,6 +38,7 @@ export class GameRoom extends Room {
       this.tickCreatureRespawn();
       this.tickTrustDecay();
       this.tickFarms();
+      this.tickPackFollow();
     }, 1000 / TICK_RATE);
 
     this.onMessage(MOVE, (client, message: MovePayload) => {
@@ -70,6 +73,14 @@ export class GameRoom extends Room {
       this.handleAbandon(client, message);
     });
 
+    this.onMessage(SELECT_CREATURE, (client, message: SelectCreaturePayload) => {
+      this.handleSelectCreature(client, message);
+    });
+
+    this.onMessage(BREED, (client, message: BreedPayload) => {
+      this.handleBreed(client, message);
+    });
+
     console.log("[GameRoom] Room created.");
   }
 
@@ -86,8 +97,15 @@ export class GameRoom extends Room {
     console.log(`[GameRoom] Client joined: ${client.sessionId} at (${spawn.x}, ${spawn.y})`);
   }
 
+  /** Ensure playerSelectedPacks is initialized (tests skip constructor). */
+  private ensurePacks(): Map<string, Set<string>> {
+    if (!this.playerSelectedPacks) this.playerSelectedPacks = new Map<string, Set<string>>();
+    return this.playerSelectedPacks;
+  }
+
   override onLeave(client: Client, code: number) {
     this.state.players.delete(client.sessionId);
+    this.ensurePacks().delete(client.sessionId);
     const consented = code === CloseCode.CONSENTED;
     console.log(
       `[GameRoom] Client left: ${client.sessionId} (consented: ${consented})`
@@ -341,6 +359,8 @@ export class GameRoom extends Room {
     creature.ownerID = "";
     creature.trust = 0;
     creature.zeroTrustTicks = 0;
+    // Remove from any selected pack
+    this.ensurePacks().forEach((pack) => pack.delete(creatureId));
   }
 
   private tickTrustDecay() {
@@ -368,6 +388,8 @@ export class GameRoom extends Room {
         if (creature.zeroTrustTicks >= TAMING.ZERO_TRUST_ABANDON_TICKS) {
           creature.ownerID = "";
           creature.zeroTrustTicks = 0;
+          // Remove from selected pack on auto-abandon
+          this.ensurePacks().forEach((pack) => pack.delete(creature.id));
         }
       } else {
         creature.zeroTrustTicks = 0;
@@ -411,7 +433,13 @@ export class GameRoom extends Room {
 
   private tickCreatureAI() {
     if (this.state.tick % CREATURE_AI.TICK_INTERVAL !== 0) return;
-    tickCreatureAI(this.state);
+    // Collect all creatures currently in any player's selected pack
+    const packs = this.ensurePacks();
+    const packIds = new Set<string>();
+    packs.forEach((pack) => {
+      pack.forEach((id) => packIds.add(id));
+    });
+    tickCreatureAI(this.state, packIds);
   }
 
   /** Biome-to-resource mapping for regeneration. */
@@ -501,6 +529,155 @@ export class GameRoom extends Room {
       while (count < typeDef.minPopulation) {
         this.spawnOneCreature(typeKey);
         count++;
+      }
+    }
+  }
+
+  handleSelectCreature(client: Client, message: SelectCreaturePayload) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+
+    const { creatureId } = message;
+    if (!creatureId) return;
+    const creature = this.state.creatures.get(creatureId);
+    if (!creature) return;
+
+    // Must own the creature
+    if (creature.ownerID !== client.sessionId) return;
+
+    // Must have trust >= 70 (obedient)
+    if (creature.trust < TAMING.TRUST_AT_OBEDIENT) return;
+
+    let pack = this.ensurePacks().get(client.sessionId);
+    if (!pack) {
+      pack = new Set<string>();
+      this.ensurePacks().set(client.sessionId, pack);
+    }
+
+    // Toggle: if already in pack, remove; otherwise add
+    if (pack.has(creatureId)) {
+      pack.delete(creatureId);
+    } else {
+      if (pack.size >= TAMING.MAX_PACK_SIZE) return;
+      pack.add(creatureId);
+    }
+  }
+
+  handleBreed(client: Client, message: BreedPayload) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+
+    const { creatureId } = message;
+    if (!creatureId) return;
+    const target = this.state.creatures.get(creatureId);
+    if (!target) return;
+
+    // Validate: creature owned by player
+    if (target.ownerID !== client.sessionId) return;
+
+    // Validate: trust >= 70
+    if (target.trust < TAMING.TRUST_AT_OBEDIENT) return;
+
+    // Check breeding cooldown on target
+    if (target.lastBredTick > 0 && this.state.tick - target.lastBredTick < BREEDING.COOLDOWN_TICKS) return;
+
+    // Check pack size limit
+    let ownedCount = 0;
+    this.state.creatures.forEach((c) => {
+      if (c.ownerID === client.sessionId) ownedCount++;
+    });
+    if (ownedCount >= TAMING.MAX_PACK_SIZE) return;
+
+    // Find mate: same type, same owner, trust >= 70, within 1 tile of target, not on cooldown
+    let mate: CreatureState | null = null;
+    this.state.creatures.forEach((c) => {
+      if (mate) return;
+      if (c.id === target.id) return;
+      if (c.creatureType !== target.creatureType) return;
+      if (c.ownerID !== client.sessionId) return;
+      if (c.trust < TAMING.TRUST_AT_OBEDIENT) return;
+      const dist = Math.abs(c.x - target.x) + Math.abs(c.y - target.y);
+      if (dist > 1) return;
+      if (c.lastBredTick > 0 && this.state.tick - c.lastBredTick < BREEDING.COOLDOWN_TICKS) return;
+      mate = c;
+    });
+    if (!mate) return;
+
+    // Cost: 10 berries
+    if (player.berries < BREEDING.FOOD_COST) return;
+    player.berries -= BREEDING.FOOD_COST;
+
+    // Set cooldowns
+    target.lastBredTick = this.state.tick;
+    (mate as CreatureState).lastBredTick = this.state.tick;
+
+    // 50% success chance
+    if (Math.random() >= 0.5) return;
+
+    // Find empty adjacent walkable tile near target
+    const spawnPos = this.findAdjacentEmptyTile(target.x, target.y);
+    if (!spawnPos) return;
+
+    // Spawn offspring
+    if (this.nextCreatureId == null) this.nextCreatureId = 0;
+    const typeDef = CREATURE_TYPES[target.creatureType];
+    const offspring = new CreatureState();
+    offspring.id = `creature_${this.nextCreatureId++}`;
+    offspring.creatureType = target.creatureType;
+    offspring.x = spawnPos.x;
+    offspring.y = spawnPos.y;
+    offspring.ownerID = client.sessionId;
+    offspring.trust = BREEDING.OFFSPRING_TRUST;
+    offspring.health = typeDef.health;
+    offspring.hunger = typeDef.hunger;
+    offspring.currentState = "idle";
+
+    // Traits: average parent speed deltas + random mutation ±1, cap ±3
+    const avgSpeed = (target.speed + (mate as CreatureState).speed) / 2;
+    const mutation = Math.floor(Math.random() * 3) - 1; // -1, 0, or 1
+    offspring.speed = Math.max(-BREEDING.TRAIT_CAP, Math.min(BREEDING.TRAIT_CAP, Math.round(avgSpeed) + mutation));
+
+    // Random personality from parent type's chart
+    offspring.personality = this.rollPersonality(typeDef.personalityChart);
+
+    this.state.creatures.set(offspring.id, offspring);
+  }
+
+  /** Find an empty adjacent walkable tile near (cx, cy). */
+  private findAdjacentEmptyTile(cx: number, cy: number): { x: number; y: number } | null {
+    const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]];
+    for (const [dx, dy] of dirs) {
+      const nx = cx + dx;
+      const ny = cy + dy;
+      if (!this.state.isWalkable(nx, ny)) continue;
+      // Check no creature on this tile
+      let occupied = false;
+      this.state.creatures.forEach((c) => {
+        if (c.x === nx && c.y === ny) occupied = true;
+      });
+      if (!occupied) return { x: nx, y: ny };
+    }
+    return null;
+  }
+
+  private tickPackFollow() {
+    const packs = this.ensurePacks();
+    for (const [playerId, pack] of packs) {
+      const owner = this.state.players.get(playerId);
+      if (!owner) { packs.delete(playerId); continue; }
+
+      for (const creatureId of pack) {
+        const creature = this.state.creatures.get(creatureId);
+        if (!creature || creature.ownerID !== playerId) {
+          pack.delete(creatureId);
+          continue;
+        }
+
+        const dist = Math.abs(creature.x - owner.x) + Math.abs(creature.y - owner.y);
+        if (dist > 1) {
+          moveToward(creature, owner.x, owner.y, this.state);
+        }
+        creature.currentState = "follow";
       }
     }
   }

@@ -11,10 +11,13 @@ export type AIState = "idle" | "wander" | "eat" | "flee" | "hunt";
  * Run one AI step for all creatures. Called every CREATURE_AI.TICK_INTERVAL ticks.
  * Modifies creature states in-place. Removes dead creatures from state.
  */
-export function tickCreatureAI(state: GameState): void {
+export function tickCreatureAI(state: GameState, skipIds?: Set<string>): void {
   const toRemove: string[] = [];
 
   state.creatures.forEach((creature) => {
+    // Skip creatures managed by pack follow
+    if (skipIds?.has(creature.id)) return;
+
     // Drain hunger
     creature.hunger = Math.max(0, creature.hunger - CREATURE_AI.HUNGER_DRAIN);
 
@@ -140,8 +143,8 @@ function wanderRandom(creature: CreatureState, state: GameState): void {
   }
 }
 
-/** Greedy Manhattan movement toward target. */
-function moveToward(creature: CreatureState, tx: number, ty: number, state: GameState): void {
+/** Greedy Manhattan movement toward target. Exported for pack follow. */
+export function moveToward(creature: CreatureState, tx: number, ty: number, state: GameState): void {
   const dx = Math.sign(tx - creature.x);
   const dy = Math.sign(ty - creature.y);
 
@@ -233,6 +236,16 @@ function findNearestResource(
 
 function manhattan(x1: number, y1: number, x2: number, y2: number): number {
   return Math.abs(x1 - x2) + Math.abs(y1 - y2);
+}
+
+// Phase 5: A* pathfinding integration point
+// Currently uses greedy Manhattan movement. Replace moveToward/moveAwayFrom
+// calls with pathfindAStar when implemented.
+export function pathfindAStar(
+  state: any, fromX: number, fromY: number, toX: number, toY: number
+): { x: number; y: number } | null {
+  // TODO Phase 5: Implement A* pathfinding
+  return null; // Falls through to greedy movement
 }
 
 /** Fisher-Yates shuffle of the 4 cardinal directions. */

@@ -54,6 +54,7 @@ export interface ICreatureState {
   trust: number;
   speed: number;
   personality: string;
+  lastBredTick: number;
 }
 
 /** Craftable / placeable item types. */

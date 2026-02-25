@@ -1,9 +1,10 @@
 import type { Room } from '@colyseus/sdk';
-import { MOVE, PLACE, FARM_HARVEST, ItemType } from '@primal-grid/shared';
+import { MOVE, PLACE, FARM_HARVEST, TAME, SELECT_CREATURE, BREED, ItemType } from '@primal-grid/shared';
 import { TILE_SIZE } from '../renderer/GridRenderer.js';
 import type { Container } from 'pixi.js';
 import type { CraftMenu } from '../ui/CraftMenu.js';
 import type { HudRenderer } from '../ui/HudRenderer.js';
+import type { CreatureRenderer } from '../renderer/CreatureRenderer.js';
 
 const MOVE_DEBOUNCE_MS = 150;
 
@@ -23,6 +24,7 @@ export class InputHandler {
   private hud: HudRenderer | null = null;
   private buildMode = false;
   private buildIndex = 0;
+  private creatureRenderer: CreatureRenderer | null = null;
 
   constructor(room: Room, worldContainer: Container) {
     this.room = room;
@@ -41,6 +43,11 @@ export class InputHandler {
     this.hud = hud;
   }
 
+  /** Wire up the creature renderer for taming, selection, and breeding queries. */
+  public setCreatureRenderer(cr: CreatureRenderer): void {
+    this.creatureRenderer = cr;
+  }
+
   private bindKeys(): void {
     window.addEventListener('keydown', (e) => {
       // Craft menu toggle
@@ -50,9 +57,29 @@ export class InputHandler {
         return;
       }
 
-      // Build mode toggle
+      // Breed (or exit build mode if active)
       if (e.key === 'b' || e.key === 'B') {
-        if (this.craftMenu?.isOpen()) return; // ignore while crafting
+        if (this.craftMenu?.isOpen()) return;
+        if (this.buildMode) {
+          this.buildMode = false;
+          this.hud?.setBuildMode(false);
+          return;
+        }
+        if (this.creatureRenderer && this.hud) {
+          const pair = this.creatureRenderer.getNearestBreedPair(
+            this.hud.localPlayerX,
+            this.hud.localPlayerY,
+          );
+          if (pair) {
+            this.room.send(BREED, { creatureId1: pair[0], creatureId2: pair[1] });
+          }
+        }
+        return;
+      }
+
+      // Build mode toggle
+      if (e.key === 'v' || e.key === 'V') {
+        if (this.craftMenu?.isOpen()) return;
         this.buildMode = !this.buildMode;
         this.hud?.setBuildMode(this.buildMode, PLACEABLE_ITEMS[this.buildIndex].name);
         return;
@@ -65,6 +92,36 @@ export class InputHandler {
             x: this.hud.localPlayerX,
             y: this.hud.localPlayerY,
           });
+        }
+        return;
+      }
+
+      // Tame nearest adjacent wild creature
+      if (e.key === 'i' || e.key === 'I') {
+        if (this.creatureRenderer && this.hud) {
+          const creatureId = this.creatureRenderer.getNearestWildCreature(
+            this.hud.localPlayerX,
+            this.hud.localPlayerY,
+          );
+          if (creatureId) {
+            this.room.send(TAME, { creatureId });
+          }
+        }
+        return;
+      }
+
+      // Select/deselect nearest owned creature for pack
+      if (e.key === 'f' || e.key === 'F') {
+        if (this.creatureRenderer && this.hud) {
+          const creatureId = this.creatureRenderer.getNearestOwnedCreature(
+            this.hud.localPlayerX,
+            this.hud.localPlayerY,
+          );
+          if (creatureId) {
+            this.creatureRenderer.togglePackSelection(creatureId);
+            this.room.send(SELECT_CREATURE, { creatureId });
+            this.hud.updatePackSize(this.creatureRenderer.getPackSize());
+          }
         }
         return;
       }

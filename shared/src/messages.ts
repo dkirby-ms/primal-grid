@@ -68,8 +68,6 @@ export interface SelectCreaturePayload {
 }
 
 export interface BreedPayload {
-  /** ID of the first creature. */
-  creatureId1: string;
-  /** ID of the second creature. */
-  creatureId2: string;
+  /** ID of the target creature to breed. Server auto-finds mate within 1 tile. */
+  creatureId: string;
 }
