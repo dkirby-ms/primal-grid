@@ -68,3 +68,12 @@
 - **Wiring**: `main.ts` creates and binds CreatureRenderer after PlayerRenderer, adds creature container to grid container (same z-order pattern).
 - **Architecture note**: Both renderers use generic `Record<string, unknown>` duck-typing for state access. No coupling to Pemulis's exact Colyseus schema classes — adapts at runtime to whatever collection shape `.creatures` or tile fields have.
 - **89 tests passing** after changes, no regressions.
+
+### Phase 2.3 Client HUD — Hunger & Health Bars (2026-02-25)
+- **HudRenderer** (`client/src/ui/HudRenderer.ts`): PixiJS-based HUD overlay showing health and hunger bars for the local player. Fixed position (top-left, 12px padding), added to `app.stage` so it stays screen-fixed regardless of camera/world scroll.
+- **Health bar**: Dark red background (#441111), fill color shifts green→orange→red as value drops. Label + numeric readout ("Health 85/100").
+- **Hunger bar**: Dark orange background (#442211), fill color shifts yellow-orange→dark orange→red as value drops. Label + numeric readout ("Hunger 42/100").
+- **Graceful defaults**: If server hasn't sent `health`/`hunger` fields yet, defaults to 100/100 (full bars). No crash, no missing UI.
+- **Wiring**: `main.ts` passes `app` into `connectToServer()` so the HUD container can be added to `app.stage` (not `grid.container`). HUD binds to room state via same duck-typed `onStateChange` pattern as other renderers.
+- **Same binding pattern**: Uses `Record<string, unknown>` duck-typing for state access, finds local player by matching `room.sessionId`, reads `player['health']` and `player['hunger']` with nullish defaults.
+- **126 tests passing** after changes, no regressions.

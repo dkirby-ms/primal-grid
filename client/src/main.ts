@@ -5,6 +5,7 @@ import { CreatureRenderer } from './renderer/CreatureRenderer.js';
 import { Camera } from './renderer/Camera.js';
 import { InputHandler } from './input/InputHandler.js';
 import { ConnectionStatusUI } from './ui/ConnectionStatus.js';
+import { HudRenderer } from './ui/HudRenderer.js';
 import { connect, disconnect, onConnectionStatus } from './network.js';
 
 const WIDTH = 800;
@@ -38,10 +39,10 @@ async function bootstrap(): Promise<void> {
   app.ticker.add(() => camera.update());
 
   // --- Connect to Colyseus (non-blocking) ---
-  connectToServer(grid);
+  connectToServer(app, grid);
 }
 
-async function connectToServer(grid: GridRenderer): Promise<void> {
+async function connectToServer(app: Application, grid: GridRenderer): Promise<void> {
   try {
     const room = await connect();
 
@@ -55,6 +56,11 @@ async function connectToServer(grid: GridRenderer): Promise<void> {
     const creatures = new CreatureRenderer();
     grid.container.addChild(creatures.container);
     creatures.bindToRoom(room);
+
+    // HUD (fixed on screen, not in world space)
+    const hud = new HudRenderer(room.sessionId);
+    app.stage.addChild(hud.container);
+    hud.bindToRoom(room);
 
     // Input handler (arrow keys + click)
     new InputHandler(room, grid.container);

@@ -66,3 +66,14 @@
 - **Resource regeneration**: `tickResourceRegen()` runs every RESOURCE_REGEN.INTERVAL_TICKS (80 ticks = 20 seconds). Depleted tiles (resourceType=-1) can regrow based on biome. Existing resources regenerate +1 per interval, capped at MAX_AMOUNT=10.
 - **Known flaky test**: "no two creatures spawn on exact same tile" — `findWalkableTileInBiomes` does NOT deduplicate positions. With 12 creatures on ~200-300 preferred tiles, birthday-problem collisions happen ~20% of the time. Test is spec-correct; implementation gap. Usually passes but will occasionally flake.
 - **Creature spawn count**: 8 herbivores + 4 carnivores = 12 total (CREATURE_SPAWN constants). Matches the ~12 target for 32×32 maps.
+
+### Phase 2.3 & 2.5 — Player Survival & Creature AI (2026-02-25)
+
+- **42 new tests** across 2 files: `server/src/__tests__/player-survival.test.ts` (20 tests), `server/src/__tests__/creature-ai.test.ts` (22 tests). Total suite: **168 tests, 167 passing** (1 pre-existing known flaky spawn collision test).
+- **Pemulis landed both implementations** before tests ran. `tickPlayerSurvival()` on GameRoom, `handleEat(client)` on GameRoom, `tickCreatureAI(state)` in `server/src/rooms/creatureAI.ts`.
+- **Survival tick is interval-gated**: `tickPlayerSurvival()` only fires at HUNGER_TICK_INTERVAL (8 tick) boundaries — NOT every tick. Tests must set `room.state.tick` to a multiple of 8 to trigger. Starvation damage is applied in the same callback when hunger reaches 0, not on a separate per-tick schedule.
+- **EAT at full hunger is a no-op** — implementation returns early when `hunger >= MAX_HUNGER`. Does NOT consume a berry. Tests adapted to match.
+- **Creature AI FSM implementation**: `idleOrWander()` toggles idle↔wander every tick (idle→wander moves, wander→idle stays). Herbivore priority: flee > eat > wander. Carnivore priority: hunt (when hungry) > idle/wander. Hunting requires `hunger < HUNGRY_THRESHOLD` (60).
+- **Greedy Manhattan** works for both `moveToward` and `moveAwayFrom`. Candidate moves try primary axis first, then secondary. Tests must set carnivore hunger below HUNGRY_THRESHOLD for hunt behavior to trigger.
+- **Creature death** removes from `state.creatures` MapSchema. Starvation: hunger 0 → health -= STARVATION_DAMAGE (2) per AI tick → removal at health ≤ 0. Tests for starvation death must place creature on barren tile (no resources) to prevent eating restoring hunger.
+- **Carnivore hunt attack**: when adjacent (Manhattan ≤ 1) to prey, deals HUNT_DAMAGE (25) and restores hunger. If prey health ≤ 0, prey is immediately deleted.

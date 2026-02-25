@@ -1,11 +1,13 @@
 import { Room, Client, CloseCode } from "colyseus";
 import { GameState, PlayerState, CreatureState } from "./GameState.js";
 import { generateProceduralMap } from "./mapGenerator.js";
+import { tickCreatureAI } from "./creatureAI.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
-  MOVE, GATHER,
+  MOVE, GATHER, EAT,
   ResourceType, TileType,
   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
+  PLAYER_SURVIVAL, CREATURE_AI,
 } from "@primal-grid/shared";
 import type { MovePayload, GatherPayload } from "@primal-grid/shared";
 
@@ -25,7 +27,9 @@ export class GameRoom extends Room {
 
     this.setSimulationInterval((_deltaTime) => {
       this.state.tick += 1;
+      this.tickPlayerSurvival();
       this.tickResourceRegen();
+      this.tickCreatureAI();
     }, 1000 / TICK_RATE);
 
     this.onMessage(MOVE, (client, message: MovePayload) => {
@@ -34,6 +38,10 @@ export class GameRoom extends Room {
 
     this.onMessage(GATHER, (client, message: GatherPayload) => {
       this.handleGather(client, message);
+    });
+
+    this.onMessage(EAT, (client) => {
+      this.handleEat(client);
     });
 
     console.log("[GameRoom] Room created.");
@@ -116,6 +124,39 @@ export class GameRoom extends Room {
       tile.resourceAmount = 0;
       tile.resourceType = -1;
     }
+  }
+
+  private handleEat(client: Client) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    if (player.berries <= 0) return;
+    if (player.hunger >= PLAYER_SURVIVAL.MAX_HUNGER) return;
+
+    player.berries -= 1;
+    player.hunger = Math.min(
+      player.hunger + PLAYER_SURVIVAL.BERRY_HUNGER_RESTORE,
+      PLAYER_SURVIVAL.MAX_HUNGER,
+    );
+  }
+
+  private tickPlayerSurvival() {
+    if (this.state.tick % PLAYER_SURVIVAL.HUNGER_TICK_INTERVAL !== 0) return;
+
+    this.state.players.forEach((player) => {
+      player.hunger = Math.max(0, player.hunger - PLAYER_SURVIVAL.HUNGER_DRAIN);
+
+      if (player.hunger <= 0) {
+        player.health = Math.max(
+          PLAYER_SURVIVAL.HEALTH_FLOOR,
+          player.health - PLAYER_SURVIVAL.STARVATION_DAMAGE,
+        );
+      }
+    });
+  }
+
+  private tickCreatureAI() {
+    if (this.state.tick % CREATURE_AI.TICK_INTERVAL !== 0) return;
+    tickCreatureAI(this.state);
   }
 
   /** Biome-to-resource mapping for regeneration. */

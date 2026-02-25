@@ -2,6 +2,7 @@
 
 export const MOVE = "move" as const;
 export const GATHER = "gather" as const;
+export const EAT = "eat" as const;
 
 // --- Message payload interfaces ---
 

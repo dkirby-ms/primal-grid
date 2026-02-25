@@ -48,6 +48,12 @@ export class PlayerState extends Schema {
 
   @type("number")
   berries: number = 0;
+
+  @type("number")
+  hunger: number = 100;
+
+  @type("number")
+  health: number = 100;
 }
 
 export class CreatureState extends Schema {

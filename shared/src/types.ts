@@ -55,4 +55,6 @@ export interface IPlayerState {
   stone: number;
   fiber: number;
   berries: number;
+  hunger: number;
+  health: number;
 }

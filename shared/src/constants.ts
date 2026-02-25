@@ -45,3 +45,41 @@ export const CREATURE_SPAWN = {
   /** Number of carnivores to spawn on 32×32 map. */
   CARNIVORE_COUNT: 4,
 } as const;
+
+/** Player survival constants. */
+export const PLAYER_SURVIVAL = {
+  /** Starting hunger value. */
+  MAX_HUNGER: 100,
+  /** Starting health value. */
+  MAX_HEALTH: 100,
+  /** Ticks between hunger decrements (8 ticks = 2 seconds at 4 ticks/sec). */
+  HUNGER_TICK_INTERVAL: 8,
+  /** Hunger lost per interval. */
+  HUNGER_DRAIN: 1,
+  /** Health lost per tick when starving. */
+  STARVATION_DAMAGE: 1,
+  /** Minimum health when starving (no player death). */
+  HEALTH_FLOOR: 1,
+  /** Hunger restored per berry consumed. */
+  BERRY_HUNGER_RESTORE: 20,
+} as const;
+
+/** Creature AI constants. */
+export const CREATURE_AI = {
+  /** Ticks between creature AI updates. */
+  TICK_INTERVAL: 2,
+  /** Hunger lost per AI tick. */
+  HUNGER_DRAIN: 1,
+  /** Health lost per AI tick when starving. */
+  STARVATION_DAMAGE: 2,
+  /** Hunger restored when a creature eats. */
+  EAT_RESTORE: 30,
+  /** Hunger threshold below which creatures seek food. */
+  HUNGRY_THRESHOLD: 60,
+  /** Max ticks a creature stays idle before wandering. */
+  IDLE_DURATION: 3,
+  /** Resource amount consumed when herbivore grazes. */
+  GRAZE_AMOUNT: 1,
+  /** Health damage dealt by carnivore per hunt attack. */
+  HUNT_DAMAGE: 25,
+} as const;

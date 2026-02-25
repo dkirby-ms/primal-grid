@@ -76,3 +76,24 @@
 - **Spawn strategy:** 8 herbivores + 4 carnivores (constants in CREATURE_SPAWN). Preferred-biome-first placement (100 random attempts in preferred biomes, then fallback to any walkable tile). Uses same pattern as player spawn.
 - **No AI yet:** Creatures spawn with currentState="idle" and don't move. AI is Phase 2.5.
 - **All 89 existing tests pass** after both phases.
+
+### Phase 2.3 — Player Survival (Hunger & Health) (2026-02-25)
+
+- **PlayerState schema extended:** Added `hunger` (default 100) and `health` (default 100) as `@type("number")` fields on PlayerState. IPlayerState interface updated in shared.
+- **Hunger drain:** Runs every `PLAYER_SURVIVAL.HUNGER_TICK_INTERVAL` (8 ticks = 2s). Decrements hunger by 1 per interval.
+- **Starvation:** When hunger hits 0, health drains by 1 per hunger tick. Health floors at 1 (decision A7: no player death).
+- **EAT message:** New `"eat"` message constant in `shared/src/messages.ts`. No payload — consumes 1 berry from `player.berries`, restores 20 hunger. Rejected if no berries or already full.
+- **All survival constants** centralized in `PLAYER_SURVIVAL` object in `shared/src/constants.ts`: MAX_HUNGER, MAX_HEALTH, HUNGER_TICK_INTERVAL, HUNGER_DRAIN, STARVATION_DAMAGE, HEALTH_FLOOR, BERRY_HUNGER_RESTORE.
+
+### Phase 2.5 — Creature AI FSM (2026-02-25)
+
+- **New file:** `server/src/rooms/creatureAI.ts` — standalone `tickCreatureAI(state)` function. Pure logic, no Room dependency.
+- **FSM states:** idle, wander, eat, flee, hunt. Stored in `creature.currentState` string field.
+- **Herbivore behavior:** Flee (carnivore within detection radius) > Eat (on tile with resources, when hungry) > Wander toward nearest resource (when hungry) > Idle/Wander cycle.
+- **Carnivore behavior:** Hunt (herbivore within detection radius, when hungry) > Attack (adjacent to prey, deals HUNT_DAMAGE=25) > Idle/Wander cycle. Kills prey when health ≤ 0.
+- **Movement:** Greedy Manhattan — `moveToward`/`moveAwayFrom` reduce dx or dy by 1 per step. Tries primary axis first, then secondary. No pathfinding.
+- **Hunger/death:** Every AI tick drains 1 hunger. At hunger=0, health drains by 2/tick. Creatures die (removed from GameState.creatures) when health ≤ 0.
+- **Herbivore grazing:** Depletes tile resources (GRAZE_AMOUNT=1). Sets tile to resourceType=-1 when empty.
+- **AI tick interval:** Configured via `CREATURE_AI.TICK_INTERVAL` (2 ticks = 0.5s). Decoupled from game tick per decision A3.
+- **All constants** in `CREATURE_AI` object in shared constants: TICK_INTERVAL, HUNGER_DRAIN, STARVATION_DAMAGE, EAT_RESTORE, HUNGRY_THRESHOLD, IDLE_DURATION, GRAZE_AMOUNT, HUNT_DAMAGE.
+- **Detection radius:** Uses `detectionRadius` from `CREATURE_TYPES` data (herbivore: 4, carnivore: 6).
