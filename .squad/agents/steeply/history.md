@@ -28,3 +28,13 @@
 - Colyseus `@colyseus/schema` decorators (`@type`) work fine under Vitest with `experimentalDecorators` in server tsconfig.
 - **12 tests across 5 files** passing: types (2), constants (3), messages (4), GameState (2), GameRoom (1).
 - Build pipeline (`npm run build`) still succeeds after adding test files and vitest config.
+
+### Phase 1 — Walking Skeleton Server Tests (2026-02-25)
+
+- **39 new tests** added across 3 files (grid-generation, player-lifecycle, movement-validation). Total: 57 tests, all passing.
+- **Testing pattern for Colyseus rooms without server:** `Object.create(GameRoom.prototype)` + manual `state` assignment lets you call private methods (`generateMap`, `handleMove`, `onJoin`, `onLeave`) without spinning up the full Colyseus server. Works cleanly.
+- **Fake clients:** `{ sessionId: "..." }` is sufficient to mock Colyseus `Client` for `onJoin`/`onLeave`/`handleMove` calls.
+- **No bugs found.** Movement validation is solid — rejects out-of-bounds, non-integer, >1/<-1 dx/dy, water tiles, rock tiles. Allows diagonal, sand, and multi-player tile stacking.
+- **Deterministic map generation** makes tile-position assertions reliable. Known coordinates: water pond at (4-8,4-8), sand beach around it, rock formation at (22-26,22-26), scattered edge rocks.
+- **Player spawn** always lands on walkable tiles — verified with 10-player stress test.
+- Coverage gaps to address in Phase 2+: no tick/simulation interval tests, no gather message handling, no network-level multi-client sync tests (would need Colyseus test server).
