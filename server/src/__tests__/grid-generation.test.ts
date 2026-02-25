@@ -14,6 +14,15 @@ function createRoomWithMap(): { state: GameState } {
   return room;
 }
 
+/** Find the first tile of a given type in the generated map. */
+function findTileOfType(state: GameState, type: TileType): TileState | undefined {
+  for (let i = 0; i < state.tiles.length; i++) {
+    const tile = state.tiles.at(i)!;
+    if (tile.type === type) return tile;
+  }
+  return undefined;
+}
+
 describe("Grid Generation", () => {
   it("generates exactly 32×32 tiles (1024 total)", () => {
     const room = createRoomWithMap();
@@ -29,25 +38,20 @@ describe("Grid Generation", () => {
 
   it("all tiles have valid TileType values", () => {
     const room = createRoomWithMap();
-    const validTypes = new Set([TileType.Grass, TileType.Water, TileType.Rock, TileType.Sand]);
+    const validTypes = new Set([TileType.Grassland, TileType.Forest, TileType.Swamp, TileType.Desert, TileType.Highland, TileType.Water, TileType.Rock, TileType.Sand]);
     for (let i = 0; i < room.state.tiles.length; i++) {
       const tile = room.state.tiles.at(i)!;
       expect(validTypes.has(tile.type)).toBe(true);
     }
   });
 
-  it("grid contains a mix of tile types (not all one type)", () => {
+  it("grid contains a mix of biome types (at least 3 distinct)", () => {
     const room = createRoomWithMap();
     const typesFound = new Set<number>();
     for (let i = 0; i < room.state.tiles.length; i++) {
       typesFound.add(room.state.tiles.at(i)!.type);
     }
-    // Should have at least Grass, Water, Rock, and Sand
-    expect(typesFound.size).toBeGreaterThanOrEqual(4);
-    expect(typesFound.has(TileType.Grass)).toBe(true);
-    expect(typesFound.has(TileType.Water)).toBe(true);
-    expect(typesFound.has(TileType.Rock)).toBe(true);
-    expect(typesFound.has(TileType.Sand)).toBe(true);
+    expect(typesFound.size).toBeGreaterThanOrEqual(3);
   });
 
   it("tile coordinates match expected positions (row-major order)", () => {
@@ -62,37 +66,83 @@ describe("Grid Generation", () => {
     }
   });
 
-  it("getTile returns correct tile at known positions", () => {
+  it("contains both walkable and non-walkable tiles", () => {
     const room = createRoomWithMap();
-    // Center of the water pond (4-8, 4-8)
-    const waterTile = room.state.getTile(6, 6);
-    expect(waterTile).toBeDefined();
-    expect(waterTile!.type).toBe(TileType.Water);
-
-    // Center of rock formation (22-26, 22-26)
-    const rockTile = room.state.getTile(24, 24);
-    expect(rockTile).toBeDefined();
-    expect(rockTile!.type).toBe(TileType.Rock);
-
-    // Open area — should be grass
-    const grassTile = room.state.getTile(15, 15);
-    expect(grassTile).toBeDefined();
-    expect(grassTile!.type).toBe(TileType.Grass);
+    let walkableCount = 0;
+    let nonWalkableCount = 0;
+    for (let i = 0; i < room.state.tiles.length; i++) {
+      const tile = room.state.tiles.at(i)!;
+      if (room.state.isWalkable(tile.x, tile.y)) walkableCount++;
+      else nonWalkableCount++;
+    }
+    expect(walkableCount).toBeGreaterThan(0);
+    expect(nonWalkableCount).toBeGreaterThan(0);
   });
 
   it("water and rock tiles are not walkable", () => {
     const room = createRoomWithMap();
-    // Water pond center
-    expect(room.state.isWalkable(6, 6)).toBe(false);
-    // Rock formation center
-    expect(room.state.isWalkable(24, 24)).toBe(false);
+    const waterTile = findTileOfType(room.state, TileType.Water);
+    const rockTile = findTileOfType(room.state, TileType.Rock);
+    if (waterTile) expect(room.state.isWalkable(waterTile.x, waterTile.y)).toBe(false);
+    if (rockTile) expect(room.state.isWalkable(rockTile.x, rockTile.y)).toBe(false);
   });
 
-  it("grass and sand tiles are walkable", () => {
+  it("grassland, forest, sand, desert, swamp, highland tiles are walkable", () => {
     const room = createRoomWithMap();
-    // Open grass area
-    expect(room.state.isWalkable(15, 15)).toBe(true);
-    // Sand beach around the pond (e.g. 3,3 is sand, not water)
-    expect(room.state.isWalkable(3, 3)).toBe(true);
+    const walkableTypes = [TileType.Grassland, TileType.Forest, TileType.Sand, TileType.Desert, TileType.Swamp, TileType.Highland];
+    for (const type of walkableTypes) {
+      const tile = findTileOfType(room.state, type);
+      if (tile) expect(room.state.isWalkable(tile.x, tile.y)).toBe(true);
+    }
+  });
+
+  it("same seed produces identical maps", () => {
+    const room1 = Object.create(GameRoom.prototype) as any;
+    room1.state = new GameState();
+    room1.generateMap(42);
+
+    const room2 = Object.create(GameRoom.prototype) as any;
+    room2.state = new GameState();
+    room2.generateMap(42);
+
+    for (let i = 0; i < room1.state.tiles.length; i++) {
+      const t1 = room1.state.tiles.at(i)!;
+      const t2 = room2.state.tiles.at(i)!;
+      expect(t1.type).toBe(t2.type);
+      expect(t1.fertility).toBe(t2.fertility);
+      expect(t1.moisture).toBe(t2.moisture);
+    }
+  });
+
+  it("different seeds produce different maps", () => {
+    const room1 = Object.create(GameRoom.prototype) as any;
+    room1.state = new GameState();
+    room1.generateMap(1);
+
+    const room2 = Object.create(GameRoom.prototype) as any;
+    room2.state = new GameState();
+    room2.generateMap(99999);
+
+    let differences = 0;
+    for (let i = 0; i < room1.state.tiles.length; i++) {
+      if (room1.state.tiles.at(i)!.type !== room2.state.tiles.at(i)!.type) differences++;
+    }
+    expect(differences).toBeGreaterThan(0);
+  });
+
+  it("tiles have fertility and moisture values in [0, 1]", () => {
+    const room = createRoomWithMap();
+    for (let i = 0; i < room.state.tiles.length; i++) {
+      const tile = room.state.tiles.at(i)!;
+      expect(tile.fertility).toBeGreaterThanOrEqual(0);
+      expect(tile.fertility).toBeLessThanOrEqual(1);
+      expect(tile.moisture).toBeGreaterThanOrEqual(0);
+      expect(tile.moisture).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("mapSeed is stored in state", () => {
+    const room = createRoomWithMap();
+    expect(typeof room.state.mapSeed).toBe("number");
   });
 });

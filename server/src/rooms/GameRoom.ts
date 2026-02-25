@@ -1,6 +1,7 @@
 import { Room, Client, CloseCode } from "colyseus";
-import { GameState, TileState, PlayerState } from "./GameState.js";
-import { TICK_RATE, DEFAULT_MAP_SIZE, TileType, MOVE } from "@primal-grid/shared";
+import { GameState, PlayerState } from "./GameState.js";
+import { generateProceduralMap } from "./mapGenerator.js";
+import { TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED, MOVE } from "@primal-grid/shared";
 import type { MovePayload } from "@primal-grid/shared";
 
 const PLAYER_COLORS = [
@@ -12,8 +13,9 @@ const PLAYER_COLORS = [
 export class GameRoom extends Room {
   state = new GameState();
 
-  override onCreate(_options: Record<string, unknown>) {
-    this.generateMap();
+  override onCreate(options: Record<string, unknown>) {
+    const seed = typeof options?.seed === "number" ? options.seed : DEFAULT_MAP_SEED;
+    this.generateMap(seed);
 
     this.setSimulationInterval((_deltaTime) => {
       this.state.tick += 1;
@@ -70,58 +72,22 @@ export class GameRoom extends Room {
     }
   }
 
-  private generateMap() {
-    const size = DEFAULT_MAP_SIZE;
-    this.state.mapWidth = size;
-    this.state.mapHeight = size;
-
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const tile = new TileState();
-        tile.x = x;
-        tile.y = y;
-        tile.type = this.chooseTileType(x, y, size);
-        this.state.tiles.push(tile);
-      }
-    }
-  }
-
-  /** Simple deterministic tile generation — mostly grass, with water/rock/sand clusters. */
-  private chooseTileType(x: number, y: number, size: number): TileType {
-    // Water pond in upper-left quadrant
-    if (x >= 4 && x <= 8 && y >= 4 && y <= 8) return TileType.Water;
-    // Sand beach around the pond
-    if (x >= 3 && x <= 9 && y >= 3 && y <= 9) return TileType.Sand;
-
-    // Rock formation in lower-right
-    if (x >= 22 && x <= 26 && y >= 22 && y <= 26) return TileType.Rock;
-
-    // Second small water feature
-    if (x >= 18 && x <= 20 && y >= 6 && y <= 8) return TileType.Water;
-    if (x >= 17 && x <= 21 && y >= 5 && y <= 9) return TileType.Sand;
-
-    // Scattered rocks along edges
-    if ((x === 0 || x === size - 1 || y === 0 || y === size - 1) &&
-        (x + y) % 7 === 0) {
-      return TileType.Rock;
-    }
-
-    return TileType.Grass;
+  private generateMap(seed: number = DEFAULT_MAP_SEED) {
+    generateProceduralMap(this.state, seed, DEFAULT_MAP_SIZE, DEFAULT_MAP_SIZE);
   }
 
   private findRandomWalkableTile(): { x: number; y: number } {
-    const size = DEFAULT_MAP_SIZE;
-    // Try random positions
+    const w = this.state.mapWidth;
+    const h = this.state.mapHeight;
     for (let attempts = 0; attempts < 100; attempts++) {
-      const x = Math.floor(Math.random() * size);
-      const y = Math.floor(Math.random() * size);
+      const x = Math.floor(Math.random() * w);
+      const y = Math.floor(Math.random() * h);
       if (this.state.isWalkable(x, y)) {
         return { x, y };
       }
     }
-    // Fallback: find first walkable tile
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
         if (this.state.isWalkable(x, y)) {
           return { x, y };
         }

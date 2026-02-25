@@ -1,13 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { GameState, TileState, PlayerState } from "../rooms/GameState.js";
-import { TileType, DEFAULT_MAP_SIZE } from "@primal-grid/shared";
+import { TileType, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED } from "@primal-grid/shared";
 
 describe("TileState", () => {
   it("can be instantiated with defaults", () => {
     const tile = new TileState();
-    expect(tile.type).toBe(TileType.Grass);
+    expect(tile.type).toBe(TileType.Grassland);
     expect(tile.x).toBe(0);
     expect(tile.y).toBe(0);
+    expect(tile.fertility).toBe(0);
+    expect(tile.moisture).toBe(0);
   });
 });
 
@@ -38,6 +40,11 @@ describe("GameState", () => {
     expect(state.mapHeight).toBe(DEFAULT_MAP_SIZE);
   });
 
+  it("has default map seed", () => {
+    const state = new GameState();
+    expect(state.mapSeed).toBe(DEFAULT_MAP_SEED);
+  });
+
   it("getTile returns undefined for out-of-bounds", () => {
     const state = new GameState();
     expect(state.getTile(-1, 0)).toBeUndefined();
@@ -55,7 +62,7 @@ describe("GameState", () => {
     // Populate a small 2x2 grid for testing
     state.mapWidth = 2;
     state.mapHeight = 2;
-    const types = [TileType.Grass, TileType.Water, TileType.Rock, TileType.Sand];
+    const types = [TileType.Grassland, TileType.Water, TileType.Rock, TileType.Sand];
     for (let i = 0; i < 4; i++) {
       const t = new TileState();
       t.x = i % 2;
@@ -63,7 +70,7 @@ describe("GameState", () => {
       t.type = types[i];
       state.tiles.push(t);
     }
-    expect(state.isWalkable(0, 0)).toBe(true);  // Grass
+    expect(state.isWalkable(0, 0)).toBe(true);  // Grassland
     expect(state.isWalkable(1, 0)).toBe(false); // Water
     expect(state.isWalkable(0, 1)).toBe(false); // Rock
     expect(state.isWalkable(1, 1)).toBe(true);  // Sand

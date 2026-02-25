@@ -1,6 +1,10 @@
 /** Tile terrain types for the world grid. */
 export enum TileType {
-  Grass,
+  Grassland,
+  Forest,
+  Swamp,
+  Desert,
+  Highland,
   Water,
   Rock,
   Sand,
@@ -11,6 +15,8 @@ export interface ITileState {
   type: TileType;
   x: number;
   y: number;
+  fertility: number;
+  moisture: number;
 }
 
 /** State of a player in the game world. */
