@@ -599,3 +599,35 @@ The player has a reason to gather beyond eating. They can shape the world — pu
 - Pemulis: FARM_HARVEST handler should check player adjacency to a FarmPlot with `cropReady=true`.
 - Future placeable items need entries added to `PLACEABLE_ITEMS` array in InputHandler.
 - Future recipes are automatically picked up by CraftMenu (reads from shared RECIPES object).
+
+---
+
+# Phase 3.7 — Integration Testing Complete
+
+**Date:** 2026-02-25  
+**Author:** Steeply (Tester)  
+**Status:** Active
+
+## Summary
+
+Phase 3 integration tests are complete. **273 total tests passing** (251 existing + 22 new). All Phase 3 gameplay loops are verified end-to-end.
+
+## Coverage
+
+- Full gather → craft → place loops (wall, floor, workbench, multi-item)
+- Farm lifecycle with repeating harvest cycles
+- Creature–structure interaction (wall avoidance, hunt pathing)
+- Edge cases: occupied tiles, insufficient resources, missing inventory, biome restrictions, non-adjacent harvest, movement blocking
+- Multiplayer simultaneous crafting/placing (isolation + race conditions)
+- Ecosystem stability at 300 ticks with structures present
+
+## Key Findings
+
+1. **Harvest yield can be < BASE_HARVEST_YIELD** on low-fertility tiles. Formula: `Math.max(1, Math.round(3 * fertility))`. This is correct behavior, not a bug.
+2. **No bugs found** in Phase 3 implementation. All handlers, validators, and tick systems work as specified.
+3. **Phase 3 is code-complete and test-complete.** Ready to advance to Phase 4.
+
+## Implications
+
+- Phase 3 definition of done is met: all gameplay loops verified, ecosystem stable, no regressions.
+- Phase 4 (Creature Systems) can begin.

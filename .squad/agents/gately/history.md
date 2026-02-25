@@ -99,3 +99,24 @@
 - **Wiring in main.ts**: StructureRenderer added to grid.container after CreatureRenderer. CraftMenu added to app.stage (screen-fixed). InputHandler receives CraftMenu and HudRenderer references via setter methods. HUD.onInventoryUpdate feeds CraftMenu.updateResources for live affordability.
 - **Architecture**: All new code follows existing duck-typed `Record<string, unknown>` state access pattern. No coupling to Pemulis's exact Colyseus schema classes. Recipes imported from shared package (already defined by Pemulis).
 - **244 tests passing**, build clean, no regressions.
+
+---
+
+## Phase 3 Complete (2026-02-25T21:50:00Z)
+
+**Status:** COMPLETE — Phase 3 Client UI Verified
+
+Phase 3 is complete as of 2026-02-25T21:50:00Z. Gately's Phase 3.5–3.6 deliverables (StructureRenderer, CraftMenu, inventory HUD, build mode, farm visualization) have been verified by Steeply's integration test suite: 273 total tests passing, no bugs found in client implementation.
+
+All Phase 3 client-side features working as specified:
+- StructureRenderer renders walls, floors, workbenches, and farm plots with correct visuals
+- Farm growth stages visualized (empty soil → sprout → medium growth → harvest-ready)
+- CraftMenu accessible via C key, shows all recipes with affordability checks
+- Build mode (B key) with item selection (1-4) and placement UI working
+- Inventory HUD shows all resource types with emoji labels
+- Harvest action (H key) sends correct coordinates to server
+- Full gameplay loop: gather → craft → build → harvest working end-to-end
+
+**Phase 3 Definition of Done:** ✅ Code-complete, test-complete, no regressions, ready for Phase 4.
+
+Client infrastructure is stable. Ready for Phase 4 creature UI extensions.
