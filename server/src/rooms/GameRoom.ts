@@ -7,7 +7,7 @@ import {
   MOVE, GATHER, EAT,
   ResourceType, TileType,
   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
-  PLAYER_SURVIVAL, CREATURE_AI,
+  PLAYER_SURVIVAL, CREATURE_AI, CREATURE_RESPAWN,
 } from "@primal-grid/shared";
 import type { MovePayload, GatherPayload } from "@primal-grid/shared";
 
@@ -19,6 +19,7 @@ const PLAYER_COLORS = [
 
 export class GameRoom extends Room {
   state = new GameState();
+  private nextCreatureId = 0;
 
   override onCreate(options: Record<string, unknown>) {
     const seed = typeof options?.seed === "number" ? options.seed : DEFAULT_MAP_SEED;
@@ -30,6 +31,7 @@ export class GameRoom extends Room {
       this.tickPlayerSurvival();
       this.tickResourceRegen();
       this.tickCreatureAI();
+      this.tickCreatureRespawn();
     }, 1000 / TICK_RATE);
 
     this.onMessage(MOVE, (client, message: MovePayload) => {
@@ -196,31 +198,49 @@ export class GameRoom extends Room {
   }
 
   private spawnCreatures() {
-    let creatureId = 0;
-
     for (const [typeKey, count] of [
       ["herbivore", CREATURE_SPAWN.HERBIVORE_COUNT],
       ["carnivore", CREATURE_SPAWN.CARNIVORE_COUNT],
     ] as const) {
-      const typeDef = CREATURE_TYPES[typeKey];
-      const preferredBiomes = new Set(typeDef.preferredBiomes as readonly number[]);
-
       for (let i = 0; i < count; i++) {
-        const pos = this.findWalkableTileInBiomes(preferredBiomes);
-        const creature = new CreatureState();
-        creature.id = `creature_${creatureId++}`;
-        creature.creatureType = typeKey;
-        creature.x = pos.x;
-        creature.y = pos.y;
-        creature.health = typeDef.health;
-        creature.hunger = typeDef.hunger;
-        creature.currentState = "idle";
-
-        this.state.creatures.set(creature.id, creature);
+        this.spawnOneCreature(typeKey);
       }
     }
 
     console.log(`[GameRoom] Spawned ${this.state.creatures.size} creatures.`);
+  }
+
+  private spawnOneCreature(typeKey: string): void {
+    if (this.nextCreatureId == null) this.nextCreatureId = 0;
+    const typeDef = CREATURE_TYPES[typeKey];
+    const preferredBiomes = new Set(typeDef.preferredBiomes as readonly number[]);
+    const pos = this.findWalkableTileInBiomes(preferredBiomes);
+    const creature = new CreatureState();
+    creature.id = `creature_${this.nextCreatureId++}`;
+    creature.creatureType = typeKey;
+    creature.x = pos.x;
+    creature.y = pos.y;
+    creature.health = typeDef.health;
+    creature.hunger = typeDef.hunger;
+    creature.currentState = "idle";
+    this.state.creatures.set(creature.id, creature);
+  }
+
+  private tickCreatureRespawn() {
+    if (this.state.tick % CREATURE_RESPAWN.CHECK_INTERVAL !== 0) return;
+
+    for (const typeKey of Object.keys(CREATURE_TYPES)) {
+      const typeDef = CREATURE_TYPES[typeKey];
+      let count = 0;
+      this.state.creatures.forEach((c) => {
+        if (c.creatureType === typeKey) count++;
+      });
+
+      while (count < typeDef.minPopulation) {
+        this.spawnOneCreature(typeKey);
+        count++;
+      }
+    }
   }
 
   private findWalkableTileInBiomes(preferredBiomes: Set<number>): { x: number; y: number } {

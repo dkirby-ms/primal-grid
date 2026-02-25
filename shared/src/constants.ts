@@ -64,6 +64,12 @@ export const PLAYER_SURVIVAL = {
   BERRY_HUNGER_RESTORE: 20,
 } as const;
 
+/** Creature respawning constants. */
+export const CREATURE_RESPAWN = {
+  /** Ticks between population checks (100 ticks = 25 seconds at 4 ticks/sec). */
+  CHECK_INTERVAL: 100,
+} as const;
+
 /** Creature AI constants. */
 export const CREATURE_AI = {
   /** Ticks between creature AI updates. */

@@ -8,6 +8,8 @@ export interface CreatureTypeDef {
   readonly detectionRadius: number;
   readonly preferredBiomes: readonly TileType[];
   readonly color: string;
+  /** Minimum population — respawn if count drops below this. */
+  readonly minPopulation: number;
 }
 
 export const CREATURE_TYPES: Record<string, CreatureTypeDef> = {
@@ -19,6 +21,7 @@ export const CREATURE_TYPES: Record<string, CreatureTypeDef> = {
     detectionRadius: 4,
     preferredBiomes: [TileType.Grassland, TileType.Forest],
     color: "#4CAF50",
+    minPopulation: 4,
   },
   carnivore: {
     name: "Raptor",
@@ -28,5 +31,6 @@ export const CREATURE_TYPES: Record<string, CreatureTypeDef> = {
     detectionRadius: 6,
     preferredBiomes: [TileType.Forest, TileType.Highland],
     color: "#F44336",
+    minPopulation: 2,
   },
 } as const;

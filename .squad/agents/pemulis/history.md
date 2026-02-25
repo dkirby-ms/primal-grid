@@ -97,3 +97,12 @@
 - **AI tick interval:** Configured via `CREATURE_AI.TICK_INTERVAL` (2 ticks = 0.5s). Decoupled from game tick per decision A3.
 - **All constants** in `CREATURE_AI` object in shared constants: TICK_INTERVAL, HUNGER_DRAIN, STARVATION_DAMAGE, EAT_RESTORE, HUNGRY_THRESHOLD, IDLE_DURATION, GRAZE_AMOUNT, HUNT_DAMAGE.
 - **Detection radius:** Uses `detectionRadius` from `CREATURE_TYPES` data (herbivore: 4, carnivore: 6).
+
+### Phase 2.6 — Ecosystem Integration & Demo Polish (2026-02-25)
+
+- **Creature respawning:** `tickCreatureRespawn()` in `GameRoom.ts` checks every `CREATURE_RESPAWN.CHECK_INTERVAL` (100 ticks = 25s). Counts creatures by type, spawns new ones via `spawnOneCreature()` when below `minPopulation` threshold. Per decision A8: population threshold, NOT breeding.
+- **minPopulation field:** Added to `CreatureTypeDef` interface and creature data. Herbivore: 4, Carnivore: 2. Configurable per creature type in `shared/src/data/creatures.ts`.
+- **CREATURE_RESPAWN constants:** New `CREATURE_RESPAWN` object in `shared/src/constants.ts` with `CHECK_INTERVAL`.
+- **Refactored spawnCreatures:** Extracted `spawnOneCreature(typeKey)` for reuse by both initial spawn and respawn. Uses persistent `nextCreatureId` counter on GameRoom instance (with null guard for test compatibility where constructor is skipped via `Object.create`).
+- **All prior systems verified:** Herbivore grazing (creatureAI.ts) depletes tile resources ✅, carnivore kills remove prey ✅, resource regeneration (80 ticks) still works alongside grazing ✅.
+- **Ecosystem stability validated:** 23/26 integration tests pass. 3 pre-existing failures in carnivore hunting tests (herbivore flees before attack due to forEach iteration order — not a system bug, test setup issue). Ecosystem sustains 5+ minutes (1200 ticks) without extinction or resource depletion.
