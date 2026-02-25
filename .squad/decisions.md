@@ -54,3 +54,91 @@
 ### Key Principle
 
 **Each phase must be playable/demonstrable before advancing.** Ship the core loop first; defer all speculative features.
+
+## 2026-02-25: Phase 0 Client & Root Scaffolding
+
+**Date:** 2026-02-25  
+**Author:** Gately (Game Dev)  
+**Status:** Active
+
+1. **PixiJS v8 async init pattern** — `new Application()` + `await app.init({...})` is the v8 API.
+2. **Vite 6** chosen for client bundling — native ESM, fast HMR, good PixiJS compatibility.
+3. **Vite dev server port 3000** — leaves 2567 (Colyseus default) free for game server.
+4. **Root tsconfig uses `moduleResolution: "bundler"`** — best fit for Vite + TypeScript monorepo.
+5. **ESLint 8 + @typescript-eslint** — `.eslintrc.cjs` (CJS required, root is ESM).
+6. **Canvas size 800×600** — initial dev viewport. Responsive in Phase 1.
+7. **`concurrently`** for parallel dev scripts — runs client and server from root.
+
+### Implications
+- All agents use `moduleResolution: "bundler"` in tsconfigs.
+- Client renders into `<div id="app">`.
+
+## 2026-02-25: Phase 0 Server & Shared Package Setup
+
+**Date:** 2026-02-25  
+**Author:** Pemulis (Systems Dev)  
+**Status:** Active
+
+1. **Colyseus 0.15+ with WebSocketTransport** — `new Server({ transport: new WebSocketTransport() })`.
+2. **GameState Schema** — minimal Colyseus Schema with tick counter. Extend in Phase 1.
+3. **Shared package is dependency-free** — types, enums, constants, messages only.
+4. **Message protocol convention** — string constants + typed payloads in `shared/src/messages.ts`.
+5. **ESM + project references** — both packages use `"type": "module"`. TypeScript project references for type checking.
+
+### Implications
+- Phase 1 extends GameState with player maps and tile arrays.
+- New messages follow the pattern in `messages.ts`.
+- All game constants live in `shared/src/constants.ts`.
+
+## 2026-02-25: Phase 0 Test Setup
+
+**Date:** 2026-02-25  
+**Author:** Steeply (Tester)  
+**Status:** Active
+
+1. **Vitest config:** Root-level `vitest.config.ts` with explicit include patterns. No per-workspace vitest configs.
+2. **Test file convention:** `<package>/src/__tests__/<module>.test.ts`.
+3. **No client tests yet:** Manual smoke tests. Automated client tests deferred.
+4. **Server tests import source directly** — Vitest handles TypeScript natively.
+
+### Test Coverage (Phase 0)
+- shared types: 2 tests
+- shared constants: 3 tests
+- shared messages: 4 tests
+- server GameState: 2 tests
+- server GameRoom: 1 test
+- **Total: 12 tests passing**
+
+## 2026-02-25: Phase 1 Tile & Player Schema
+
+**Date:** 2026-02-25  
+**Author:** Pemulis (Systems Dev)  
+**Status:** Active
+
+1. **Tile Grid: Flat ArraySchema** — row-major indexing (index = `y * mapWidth + x`), not nested. Constant-time lookup.
+2. **Movement: Directional** — `{ dx, dy }` (each -1, 0, or 1), not absolute coordinates. Prevents teleportation.
+3. **Walkability Model** — Water and Rock impassable; Grass and Sand walkable. Extend via `isWalkable()`, never bypass.
+4. **Player Spawn Strategy** — random walkable tile with 100-attempt cap + linear fallback.
+
+### Validation
+- Grid generates 32×32 with mixed biomes.
+- Players spawn on walkable tiles.
+- Movement validation blocks non-adjacent moves.
+
+## 2026-02-25: Phase 1 Client Rendering Architecture
+
+**Date:** 2026-02-25  
+**Author:** Gately (Game Dev)  
+**Status:** Active
+
+1. **Grid renders immediately with default grass** — client doesn't wait for server. Server tile data overwrites.
+2. **Generic state binding via `Record<string, unknown>`** — duck-typed access avoids schema coupling.
+3. **WASD = camera, Arrows = player** — clean separation. Camera continuous, player discrete (150ms debounce).
+4. **Click-to-move sends absolute coordinates** — arrows send direction `{ dx, dy }`.
+5. **Player rendering is snap-to-position** — no interpolation. Smooth movement deferred.
+6. **Connection failure = offline mode** — no crash, no modal.
+
+### Impact
+- Client works standalone for visual testing.
+- Rendering adapts dynamically to schema changes.
+- No rebuild needed when Pemulis changes shape.
