@@ -45,3 +45,45 @@
 - **Wiring in main.ts:** Bootstrap creates app → grid → camera → status UI → async connects to server. On connect: binds grid, creates player renderer, attaches input handler. On failure: logs warning, client stays up with default grid.
 - **Architecture note:** State binding uses generic `Record<string, unknown>` typing to avoid coupling to Pemulis's exact schema shape. Works with any collection that has `.forEach()`.
 - **Files created:** `client/src/network.ts`, `client/src/renderer/GridRenderer.ts`, `client/src/renderer/Camera.ts`, `client/src/renderer/PlayerRenderer.ts`, `client/src/input/InputHandler.ts`, `client/src/ui/ConnectionStatus.ts`. Modified: `client/src/main.ts`.
+
+### Phase 2.1 Biome Tile Rendering (2026-02-25)
+- Expanded TILE_COLORS map in GridRenderer to support 8 biome types: Grassland (0x4a7c4f), Forest (0x2d5a27), Swamp (0x556b2f), Desert (0xd2b48c), Highland (0x8b7d6b), Water (0x3498db), Rock (0x7f8c8d), Sand (0xf0d9a0).
+- Renamed all `TileType.Grass` references to `TileType.Grassland` across client, server, and shared packages.
+- Updated shared TileType enum to include new biomes (Forest, Swamp, Desert, Highland). Enum values shifted: Water=5, Rock=6, Sand=7. No issues since all code uses symbolic names.
+- Added `disconnect()` export to `network.ts` for clean room teardown.
+- Added Vite HMR dispose handler in `main.ts` — calls `disconnect()` on hot reload to prevent duplicate Colyseus connections.
+- Added `"types": ["vite/client"]` to client tsconfig for `import.meta.hot` type support.
+- `isWalkable` uses deny-list (Water/Rock), so new biomes are automatically walkable — no server-side changes needed.
+
+### Phase 2.1 Completion & Handoff (2026-02-25)
+
+- **Phase 2.1 complete:** Biome colors, HMR cleanup, 60 tests passing. Pemulis completed server-side map generation. Steeply expanded test coverage.
+- **Decision record merged:** `.squad/decisions.md` now contains full Phase 2 scoping + Phase 2.1 architecture from Pemulis and Gately. Inbox files deleted. Orchestration logs written.
+- **Team status:** 60 tests passing. Biome world rendering live. HMR dev loop clean. Ready for Phase 2.2 (Resources) and 2.4 (Creatures) parallel tracks.
+
+### Phase 2.2/2.4 Client Rendering (2026-02-25)
+- **CreatureRenderer** (`client/src/renderer/CreatureRenderer.ts`): Renders herbivores as green circles (#4CAF50, radius 6px) and carnivores as red triangles (#F44336, radius 6px). Follows same duck-typed `onStateChange` binding pattern as PlayerRenderer — iterates `state.creatures.forEach()`, creates/removes sprites reactively.
+- **Resource indicators in GridRenderer**: Each tile now has a pre-allocated resource dot (5×5px square, top-right corner of tile). Hidden by default; shown when `resourceAmount > 0`. Color-coded by type: Wood=brown (#8B4513), Stone=gray (#999999), Fiber=light green (#90EE90), Berries=orchid (#DA70D6).
+- **Shared types expanded**: Added `ResourceType` enum (Wood=0, Stone=1, Fiber=2, Berries=3), `CreatureType` type alias, `ICreatureState` interface, and optional `resourceType`/`resourceAmount` fields on `ITileState`.
+- **Wiring**: `main.ts` creates and binds CreatureRenderer after PlayerRenderer, adds creature container to grid container (same z-order pattern).
+- **Architecture note**: Both renderers use generic `Record<string, unknown>` duck-typing for state access. No coupling to Pemulis's exact Colyseus schema classes — adapts at runtime to whatever collection shape `.creatures` or tile fields have.
+- **89 tests passing** after changes, no regressions.
+
+### Phase 2.3 Client HUD — Hunger & Health Bars (2026-02-25)
+- **HudRenderer** (`client/src/ui/HudRenderer.ts`): PixiJS-based HUD overlay showing health and hunger bars for the local player. Fixed position (top-left, 12px padding), added to `app.stage` so it stays screen-fixed regardless of camera/world scroll.
+- **Health bar**: Dark red background (#441111), fill color shifts green→orange→red as value drops. Label + numeric readout ("Health 85/100").
+- **Hunger bar**: Dark orange background (#442211), fill color shifts yellow-orange→dark orange→red as value drops. Label + numeric readout ("Hunger 42/100").
+- **Graceful defaults**: If server hasn't sent `health`/`hunger` fields yet, defaults to 100/100 (full bars). No crash, no missing UI.
+- **Wiring**: `main.ts` passes `app` into `connectToServer()` so the HUD container can be added to `app.stage` (not `grid.container`). HUD binds to room state via same duck-typed `onStateChange` pattern as other renderers.
+- **Same binding pattern**: Uses `Record<string, unknown>` duck-typing for state access, finds local player by matching `room.sessionId`, reads `player['health']` and `player['hunger']` with nullish defaults.
+- **126 tests passing** after changes, no regressions.
+
+### Phase 2.6 Creature State Visual Feedback (2026-02-25)
+- **CreatureRenderer state-aware rendering**: Each creature now tracked as a `CreatureEntry` (Container + Graphics + Text indicator) instead of a plain Graphics sprite. Graphics rebuilt only when `currentState` changes — no per-frame redraws.
+- **State color variations**: Eat state uses brighter/lighter colors (herbivore: #81C784, carnivore: #EF9A9A). Hunt state uses darker carnivore red (#C62828). Idle/Wander use default base colors.
+- **State indicators**: Flee state shows "!" above creature, Hunt state shows "⚔" above creature. Text indicators hidden when idle/wander/eat for clean visuals.
+- **Health opacity**: Creatures below 50% health render at 0.6 alpha — subtle visual degradation without cluttering the grid.
+- **HUD creature counts**: Added `🦕 {herbivores}  🦖 {carnivores}` text below hunger bar in HudRenderer. Counts updated every state change from `state.creatures` collection.
+- **HUD bindToRoom refactored**: Player stats and creature counts now both read from the same `onStateChange` callback. Guard changed from early-return to conditional blocks so both sections execute.
+- **Performance**: Graphic rebuilds are gated by `lastType`/`lastState` diffing. Alpha updates gated by `lastHealthLow` boolean. Indicator Text objects pre-allocated and toggled via `visible` — no allocation churn.
+- **168 tests passing** after changes, no regressions.

@@ -3,15 +3,19 @@ import { TileType } from "../types.js";
 
 describe("TileType enum", () => {
   it("has expected terrain values", () => {
-    expect(TileType.Grass).toBe(0);
-    expect(TileType.Water).toBe(1);
-    expect(TileType.Rock).toBe(2);
-    expect(TileType.Sand).toBe(3);
+    expect(TileType.Grassland).toBe(0);
+    expect(TileType.Forest).toBe(1);
+    expect(TileType.Swamp).toBe(2);
+    expect(TileType.Desert).toBe(3);
+    expect(TileType.Highland).toBe(4);
+    expect(TileType.Water).toBe(5);
+    expect(TileType.Rock).toBe(6);
+    expect(TileType.Sand).toBe(7);
   });
 
-  it("has exactly 4 members", () => {
+  it("has exactly 8 members", () => {
     const members = Object.keys(TileType).filter((k) => isNaN(Number(k)));
-    expect(members).toHaveLength(4);
-    expect(members).toEqual(["Grass", "Water", "Rock", "Sand"]);
+    expect(members).toHaveLength(8);
+    expect(members).toEqual(["Grassland", "Forest", "Swamp", "Desert", "Highland", "Water", "Rock", "Sand"]);
   });
 });

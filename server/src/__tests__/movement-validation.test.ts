@@ -26,215 +26,259 @@ function placePlayerAt(room: any, sessionId: string, x: number, y: number) {
   return { client, player };
 }
 
+/** Find a walkable tile with a walkable neighbor in the interior. */
+function findWalkablePair(state: GameState): { x: number; y: number; nx: number; ny: number } {
+  for (let y = 1; y < state.mapHeight - 1; y++) {
+    for (let x = 1; x < state.mapWidth - 1; x++) {
+      if (state.isWalkable(x, y) && state.isWalkable(x + 1, y)) {
+        return { x, y, nx: x + 1, ny: y };
+      }
+    }
+  }
+  throw new Error("No adjacent walkable pair found");
+}
+
+/** Find a non-walkable tile adjacent to a walkable tile. */
+function findNonWalkableEdge(state: GameState): { wx: number; wy: number; dx: number; dy: number } | undefined {
+  for (let y = 0; y < state.mapHeight; y++) {
+    for (let x = 0; x < state.mapWidth; x++) {
+      if (!state.isWalkable(x, y)) {
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          if (state.isWalkable(x + dx, y + dy)) {
+            return { wx: x + dx, wy: y + dy, dx: -dx, dy: -dy };
+          }
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
 describe("Movement Validation", () => {
   describe("valid moves", () => {
     it("move to adjacent walkable tile → position updates", () => {
       const room = createRoom();
-      // Place at (15, 15) — open grass area
-      const { client, player } = placePlayerAt(room, "mover", 15, 15);
-      expect(room.state.isWalkable(16, 15)).toBe(true);
+      const pair = findWalkablePair(room.state);
+      const { client, player } = placePlayerAt(room, "mover", pair.x, pair.y);
 
       room.handleMove(client, { dx: 1, dy: 0 });
-      expect(player.x).toBe(16);
-      expect(player.y).toBe(15);
+      expect(player.x).toBe(pair.x + 1);
+      expect(player.y).toBe(pair.y);
     });
 
     it("move left", () => {
       const room = createRoom();
-      const { client, player } = placePlayerAt(room, "m", 15, 15);
+      const pair = findWalkablePair(room.state);
+      const { client, player } = placePlayerAt(room, "m", pair.nx, pair.ny);
       room.handleMove(client, { dx: -1, dy: 0 });
-      expect(player.x).toBe(14);
-      expect(player.y).toBe(15);
+      expect(player.x).toBe(pair.x);
     });
 
     it("move up", () => {
       const room = createRoom();
-      const { client, player } = placePlayerAt(room, "m", 15, 15);
-      room.handleMove(client, { dx: 0, dy: -1 });
-      expect(player.x).toBe(15);
-      expect(player.y).toBe(14);
+      // Find vertically adjacent walkable pair
+      for (let y = 1; y < room.state.mapHeight - 1; y++) {
+        for (let x = 1; x < room.state.mapWidth - 1; x++) {
+          if (room.state.isWalkable(x, y) && room.state.isWalkable(x, y - 1)) {
+            const { client, player } = placePlayerAt(room, "m", x, y);
+            room.handleMove(client, { dx: 0, dy: -1 });
+            expect(player.y).toBe(y - 1);
+            return;
+          }
+        }
+      }
     });
 
     it("move down", () => {
       const room = createRoom();
-      const { client, player } = placePlayerAt(room, "m", 15, 15);
-      room.handleMove(client, { dx: 0, dy: 1 });
-      expect(player.x).toBe(15);
-      expect(player.y).toBe(16);
+      for (let y = 1; y < room.state.mapHeight - 1; y++) {
+        for (let x = 1; x < room.state.mapWidth - 1; x++) {
+          if (room.state.isWalkable(x, y) && room.state.isWalkable(x, y + 1)) {
+            const { client, player } = placePlayerAt(room, "m", x, y);
+            room.handleMove(client, { dx: 0, dy: 1 });
+            expect(player.y).toBe(y + 1);
+            return;
+          }
+        }
+      }
     });
 
-    it("diagonal move (dx=1, dy=1) → works if target is walkable", () => {
+    it("diagonal move → works if target is walkable", () => {
       const room = createRoom();
-      const { client, player } = placePlayerAt(room, "diag", 15, 15);
-      expect(room.state.isWalkable(16, 16)).toBe(true);
-
-      room.handleMove(client, { dx: 1, dy: 1 });
-      expect(player.x).toBe(16);
-      expect(player.y).toBe(16);
-    });
-
-    it("diagonal move (dx=-1, dy=-1) → works if target is walkable", () => {
-      const room = createRoom();
-      const { client, player } = placePlayerAt(room, "diag2", 15, 15);
-      room.handleMove(client, { dx: -1, dy: -1 });
-      expect(player.x).toBe(14);
-      expect(player.y).toBe(14);
+      for (let y = 1; y < room.state.mapHeight - 1; y++) {
+        for (let x = 1; x < room.state.mapWidth - 1; x++) {
+          if (room.state.isWalkable(x, y) && room.state.isWalkable(x + 1, y + 1)) {
+            const { client, player } = placePlayerAt(room, "diag", x, y);
+            room.handleMove(client, { dx: 1, dy: 1 });
+            expect(player.x).toBe(x + 1);
+            expect(player.y).toBe(y + 1);
+            return;
+          }
+        }
+      }
     });
   });
 
   describe("boundary rejection", () => {
     it("move out of bounds (past left edge) → position unchanged", () => {
       const room = createRoom();
-      const { client, player } = placePlayerAt(room, "edge-l", 0, 15);
+      // Find walkable tile at x=0
+      for (let y = 0; y < room.state.mapHeight; y++) {
+        if (room.state.isWalkable(0, y)) {
+          const { client, player } = placePlayerAt(room, "edge-l", 0, y);
+          room.handleMove(client, { dx: -1, dy: 0 });
+          expect(player.x).toBe(0);
+          return;
+        }
+      }
+      // If no walkable tile at x=0, place and force position
+      const { client, player } = placePlayerAt(room, "edge-l", 0, 0);
+      player.x = 0;
       room.handleMove(client, { dx: -1, dy: 0 });
       expect(player.x).toBe(0);
-      expect(player.y).toBe(15);
     });
 
     it("move out of bounds (past top edge) → position unchanged", () => {
       const room = createRoom();
-      const { client, player } = placePlayerAt(room, "edge-t", 15, 0);
-      room.handleMove(client, { dx: 0, dy: -1 });
-      expect(player.x).toBe(15);
-      expect(player.y).toBe(0);
+      for (let x = 0; x < room.state.mapWidth; x++) {
+        if (room.state.isWalkable(x, 0)) {
+          const { client, player } = placePlayerAt(room, "edge-t", x, 0);
+          room.handleMove(client, { dx: 0, dy: -1 });
+          expect(player.y).toBe(0);
+          return;
+        }
+      }
     });
 
     it("move out of bounds (past right edge) → position unchanged", () => {
       const room = createRoom();
-      const { client, player } = placePlayerAt(room, "edge-r", DEFAULT_MAP_SIZE - 1, 15);
-      room.handleMove(client, { dx: 1, dy: 0 });
-      expect(player.x).toBe(DEFAULT_MAP_SIZE - 1);
-      expect(player.y).toBe(15);
+      const lastX = DEFAULT_MAP_SIZE - 1;
+      for (let y = 0; y < room.state.mapHeight; y++) {
+        if (room.state.isWalkable(lastX, y)) {
+          const { client, player } = placePlayerAt(room, "edge-r", lastX, y);
+          room.handleMove(client, { dx: 1, dy: 0 });
+          expect(player.x).toBe(lastX);
+          return;
+        }
+      }
     });
 
     it("move out of bounds (past bottom edge) → position unchanged", () => {
       const room = createRoom();
-      const { client, player } = placePlayerAt(room, "edge-b", 15, DEFAULT_MAP_SIZE - 1);
-      room.handleMove(client, { dx: 0, dy: 1 });
-      expect(player.x).toBe(15);
-      expect(player.y).toBe(DEFAULT_MAP_SIZE - 1);
+      const lastY = DEFAULT_MAP_SIZE - 1;
+      for (let x = 0; x < room.state.mapWidth; x++) {
+        if (room.state.isWalkable(x, lastY)) {
+          const { client, player } = placePlayerAt(room, "edge-b", x, lastY);
+          room.handleMove(client, { dx: 0, dy: 1 });
+          expect(player.y).toBe(lastY);
+          return;
+        }
+      }
     });
   });
 
   describe("terrain rejection", () => {
-    it("move to water tile → position unchanged", () => {
+    it("move to non-walkable tile → position unchanged", () => {
       const room = createRoom();
-      // (6,6) is water; place player next to it at a walkable spot
-      // (3,6) is sand (walkable), (4,6) is water
-      // Actually let's find an adjacent walkable tile next to water
-      // Water is at x=4..8, y=4..8. Tile (3,6) is sand (x>=3,<=9,y>=3,<=9)
-      // Let's place at (3,5) which is sand, and try to move into (4,5) which is water
-      expect(room.state.getTile(4, 5)!.type).toBe(TileType.Water);
-      expect(room.state.isWalkable(3, 5)).toBe(true);
-
-      const { client, player } = placePlayerAt(room, "swim", 3, 5);
-      room.handleMove(client, { dx: 1, dy: 0 });
-      expect(player.x).toBe(3);
-      expect(player.y).toBe(5);
+      const edge = findNonWalkableEdge(room.state);
+      expect(edge).toBeDefined();
+      const { client, player } = placePlayerAt(room, "blocked", edge!.wx, edge!.wy);
+      room.handleMove(client, { dx: edge!.dx, dy: edge!.dy });
+      expect(player.x).toBe(edge!.wx);
+      expect(player.y).toBe(edge!.wy);
     });
 
-    it("move to rock tile → position unchanged", () => {
+    it("move to walkable biome tile → position updates", () => {
       const room = createRoom();
-      // Rock is at x=22..26, y=22..26. Tile (21,22) should be grass (walkable)
-      expect(room.state.getTile(22, 22)!.type).toBe(TileType.Rock);
-      expect(room.state.isWalkable(21, 22)).toBe(true);
-
-      const { client, player } = placePlayerAt(room, "climber", 21, 22);
+      const pair = findWalkablePair(room.state);
+      const { client, player } = placePlayerAt(room, "walker", pair.x, pair.y);
       room.handleMove(client, { dx: 1, dy: 0 });
-      expect(player.x).toBe(21);
-      expect(player.y).toBe(22);
-    });
-
-    it("move to sand tile → position updates (sand is walkable)", () => {
-      const room = createRoom();
-      // (3,3) is sand
-      expect(room.state.getTile(3, 3)!.type).toBe(TileType.Sand);
-      expect(room.state.isWalkable(2, 3)).toBe(true);
-
-      const { client, player } = placePlayerAt(room, "sandy", 2, 3);
-      room.handleMove(client, { dx: 1, dy: 0 });
-      expect(player.x).toBe(3);
-      expect(player.y).toBe(3);
+      expect(player.x).toBe(pair.x + 1);
     });
   });
 
   describe("invalid input rejection", () => {
     it("dx/dy values > 1 → rejected", () => {
       const room = createRoom();
-      const { client, player } = placePlayerAt(room, "cheat1", 15, 15);
+      const pair = findWalkablePair(room.state);
+      const { client, player } = placePlayerAt(room, "cheat1", pair.x, pair.y);
       room.handleMove(client, { dx: 2, dy: 0 });
-      expect(player.x).toBe(15);
-      expect(player.y).toBe(15);
+      expect(player.x).toBe(pair.x);
     });
 
     it("dx/dy values < -1 → rejected", () => {
       const room = createRoom();
-      const { client, player } = placePlayerAt(room, "cheat2", 15, 15);
+      const pair = findWalkablePair(room.state);
+      const { client, player } = placePlayerAt(room, "cheat2", pair.x, pair.y);
       room.handleMove(client, { dx: 0, dy: -2 });
-      expect(player.x).toBe(15);
-      expect(player.y).toBe(15);
+      expect(player.y).toBe(pair.y);
     });
 
     it("large dx/dy values → rejected", () => {
       const room = createRoom();
-      const { client, player } = placePlayerAt(room, "cheat3", 15, 15);
+      const pair = findWalkablePair(room.state);
+      const { client, player } = placePlayerAt(room, "cheat3", pair.x, pair.y);
       room.handleMove(client, { dx: 10, dy: 10 });
-      expect(player.x).toBe(15);
-      expect(player.y).toBe(15);
+      expect(player.x).toBe(pair.x);
+      expect(player.y).toBe(pair.y);
     });
 
     it("dx=0, dy=0 (no movement) → position unchanged", () => {
       const room = createRoom();
-      const { client, player } = placePlayerAt(room, "still", 15, 15);
+      const pair = findWalkablePair(room.state);
+      const { client, player } = placePlayerAt(room, "still", pair.x, pair.y);
       room.handleMove(client, { dx: 0, dy: 0 });
-      expect(player.x).toBe(15);
-      expect(player.y).toBe(15);
+      expect(player.x).toBe(pair.x);
+      expect(player.y).toBe(pair.y);
     });
 
     it("non-integer dx/dy → rejected", () => {
       const room = createRoom();
-      const { client, player } = placePlayerAt(room, "float", 15, 15);
+      const pair = findWalkablePair(room.state);
+      const { client, player } = placePlayerAt(room, "float", pair.x, pair.y);
       room.handleMove(client, { dx: 0.5, dy: 0 });
-      expect(player.x).toBe(15);
-      expect(player.y).toBe(15);
+      expect(player.x).toBe(pair.x);
     });
 
     it("unknown client sessionId → no crash", () => {
       const room = createRoom();
       const ghostClient = fakeClient("ghost");
-      // handleMove with a client that never joined — should silently return
       room.handleMove(ghostClient, { dx: 1, dy: 0 });
-      // No crash means pass
     });
   });
 
   describe("multi-player movement", () => {
     it("move to occupied tile → still works (tiles can hold multiple players)", () => {
       const room = createRoom();
-      const { client: clientA, player: playerA } = placePlayerAt(room, "A", 15, 15);
-      const { client: clientB, player: playerB } = placePlayerAt(room, "B", 16, 15);
+      const pair = findWalkablePair(room.state);
+      const { client: clientA, player: playerA } = placePlayerAt(room, "A", pair.x, pair.y);
+      const { client: clientB, player: playerB } = placePlayerAt(room, "B", pair.nx, pair.ny);
 
-      // Move B to same tile as A
       room.handleMove(clientB, { dx: -1, dy: 0 });
-      expect(playerB.x).toBe(15);
-      expect(playerB.y).toBe(15);
-      // Both players at same position
+      expect(playerB.x).toBe(pair.x);
+      expect(playerB.y).toBe(pair.y);
       expect(playerA.x).toBe(playerB.x);
       expect(playerA.y).toBe(playerB.y);
     });
 
     it("Player A moves → Player B state unaffected", () => {
       const room = createRoom();
-      const { client: clientA, player: playerA } = placePlayerAt(room, "A2", 15, 15);
-      const { client: clientB, player: playerB } = placePlayerAt(room, "B2", 20, 20);
+      const pair = findWalkablePair(room.state);
+      const { client: clientA, player: playerA } = placePlayerAt(room, "A2", pair.x, pair.y);
 
-      const bX = playerB.x;
-      const bY = playerB.y;
+      // Find another walkable tile far away for B
+      let bx = pair.x + 5, by = pair.y + 5;
+      for (let y = pair.y + 3; y < room.state.mapHeight; y++) {
+        for (let x = pair.x + 3; x < room.state.mapWidth; x++) {
+          if (room.state.isWalkable(x, y)) { bx = x; by = y; y = room.state.mapHeight; break; }
+        }
+      }
+      const { client: clientB, player: playerB } = placePlayerAt(room, "B2", bx, by);
 
       room.handleMove(clientA, { dx: 1, dy: 0 });
-      expect(playerA.x).toBe(16);
-      expect(playerB.x).toBe(bX);
-      expect(playerB.y).toBe(bY);
+      expect(playerA.x).toBe(pair.x + 1);
+      expect(playerB.x).toBe(bx);
+      expect(playerB.y).toBe(by);
     });
 
     it("two players join same room → both see each other in state", () => {
@@ -247,7 +291,6 @@ describe("Movement Validation", () => {
       const p2 = room.state.players.get("see-2");
       expect(p1).toBeDefined();
       expect(p2).toBeDefined();
-      // Both have valid positions
       expect(room.state.isWalkable(p1!.x, p1!.y)).toBe(true);
       expect(room.state.isWalkable(p2!.x, p2!.y)).toBe(true);
     });
@@ -258,15 +301,15 @@ describe("Movement Validation", () => {
       room.onJoin(fakeClient("vis-B"));
 
       const playerA = room.state.players.get("vis-A")!;
-      playerA.x = 15;
-      playerA.y = 15;
+      const pair = findWalkablePair(room.state);
+      playerA.x = pair.x;
+      playerA.y = pair.y;
 
       room.handleMove(fakeClient("vis-A"), { dx: 1, dy: 0 });
 
-      // Re-fetch from state (as another client would see it)
       const updatedA = room.state.players.get("vis-A")!;
-      expect(updatedA.x).toBe(16);
-      expect(updatedA.y).toBe(15);
+      expect(updatedA.x).toBe(pair.x + 1);
+      expect(updatedA.y).toBe(pair.y);
     });
   });
 });

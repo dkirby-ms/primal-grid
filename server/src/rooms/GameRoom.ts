@@ -1,7 +1,15 @@
 import { Room, Client, CloseCode } from "colyseus";
-import { GameState, TileState, PlayerState } from "./GameState.js";
-import { TICK_RATE, DEFAULT_MAP_SIZE, TileType, MOVE } from "@primal-grid/shared";
-import type { MovePayload } from "@primal-grid/shared";
+import { GameState, PlayerState, CreatureState } from "./GameState.js";
+import { generateProceduralMap } from "./mapGenerator.js";
+import { tickCreatureAI } from "./creatureAI.js";
+import {
+  TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
+  MOVE, GATHER, EAT,
+  ResourceType, TileType,
+  RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
+  PLAYER_SURVIVAL, CREATURE_AI, CREATURE_RESPAWN,
+} from "@primal-grid/shared";
+import type { MovePayload, GatherPayload } from "@primal-grid/shared";
 
 const PLAYER_COLORS = [
   "#e6194b", "#3cb44b", "#4363d8", "#f58231",
@@ -11,16 +19,31 @@ const PLAYER_COLORS = [
 
 export class GameRoom extends Room {
   state = new GameState();
+  private nextCreatureId = 0;
 
-  override onCreate(_options: Record<string, unknown>) {
-    this.generateMap();
+  override onCreate(options: Record<string, unknown>) {
+    const seed = typeof options?.seed === "number" ? options.seed : DEFAULT_MAP_SEED;
+    this.generateMap(seed);
+    this.spawnCreatures();
 
     this.setSimulationInterval((_deltaTime) => {
       this.state.tick += 1;
+      this.tickPlayerSurvival();
+      this.tickResourceRegen();
+      this.tickCreatureAI();
+      this.tickCreatureRespawn();
     }, 1000 / TICK_RATE);
 
     this.onMessage(MOVE, (client, message: MovePayload) => {
       this.handleMove(client, message);
+    });
+
+    this.onMessage(GATHER, (client, message: GatherPayload) => {
+      this.handleGather(client, message);
+    });
+
+    this.onMessage(EAT, (client) => {
+      this.handleEat(client);
     });
 
     console.log("[GameRoom] Room created.");
@@ -70,58 +93,186 @@ export class GameRoom extends Room {
     }
   }
 
-  private generateMap() {
-    const size = DEFAULT_MAP_SIZE;
-    this.state.mapWidth = size;
-    this.state.mapHeight = size;
+  private generateMap(seed: number = DEFAULT_MAP_SEED) {
+    generateProceduralMap(this.state, seed, DEFAULT_MAP_SIZE, DEFAULT_MAP_SIZE);
+  }
 
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const tile = new TileState();
-        tile.x = x;
-        tile.y = y;
-        tile.type = this.chooseTileType(x, y, size);
-        this.state.tiles.push(tile);
+  private handleGather(client: Client, message: GatherPayload) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+
+    const { x, y } = message;
+    if (!Number.isInteger(x) || !Number.isInteger(y)) return;
+
+    // Player must be on or adjacent to the tile
+    const dx = Math.abs(player.x - x);
+    const dy = Math.abs(player.y - y);
+    if (dx > 1 || dy > 1) return;
+
+    const tile = this.state.getTile(x, y);
+    if (!tile || tile.resourceType < 0 || tile.resourceAmount <= 0) return;
+
+    // Decrement resource, increment player inventory
+    tile.resourceAmount -= 1;
+    switch (tile.resourceType) {
+      case ResourceType.Wood: player.wood += 1; break;
+      case ResourceType.Stone: player.stone += 1; break;
+      case ResourceType.Fiber: player.fiber += 1; break;
+      case ResourceType.Berries: player.berries += 1; break;
+    }
+
+    // Deplete tile if empty
+    if (tile.resourceAmount <= 0) {
+      tile.resourceAmount = 0;
+      tile.resourceType = -1;
+    }
+  }
+
+  private handleEat(client: Client) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    if (player.berries <= 0) return;
+    if (player.hunger >= PLAYER_SURVIVAL.MAX_HUNGER) return;
+
+    player.berries -= 1;
+    player.hunger = Math.min(
+      player.hunger + PLAYER_SURVIVAL.BERRY_HUNGER_RESTORE,
+      PLAYER_SURVIVAL.MAX_HUNGER,
+    );
+  }
+
+  private tickPlayerSurvival() {
+    if (this.state.tick % PLAYER_SURVIVAL.HUNGER_TICK_INTERVAL !== 0) return;
+
+    this.state.players.forEach((player) => {
+      player.hunger = Math.max(0, player.hunger - PLAYER_SURVIVAL.HUNGER_DRAIN);
+
+      if (player.hunger <= 0) {
+        player.health = Math.max(
+          PLAYER_SURVIVAL.HEALTH_FLOOR,
+          player.health - PLAYER_SURVIVAL.STARVATION_DAMAGE,
+        );
+      }
+    });
+  }
+
+  private tickCreatureAI() {
+    if (this.state.tick % CREATURE_AI.TICK_INTERVAL !== 0) return;
+    tickCreatureAI(this.state);
+  }
+
+  /** Biome-to-resource mapping for regeneration. */
+  private getDefaultResourceType(biomeType: number): number {
+    switch (biomeType) {
+      case TileType.Forest: return ResourceType.Wood;
+      case TileType.Grassland: return Math.random() < 0.5 ? ResourceType.Fiber : ResourceType.Berries;
+      case TileType.Highland: return ResourceType.Stone;
+      case TileType.Sand: return Math.random() < RESOURCE_REGEN.SAND_FIBER_CHANCE ? ResourceType.Fiber : -1;
+      default: return -1;
+    }
+  }
+
+  private tickResourceRegen() {
+    if (this.state.tick % RESOURCE_REGEN.INTERVAL_TICKS !== 0) return;
+
+    const len = this.state.tiles.length;
+    for (let i = 0; i < len; i++) {
+      const tile = this.state.tiles.at(i);
+      if (!tile) continue;
+
+      if (tile.resourceType >= 0 && tile.resourceAmount < RESOURCE_REGEN.MAX_AMOUNT) {
+        // Existing resource — regenerate toward max
+        tile.resourceAmount = Math.min(
+          tile.resourceAmount + RESOURCE_REGEN.REGEN_AMOUNT,
+          RESOURCE_REGEN.MAX_AMOUNT,
+        );
+      } else if (tile.resourceType < 0) {
+        // Depleted tile — try to regrow based on biome
+        const newType = this.getDefaultResourceType(tile.type);
+        if (newType >= 0) {
+          tile.resourceType = newType;
+          tile.resourceAmount = RESOURCE_REGEN.REGEN_AMOUNT;
+        }
       }
     }
   }
 
-  /** Simple deterministic tile generation — mostly grass, with water/rock/sand clusters. */
-  private chooseTileType(x: number, y: number, size: number): TileType {
-    // Water pond in upper-left quadrant
-    if (x >= 4 && x <= 8 && y >= 4 && y <= 8) return TileType.Water;
-    // Sand beach around the pond
-    if (x >= 3 && x <= 9 && y >= 3 && y <= 9) return TileType.Sand;
-
-    // Rock formation in lower-right
-    if (x >= 22 && x <= 26 && y >= 22 && y <= 26) return TileType.Rock;
-
-    // Second small water feature
-    if (x >= 18 && x <= 20 && y >= 6 && y <= 8) return TileType.Water;
-    if (x >= 17 && x <= 21 && y >= 5 && y <= 9) return TileType.Sand;
-
-    // Scattered rocks along edges
-    if ((x === 0 || x === size - 1 || y === 0 || y === size - 1) &&
-        (x + y) % 7 === 0) {
-      return TileType.Rock;
+  private spawnCreatures() {
+    for (const [typeKey, count] of [
+      ["herbivore", CREATURE_SPAWN.HERBIVORE_COUNT],
+      ["carnivore", CREATURE_SPAWN.CARNIVORE_COUNT],
+    ] as const) {
+      for (let i = 0; i < count; i++) {
+        this.spawnOneCreature(typeKey);
+      }
     }
 
-    return TileType.Grass;
+    console.log(`[GameRoom] Spawned ${this.state.creatures.size} creatures.`);
+  }
+
+  private spawnOneCreature(typeKey: string): void {
+    if (this.nextCreatureId == null) this.nextCreatureId = 0;
+    const typeDef = CREATURE_TYPES[typeKey];
+    const preferredBiomes = new Set(typeDef.preferredBiomes as readonly number[]);
+    const pos = this.findWalkableTileInBiomes(preferredBiomes);
+    const creature = new CreatureState();
+    creature.id = `creature_${this.nextCreatureId++}`;
+    creature.creatureType = typeKey;
+    creature.x = pos.x;
+    creature.y = pos.y;
+    creature.health = typeDef.health;
+    creature.hunger = typeDef.hunger;
+    creature.currentState = "idle";
+    this.state.creatures.set(creature.id, creature);
+  }
+
+  private tickCreatureRespawn() {
+    if (this.state.tick % CREATURE_RESPAWN.CHECK_INTERVAL !== 0) return;
+
+    for (const typeKey of Object.keys(CREATURE_TYPES)) {
+      const typeDef = CREATURE_TYPES[typeKey];
+      let count = 0;
+      this.state.creatures.forEach((c) => {
+        if (c.creatureType === typeKey) count++;
+      });
+
+      while (count < typeDef.minPopulation) {
+        this.spawnOneCreature(typeKey);
+        count++;
+      }
+    }
+  }
+
+  private findWalkableTileInBiomes(preferredBiomes: Set<number>): { x: number; y: number } {
+    const w = this.state.mapWidth;
+    const h = this.state.mapHeight;
+
+    // Try preferred biomes first
+    for (let attempts = 0; attempts < 100; attempts++) {
+      const x = Math.floor(Math.random() * w);
+      const y = Math.floor(Math.random() * h);
+      const tile = this.state.getTile(x, y);
+      if (tile && this.state.isWalkable(x, y) && preferredBiomes.has(tile.type)) {
+        return { x, y };
+      }
+    }
+
+    // Fallback: any walkable tile
+    return this.findRandomWalkableTile();
   }
 
   private findRandomWalkableTile(): { x: number; y: number } {
-    const size = DEFAULT_MAP_SIZE;
-    // Try random positions
+    const w = this.state.mapWidth;
+    const h = this.state.mapHeight;
     for (let attempts = 0; attempts < 100; attempts++) {
-      const x = Math.floor(Math.random() * size);
-      const y = Math.floor(Math.random() * size);
+      const x = Math.floor(Math.random() * w);
+      const y = Math.floor(Math.random() * h);
       if (this.state.isWalkable(x, y)) {
         return { x, y };
       }
     }
-    // Fallback: find first walkable tile
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
         if (this.state.isWalkable(x, y)) {
           return { x, y };
         }
