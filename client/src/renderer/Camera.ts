@@ -16,6 +16,9 @@ export class Camera {
   private dragging = false;
   private lastMouse = { x: 0, y: 0 };
 
+  private tracking = false;
+  private trackingTarget: (() => { x: number; y: number }) | null = null;
+
   constructor(target: Container, viewWidth: number, viewHeight: number, mapTiles: number) {
     this.target = target;
     this.viewWidth = viewWidth;
@@ -57,6 +60,7 @@ export class Camera {
 
   private onMouseMove(e: MouseEvent): void {
     if (!this.dragging) return;
+    this.tracking = false;
     const dx = e.clientX - this.lastMouse.x;
     const dy = e.clientY - this.lastMouse.y;
     this.target.position.x += dx;
@@ -69,7 +73,7 @@ export class Camera {
     this.dragging = false;
   }
 
-  /** Call once per frame to apply WASD panning. */
+  /** Call once per frame to apply WASD panning or tracking. */
   public update(): void {
     let dx = 0;
     let dy = 0;
@@ -79,9 +83,16 @@ export class Camera {
     if (this.keys.d) dx -= PAN_SPEED;
 
     if (dx !== 0 || dy !== 0) {
+      this.tracking = false;
       this.target.position.x += dx;
       this.target.position.y += dy;
       this.clamp();
+      return;
+    }
+
+    if (this.tracking && this.trackingTarget) {
+      const pos = this.trackingTarget();
+      this.centerOn(pos.x, pos.y);
     }
   }
 
@@ -102,6 +113,32 @@ export class Camera {
   public resize(w: number, h: number): void {
     this.viewWidth = w;
     this.viewHeight = h;
+    this.clamp();
+  }
+
+  /** Register a callback that returns the tile position to track. */
+  public setTrackingTarget(getter: () => { x: number; y: number }): void {
+    this.trackingTarget = getter;
+  }
+
+  /** Toggle center-on-player tracking. Returns the new state. */
+  public toggleTracking(): boolean {
+    if (!this.trackingTarget) return false;
+    this.tracking = !this.tracking;
+    return this.tracking;
+  }
+
+  public isTracking(): boolean {
+    return this.tracking;
+  }
+
+  /** Center the viewport on a tile position. */
+  public centerOn(tileX: number, tileY: number): void {
+    const scale = this.target.scale.x;
+    const worldX = tileX * TILE_SIZE + TILE_SIZE / 2;
+    const worldY = tileY * TILE_SIZE + TILE_SIZE / 2;
+    this.target.position.x = this.viewWidth / 2 - worldX * scale;
+    this.target.position.y = this.viewHeight / 2 - worldY * scale;
     this.clamp();
   }
 }

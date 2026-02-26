@@ -94,9 +94,8 @@ export class GridRenderer {
       const tiles = s['tiles'];
       if (!tiles || typeof (tiles as { forEach?: unknown }).forEach !== 'function') return;
 
-      const forEach = (tiles as { forEach: (cb: (tile: unknown, key: unknown) => void) => void })
-        .forEach;
-      forEach((rawTile: unknown, key: unknown) => {
+      (tiles as { forEach: (cb: (tile: unknown, key: unknown) => void) => void })
+        .forEach((rawTile: unknown, key: unknown) => {
         const tile = rawTile as Record<string, unknown>;
         const idx = typeof key === 'number' ? key : Number(key);
         const tx = (tile['x'] as number) ?? idx % this.mapSize;
