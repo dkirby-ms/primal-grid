@@ -175,3 +175,18 @@ Client infrastructure is stable. Ready for Phase 4 creature UI extensions.
 - 🟡 Steeply: 4.8 integration tests (in progress, full demo validation)
 
 **Phase 4 code-complete. Ready for Phase 5 kickoff (World Events: weather, migration, disasters, ruins, day/night cycle).**
+
+### Phase 4.5 — HUD Redesign: Canvas to DOM Side Panel (2026-02-26)
+
+- **Canvas resized:** 800×600 → 600×600. Side panel takes the 200px on the right. Page uses flexbox: `#game-wrapper` with `#app` (canvas) + `#hud-panel` side by side, centered on page.
+- **HudDOM** (`client/src/ui/HudDOM.ts`): New DOM-based HUD replacing PixiJS HudRenderer. Same duck-typed `bindToRoom(room)` interface with `onStateChange` pattern. Caches DOM element references in constructor for zero-allocation updates.
+- **Health/Hunger bars:** CSS `div` bars with `transition` for smooth width changes. Color thresholds: green (#2ecc71) > 50%, orange (#f39c12) 25-50%, red (#e74c3c) < 25%. Same thresholds as old HudRenderer.
+- **Inventory display:** Emoji labels (🪵🪨🌿🫐🥩) with numeric counts. Crafted items (🧱🟫🪓⛏️🔨🌾) in separate section.
+- **Taming section:** Owned creature counts with trust bars (color-coded: green ≥60, yellow ≥30, red <30). Pack size display in gold (#ffd700).
+- **Build mode indicator:** `#build-indicator` div at top of panel, toggled via CSS class `.active`. `setBuildMode()` method matches HudRenderer API.
+- **HudRenderer.ts preserved:** File remains in codebase but is no longer imported or instantiated. Steeply needs to verify before deletion.
+- **InputHandler updated:** Import changed from `HudRenderer` to `HudDOM`. Type annotation on `setHud()` changed. All keybinds unchanged — same API surface (`setBuildMode`, `updatePackSize`, `localPlayerX/Y`).
+- **Connection status + help hint:** Remain as PixiJS canvas overlays (top-right and bottom-right respectively). Not moved to panel.
+- **Craft menu + help screen overlays:** Remain as PixiJS overlays on `app.stage`. Still work at 600×600.
+- **Zero server changes.** All changes are client-side HTML/CSS/TS.
+- **303 tests passing**, 1 pre-existing server-side failure unrelated to this change.
