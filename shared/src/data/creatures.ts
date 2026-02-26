@@ -2,6 +2,7 @@ import { TileType, Personality } from "../types.js";
 
 export interface CreatureTypeDef {
   readonly name: string;
+  readonly icon: string;
   readonly health: number;
   readonly hunger: number;
   readonly speed: number;
@@ -17,6 +18,7 @@ export interface CreatureTypeDef {
 export const CREATURE_TYPES: Record<string, CreatureTypeDef> = {
   herbivore: {
     name: "Parasaurolophus",
+    icon: "🦕",
     health: 100,
     hunger: 100,
     speed: 1,
@@ -28,6 +30,7 @@ export const CREATURE_TYPES: Record<string, CreatureTypeDef> = {
   },
   carnivore: {
     name: "Raptor",
+    icon: "🦖",
     health: 80,
     hunger: 80,
     speed: 1,

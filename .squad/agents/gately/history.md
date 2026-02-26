@@ -205,3 +205,12 @@ Client infrastructure is stable. Ready for Phase 4 creature UI extensions.
 - **Pre-existing flaky test:** 1 breeding cycle integration (creature spawn collision—not HUD-related) remains flaky but not permanently broken
 - **Documentation:** Orchestration log, session log, and decision records merged to `.squad/` (see Phase 4.5 final logs)
 
+### Emoji Creature Rendering Upgrade (2026-02-26)
+- **CreatureTypeDef `icon` field:** Added `icon: string` (emoji) to `CreatureTypeDef` interface in `shared/src/data/creatures.ts`. Herbivore = 🦕, Carnivore = 🦖. Matches HUD emoji in `HudDOM.ts`.
+- **CreatureRenderer emoji rendering:** Replaced geometric shapes (triangles/circles) with PixiJS `Text` objects rendering emoji from `CREATURE_TYPES[creatureType].icon`. Font size = `CREATURE_RADIUS * 2.5` for proper tile scaling.
+- **State color preserved:** Behavioral state colors (eat/hunt/flee) now render as a subtle translucent background circle (alpha 0.35) behind the emoji, only visible during active states (eat, hunt, flee). Idle/wander show no background — clean emoji only.
+- **Performance:** Emoji `Text` objects are cached per creature in `CreatureEntry.emojiText`. Only recreated when creature spawns. Text content only updated when `creatureType` changes. No per-frame allocation.
+- **Indicator text preserved:** "!" (flee) and "⚔" (hunt) still render above creature. Ownership rings, stat overlays, follow text all unchanged.
+- **304 tests passing**, no regressions.
+- **Files changed:** `shared/src/data/creatures.ts` (icon field), `client/src/renderer/CreatureRenderer.ts` (emoji rendering).
+

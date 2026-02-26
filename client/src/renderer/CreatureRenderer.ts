@@ -1,5 +1,6 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { TILE_SIZE } from './GridRenderer.js';
+import { CREATURE_TYPES } from '@primal-grid/shared';
 import type { Room } from '@colyseus/sdk';
 
 const CREATURE_RADIUS = 6;
@@ -24,6 +25,7 @@ const RING_OWNED_COLOR = 0xb8860b; // dim gold — owned but not selected
 interface CreatureEntry {
   container: Container;
   graphic: Graphics;
+  emojiText: Text;
   indicator: Text;
   ring: Graphics;
   statText: Text;
@@ -226,9 +228,20 @@ export class CreatureRenderer {
     ring.visible = false;
     container.addChild(ring);
 
+    // State-colored background circle (subtle indicator behind emoji)
     const graphic = new Graphics();
-    this.drawCreatureShape(graphic, creatureType, currentState);
+    this.drawStateBackground(graphic, creatureType, currentState);
     container.addChild(graphic);
+
+    // Emoji icon as primary visual
+    const icon = CREATURE_TYPES[creatureType]?.icon ?? '🦕';
+    const fontSize = CREATURE_RADIUS * 2.5;
+    const emojiText = new Text({
+      text: icon,
+      style: { fontSize, fontFamily: 'sans-serif' },
+    });
+    emojiText.anchor?.set?.(0.5, 0.5);
+    container.addChild(emojiText);
 
     const indicator = new Text({
       text: '',
@@ -263,6 +276,7 @@ export class CreatureRenderer {
     return {
       container,
       graphic,
+      emojiText,
       indicator,
       ring,
       statText,
@@ -282,26 +296,22 @@ export class CreatureRenderer {
 
   private rebuildGraphic(entry: CreatureEntry, creatureType: string, currentState: string): void {
     entry.graphic.clear();
-    this.drawCreatureShape(entry.graphic, creatureType, currentState);
+    this.drawStateBackground(entry.graphic, creatureType, currentState);
+    // Update emoji if creature type changed
+    const icon = CREATURE_TYPES[creatureType]?.icon ?? '🦕';
+    if (entry.emojiText.text !== icon) {
+      entry.emojiText.text = icon;
+    }
     this.updateIndicator(entry.indicator, currentState);
     entry.lastType = creatureType;
     entry.lastState = currentState;
   }
 
-  private drawCreatureShape(g: Graphics, creatureType: string, currentState: string): void {
+  private drawStateBackground(g: Graphics, creatureType: string, currentState: string): void {
+    if (currentState === 'idle' || currentState === 'wander') return;
     const color = this.getCreatureColor(creatureType, currentState);
-
-    if (creatureType === 'carnivore') {
-      const r = CREATURE_RADIUS;
-      g.moveTo(0, -r);
-      g.lineTo(r, r);
-      g.lineTo(-r, r);
-      g.closePath();
-      g.fill(color);
-    } else {
-      g.circle(0, 0, CREATURE_RADIUS);
-      g.fill(color);
-    }
+    g.circle(0, 0, CREATURE_RADIUS + 1);
+    g.fill({ color, alpha: 0.35 });
   }
 
   private getCreatureColor(creatureType: string, currentState: string): number {
