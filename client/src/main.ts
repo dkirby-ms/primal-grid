@@ -6,12 +6,12 @@ import { StructureRenderer } from './renderer/StructureRenderer.js';
 import { Camera } from './renderer/Camera.js';
 import { InputHandler } from './input/InputHandler.js';
 import { ConnectionStatusUI } from './ui/ConnectionStatus.js';
-import { HudRenderer } from './ui/HudRenderer.js';
+import { HudDOM } from './ui/HudDOM.js';
 import { CraftMenu } from './ui/CraftMenu.js';
 import { HelpScreen } from './ui/HelpScreen.js';
 import { connect, disconnect, onConnectionStatus } from './network.js';
 
-const WIDTH = 800;
+const WIDTH = 600;
 const HEIGHT = 600;
 
 async function bootstrap(): Promise<void> {
@@ -73,9 +73,8 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
     grid.container.addChild(structures.container);
     structures.bindToRoom(room);
 
-    // HUD (fixed on screen, not in world space)
-    const hud = new HudRenderer(room.sessionId);
-    app.stage.addChild(hud.container);
+    // HUD (DOM-based side panel, replaces canvas HudRenderer)
+    const hud = new HudDOM(room.sessionId);
     hud.bindToRoom(room);
 
     // Craft menu overlay (screen-fixed)

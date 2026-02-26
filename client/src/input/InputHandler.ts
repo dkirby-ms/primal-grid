@@ -3,7 +3,7 @@ import { MOVE, GATHER, EAT, PLACE, FARM_HARVEST, TAME, SELECT_CREATURE, BREED, I
 import { TILE_SIZE } from '../renderer/GridRenderer.js';
 import type { Container } from 'pixi.js';
 import type { CraftMenu } from '../ui/CraftMenu.js';
-import type { HudRenderer } from '../ui/HudRenderer.js';
+import type { HudDOM } from '../ui/HudDOM.js';
 import type { HelpScreen } from '../ui/HelpScreen.js';
 import type { CreatureRenderer } from '../renderer/CreatureRenderer.js';
 import type { Camera } from '../renderer/Camera.js';
@@ -23,7 +23,7 @@ export class InputHandler {
   private lastMoveTime = 0;
 
   private craftMenu: CraftMenu | null = null;
-  private hud: HudRenderer | null = null;
+  private hud: HudDOM | null = null;
   private helpScreen: HelpScreen | null = null;
   private buildMode = false;
   private buildIndex = 0;
@@ -43,7 +43,7 @@ export class InputHandler {
   }
 
   /** Wire up the HUD for build mode indicator and player position. */
-  public setHud(hud: HudRenderer): void {
+  public setHud(hud: HudDOM): void {
     this.hud = hud;
   }
 

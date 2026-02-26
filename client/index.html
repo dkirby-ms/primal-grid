@@ -6,11 +6,169 @@
     <title>Primal Grid</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { background: #111; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+      body {
+        background: #111;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        font-family: 'Courier New', monospace;
+        color: #cccccc;
+      }
+      #game-wrapper {
+        display: flex;
+        flex-direction: row;
+        border: 1px solid #2a2a4a;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      #app {
+        width: 600px;
+        height: 600px;
+        flex-shrink: 0;
+      }
+      #hud-panel {
+        width: 200px;
+        height: 600px;
+        background: #1a1a2e;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+      }
+      #hud-panel .hud-section {
+        padding: 8px 10px;
+        border-bottom: 1px solid #2a2a4a;
+      }
+      #hud-panel .hud-section:last-child {
+        border-bottom: none;
+      }
+      #hud-panel .hud-section h3 {
+        font-size: 10px;
+        text-transform: uppercase;
+        color: #888;
+        letter-spacing: 1px;
+        margin-bottom: 6px;
+      }
+      /* Health / Hunger bars */
+      .stat-bar-wrap {
+        margin-bottom: 4px;
+      }
+      .stat-bar-wrap .bar-label {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        margin-bottom: 2px;
+      }
+      .stat-bar {
+        width: 100%;
+        height: 12px;
+        background: #222;
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      .stat-bar-fill {
+        height: 100%;
+        border-radius: 3px;
+        transition: width 0.15s ease, background 0.3s ease;
+      }
+      .stat-bar-fill.health { background: #2ecc71; }
+      .stat-bar-fill.hunger { background: #f39c12; }
+      /* Inventory items */
+      .inv-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        padding: 1px 0;
+      }
+      .inv-row .inv-icon { flex-shrink: 0; }
+      .inv-row .inv-count {
+        color: #ddd;
+        font-weight: bold;
+      }
+      /* Build mode indicator */
+      #build-indicator {
+        display: none;
+        padding: 6px 10px;
+        background: #332b00;
+        color: #ffcc00;
+        font-size: 12px;
+        font-weight: bold;
+        text-align: center;
+        border-bottom: 1px solid #2a2a4a;
+      }
+      #build-indicator.active { display: block; }
+      /* Creature / Taming */
+      .creature-row {
+        font-size: 12px;
+        padding: 1px 0;
+      }
+      .trust-bar {
+        width: 100%;
+        height: 6px;
+        background: #222;
+        border-radius: 2px;
+        overflow: hidden;
+        margin: 2px 0 4px;
+      }
+      .trust-bar-fill {
+        height: 100%;
+        border-radius: 2px;
+        transition: width 0.15s ease;
+      }
+      .pack-label {
+        font-size: 11px;
+        color: #ffd700;
+        margin-top: 4px;
+      }
     </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="game-wrapper">
+      <div id="app"></div>
+      <div id="hud-panel">
+        <div id="build-indicator">🔨 BUILD MODE</div>
+        <div class="hud-section" id="section-health">
+          <h3>Health</h3>
+          <div class="stat-bar-wrap">
+            <div class="bar-label"><span>❤️ Health</span><span id="health-val">100/100</span></div>
+            <div class="stat-bar"><div class="stat-bar-fill health" id="health-fill" style="width:100%"></div></div>
+          </div>
+        </div>
+        <div class="hud-section" id="section-hunger">
+          <h3>Hunger</h3>
+          <div class="stat-bar-wrap">
+            <div class="bar-label"><span>🍖 Hunger</span><span id="hunger-val">100/100</span></div>
+            <div class="stat-bar"><div class="stat-bar-fill hunger" id="hunger-fill" style="width:100%"></div></div>
+          </div>
+        </div>
+        <div class="hud-section" id="section-inventory">
+          <h3>Inventory</h3>
+          <div class="inv-row"><span class="inv-icon">🪵 Wood</span><span class="inv-count" id="inv-wood">0</span></div>
+          <div class="inv-row"><span class="inv-icon">🪨 Stone</span><span class="inv-count" id="inv-stone">0</span></div>
+          <div class="inv-row"><span class="inv-icon">🌿 Fiber</span><span class="inv-count" id="inv-fiber">0</span></div>
+          <div class="inv-row"><span class="inv-icon">🫐 Berries</span><span class="inv-count" id="inv-berries">0</span></div>
+          <div class="inv-row"><span class="inv-icon">🥩 Meat</span><span class="inv-count" id="inv-meat">0</span></div>
+        </div>
+        <div class="hud-section" id="section-crafted">
+          <h3>Crafted Items</h3>
+          <div class="inv-row"><span class="inv-icon">🧱 Walls</span><span class="inv-count" id="craft-walls">0</span></div>
+          <div class="inv-row"><span class="inv-icon">🟫 Floors</span><span class="inv-count" id="craft-floors">0</span></div>
+          <div class="inv-row"><span class="inv-icon">🪓 Axes</span><span class="inv-count" id="craft-axes">0</span></div>
+          <div class="inv-row"><span class="inv-icon">⛏️ Pickaxes</span><span class="inv-count" id="craft-pickaxes">0</span></div>
+          <div class="inv-row"><span class="inv-icon">🔨 Workbenches</span><span class="inv-count" id="craft-workbenches">0</span></div>
+          <div class="inv-row"><span class="inv-icon">🌾 Farms</span><span class="inv-count" id="craft-farms">0</span></div>
+        </div>
+        <div class="hud-section" id="section-creatures">
+          <h3>Creatures</h3>
+          <div class="creature-row" id="creature-counts">🦕 0 &nbsp; 🦖 0</div>
+        </div>
+        <div class="hud-section" id="section-taming">
+          <h3>Taming / Pack</h3>
+          <div id="tamed-info"></div>
+          <div class="pack-label" id="pack-info"></div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
