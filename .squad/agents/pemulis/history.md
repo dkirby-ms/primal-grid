@@ -227,6 +227,16 @@ Phase 4 (Creature Systems) can proceed with high confidence in the Phase 3 platf
 - **Dependencies added:** `express` (prod) and `@types/express` (dev) to `server/package.json`.
 - **All 303/304 tests pass.** 1 pre-existing failure (creature spawn overlap) unrelated to changes.
 
+### Phase 4.6.3 — CI/CD Pipeline (GitHub Actions) (2026-02-26)
+
+- **Workflow file:** `.github/workflows/deploy.yml` — two-job pipeline triggered on push to `master`.
+- **Job 1 (test):** Checkout, Node 20 with npm cache, `npm ci --workspaces`, `npm test`. Gate for deploy.
+- **Job 2 (deploy):** Needs test. Azure OIDC login (`azure/login@v2`), Docker build+push to ACR (tagged with git SHA), `az containerapp update` to deploy new revision, prints app URL to step summary.
+- **OIDC auth pattern:** `id-token: write` + `contents: read` permissions at workflow level. Three secrets: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID. No client secrets stored.
+- **Image tagging:** Uses `${{ github.sha }}` — every deploy is traceable to a specific commit. No `latest` tag in CI.
+- **Deployment docs:** `docs/deployment.md` covers architecture (single container Express+Colyseus), all 6 required GitHub secrets, Bicep provisioning command, OIDC setup, deployment trigger, local Docker testing instructions.
+- **Key design choice:** Two jobs (test + deploy) not three. Build/push and container update are in the same job to avoid passing image tags between jobs. Simpler pipeline, same guarantees.
+
 ---
 
 **Cross-agent context (Phase 4.6):**
