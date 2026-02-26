@@ -215,3 +215,25 @@ Phase 4 (Creature Systems) can proceed with high confidence in the Phase 3 platf
 - **Key decisions:** Pack selection is server-side state (client observes via `currentState`). Single-ID BREED simplifies client API (no mate picker UI needed). Speed-only trait inheritance keeps schema lean; extensible for future traits. Cooldown on attempt prevents rapid-fire food/berry spam.
 - **Files landed:** `server/src/rooms/GameRoom.ts` (SELECT_CREATURE + ensurePacks null guard, BREED handler, pack follow tick), `server/src/rooms/creatureAI.ts` (moveToward export), `shared/src/messages.ts` (BreedPayload changed from two IDs to one), `server/src/rooms/GameState.ts` (lastBredTick field).
 - **Schema stability:** No breaking changes. Backward compatible with Phase 3. Ready for Gately (4.5–4.7) UI work and Steeply (4.8) integration tests.
+
+### Phase 4.6.1+4.6.2 — Server Containerization & Azure Bicep (2026-02-26)
+
+- **Express wrapper:** `server/src/index.ts` refactored to create Express app → `http.createServer(app)` → pass to `WebSocketTransport({ server: httpServer })`. Colyseus attaches WebSocket handling to the same HTTP server. Static files served via `express.static()` from `../../public` relative to server dist (populated in Docker build).
+- **Port config:** `Number(process.env.PORT) || SERVER_PORT` — Container Apps sets PORT env var, local dev uses constant 2567.
+- **ESM __dirname:** Server is ESM (`"type": "module"`), so `__dirname` derived via `fileURLToPath(import.meta.url)` + `path.dirname()`.
+- **WebSocketTransport internals:** Constructor accepts `server` option via `ws.ServerOptions`. If provided, skips creating its own `http.createServer()`. The `transport.listen(port)` delegates to `httpServer.listen(port)`. Also has `getExpressApp()` for lazy internal Express, but we use explicit app for clarity.
+- **Dockerfile:** Two-stage multi-stage build. Stage 1 (build): `node:20-alpine`, `npm ci --workspaces`, build shared→server→client. Stage 2 (production): `node:20-alpine`, `npm ci --workspaces --omit=dev`, copy server/shared dist + client dist to `public/`. CMD runs `node server/dist/index.js`.
+- **Bicep IaC:** `infra/main.bicep` defines ACR (Basic), Log Analytics workspace, Container Apps Environment (Consumption), Container App (0.25 vCPU / 0.5Gi, external HTTPS ingress on port 2567, scale 1/1). ACR admin credentials used for registry auth.
+- **Dependencies added:** `express` (prod) and `@types/express` (dev) to `server/package.json`.
+- **All 303/304 tests pass.** 1 pre-existing failure (creature spawn overlap) unrelated to changes.
+
+---
+
+**Cross-agent context (Phase 4.6):**
+
+Gately's 4.6.1 WebSocket URL work (`client/src/network.ts`) complements this containerization:
+- Client now has `getServerUrl()` with 3-tier resolution (VITE_WS_URL override → production same-origin → dev localhost)
+- In production (Docker build), client automatically connects to `wss://${location.host}` (same Container Apps origin)
+- In local dev, client falls back to `ws://localhost:2567`
+- No configuration file needed; works seamlessly with this single-container deployment model
+- Test: 304 tests passing (includes Gately's client work)

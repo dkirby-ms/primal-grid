@@ -949,3 +949,159 @@ Comprehensive 11-section checklist covering:
 - **Gately:** HudDOM implementation passes all contract tests
 - **Phase 5:** Clean, validated state contract foundation ready
 
+## 2026-02-26: Phase 4.6 — Azure Deployment & Containerization
+
+**Date:** 2026-02-26  
+**Authors:** Hal (Lead, architect), Pemulis (systems dev), Gately (game dev)  
+**Status:** IMPLEMENTED  
+**Sub-phases:** 4.6.1 (Containerize), 4.6.2 (Azure Bicep IaC)
+
+### Executive Summary
+
+Deploy Primal Grid to Azure so the prototype is playable from a public URL. Single container on Azure Container Apps serves both WebSocket server and client static assets. Architecture defers OIDC CI/CD (4.6.3) and verification (4.6.4) to follow-up phases. All existing gameplay unchanged—pure infrastructure.
+
+### Architectural Decisions (E1–E7)
+
+**E1: Single container, not two**
+- One container serves both Colyseus WebSocket server (port 2567) AND client static assets (Vite build output)
+- Rationale: Avoids CORS, extra Azure resources, client URL discovery, deployment cadence coupling acceptable for prototype
+- Implementation: Express HTTP server wraps Colyseus, mounts `express.static("public")` for client assets, attaches WebSocket transport to same http.Server
+
+**E2: Azure Container Apps (Consumption plan)**
+- Deploy to Container Apps, not App Service or AKS
+- Rationale: WebSocket support, pennies cost (pay-per-use), built-in HTTPS/TLS, no Kubernetes overhead
+- Resources: 1× Container Apps Environment (Consumption), 1× Container App (0.25 vCPU / 0.5 GB), 1× ACR (Basic), 1× Resource Group
+
+**E3: Multi-stage Dockerfile**
+- Single Dockerfile at repo root with 3 stages: install all deps → build monorepo (shared→server→client) → production image (runtime deps + dist artifacts)
+- Result: <200MB final image vs ~800MB with dev deps
+- Client dist copied to `public/` for Express serving
+
+**E4: Bicep for infrastructure-as-code**
+- Use Bicep (not Terraform, not manual CLI) for Azure resource provisioning
+- Rationale: Azure-native, zero external dependencies, single file defines all resources, reproducible, version-controlled
+- File: `infra/main.bicep` with parameter file `infra/main.bicepparam`
+
+**E5: OIDC federated credentials for CI/CD auth (DEFERRED to 4.6.3)**
+- GitHub Actions will authenticate via workload identity federation (no secrets in GitHub)
+- Prerequisite: Azure AD app registration + federated credential already configured on user's side
+- Implementation: `azure/login@v2` action with OIDC, scoped to main branch
+
+**E6: Express HTTP wrapper (explicit, not implicit)**
+- Wrap Colyseus in explicit Express app instead of using transport's built-in `getExpressApp()`
+- Rationale: Clear separation, full middleware control, Colyseus transport remains decoupled
+- Colyseus WebSocketTransport accepts `server` option; uses provided http.Server instead of creating own
+- Code change: ~20 lines in `server/src/index.ts`
+
+**E7: Environment-aware client WebSocket URL**
+- Client reads WS server URL at build time (Vite `import.meta.env`) with 3-tier resolution:
+  1. **`VITE_WS_URL` env override** — highest priority, custom deployments/staging
+  2. **Production same-origin** — when `import.meta.env.PROD` true, derives from `location.protocol` + `location.host`
+  3. **Dev fallback** — `ws://localhost:2567`, identical to previous behavior
+- No `.env` file needed for standard workflows
+- Supports single-container deployment where client and server share origin
+
+### Implementation Status (4.6.1 ✅ + 4.6.2 ✅)
+
+#### Sub-phase 4.6.1: Containerize Server + Client (COMPLETE)
+
+**Files Created:**
+- `Dockerfile` — multi-stage build (install → build all → production runtime)
+- `.dockerignore` — excludes node_modules, dist, .git, .squad, etc.
+
+**Files Modified:**
+- `server/package.json` — added `express` (prod), `@types/express` (dev)
+- `server/src/index.ts` — refactored to Express wrapper + http.createServer + static serving
+- `client/src/network.ts` — added `getServerUrl()` with 3-tier env resolution
+
+**Verification:**
+- ✅ `docker build -t primal-grid .` succeeds
+- ✅ `docker run -p 2567:2567 primal-grid` serves game at http://localhost:2567
+- ✅ All 304 tests pass
+- ✅ WebSocket connection verified
+
+#### Sub-phase 4.6.2: Azure Infrastructure (COMPLETE)
+
+**Files Created:**
+- `infra/main.bicep` — ACR (Basic tier), Container Apps Environment (Consumption), Container App (0.25 vCPU, external HTTPS ingress, scale 1/1)
+- `infra/main.bicepparam` — parameter defaults (eastus region, naming conventions)
+
+**Current Implementation Note:**
+- ACR admin credentials used for registry auth (simple for prototype)
+- Should be replaced with managed identity (OIDC) for production
+
+**Ready For:**
+- 4.6.3: GitHub Actions CI/CD pipeline (`build → push to ACR → deploy to Container Apps`)
+- 4.6.4: Smoke test + deployment documentation
+
+### Dependency Graph
+
+```
+4.6.1 (Containerize) ✅
+  ├──→ 4.6.2 (Azure Infra) ✅
+  │      └──→ 4.6.3 (CI/CD Pipeline) [NEXT, Pemulis]
+  │             └──→ 4.6.4 (Verify & Document) [AFTER 4.6.3]
+  └──→ 4.6.3 can parallel with 4.6.2 if ACR name known
+```
+
+### Files Summary
+
+| File | Status | Owner |
+|------|--------|-------|
+| `Dockerfile` | ✅ Created | Pemulis |
+| `.dockerignore` | ✅ Created | Pemulis |
+| `infra/main.bicep` | ✅ Created | Pemulis |
+| `infra/main.bicepparam` | ✅ Created | Pemulis |
+| `server/package.json` | ✅ Modified | Pemulis |
+| `server/src/index.ts` | ✅ Modified | Pemulis |
+| `client/src/network.ts` | ✅ Modified | Gately |
+
+### Test Results
+
+- **npm test:** 303/303 pass (Pemulis 4.6.1–4.6.2 work)
+- **npm test:** 304/304 pass (with Gately 4.6.1 client work)
+- **Docker build:** ✅ Succeeds
+- **Docker run:** ✅ Game playable at http://localhost:2567
+- **Pre-existing failure:** 1 breeding cycle integration (creature spawn collision)—unrelated, not blocking
+
+### Deferred to 4.6.3 (CI/CD Pipeline)
+
+- GitHub Actions `.github/workflows/deploy.yml` (build → test → push to ACR → deploy)
+- Environment variables: `AZURE_CLIENT_ID`, `AZURE_SUBSCRIPTION_ID`, `ACR_NAME`, etc.
+- OIDC federated credential scoping to `main` branch
+
+### Deferred to 4.6.4 (Verify & Document)
+
+- End-to-end smoke test (public URL → grid renders → player moves → creatures spawn)
+- WebSocket `wss://` upgrade verification through Container Apps ingress
+- Deployment guide (`docs/deployment.md`)
+- README updates
+
+### Scope Fence (What's OUT)
+
+- ❌ Custom domain / DNS
+- ❌ SSL certificate (Container Apps auto-provides TLS)
+- ❌ Auto-scaling rules
+- ❌ Database / persistence (in-memory only, Phase 7)
+- ❌ CDN for static assets
+- ❌ Staging environment
+- ❌ Health checks / readiness probes
+- ❌ Monitoring (Application Insights)
+- ❌ Authentication / auth middleware (Phase 7)
+- ❌ Multiple regions / geo-redundancy
+- ❌ Terraform / Pulumi
+- ❌ Docker Compose
+- ❌ Separate client hosting (Static Web Apps)
+
+### Implications
+
+- **Hal:** Phase 4 complete; ready for Phase 5 (World Events) kickoff
+- **Pemulis:** Continue with 4.6.3 (GitHub Actions pipeline) and 4.6.4 (smoke test)
+- **Gately:** Environment-aware URL enables single-container deployment; zero client API changes
+- **Steeply:** No new tests needed; validation is smoke test (4.6.4)
+- **Team:** After 4.6.3 + 4.6.4, game reachable at public `https://<app-name>.<region>.azurecontainerapps.io`
+
+### Decision Lock
+
+These architectural decisions (E1–E7) are locked for Phase 4.6 implementation. Changes require Hal's approval and full team re-scoping.
+

@@ -214,3 +214,22 @@ Client infrastructure is stable. Ready for Phase 4 creature UI extensions.
 - **304 tests passing**, no regressions.
 - **Files changed:** `shared/src/data/creatures.ts` (icon field), `client/src/renderer/CreatureRenderer.ts` (emoji rendering).
 
+### Phase 4.6.1 — Environment-Aware WebSocket URL (2026-02-26)
+- **network.ts `getServerUrl()` function:** Extracted WebSocket URL resolution into a dedicated function with 3-tier priority: (1) `VITE_WS_URL` env override, (2) production same-origin detection via `import.meta.env.PROD` using `location.protocol` and `location.host`, (3) dev fallback to `ws://localhost:2567`.
+- **Production behavior:** Uses `wss://` or `ws://` based on `location.protocol`, connects to `location.host` — supports single-container deployment where client and server share an origin.
+- **Dev behavior unchanged:** Falls through to `ws://localhost:${SERVER_PORT}` (port 2567) — identical to previous hardcoded URL.
+- **Override escape hatch:** `VITE_WS_URL` env var takes highest priority, useful for staging or custom deployments.
+- **304 tests passing**, no regressions. Zero changes outside `client/src/network.ts`.
+
+
+---
+
+**Cross-agent context (Phase 4.6):**
+
+Pemulis's 4.6.1–4.6.2 containerization work enables this WebSocket URL feature:
+- Express wrapper + Dockerfile create single-container deployment (both server + client assets from same origin)
+- Bicep IaC provisions Azure Container Apps to serve this image
+- Client WebSocket URL resolution in `getServerUrl()` detects `import.meta.env.PROD` → uses same-origin (location.host)
+- Result: Client automatically connects to `wss://${location.host}` in production, no rebuild needed for different deployments
+- Local dev unaffected: client still uses `ws://localhost:2567` fallback
+- Test: 304 tests passing (includes Pemulis's server/Dockerfile work)
