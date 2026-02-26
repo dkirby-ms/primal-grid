@@ -1,10 +1,12 @@
 import type { Room } from '@colyseus/sdk';
-import { MOVE, PLACE, FARM_HARVEST, TAME, SELECT_CREATURE, BREED, ItemType } from '@primal-grid/shared';
+import { MOVE, GATHER, EAT, PLACE, FARM_HARVEST, TAME, SELECT_CREATURE, BREED, ItemType } from '@primal-grid/shared';
 import { TILE_SIZE } from '../renderer/GridRenderer.js';
 import type { Container } from 'pixi.js';
 import type { CraftMenu } from '../ui/CraftMenu.js';
 import type { HudRenderer } from '../ui/HudRenderer.js';
+import type { HelpScreen } from '../ui/HelpScreen.js';
 import type { CreatureRenderer } from '../renderer/CreatureRenderer.js';
+import type { Camera } from '../renderer/Camera.js';
 
 const MOVE_DEBOUNCE_MS = 150;
 
@@ -22,9 +24,11 @@ export class InputHandler {
 
   private craftMenu: CraftMenu | null = null;
   private hud: HudRenderer | null = null;
+  private helpScreen: HelpScreen | null = null;
   private buildMode = false;
   private buildIndex = 0;
   private creatureRenderer: CreatureRenderer | null = null;
+  private camera: Camera | null = null;
 
   constructor(room: Room, worldContainer: Container) {
     this.room = room;
@@ -43,13 +47,36 @@ export class InputHandler {
     this.hud = hud;
   }
 
+  /** Wire up the help screen for toggle. */
+  public setHelpScreen(helpScreen: HelpScreen): void {
+    this.helpScreen = helpScreen;
+  }
+
   /** Wire up the creature renderer for taming, selection, and breeding queries. */
   public setCreatureRenderer(cr: CreatureRenderer): void {
     this.creatureRenderer = cr;
   }
 
+  /** Wire up the camera for center-on-player tracking. */
+  public setCamera(camera: Camera): void {
+    this.camera = camera;
+  }
+
   private bindKeys(): void {
     window.addEventListener('keydown', (e) => {
+      // Center camera on player toggle
+      if (e.key === ' ') {
+        e.preventDefault();
+        this.camera?.toggleTracking();
+        return;
+      }
+
+      // Help screen toggle
+      if (e.key === '?' || e.key === '/') {
+        this.helpScreen?.toggle();
+        return;
+      }
+
       // Craft menu toggle
       if (e.key === 'c' || e.key === 'C') {
         if (this.buildMode) return; // ignore while building
@@ -93,6 +120,23 @@ export class InputHandler {
             y: this.hud.localPlayerY,
           });
         }
+        return;
+      }
+
+      // Gather resources from current tile
+      if (e.key === 'g' || e.key === 'G') {
+        if (this.hud) {
+          this.room.send(GATHER, {
+            x: this.hud.localPlayerX,
+            y: this.hud.localPlayerY,
+          });
+        }
+        return;
+      }
+
+      // Eat (consume 1 berry, restore hunger)
+      if (e.key === 'e' || e.key === 'E') {
+        this.room.send(EAT);
         return;
       }
 
