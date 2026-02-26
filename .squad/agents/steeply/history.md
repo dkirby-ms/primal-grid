@@ -220,3 +220,15 @@ All Phase 4 gameplay loops verified end-to-end:
 - **Blocking:** Gately 4.5–4.7 client UI code must be integrated before full integration tests can run (need client-side pack selection). Currently validating server-side pack follow + breeding behavior.
 - **Test helper updates:** Extend `createRoomWithMap()` to accept multiple players, creature spawning, trust progression helpers.
 - **Next step:** Validate full 15-minute demo: spawn → tame creature → trust increases → breed → offspring spawns → pack follow works → all creatures sync correctly to client. Zero crashes, stable tick rate.
+
+### Phase 4.5.4 — HUD Redesign Anticipatory Testing (2026-02-26)
+
+- **Baseline established:** 291 tests across 25 files, all passing. 1 pre-existing flaky test (breeding cycle integration — creature spawn collision, not HUD-related).
+- **13 new automated tests** in `server/src/__tests__/hud-state-contract.test.ts`. Total suite: **304 tests across 26 files, all passing.**
+- **HUD state contract tests** verify every field the HUD reads (health, hunger, 5 inventory fields, 6 crafted-item fields, creature type/ownerID/trust) is present, correctly typed, and stays within valid bounds during gameplay sequences (gather, eat, craft, tame).
+- **Multiplayer HUD isolation verified:** two players have fully independent inventory, vitals, and tame counts. No cross-player data leakage in state.
+- **No server-side tests affected** by HUD redesign (Decision D4: pure UI refactor, no server changes). All 304 tests must continue passing after 4.5.1–4.5.3.
+- **Manual verification checklist written** to `.squad/decisions/inbox/steeply-hud-test-plan.md`: 10 categories, 50+ check items covering layout, bars, inventory, creatures, taming, build mode, keyboard shortcuts, farming, multiplayer, and performance.
+- **Performance protocol defined:** DOM update batching, layout thrashing avoidance, FPS comparison, memory leak detection for state listeners.
+- **Key insight:** The HUD reads 18 PlayerState fields and 4 CreatureState fields. All are covered by existing + new automated tests at the server level. The remaining risk surface is purely client-side rendering (DOM correctness, CSS layout, event listener lifecycle) — requires manual testing.
+- **Files landed:** `server/src/__tests__/hud-state-contract.test.ts` (13 tests), `.squad/decisions/inbox/steeply-hud-test-plan.md` (verification checklist).
