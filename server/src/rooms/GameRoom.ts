@@ -5,14 +5,14 @@ import { tickCreatureAI } from "./creatureAI.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
   CRAFT, PLACE, FARM_HARVEST, TAME, ABANDON, BREED,
-  PLACE_SHAPE,
+  PLACE_SHAPE, ASSIGN_PAWN,
   ResourceType, TileType, ItemType, Personality,
   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
   CREATURE_AI, CREATURE_RESPAWN, FARM, TAMING, BREEDING, TERRITORY,
   TERRITORY_INCOME, SHAPE, SHAPE_CATALOG,
   RECIPES, canCraft, getItemField,
 } from "@primal-grid/shared";
-import type { CraftPayload, PlacePayload, FarmHarvestPayload, TamePayload, AbandonPayload, BreedPayload, PlaceShapePayload } from "@primal-grid/shared";
+import type { CraftPayload, PlacePayload, FarmHarvestPayload, TamePayload, AbandonPayload, BreedPayload, PlaceShapePayload, AssignPawnPayload } from "@primal-grid/shared";
 import { spawnHQ, isShapeAdjacentToTerritory } from "./territory.js";
 
 const PLAYER_COLORS = [
@@ -67,6 +67,10 @@ export class GameRoom extends Room {
 
     this.onMessage(PLACE_SHAPE, (client, message: PlaceShapePayload) => {
       this.handlePlaceShape(client, message);
+    });
+
+    this.onMessage(ASSIGN_PAWN, (client, message: AssignPawnPayload) => {
+      this.handleAssignPawn(client, message);
     });
 
     console.log("[GameRoom] Room created.");
@@ -159,6 +163,50 @@ export class GameRoom extends Room {
         player.score += 1;
       }
       tile.shapeHP = SHAPE.BLOCK_HP;
+    }
+  }
+
+  private handleAssignPawn(client: Client, message: AssignPawnPayload) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+
+    const { creatureId, command, zoneX, zoneY } = message;
+    if (!creatureId) return;
+
+    const creature = this.state.creatures.get(creatureId);
+    if (!creature) return;
+
+    // Must own the creature
+    if (creature.ownerID !== client.sessionId) return;
+
+    // Must have trust >= 70 (obedient)
+    if (creature.trust < TAMING.TRUST_AT_OBEDIENT) return;
+
+    // Validate command
+    const validCommands = ["idle", "gather", "guard"];
+    if (!validCommands.includes(command)) return;
+
+    // For gather/guard, validate zone tile
+    if (command === "gather" || command === "guard") {
+      if (zoneX == null || zoneY == null) return;
+      if (!Number.isInteger(zoneX) || !Number.isInteger(zoneY)) return;
+
+      // Zone tile must be within player's territory
+      const zoneTile = this.state.getTile(zoneX, zoneY);
+      if (!zoneTile) return;
+      if (zoneTile.ownerID !== client.sessionId) return;
+
+      creature.zoneX = zoneX;
+      creature.zoneY = zoneY;
+    }
+
+    // Set command
+    creature.command = command;
+
+    // Idle clears zone
+    if (command === "idle") {
+      creature.zoneX = -1;
+      creature.zoneY = -1;
     }
   }
 

@@ -118,6 +118,17 @@
         color: #ffd700;
         margin-top: 4px;
       }
+      /* Pawn HUD panel */
+      .section-title {
+        font-size: 11px;
+        color: #aaa;
+        margin-bottom: 4px;
+      }
+      .pawn-row {
+        font-size: 11px;
+        padding: 2px 0;
+        color: #ccc;
+      }
     </style>
   </head>
   <body>
@@ -151,6 +162,10 @@
           <h3>Taming / Pack</h3>
           <div id="tamed-info"></div>
           <div class="pack-label" id="pack-info"></div>
+        </div>
+        <div class="hud-section" id="section-pawns">
+          <div class="section-title">🐾 Pawns (0/8)</div>
+          <div id="pawn-list"></div>
         </div>
       </div>
     </div>

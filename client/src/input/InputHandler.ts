@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { PLACE, PLACE_SHAPE, FARM_HARVEST, TAME, ItemType, SHAPE_CATALOG } from '@primal-grid/shared';
+import { PLACE, PLACE_SHAPE, FARM_HARVEST, TAME, ASSIGN_PAWN, ItemType, SHAPE_CATALOG } from '@primal-grid/shared';
 import { TILE_SIZE } from '../renderer/GridRenderer.js';
 import type { Container } from 'pixi.js';
 import type { CraftMenu } from '../ui/CraftMenu.js';
@@ -28,6 +28,8 @@ export class InputHandler {
   private shapeKeys: string[] = [];
   private creatureRenderer: CreatureRenderer | null = null;
   private camera: Camera | null = null;
+  private selectedPawnId: string | null = null;
+  private pawnCommandMode: 'none' | 'gather' | 'guard' = 'none';
 
   private mouseScreenX = 0;
   private mouseScreenY = 0;
@@ -136,6 +138,36 @@ export class InputHandler {
         return;
       }
 
+      // Pawn command: assign gather mode
+      if (e.key === 'g' || e.key === 'G') {
+        if (this.selectedPawnId) {
+          this.pawnCommandMode = 'gather';
+          this.hud?.setBuildMode(true, 'Assign Gather (click tile)');
+        }
+        return;
+      }
+
+      // Pawn command: assign guard mode
+      if (e.key === 'd' || e.key === 'D') {
+        if (this.selectedPawnId) {
+          this.pawnCommandMode = 'guard';
+          this.hud?.setBuildMode(true, 'Assign Guard (click tile)');
+        }
+        return;
+      }
+
+      // Escape: deselect pawn / set idle
+      if (e.key === 'Escape') {
+        if (this.selectedPawnId) {
+          this.room.send(ASSIGN_PAWN, { creatureId: this.selectedPawnId, command: 'idle' });
+          this.selectedPawnId = null;
+          this.pawnCommandMode = 'none';
+          this.creatureRenderer?.setSelectedPawnId(null);
+          this.hud?.setBuildMode(false);
+          return;
+        }
+      }
+
       // Farm harvest at cursor tile
       if (e.key === 'h' || e.key === 'H') {
         const tile = this.screenToTile();
@@ -191,6 +223,32 @@ export class InputHandler {
         const item = PLACEABLE_ITEMS[this.buildIndex];
         this.room.send(PLACE, { itemType: item.type, x: tileX, y: tileY });
         return;
+      }
+
+      // Pawn command mode: assign command to selected pawn at clicked tile
+      if (this.pawnCommandMode !== 'none' && this.selectedPawnId) {
+        this.room.send(ASSIGN_PAWN, {
+          creatureId: this.selectedPawnId,
+          command: this.pawnCommandMode,
+          zoneX: tileX,
+          zoneY: tileY,
+        });
+        this.selectedPawnId = null;
+        this.pawnCommandMode = 'none';
+        this.creatureRenderer?.setSelectedPawnId(null);
+        this.hud?.setBuildMode(false);
+        return;
+      }
+
+      // Click on tamed creature owned by local player: select pawn
+      if (this.creatureRenderer) {
+        const ownedId = this.creatureRenderer.getNearestOwnedCreature(tileX, tileY);
+        if (ownedId) {
+          this.selectedPawnId = ownedId;
+          this.pawnCommandMode = 'none';
+          this.creatureRenderer.setSelectedPawnId(ownedId);
+          return;
+        }
       }
 
       // Normal click: check for wild creature first, then no-op

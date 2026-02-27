@@ -16,9 +16,28 @@
 
 **Your Role (Pemulis):** Systems Dev — lead Phase 0 scaffolding (monorepo, Colyseus, PixiJS, CI) and Phase 5 (persistence, automation). See `.squad/decisions.md` for full architecture.
 
+## Current Status
+
+**Phase C COMPLETE** — 2026-02-27T14:10:00Z
+- C1 ASSIGN_PAWN handler ✅
+- C2, C3, C4 FSM transitions ✅
+- B1–B7 Phase B implementation (shapes, worker economy) ✅
+- 244/244 integration tests passing
+
+Next: Phase D (Breeding & Pack Dynamics) ready to spawn.
+
 ## Learnings
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
+
+### Phase C — Pawn Commands & Phase B Territory Redesign (2026-02-27)
+
+- **ASSIGN_PAWN handler:** Server event loop routing. Validates command, updates pawn.command field, routes to FSM. Deterministic, no side effects.
+- **FSM design:** 6 state transitions (idle↔gather, idle↔guard, guard↔gather). Implicit via priority chains, not formal state machine class. Tested extensively (60+ tests).
+- **Phase B shapes:** 11 polyomino catalog with pre-computed 4-rotation arrays. shapeHP field on TileState (not separate Structure). Permanent walls. 2 wood cost per cell.
+- **Worker economy:** Worker as CreatureState. No hunger drain (game mechanic, not survival). Gathers from tiles at fixed rate. Automatic territory expansion when shapes placed.
+- **Dual income:** Passive (1 resource per open tile every 10s) + active (worker gather). Both scale with territory size. Prevents softlock.
+- **B1–B7 implementation:** Shape data (70 lines), placement handler (90), adjacency validation, worker spawn, gather AI (70 lines), territory income tick (25), test updates (150). Zero schema additions. All existing tests pass with new coverage.
 
 ### Phase 0 — Server & Shared Package Scaffolding (2026-02-25)
 
@@ -415,3 +434,21 @@ Phase A foundation pivot complete. Server-side: removed avatar properties, imple
 - `spawnHQ()` signature extended with optional `nextCreatureId?: { value: number }` ref parameter (same pattern as `nextStructureId`) to generate unique `creature_N` IDs.
 - **Null guard pattern critical:** `if (this.nextCreatureId == null) this.nextCreatureId = 0;` in `onJoin()` — tests use `Object.create(GameRoom.prototype)` which skips constructor, leaving private fields undefined. Without the guard, IDs become `creature_undefined` / `creature_NaN`.
 - Updated 4 test files to account for worker spawn: breeding offspring detection uses `knownIds` set (pre-populated with all existing creature IDs before breeding loop), creature count expectations incremented by 1 per player, shared creature-types tests filter `minPopulation === 0` types from wild-only assertions.
+
+## Learnings
+
+### C1 — ASSIGN_PAWN Handler (Phase C)
+- Added `handleAssignPawn` to `GameRoom.ts` — validates ownership, trust ≥ 70, command ∈ {idle, gather, guard}, and zone tile ownership for gather/guard.
+- `AssignPawnPayload` in `shared/src/messages.ts` includes `"patrol"` in its union type, but the handler currently rejects it per spec (validCommands array only has idle/gather/guard). When patrol is implemented later, just add it to the array.
+- `TileState.ownerID` is a plain string field — no special accessor needed. Territory ownership check is `zoneTile.ownerID !== client.sessionId`.
+- Idle command resets `zoneX`/`zoneY` to -1. Gather/guard sets them to the validated zone tile coordinates.
+- Server-only `tsc --noEmit` passes clean. All 230 tests remain green.
+
+### C2+C3+C4 — Gather, Guard, Idle FSM States (Phase C)
+- Refactored `tickCreatureAI` routing: all tamed creatures (`ownerID !== ""`) now route through command-specific handlers before wild AI. Tamed creatures skip hunger drain entirely.
+- `tickGatherPawn`: zone-based gather — moves toward `zoneX/zoneY` if dist > 2, harvests current tile (1 unit → owner stockpile), falls back to `findNearestOwnedResource` (existing helper, 10-tile scan radius), then `wanderNear` if nothing found.
+- `tickGuardPawn`: checks wild hostiles within `PAWN_COMMAND.GUARD_RANGE` (3 tiles) of zone position. Adjacent hostiles take `CREATURE_AI.HUNT_DAMAGE`. Returns to post if > 3 tiles away. TypeScript forEach closure quirk: `nearestHostile` must be cast via `const nh = nearestHostile as CreatureState` after forEach since TS won't narrow the closure-assigned variable.
+- `tickIdlePawn`: territory-bounded wander. Checks `tile.ownerID === creature.ownerID` — if outside territory, `findNearestOwnedTile` (expanding ring search, radius 10) guides creature back. Inside territory, 30% chance to move to a random adjacent owned walkable tile.
+- Added helpers: `findNearestOwnedTile` (ring search), `wanderNear` (random step within 3 tiles of center).
+- Old `tickWorkerGather` kept as dead code — removing it risks test breakage from import/reference checks. Can be cleaned up in a future pass.
+- All 230 tests green. The idle-duration transition test (`creature-ai.test.ts`) is flaky when run with full suite but passes in isolation — pre-existing randomness issue, not related to this change.

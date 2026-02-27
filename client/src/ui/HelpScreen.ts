@@ -15,6 +15,10 @@ const KEYBINDINGS: [string, string][] = [
   ['V', 'Toggle build mode'],
   ['1-9', 'Craft item (menu) / Select build item'],
   ['H', 'Harvest farm (cursor tile)'],
+  ['Click tamed', 'Select pawn'],
+  ['G', 'Assign gather (then click tile)'],
+  ['D', 'Assign guard (then click tile)'],
+  ['Esc', 'Deselect pawn / Set idle'],
   ['?', 'Toggle this help screen'],
 ];
 

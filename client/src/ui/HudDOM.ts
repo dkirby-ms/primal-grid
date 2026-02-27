@@ -19,6 +19,8 @@ export class HudDOM {
   private tamedInfo: HTMLElement;
   private packInfo: HTMLElement;
   private buildIndicator: HTMLElement;
+  private pawnList: HTMLElement;
+  private pawnTitle: HTMLElement;
 
   /** Callback invoked with latest player resources for craft menu updates. */
   public onInventoryUpdate: ((resources: Record<string, number>) => void) | null = null;
@@ -42,6 +44,8 @@ export class HudDOM {
     this.tamedInfo = document.getElementById('tamed-info')!;
     this.packInfo = document.getElementById('pack-info')!;
     this.buildIndicator = document.getElementById('build-indicator')!;
+    this.pawnList = document.getElementById('pawn-list')!;
+    this.pawnTitle = document.querySelector('#section-pawns .section-title') as HTMLElement;
   }
 
   /** Show or hide build mode indicator with selected item name. */
@@ -130,6 +134,7 @@ export class HudDOM {
         });
         this.creatureCounts.textContent = `🦕 ${herbs}  🦖 ${carns}`;
         this.updateTamedDisplay(ownedHerbs, ownedCarns, herbTrusts, carnTrusts);
+        this.updatePawnList(creatures);
       }
     });
   }
@@ -163,5 +168,29 @@ export class HudDOM {
     }
     this.tamedInfo.innerHTML = html;
     this.packInfo.textContent = `Pack: ${this.packSize}/8`;
+  }
+
+  private updatePawnList(
+    creatures: { forEach: (cb: (creature: Record<string, unknown>, key: string) => void) => void },
+  ): void {
+    if (!this.pawnList) return;
+    let pawnCount = 0;
+    let pawnHtml = '';
+
+    creatures.forEach((creature) => {
+      const ownerId = (creature['ownerID'] as string) ?? '';
+      if (ownerId !== this.localSessionId) return;
+      pawnCount++;
+      const creatureType = (creature['creatureType'] as string) ?? 'herbivore';
+      const command = (creature['command'] as string) ?? 'idle';
+      const trust = (creature['trust'] as number) ?? 0;
+      const emoji = creatureType === 'carnivore' ? '🦖' : '🦕';
+      const cmdIcon = command === 'gather' ? '⛏' : command === 'guard' ? '🛡' : '💤';
+      const trustPct = Math.round(trust);
+      pawnHtml += `<div class="pawn-row">${emoji} ${creatureType} [${cmdIcon} ${command}] Trust: ${trustPct}%</div>`;
+    });
+
+    this.pawnList.innerHTML = pawnHtml || '<div style="color:#888;font-size:11px">No tamed creatures</div>';
+    if (this.pawnTitle) this.pawnTitle.textContent = `🐾 Pawns (${pawnCount}/8)`;
   }
 }

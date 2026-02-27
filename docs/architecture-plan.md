@@ -864,3 +864,254 @@ A1 (shared)
 ---
 
 *This document is the implementation spec for the GDD pivot. When a work item says "do X," the implementer should do exactly X — no more, no less. Scope questions go to Hal. Implementation questions go to the owning agent.*
+
+---
+
+## Phase C: Pawn Commands — Work Breakdown
+
+> **Goal:** Make tamed dinos useful. Players tame creatures, assign them commands (gather, guard), and build the core gameplay loop: claim → build → tame → assign → defend → expand.
+
+**Prerequisite:** Phase A (foundation pivot) ✅ and Phase B (shape-territory system) ✅ complete. 230 tests passing.
+
+**Scope fence — explicitly deferred:**
+- Patrol command (Phase D)
+- Patrol waypoints / route editing
+- Pawn capacity expansion (Dino Pen structure)
+- Specialized dino roles beyond personality stat modifiers
+- Resource hauling / transport logistics (gathered resources teleport to stockpile)
+- Complex guard formations
+- Pawn health bars or individual pawn stat panels
+
+---
+
+### Schema Changes
+
+**No new schema fields needed.** All required fields already exist:
+
+| Schema | Field | Status |
+|--------|-------|--------|
+| `CreatureState.command` | `"idle" \| "gather" \| "guard" \| "patrol"` | ✅ Exists (added Phase A, unused) |
+| `CreatureState.zoneX` | Zone center X (-1 = no zone) | ✅ Exists (added Phase A, unused) |
+| `CreatureState.zoneY` | Zone center Y (-1 = no zone) | ✅ Exists (added Phase A, unused) |
+| `CreatureState.ownerID` | Owner session ID | ✅ Exists |
+| `CreatureState.trust` | 0–100 trust score | ✅ Exists |
+
+**Constant already defined:** `PAWN_COMMAND` in `shared/src/constants.ts` with `GATHER_INTERVAL`, `GUARD_RANGE`, `PATROL_STEP_INTERVAL`.
+
+---
+
+### Message Protocol
+
+**Existing (ready to use):**
+
+| Message | Constant | Payload | Status |
+|---------|----------|---------|--------|
+| `ASSIGN_PAWN` | `"assign_pawn"` | `AssignPawnPayload { creatureId, command, zoneX?, zoneY? }` | ✅ Defined in `shared/src/messages.ts`, no server handler yet |
+| `TAME` | `"tame"` | `TamePayload { creatureId }` | ✅ Handler exists, already uses territory-based validation |
+
+**No new messages required.** The TAME handler already validates creature-near-territory (8-directional adjacency check). ASSIGN_PAWN payload is already typed.
+
+---
+
+### Work Items
+
+#### C1 — ASSIGN_PAWN Server Handler
+> Add the `onMessage(ASSIGN_PAWN)` handler to `GameRoom.ts`. Validates: creature owned by player, trust ≥ 70 (obedient), command is valid ("idle", "gather", "guard"), zone tile within player's territory (for gather/guard). Sets `creature.command`, `creature.zoneX`, `creature.zoneY`. Idle command clears zone to -1/-1.
+
+- **Files:** `server/src/rooms/GameRoom.ts`
+- **Dependencies:** None (schema + message types already exist)
+- **Complexity:** S
+- **Owner:** Pemulis
+
+#### C2 — Gather FSM State
+> Extend `creatureAI.ts` to handle tamed creatures with `command === "gather"`. Behavior: move toward `zoneX/zoneY`; once in zone (within 2 tiles), find nearest resource tile in owner's territory, collect resources, deposit directly to owner's stockpile (teleport — no hauling). If no resources in range, wander within territory. Worker gather logic already exists (`tickWorkerGather`) — refactor to also handle non-worker tamed creatures with gather command.
+
+- **Files:** `server/src/rooms/creatureAI.ts`
+- **Dependencies:** C1
+- **Complexity:** M
+- **Owner:** Pemulis
+
+**Behavior detail:**
+```
+if creature.ownerID != "" && creature.command === "gather":
+  skip hunger drain (gathering pawns are fed by the colony)
+  if manhattan(creature, zone) > 2:
+    moveToward(creature, zoneX, zoneY, state)
+    creature.currentState = "wander"
+  else:
+    // In zone — find and gather resources
+    tile = getTile(creature.x, creature.y)
+    if tile has resources && tile.ownerID === creature.ownerID:
+      harvest 1 unit → owner's stockpile (switch on resourceType)
+      creature.currentState = "eat" (visual: gathering)
+    else:
+      target = findNearestOwnedResource(creature, state) // existing fn
+      if target: moveToward(creature, target)
+      else: wanderInTerritory(creature, state) // existing fn
+```
+
+#### C3 — Guard FSM State
+> Add guard behavior for tamed creatures with `command === "guard"`. Behavior: stay near assigned position (`zoneX/zoneY`); if > 3 tiles away, move back. Attack any wild creature that enters `PAWN_COMMAND.GUARD_RANGE` (3 tiles) of the guard position. Use existing `CREATURE_AI.HUNT_DAMAGE` for attack damage. Guard pawns skip hunger drain.
+
+- **Files:** `server/src/rooms/creatureAI.ts`
+- **Dependencies:** C1
+- **Complexity:** M
+- **Owner:** Pemulis
+
+**Behavior detail:**
+```
+if creature.ownerID != "" && creature.command === "guard":
+  skip hunger drain
+  // Priority 1: Attack hostile in range
+  hostile = findNearestWild(creature, state, PAWN_COMMAND.GUARD_RANGE)
+  if hostile && manhattan(creature, hostile) <= 1:
+    hostile.health -= CREATURE_AI.HUNT_DAMAGE
+    creature.currentState = "hunt"
+    if hostile.health <= 0: remove hostile
+    return
+  if hostile:
+    moveToward(creature, hostile.x, hostile.y, state)
+    creature.currentState = "hunt"
+    return
+  // Priority 2: Return to post if too far
+  if manhattan(creature, zoneX, zoneY) > 3:
+    moveToward(creature, zoneX, zoneY, state)
+    creature.currentState = "wander"
+    return
+  // Priority 3: Idle near post
+  creature.currentState = "idle"
+```
+
+#### C4 — Idle Pawn Behavior (Territory-Bounded)
+> Modify idle behavior for tamed creatures so they wander within owner's territory instead of freely. When `command === "idle"` and creature is owned, use `wanderInTerritory()` (already exists) instead of `wanderRandom()`. If creature has drifted outside territory, move back toward nearest owned tile.
+
+- **Files:** `server/src/rooms/creatureAI.ts`
+- **Dependencies:** C1
+- **Complexity:** S
+- **Owner:** Pemulis
+
+#### C5 — Tame UI Update (Click-to-Tame)
+> Replace the I-key taming with click-based taming. In InputHandler, clicking a wild creature near territory sends `TAME { creatureId }`. Uses existing `CreatureRenderer.getNearestWildCreature()` for hit detection. Remove the I-key handler. Normal click (not in build/shape mode) on a tile checks for a wild creature first.
+
+- **Files:** `client/src/input/InputHandler.ts`, `client/src/ui/HelpScreen.ts`
+- **Dependencies:** None (server TAME handler already works)
+- **Complexity:** S
+- **Owner:** Gately
+
+#### C6 — Pawn Selection & Command Assignment UI
+> Click a tamed creature to select it (highlight ring). While selected, click a tile in owned territory to assign gather/guard zone. Add keyboard shortcuts: `G` = assign gather at clicked tile, `D` = assign guard at clicked tile, `Escape` = deselect / set idle. InputHandler sends `ASSIGN_PAWN` message. Visual feedback: selected creature gets bright ring, zone tile gets a colored marker.
+
+- **Files:** `client/src/input/InputHandler.ts`, `client/src/renderer/CreatureRenderer.ts`
+- **Dependencies:** C1, C5
+- **Complexity:** M
+- **Owner:** Gately
+
+**UI flow:**
+```
+1. Click tamed creature → select (gold ring, store selectedPawnId)
+2. Press G → enter "assign gather" mode
+3. Click tile → send ASSIGN_PAWN { creatureId, command: "gather", zoneX, zoneY }
+4. Or press D → enter "assign guard" mode → click tile → send guard command
+5. Escape → deselect pawn, or if pawn selected: send ASSIGN_PAWN { command: "idle" }
+```
+
+#### C7 — Pawn HUD Panel
+> Add a "Pawns" section to the HUD side panel showing owned creatures: emoji + type + current command + trust bar. Clicking a pawn entry in the HUD selects it (same as clicking on map). Shows count as "Pawns: N/8". Each pawn row: `🦕 Herbivore [Gather] ████░░ 65%`.
+
+- **Files:** `client/src/ui/HudDOM.ts`, `client/index.html`
+- **Dependencies:** C6
+- **Complexity:** M
+- **Owner:** Gately
+
+**HTML additions to side panel:**
+```html
+<div id="section-pawns">
+  <div class="section-title">🐾 Pawns</div>
+  <div id="pawn-list"></div>
+</div>
+```
+
+#### C8 — Command Visual Indicators
+> Show the active command on each tamed creature in the game world. Below each owned creature, render a small text label: "⛏" (gather), "🛡" (guard), or nothing (idle). When a creature has an assigned zone, draw a subtle pulsing highlight on the zone tile. Update CreatureRenderer to read `command` field from state.
+
+- **Files:** `client/src/renderer/CreatureRenderer.ts`, `client/src/renderer/GridRenderer.ts`
+- **Dependencies:** C2, C3 (need commands flowing to see them)
+- **Complexity:** S
+- **Owner:** Gately
+
+#### C9 — Integration Tests
+> End-to-end tests for the full pawn command loop: tame creature via TAME message → verify ownership → send ASSIGN_PAWN with gather → verify creature moves toward zone and collects resources → verify owner stockpile increases. Test guard: assign guard → spawn hostile nearby → verify pawn attacks. Test idle: verify tamed creature stays in territory. Test validation: ASSIGN_PAWN rejected for unowned creature, trust < 70, invalid zone.
+
+- **Files:** `server/src/__tests__/pawnCommands.test.ts` (new), `server/src/__tests__/creatureAI.test.ts` (extend)
+- **Dependencies:** C1, C2, C3, C4
+- **Complexity:** M
+- **Owner:** Steeply
+
+**Test cases (minimum):**
+1. ASSIGN_PAWN accepted for owned creature with trust ≥ 70
+2. ASSIGN_PAWN rejected for unowned creature
+3. ASSIGN_PAWN rejected for trust < 70
+4. ASSIGN_PAWN rejected for invalid command string
+5. ASSIGN_PAWN rejected for zone outside player territory
+6. Gather pawn moves toward zone and collects resources
+7. Gather pawn deposits resources to owner stockpile
+8. Gather pawn wanders in territory when no resources
+9. Guard pawn attacks wild creature in range
+10. Guard pawn returns to post when too far
+11. Guard pawn idles when no threats
+12. Idle tamed creature stays within territory
+13. Command change (gather → guard) updates creature behavior
+14. Idle command clears zoneX/zoneY to -1
+
+---
+
+### Architecture Decisions (Phase C)
+
+**F1 — No separate tick function for pawn commands.** Pawn gather/guard/idle logic runs inside `tickCreatureAI()` as FSM branches. Tamed creatures with commands skip the wild AI path entirely. This keeps one entry point for all creature behavior and avoids double-moving creatures.
+
+**F2 — Gather pawns skip hunger drain.** Tamed pawns assigned to gather or guard don't lose hunger. They're "fed by the colony." This avoids the degenerate case where gather pawns starve while gathering and simplifies the loop. Wild creature hunger mechanics still apply to untamed creatures.
+
+**F3 — Guard attacks use existing HUNT_DAMAGE.** No separate guard damage stat. Guard pawns deal the same damage as hunting carnivores (`CREATURE_AI.HUNT_DAMAGE = 25`). Personality-based modifiers are deferred — all guards hit the same. Keeps constants simple.
+
+**F4 — Zone is a single tile, not an area.** `zoneX/zoneY` is a point, not a rectangle. Gather pawns search for resources within radius of that point (using existing `findNearestOwnedResource`). Guard pawns stay near that point. This is the simplest possible zone model. Area-based zones (paint multiple tiles) are deferred.
+
+**F5 — Click-to-tame replaces I-key.** Taming becomes: click wild creature near territory → TAME message. No keyboard shortcut. Consistent with the click-based commander interaction model. I-key is removed.
+
+**F6 — Pawn selection state is client-only.** `selectedPawnId` lives in `InputHandler`, not on the server. Server doesn't need to know which pawn the player is looking at. Command assignment is a discrete message, not a selection state.
+
+---
+
+### Phase C Dependency Graph
+
+```
+C1 (ASSIGN_PAWN handler)
+├── C2 (Gather FSM) ──┐
+├── C3 (Guard FSM) ───┼── C9 (Integration tests)
+├── C4 (Idle bounds) ──┘
+│
+C5 (Click-to-tame UI) ── C6 (Pawn selection + command UI) ── C7 (Pawn HUD panel)
+                                                              │
+                          C8 (Command visuals) ←──────────────┘
+```
+
+**Server track (Pemulis):** C1 → C2 + C3 + C4 (parallel) → done
+**Client track (Gately):** C5 → C6 → C7 + C8 (parallel) → done
+**Test track (Steeply):** C9 (after C1–C4 land)
+
+**Critical path:** C1 → C2/C3 → C9 (server) and C5 → C6 → C7 (client), whichever is longer.
+**Estimated duration:** 4–6 working days (2 parallel tracks).
+
+---
+
+### Definition of Done (Phase C)
+
+1. Player can click a wild creature near territory to tame it (berries deducted)
+2. Player can select a tamed creature and assign gather/guard/idle commands via click + keyboard
+3. Gather pawns move to assigned zone, collect resources from tiles, add to owner's stockpile
+4. Guard pawns stay near assigned position and attack wild creatures in range
+5. Idle tamed creatures wander within owner's territory (not into the wild)
+6. HUD shows list of owned pawns with command and trust
+7. Command indicators visible on map (gather/guard icons on creatures)
+8. All validation enforced: trust ≥ 70, owned creature, zone in territory
+9. 240+ tests passing (230 baseline + ~14 new)
+10. No regressions in existing taming, breeding, territory, building systems

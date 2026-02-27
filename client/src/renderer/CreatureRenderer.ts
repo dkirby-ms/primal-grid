@@ -30,10 +30,12 @@ interface CreatureEntry {
   ring: Graphics;
   statText: Text;
   followText: Text;
+  commandText: Text;
   lastType: string;
   lastState: string;
   lastHealthLow: boolean;
   lastRingState: 'none' | 'owned' | 'selected';
+  lastCommand: string;
   tileX: number;
   tileY: number;
   ownerID: string;
@@ -47,6 +49,7 @@ export class CreatureRenderer {
   private entries: Map<string, CreatureEntry> = new Map();
   private localSessionId: string;
   private selectedPack: Set<string> = new Set();
+  private selectedPawnId: string | null = null;
 
   /** Latest creature counts, readable by HUD. */
   public herbivoreCount = 0;
@@ -83,6 +86,7 @@ export class CreatureRenderer {
         const trust = (creature['trust'] as number) ?? 0;
         const speed = (creature['speed'] as number) ?? 1;
         const personality = (creature['personality'] as string) ?? 'neutral';
+        const command = (creature['command'] as string) ?? 'idle';
 
         if (creatureType === 'carnivore') carns++;
         else herbs++;
@@ -115,7 +119,7 @@ export class CreatureRenderer {
 
         // Update ownership ring
         const isOwned = ownerID === this.localSessionId && this.localSessionId !== '';
-        const isSelected = isOwned && this.selectedPack.has(id);
+        const isSelected = isOwned && (this.selectedPack.has(id) || this.selectedPawnId === id);
         const ringState: 'none' | 'owned' | 'selected' = isSelected
           ? 'selected'
           : isOwned
@@ -136,6 +140,23 @@ export class CreatureRenderer {
         } else {
           entry.statText.visible = false;
           entry.followText.visible = false;
+        }
+
+        // Command visual indicator for tamed creatures (C8)
+        if (isOwned && entry.lastCommand !== command) {
+          if (command === 'gather') {
+            entry.commandText.text = '⛏';
+            entry.commandText.visible = true;
+          } else if (command === 'guard') {
+            entry.commandText.text = '🛡';
+            entry.commandText.visible = true;
+          } else {
+            entry.commandText.visible = false;
+          }
+          entry.lastCommand = command;
+        } else if (!isOwned && entry.commandText.visible) {
+          entry.commandText.visible = false;
+          entry.lastCommand = '';
         }
 
         // Snap to tile center
@@ -176,14 +197,24 @@ export class CreatureRenderer {
     return this.selectedPack.size;
   }
 
+  /** Set the currently selected pawn for command assignment. */
+  public setSelectedPawnId(id: string | null): void {
+    this.selectedPawnId = id;
+  }
+
+  /** Get the currently selected pawn ID. */
+  public getSelectedPawnId(): string | null {
+    return this.selectedPawnId;
+  }
+
   /** Find nearest wild creature adjacent to (px, py). */
   public getNearestWildCreature(px: number, py: number): string | null {
     return this.findNearest(px, py, (e) => !e.ownerID, 1);
   }
 
-  /** Find nearest owned creature to (px, py). */
+  /** Find nearest owned creature adjacent to (px, py). */
   public getNearestOwnedCreature(px: number, py: number): string | null {
-    return this.findNearest(px, py, (e) => e.ownerID === this.localSessionId);
+    return this.findNearest(px, py, (e) => e.ownerID === this.localSessionId, 1);
   }
 
   /** Find two nearest owned creatures with trust≥70 for breeding. */
@@ -273,6 +304,16 @@ export class CreatureRenderer {
     statText.visible = false;
     container.addChild(statText);
 
+    // Command label (below creature, for tamed pawns)
+    const commandText = new Text({
+      text: '',
+      style: { fontSize: 10, fill: '#ffd700', fontFamily: 'sans-serif' },
+    });
+    commandText.anchor?.set?.(0.5, 0);
+    commandText.position.set(0, CREATURE_RADIUS + 10);
+    commandText.visible = false;
+    container.addChild(commandText);
+
     return {
       container,
       graphic,
@@ -281,10 +322,12 @@ export class CreatureRenderer {
       ring,
       statText,
       followText,
+      commandText,
       lastType: creatureType,
       lastState: currentState,
       lastHealthLow: false,
       lastRingState: 'none',
+      lastCommand: '',
       tileX: 0,
       tileY: 0,
       ownerID: '',

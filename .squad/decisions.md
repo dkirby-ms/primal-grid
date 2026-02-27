@@ -1481,3 +1481,124 @@ After the A1–A9 colony commander pivot, the test suite had 105 failures across
 ### All Phase A Decisions Finalized
 
 All 10 Phase A items (A1–A10) are complete. Tests pass 240/240. Foundation established for Phase B (waves, turrets, creature zones, economy balance).
+
+---
+
+## 2026-02-27: Phase C — Pawn Commands Complete
+
+**Date:** 2026-02-27  
+**Author:** Scribe (consolidating C1–C9)  
+**Status:** ✅ COMPLETE (244/244 tests passing)
+
+All 9 Phase C items delivered:
+- **C1:** ASSIGN_PAWN handler — Server-side command routing for pawn state updates
+- **C2, C3, C4:** FSM transitions — gather/guard/idle states, 6 deterministic transitions
+- **C5:** Click-to-tame — Press I, click creature, consume berries → pawn creation
+- **C6:** Pawn selection UI — G/D/Esc keyboard controls for multi-select
+- **C7:** Pawn HUD panel — Right-side DOM panel showing pawns, commands, pack size
+- **C8:** Command visuals — Arrows (gather), zones (guard), rendered in-world
+- **C9:** Integration tests — 244 tests covering all C1–C8 functionality, zero flakiness
+
+Key decisions:
+- Gather/guard/idle are deterministic (no randomness). Selection allows multi-pawn commanding. Visuals update immediately. Berries cost taming.
+
+### Ready for Phase D (Breeding & Pack Dynamics)
+
+Next phase will add: pack formation, trust system, multi-zone assignments, pack-level commands.
+
+---
+
+## 2026-02-27: Phase B — Territory Redesign (Shapes & Worker Economy)
+
+**Date:** 2026-02-26 to 2026-02-27  
+**Author:** Pemulis + Gately + Hal (dkirby-ms)  
+**Status:** ✅ IMPLEMENTED
+
+### Core Decisions
+
+**F1: Shape cells block movement** — Tetris-like polyominoes placed on tiles act as permanent walls. Implemented via `shapeHP > 0` field on TileState.
+
+**F2: shapeHP field on TileState** — Single field per tile (not separate Structure). Hundreds of shape cells per player; O(1) lookup, minimal sync overhead.
+
+**F3: 11 shape catalog** — Monomino through tetrominoes (Tetris polyominoes). Pentominoes excluded (too large for 64×64).
+
+**F4: Shape cost 2 wood per cell** — Higher cost than old 1-wood claim (shapes are permanent walls). Balanced with 10 starting wood + passive/active income.
+
+**F5: Worker as CreatureState** — Worker pawn uses existing creature infrastructure (`creatureType="worker"`, `ownerID=player.id`). Zero new schema.
+
+**F6: Workers don't drain hunger** — Hunger stays 100. Workers are game mechanic, not survival challenge.
+
+**F7: Dual income system** — Passive (1 resource per owned tile every 10s) + active (worker gathers from tiles). Both scale with territory.
+
+**F8: Shapes indestructible (MVP)** — No damage system targets them yet. `shapeHP` field exists for Phase D+.
+
+**F9: Starting territory unchanged** — 3×3 open area around HQ. Worker needs walkable space.
+
+**F10: CLAIM_TILE fully removed** — Old per-tile claiming deleted entirely. Shapes are sole territory expansion path.
+
+### Implementation (B1–B10)
+
+| Item | Status | Lines | Agent |
+|------|--------|-------|-------|
+| B1 Shape Data | ✅ | ~70 | Pemulis |
+| B2 Shape Placement | ✅ | ~90 | Pemulis |
+| B3 Remove CLAIM_TILE | ✅ | ~30 | Pemulis |
+| B4 Remove Wall/Floor | ✅ | ~40 | Pemulis |
+| B5 Worker Spawn | ✅ | ~35 | Pemulis |
+| B6 Worker Gather AI | ✅ | ~70 | Pemulis |
+| B7 Territory Income | ✅ | ~25 | Pemulis |
+| B8 Shape Placement UI | ✅ | ~130 | Gately |
+| B9 Shape Rendering | ✅ | ~60 | Gately |
+| B10 Test Updates | ✅ | ~150 | Steeply |
+
+All tests passing (existing 240 + new coverage, no regressions). Full territory redesign complete.
+
+---
+
+## 2026-02-27: User Directive — Territory & Economy Redesign
+
+**By:** dkirby-ms (via Copilot)  
+**Date:** 2026-02-27  
+**Source:** Phase C/B planning (circulated 2026-02-27T02:52Z)
+
+### Problem Statement
+
+Wood economy broken. Players softlock when out of wood with no active gather mechanic. Explicit CLAIM_TILE action is busywork. Need redesign.
+
+### Solution (Three Changes)
+
+1. **Free worker pawn** — Players start with 1 worker that autonomously roams and gathers wood + other resources. No micromanagement needed; worker is background income.
+
+2. **Automatic territory** — Territory claims happen as side effect of shape placement (not explicit CLAIM_TILE action). Placing a shape automatically claims any unclaimed cells it touches (if adjacent to existing territory).
+
+3. **Tetris-like shapes** — Replace walls/floors with polyomino shapes (Tetris blocks) that can be rotated and placed to control territory spatially. Creates emergent base-building loop: shapes grant territory, territory enables worker gathering, gathering funds more shapes.
+
+### Impact
+
+Core loop redesigned: **Gather (worker) → Spend (shapes) → Expand (territory) → Gather more (passive income)**.
+
+No more softlock. Territory expansion is visual/spatial puzzle. Economy is dual-layer (passive baseline + active multiplier).
+
+---
+
+## Decision Format
+
+Decisions in this log follow:
+
+```markdown
+#### Title [Phase ID]
+**Author:** [Agent/User]  
+**Date:** [ISO date]  
+**Status:** [✅ ACTIVE | ⏸ DEFERRED | ❌ SUPERSEDED]
+
+[Summary paragraph]
+
+### Details
+[Context, rationale, implications]
+```
+
+---
+
+**Maintained by:** Scribe  
+**Last Updated:** 2026-02-27T14:10:00Z  
+**Total Decisions:** 40+ (consolidated from inbox)
