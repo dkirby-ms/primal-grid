@@ -56,6 +56,23 @@ export class InputHandler {
   /** Wire up the HUD for build mode indicator. */
   public setHud(hud: HudDOM): void {
     this.hud = hud;
+    // Wire pawn row click → select/deselect pawn
+    hud.onPawnSelect = (creatureId: string) => {
+      if (creatureId) {
+        this.selectedPawnId = creatureId;
+        this.pawnCommandMode = 'none';
+        this.creatureRenderer?.setSelectedPawnId(creatureId);
+        hud.setSelectedPawnId(creatureId);
+      } else {
+        this.selectedPawnId = null;
+        this.pawnCommandMode = 'none';
+        this.creatureRenderer?.setSelectedPawnId(null);
+        hud.setSelectedPawnId(null);
+        hud.setBuildMode(false);
+      }
+      this.updateCursor();
+    };
+
     // Wire carousel click → select shape
     hud.onShapeSelect = (index: number) => {
       this.shapeIndex = index;
@@ -212,6 +229,7 @@ export class InputHandler {
           this.selectedPawnId = null;
           this.pawnCommandMode = 'none';
           this.creatureRenderer?.setSelectedPawnId(null);
+          this.hud?.setSelectedPawnId(null);
           this.hud?.setBuildMode(false);
           this.updateCursor();
           return;
@@ -287,6 +305,7 @@ export class InputHandler {
         this.selectedPawnId = null;
         this.pawnCommandMode = 'none';
         this.creatureRenderer?.setSelectedPawnId(null);
+        this.hud?.setSelectedPawnId(null);
         this.hud?.setBuildMode(false);
         this.updateCursor();
         return;
@@ -299,6 +318,7 @@ export class InputHandler {
           this.selectedPawnId = ownedId;
           this.pawnCommandMode = 'none';
           this.creatureRenderer.setSelectedPawnId(ownedId);
+          this.hud?.setSelectedPawnId(ownedId);
           return;
         }
       }

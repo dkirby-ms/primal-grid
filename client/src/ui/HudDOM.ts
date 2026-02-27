@@ -81,6 +81,17 @@ export class HudDOM {
   /** Callback when user clicks a shape in the carousel. */
   public onShapeSelect: ((index: number) => void) | null = null;
 
+  /** Callback when user clicks a pawn row in the HUD panel. */
+  public onPawnSelect: ((creatureId: string) => void) | null = null;
+
+  /** Currently selected pawn ID for HUD highlight. */
+  private selectedPawnId: string | null = null;
+
+  /** Set which pawn is selected (highlights the row). */
+  public setSelectedPawnId(id: string | null): void {
+    this.selectedPawnId = id;
+  }
+
   private buildShapeCarousel(): void {
     this.shapeCarouselItems.innerHTML = '';
     this.shapeItemEls = [];
@@ -253,22 +264,41 @@ export class HudDOM {
   ): void {
     if (!this.pawnList) return;
     let pawnCount = 0;
-    let pawnHtml = '';
 
-    creatures.forEach((creature) => {
+    interface PawnEntry { id: string; creatureType: string; command: string; trust: number }
+    const pawns: PawnEntry[] = [];
+    creatures.forEach((creature, key) => {
       const ownerId = (creature['ownerID'] as string) ?? '';
       if (ownerId !== this.localSessionId) return;
-      pawnCount++;
-      const creatureType = (creature['creatureType'] as string) ?? 'herbivore';
-      const command = (creature['command'] as string) ?? 'idle';
-      const trust = (creature['trust'] as number) ?? 0;
-      const emoji = creatureType === 'carnivore' ? '🦖' : '🦕';
-      const cmdIcon = command === 'gather' ? '⛏' : command === 'guard' ? '🛡' : '💤';
-      const trustPct = Math.round(trust);
-      pawnHtml += `<div class="pawn-row">${emoji} ${creatureType} [${cmdIcon} ${command}] Trust: ${trustPct}%</div>`;
+      const id = (creature['id'] as string) ?? key;
+      pawns.push({
+        id,
+        creatureType: (creature['creatureType'] as string) ?? 'herbivore',
+        command: (creature['command'] as string) ?? 'idle',
+        trust: (creature['trust'] as number) ?? 0,
+      });
     });
 
-    this.pawnList.innerHTML = pawnHtml || '<div style="color:#888;font-size:11px">No tamed creatures</div>';
+    pawnCount = pawns.length;
+    this.pawnList.innerHTML = '';
+    if (pawns.length === 0) {
+      this.pawnList.innerHTML = '<div style="color:#888;font-size:11px">No tamed creatures</div>';
+    } else {
+      for (const pawn of pawns) {
+        const emoji = pawn.creatureType === 'carnivore' ? '🦖' : '🦕';
+        const cmdIcon = pawn.command === 'gather' ? '⛏' : pawn.command === 'guard' ? '🛡' : '💤';
+        const trustPct = Math.round(pawn.trust);
+        const row = document.createElement('div');
+        row.className = 'pawn-row' + (this.selectedPawnId === pawn.id ? ' selected' : '');
+        row.textContent = `${emoji} ${pawn.creatureType} [${cmdIcon} ${pawn.command}] Trust: ${trustPct}%`;
+        row.addEventListener('click', () => {
+          const newId = this.selectedPawnId === pawn.id ? null : pawn.id;
+          this.selectedPawnId = newId;
+          this.onPawnSelect?.(newId!);
+        });
+        this.pawnList.appendChild(row);
+      }
+    }
     if (this.pawnTitle) this.pawnTitle.textContent = `🐾 Pawns (${pawnCount}/8)`;
   }
 }
