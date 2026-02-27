@@ -102,6 +102,11 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
     input.setCreatureRenderer(creatures);
     input.setCamera(camera);
     input.setGridRenderer(grid);
+
+    // Update shape ghost preview every frame
+    app.ticker.add(() => {
+      input.updatePreview();
+    });
   } catch (err) {
     console.error('[main] Post-connect error:', err);
   }

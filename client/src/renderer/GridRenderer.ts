@@ -37,6 +37,8 @@ export class GridRenderer {
   private resourceDots: Graphics[][] = [];
   private territoryOverlays: Graphics[][] = [];
   private territoryContainer: Container;
+  private shapePreviewContainer: Container;
+  private shapePreviewGraphics: Graphics[] = [];
   private mapSize: number;
   private playerColors: Map<string, string> = new Map();
   private lastOwnerIDs: string[][] = [];
@@ -47,9 +49,11 @@ export class GridRenderer {
   constructor(mapSize: number = DEFAULT_MAP_SIZE) {
     this.container = new Container();
     this.territoryContainer = new Container();
+    this.shapePreviewContainer = new Container();
     this.mapSize = mapSize;
     this.buildGrid();
     this.container.addChild(this.territoryContainer);
+    this.container.addChild(this.shapePreviewContainer);
   }
 
   /** Create the initial grid with all-grassland tiles. */
@@ -297,6 +301,45 @@ export class GridRenderer {
     const pulse = 0.3 + 0.7 * Math.abs(Math.sin(Date.now() * 0.006));
     for (const { x, y } of this.claimingTiles.values()) {
       this.territoryOverlays[y][x].alpha = pulse;
+    }
+  }
+
+  /** Get the color assigned to a player (for preview rendering). */
+  public getPlayerColor(playerId: string): string {
+    return this.playerColors.get(playerId) ?? '#ffffff';
+  }
+
+  /** Render a translucent ghost preview of a shape at the given tile position. */
+  public updateShapePreview(cells: { dx: number; dy: number }[], tileX: number, tileY: number, color: string): void {
+    const numColor = parseColor(color);
+
+    // Reuse or create Graphics objects as needed
+    while (this.shapePreviewGraphics.length < cells.length) {
+      const g = new Graphics();
+      this.shapePreviewContainer.addChild(g);
+      this.shapePreviewGraphics.push(g);
+    }
+    // Hide excess graphics from previous frame
+    for (let i = cells.length; i < this.shapePreviewGraphics.length; i++) {
+      this.shapePreviewGraphics[i].visible = false;
+    }
+
+    for (let i = 0; i < cells.length; i++) {
+      const g = this.shapePreviewGraphics[i];
+      g.clear();
+      g.rect(0, 0, TILE_SIZE, TILE_SIZE);
+      g.fill({ color: numColor, alpha: 0.35 });
+      g.rect(0, 0, TILE_SIZE, TILE_SIZE);
+      g.stroke({ width: 1.5, color: numColor, alpha: 0.7 });
+      g.position.set((tileX + cells[i].dx) * TILE_SIZE, (tileY + cells[i].dy) * TILE_SIZE);
+      g.visible = true;
+    }
+  }
+
+  /** Clear the shape ghost preview. */
+  public clearShapePreview(): void {
+    for (const g of this.shapePreviewGraphics) {
+      g.visible = false;
     }
   }
 

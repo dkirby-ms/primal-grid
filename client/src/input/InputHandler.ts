@@ -45,6 +45,7 @@ export class InputHandler {
     this.bindKeys();
     this.bindClick();
     this.bindMouseTracking();
+    this.updateCursor();
   }
 
   /** Wire up the craft menu for toggle and number-key crafting. */
@@ -135,7 +136,9 @@ export class InputHandler {
         this.updateShapeHud();
         if (!this.shapeMode) {
           this.hud?.setBuildMode(false);
+          this.gridRenderer?.clearShapePreview();
         }
+        this.updateCursor();
         return;
       }
 
@@ -144,12 +147,14 @@ export class InputHandler {
         if (this.craftMenu?.isOpen()) return;
         this.shapeMode = false;
         this.hud?.setShapeMode(false);
+        this.gridRenderer?.clearShapePreview();
         this.buildMode = !this.buildMode;
         if (this.buildMode) {
           this.hud?.setBuildMode(true, PLACEABLE_ITEMS[this.buildIndex].name);
         } else {
           this.hud?.setBuildMode(false);
         }
+        this.updateCursor();
         return;
       }
 
@@ -185,6 +190,7 @@ export class InputHandler {
         if (this.selectedPawnId) {
           this.pawnCommandMode = 'gather';
           this.hud?.setBuildMode(true, 'Assign Gather (click tile)');
+          this.updateCursor();
         }
         return;
       }
@@ -194,6 +200,7 @@ export class InputHandler {
         if (this.selectedPawnId) {
           this.pawnCommandMode = 'guard';
           this.hud?.setBuildMode(true, 'Assign Guard (click tile)');
+          this.updateCursor();
         }
         return;
       }
@@ -206,6 +213,7 @@ export class InputHandler {
           this.pawnCommandMode = 'none';
           this.creatureRenderer?.setSelectedPawnId(null);
           this.hud?.setBuildMode(false);
+          this.updateCursor();
           return;
         }
       }
@@ -280,6 +288,7 @@ export class InputHandler {
         this.pawnCommandMode = 'none';
         this.creatureRenderer?.setSelectedPawnId(null);
         this.hud?.setBuildMode(false);
+        this.updateCursor();
         return;
       }
 
@@ -328,5 +337,35 @@ export class InputHandler {
     if (this.shapeMode) {
       this.hud?.setBuildMode(true, `${shape.name} [R${this.shapeRotation}]`);
     }
+    this.updateCursor();
+  }
+
+  /** Set the canvas CSS cursor based on the current input mode. */
+  private updateCursor(): void {
+    if (this.shapeMode) {
+      this.canvas.style.cursor = 'cell';
+    } else if (this.buildMode) {
+      this.canvas.style.cursor = 'copy';
+    } else if (this.pawnCommandMode !== 'none') {
+      this.canvas.style.cursor = 'pointer';
+    } else {
+      this.canvas.style.cursor = 'crosshair';
+    }
+  }
+
+  /** Called each frame to update the shape ghost preview on the map. */
+  public updatePreview(): void {
+    if (!this.gridRenderer) return;
+    if (!this.shapeMode) {
+      this.gridRenderer.clearShapePreview();
+      return;
+    }
+    const shapeId = this.shapeKeys[this.shapeIndex];
+    const shapeDef = SHAPE_CATALOG[shapeId];
+    if (!shapeDef) return;
+    const cells = shapeDef.rotations[this.shapeRotation] ?? shapeDef.rotations[0];
+    const tile = this.screenToTile();
+    const color = this.gridRenderer.getPlayerColor(this.room.sessionId);
+    this.gridRenderer.updateShapePreview(cells as { dx: number; dy: number }[], tile.x, tile.y, color);
   }
 }
