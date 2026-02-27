@@ -62,14 +62,14 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
     // Bind renderers to server state
     grid.bindToRoom(room);
 
-    const creatures = new CreatureRenderer(room.sessionId);
-    grid.container.addChild(creatures.container);
-    creatures.bindToRoom(room);
-
-    // Structure renderer (walls, floors, workbenches, farm plots, HQ)
+    // Structure renderer (walls, floors, workbenches, farm plots, HQ) — added first so creatures draw on top
     const structures = new StructureRenderer();
     grid.container.addChild(structures.container);
     structures.bindToRoom(room);
+
+    const creatures = new CreatureRenderer(room.sessionId);
+    grid.container.addChild(creatures.container);
+    creatures.bindToRoom(room);
 
     // Center camera on local player's HQ once state has synced
     room.onStateChange.once(() => {
