@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { MOVE, GATHER, EAT, PLACE, FARM_HARVEST, TAME, SELECT_CREATURE, BREED, ItemType } from '@primal-grid/shared';
+import { PLACE, FARM_HARVEST, TAME, CLAIM_TILE, ItemType } from '@primal-grid/shared';
 import { TILE_SIZE } from '../renderer/GridRenderer.js';
 import type { Container } from 'pixi.js';
 import type { CraftMenu } from '../ui/CraftMenu.js';
@@ -7,8 +7,6 @@ import type { HudDOM } from '../ui/HudDOM.js';
 import type { HelpScreen } from '../ui/HelpScreen.js';
 import type { CreatureRenderer } from '../renderer/CreatureRenderer.js';
 import type { Camera } from '../renderer/Camera.js';
-
-const MOVE_DEBOUNCE_MS = 150;
 
 const PLACEABLE_ITEMS: { type: ItemType; name: string }[] = [
   { type: ItemType.Wall, name: 'Wall' },
@@ -20,7 +18,6 @@ const PLACEABLE_ITEMS: { type: ItemType; name: string }[] = [
 export class InputHandler {
   private room: Room;
   private worldContainer: Container;
-  private lastMoveTime = 0;
 
   private craftMenu: CraftMenu | null = null;
   private hud: HudDOM | null = null;
@@ -30,11 +27,15 @@ export class InputHandler {
   private creatureRenderer: CreatureRenderer | null = null;
   private camera: Camera | null = null;
 
+  private mouseScreenX = 0;
+  private mouseScreenY = 0;
+
   constructor(room: Room, worldContainer: Container) {
     this.room = room;
     this.worldContainer = worldContainer;
     this.bindKeys();
     this.bindClick();
+    this.bindMouseTracking();
   }
 
   /** Wire up the craft menu for toggle and number-key crafting. */
@@ -42,7 +43,7 @@ export class InputHandler {
     this.craftMenu = menu;
   }
 
-  /** Wire up the HUD for build mode indicator and player position. */
+  /** Wire up the HUD for build mode indicator. */
   public setHud(hud: HudDOM): void {
     this.hud = hud;
   }
@@ -52,25 +53,36 @@ export class InputHandler {
     this.helpScreen = helpScreen;
   }
 
-  /** Wire up the creature renderer for taming, selection, and breeding queries. */
+  /** Wire up the creature renderer for taming queries. */
   public setCreatureRenderer(cr: CreatureRenderer): void {
     this.creatureRenderer = cr;
   }
 
-  /** Wire up the camera for center-on-player tracking. */
+  /** Wire up the camera. */
   public setCamera(camera: Camera): void {
     this.camera = camera;
   }
 
+  /** Convert current mouse screen position to tile coordinates. */
+  private screenToTile(): { x: number; y: number } {
+    const scale = this.worldContainer.scale.x;
+    const worldX = (this.mouseScreenX - this.worldContainer.position.x) / scale;
+    const worldY = (this.mouseScreenY - this.worldContainer.position.y) / scale;
+    return {
+      x: Math.floor(worldX / TILE_SIZE),
+      y: Math.floor(worldY / TILE_SIZE),
+    };
+  }
+
+  private bindMouseTracking(): void {
+    window.addEventListener('mousemove', (e) => {
+      this.mouseScreenX = e.clientX;
+      this.mouseScreenY = e.clientY;
+    });
+  }
+
   private bindKeys(): void {
     window.addEventListener('keydown', (e) => {
-      // Center camera on player toggle
-      if (e.key === ' ') {
-        e.preventDefault();
-        this.camera?.toggleTracking();
-        return;
-      }
-
       // Help screen toggle
       if (e.key === '?' || e.key === '/') {
         this.helpScreen?.toggle();
@@ -79,28 +91,8 @@ export class InputHandler {
 
       // Craft menu toggle
       if (e.key === 'c' || e.key === 'C') {
-        if (this.buildMode) return; // ignore while building
+        if (this.buildMode) return;
         this.craftMenu?.toggle();
-        return;
-      }
-
-      // Breed (or exit build mode if active)
-      if (e.key === 'b' || e.key === 'B') {
-        if (this.craftMenu?.isOpen()) return;
-        if (this.buildMode) {
-          this.buildMode = false;
-          this.hud?.setBuildMode(false);
-          return;
-        }
-        if (this.creatureRenderer && this.hud) {
-          const pair = this.creatureRenderer.getNearestBreedPair(
-            this.hud.localPlayerX,
-            this.hud.localPlayerY,
-          );
-          if (pair) {
-            this.room.send(BREED, { creatureId1: pair[0], creatureId2: pair[1] });
-          }
-        }
         return;
       }
 
@@ -112,59 +104,22 @@ export class InputHandler {
         return;
       }
 
-      // Farm harvest
+      // Farm harvest at cursor tile
       if (e.key === 'h' || e.key === 'H') {
-        if (this.hud) {
-          this.room.send(FARM_HARVEST, {
-            x: this.hud.localPlayerX,
-            y: this.hud.localPlayerY,
-          });
+        const tile = this.screenToTile();
+        if (tile.x >= 0 && tile.y >= 0) {
+          this.room.send(FARM_HARVEST, { x: tile.x, y: tile.y });
         }
         return;
       }
 
-      // Gather resources from current tile
-      if (e.key === 'g' || e.key === 'G') {
-        if (this.hud) {
-          this.room.send(GATHER, {
-            x: this.hud.localPlayerX,
-            y: this.hud.localPlayerY,
-          });
-        }
-        return;
-      }
-
-      // Eat (consume 1 berry, restore hunger)
-      if (e.key === 'e' || e.key === 'E') {
-        this.room.send(EAT);
-        return;
-      }
-
-      // Tame nearest adjacent wild creature
+      // Tame wild creature near cursor
       if (e.key === 'i' || e.key === 'I') {
-        if (this.creatureRenderer && this.hud) {
-          const creatureId = this.creatureRenderer.getNearestWildCreature(
-            this.hud.localPlayerX,
-            this.hud.localPlayerY,
-          );
+        if (this.creatureRenderer) {
+          const tile = this.screenToTile();
+          const creatureId = this.creatureRenderer.getNearestWildCreature(tile.x, tile.y);
           if (creatureId) {
             this.room.send(TAME, { creatureId });
-          }
-        }
-        return;
-      }
-
-      // Select/deselect nearest owned creature for pack
-      if (e.key === 'f' || e.key === 'F') {
-        if (this.creatureRenderer && this.hud) {
-          const creatureId = this.creatureRenderer.getNearestOwnedCreature(
-            this.hud.localPlayerX,
-            this.hud.localPlayerY,
-          );
-          if (creatureId) {
-            this.creatureRenderer.togglePackSelection(creatureId);
-            this.room.send(SELECT_CREATURE, { creatureId });
-            this.hud.updatePackSize(this.creatureRenderer.getPackSize());
           }
         }
         return;
@@ -183,28 +138,6 @@ export class InputHandler {
           return;
         }
       }
-
-      // Movement keys
-      let dx = 0;
-      let dy = 0;
-      switch (e.key) {
-        case 'ArrowUp':
-          dy = -1;
-          break;
-        case 'ArrowDown':
-          dy = 1;
-          break;
-        case 'ArrowLeft':
-          dx = -1;
-          break;
-        case 'ArrowRight':
-          dx = 1;
-          break;
-        default:
-          return;
-      }
-      e.preventDefault();
-      this.sendMove(dx, dy);
     });
   }
 
@@ -219,22 +152,15 @@ export class InputHandler {
 
       if (tileX < 0 || tileY < 0) return;
 
-      // Build mode: place structure instead of moving
+      // Build mode: place structure
       if (this.buildMode) {
         const item = PLACEABLE_ITEMS[this.buildIndex];
         this.room.send(PLACE, { itemType: item.type, x: tileX, y: tileY });
         return;
       }
 
-      // Normal click-to-move
-      this.room.send(MOVE, { x: tileX, y: tileY });
+      // Normal click: claim tile
+      this.room.send(CLAIM_TILE, { x: tileX, y: tileY });
     });
-  }
-
-  private sendMove(dx: number, dy: number): void {
-    const now = Date.now();
-    if (now - this.lastMoveTime < MOVE_DEBOUNCE_MS) return;
-    this.lastMoveTime = now;
-    this.room.send(MOVE, { dx, dy });
   }
 }

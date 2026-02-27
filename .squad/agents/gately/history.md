@@ -273,3 +273,37 @@ Pemulis's 4.6.1–4.6.2 containerization work enables this WebSocket URL feature
 
 **Context:** User requested fundamental pivot from avatar-based to territory/commander-mode gameplay. This is Phase A of 4-phase implementation plan (A–D). After Phase A: join room → see 64×64 map → claim tiles → see territory. Phases B–D add buildings, waves, pawn commands, and multiplayer polish.
 
+### A6 — Client Camera Pivot (2026-02-27)
+- **Tracking logic removed:** Stripped `tracking` flag, `trackingTarget` callback, `setTrackingTarget()`, `toggleTracking()`, `isTracking()` methods, and tracking update path from `update()`. Camera is now free-pan only — no avatar follow mode.
+- **`centerOnHQ(hqX, hqY)` added:** Convenience method that delegates to existing `centerOn()` (which already handles tile→pixel conversion via `TILE_SIZE`). Used to snap camera to HQ on join.
+- **Everything else preserved:** WASD panning, mouse drag panning, scroll zoom (0.5×–3×), bounds clamping, `centerOn()`, `resize()`.
+- **Downstream breakage expected:** `main.ts:98` (`setTrackingTarget`) and `InputHandler.ts:70` (`toggleTracking`) now error — A7 handles those removals.
+- **Camera.ts compiles clean in isolation.** 122 lines, zero tracking state.
+
+
+### A7 — Avatar Removal & Territory Rendering (2026-02-27)
+- **PlayerRenderer.ts DELETED:** No player avatar on map in colony commander mode. File removed entirely.
+- **HudRenderer.ts DELETED:** Deprecated canvas HUD (replaced by HudDOM in Phase 4.5). File removed. No imports referenced it.
+- **main.ts cleaned up:** Removed PlayerRenderer import/instantiation/binding. Removed `camera.setTrackingTarget()` call (method removed in A6). Added `camera.centerOnHQ(localPlayer.hqX, localPlayer.hqY)` after room join — finds local player via `room.state.players.get(room.sessionId)`.
+- **GridRenderer territory overlay:** Added `territoryContainer` (separate PIXI Container on top of base terrain). Each tile gets a pre-allocated `Graphics` overlay, initially hidden. On `onStateChange`, reads `ownerID` from each tile — if non-empty, draws a semi-transparent rect (alpha 0.25) in the owning player's color. Uses `lastOwnerIDs` 2D array to diff and skip unchanged tiles. Player colors cached from `state.players` forEach in same callback. `parseColor()` helper converts CSS hex strings to numeric.
+- **StructureRenderer HQ rendering:** Added `ItemType.HQ` case to `createEntry` switch. HQ drawn as colored filled rectangle (owner's player color) with gold (#FFD700) border stroke and 🏰 emoji text label centered. Player colors cached from `state.players` forEach in `bindToRoom`. `placedBy` field read from structure state to look up owner color.
+- **ArraySchema safety:** forEach called directly on `tiles` and `players` objects, never extracted to variables — preserves `this` binding per repo convention.
+- **Downstream:** A8 (HUD overhaul) and A9 (input rewrite) will fix remaining client compile errors in HudDOM and InputHandler.
+- **Files changed:** `client/src/main.ts`, `client/src/renderer/GridRenderer.ts`, `client/src/renderer/StructureRenderer.ts`. **Files deleted:** `client/src/renderer/PlayerRenderer.ts`, `client/src/ui/HudRenderer.ts`.
+
+### A8 — HUD Overhaul (Phase A pivot)
+- **HudDOM.ts:** Removed health/hunger bars, meat inventory, axes/pickaxes crafted items, `updateHealth()`/`updateHunger()` methods, and all associated DOM element caches. Added `territoryCount` element binding to display `player.score`. Renamed `localPlayerX`/`localPlayerY` to `localHqX`/`localHqY`, now sourced from `player['hqX']`/`player['hqY']` instead of `player['x']`/`player['y']`.
+- **index.html:** Removed health and hunger bar sections, meat inventory row, axes/pickaxes crafted item rows, `.health`/`.hunger` CSS classes. Added territory count section at top of HUD panel with 🏰 emoji, gold styling, reading from `#territory-count-val` span.
+- **InputHandler.ts:** All `this.hud.localPlayerX`/`localPlayerY` references updated to `this.hud.localHqX`/`localHqY` (10 occurrences across breed, farm harvest, gather, tame, pack select actions).
+- **No new compile errors introduced.** Pre-existing errors in InputHandler (missing shared exports, Camera.toggleTracking) remain — those are A9 scope.
+
+## Learnings
+- HudDOM serves as position provider for InputHandler — can't just delete position tracking, need to replace with colony-appropriate coords (hqX/hqY).
+- Territory count reads from `player.score` which Colyseus syncs automatically — no special subscription needed beyond the existing `onStateChange` callback.
+- Client tsconfig has pre-existing errors from server reference project config; client-only `tsc --noEmit` is the correct way to validate client changes.
+
+### A9 — Input & UI Update (Phase A pivot)
+- **InputHandler.ts rewritten:** Removed MOVE, GATHER, EAT, SELECT_CREATURE, BREED imports (gone from shared). Removed arrow-key movement, G (gather), E (eat), F (pack select), B (breed), Space (toggleTracking — method didn't exist). Removed `sendMove()` method and `MOVE_DEBOUNCE_MS`. Added `CLAIM_TILE` import. Click-to-move replaced with click-to-claim (`CLAIM_TILE { x, y }`). H key (farm harvest) now uses cursor tile position via `screenToTile()` instead of hqX/hqY. I key (tame) now uses cursor tile to find nearest wild creature. Added `mouseScreenX/Y` tracking via mousemove listener and `screenToTile()` helper. Build mode click unchanged (PLACE). Camera already handles WASD pan — no duplication.
+- **HelpScreen.ts updated:** Removed Arrow Keys, G, E, F, B, Space keybindings. Added Click (claim/build), Scroll (zoom). Reordered to match new input model.
+- **CraftMenu.ts:** No changes needed — already reads dynamically from `RECIPES` which was pruned in A1 (no axe/pickaxe). Shows wall, floor, workbench, farm_plot, turret.
+- **Zero compile errors** on `npx tsc --noEmit -p client/tsconfig.json`.

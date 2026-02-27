@@ -7,19 +7,14 @@ const HEADER_SIZE = 16;
 const BODY_SIZE = 12;
 
 const KEYBINDINGS: [string, string][] = [
-  ['Arrow Keys', 'Move player'],
+  ['Click', 'Claim tile / Place structure (build)'],
   ['W A S D', 'Pan camera'],
-  ['Space', 'Center camera on player (toggle follow)'],
-  ['G', 'Gather resources from tile'],
-  ['E', 'Eat (consume berry, restore hunger)'],
+  ['Scroll', 'Zoom in / out'],
   ['C', 'Open / close craft menu'],
-  ['1-9', 'Craft item (menu) / Select build item'],
   ['V', 'Toggle build mode'],
-  ['Click', 'Place structure (build) / Move to tile'],
-  ['H', 'Harvest farm'],
-  ['I', 'Tame nearest creature'],
-  ['F', 'Select creature for pack'],
-  ['B', 'Breed two tamed creatures'],
+  ['1-9', 'Craft item (menu) / Select build item'],
+  ['H', 'Harvest farm (cursor tile)'],
+  ['I', 'Tame creature (cursor tile)'],
   ['?', 'Toggle this help screen'],
 ];
 
