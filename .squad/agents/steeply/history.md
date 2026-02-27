@@ -245,3 +245,45 @@ All Phase 4 gameplay loops verified end-to-end:
 - **Orchestration & logging:** Phase 4.5 orchestration logs written (`.squad/orchestration-log/2026-02-26T13:57:00Z-steeply.md`), session log updated, decision inbox merged.
 - **Phase 4.5 Definition of Done:** ✅ HUD redesigned, DOM implementation complete, all 304 tests passing, manual verification checklist ready, regression gate passed, clean state contract validated for Phase 5.
 
+
+---
+
+## 2026-02-27 — Phase A Architecture Plan & Team Kickoff
+
+**From:** Hal (orchestration log: 2026-02-27T00:45:00Z)
+
+**Architecture plan written** to `docs/architecture-plan.md` (33 KB). GDD v2 pivot (Rimworld-style) now ready for implementation. Phase A is a 10-item breakdown across server, client, and shared work.
+
+### Phase A Work Assignment (Shared Track) — Mario
+
+**Deliverables (5–7 days, coordinate with server/client teams):**
+
+1. **Shared Constants** — Add new sections to `shared/src/constants.ts`:
+   - **TERRITORY:** Territory sizes, starting area (3×3), adjacency rules
+   - **PAWN_ASSIGNMENT:** Zone sizes, max creatures per zone, movement costs
+   - **MAP:** New map size (64×64), tile counts, bandwidth considerations
+   - Reference existing patterns (PLAYER_SURVIVAL, CREATURE_AI from Phase 2)
+
+2. **Schema Validation Helpers** — Functions to validate territory claims and pawn assignments (testable, pure functions). Use existing patterns from creature AI validation.
+
+3. **Message Type Definitions** — Add CLAIM_TILE and ASSIGN_PAWN to message protocol. Remove MOVE, GATHER, EAT, SELECT_CREATURE types.
+
+4. **Migration Checklist** — Inventory all files affected by schema changes. Work with Pemulis/Gately to coordinate removal of avatar-related types and addition of territory/pawn types.
+
+### Key Decisions for Implementation
+
+- Constants are source of truth for balance tuning; all magic numbers extracted to shared
+- Validation helpers enable unit testing of territory logic before server integration
+- Clean schema definition ensures client/server alignment (generated from shared types)
+- Migration checklist prevents orphaned code and misaligned validation
+
+### Immediate Next Steps
+
+1. Read `docs/architecture-plan.md` in full (Sections 2, 5, 6 detail schema and file map)
+2. List all shared constants needed for Phase A (reference architecture-plan.md file map)
+3. Coordinate with Pemulis on validation helper signatures
+4. Create migration checklist (all files touching removed PlayerState fields)
+5. Finalize message type definitions with Pemulis/Gately
+
+**Context:** User requested fundamental pivot from avatar-based to territory/commander-mode gameplay. This is Phase A of 4-phase implementation plan (A–D). Shared work is critical path — schema alignment gates both server and client. After Phase A: join room → see 64×64 map → claim tiles → see territory. Phases B–D add buildings, waves, pawn commands, and multiplayer polish.
+

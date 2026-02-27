@@ -247,3 +247,43 @@ Gately's 4.6.1 WebSocket URL work (`client/src/network.ts`) complements this con
 - In local dev, client falls back to `ws://localhost:2567`
 - No configuration file needed; works seamlessly with this single-container deployment model
 - Test: 304 tests passing (includes Gately's client work)
+
+---
+
+## 2026-02-27 — Phase A Architecture Plan & Team Kickoff
+
+**From:** Hal (orchestration log: 2026-02-27T00:45:00Z)
+
+**Architecture plan written** to `docs/architecture-plan.md` (33 KB). GDD v2 pivot (Rimworld-style) now ready for implementation. Phase A is a 10-item breakdown across server, client, and shared work.
+
+### Phase A Work Assignment (Server Track) — Pemulis/Odie
+
+**Parallel deliverables (5–7 days):**
+
+1. **Schema migration** — Remove PlayerState fields (`x`, `y`, `hunger`, `health`). Add `selectedTile`, `selectedCreature`, `cameraX`. Update TileState, CreatureState, StructureState, GameState, ItemType enums. Use shared constants.
+
+2. **Territory & Claiming** — Implement CLAIM_TILE message handler. Territory validation: tiles adjacent to owned tiles only (cardinal adjacency). Territory initialization: player starts with 3×3 + HQ structure at spawn.
+
+3. **Pawn Assignment** — Implement ASSIGN_PAWN message handler. Assign creatures to zones (zoneX, zoneY). Validate: pawn must be tamed, player must own target zone.
+
+4. **Tick System Cleanup** — Remove `tickPlayerSurvival`, `tickPackFollow`. Modify `tickTrustDecay` (use territory proximity, not avatar proximity). Keep other ticks; Phase B adds new ones.
+
+5. **Message Handlers** — Update CRAFT/PLACE/TAME/ABANDON/BREED/FARM_HARVEST to use territory-based validation instead of avatar-adjacent. Remove EAT message entirely.
+
+### Key Decisions for Implementation
+
+- Schema-first approach (shared changes first) ensures client/server alignment
+- Clean break strategy accepted ~180 test breakages; delete broken tests before writing new ones
+- Simple cardinal-adjacency for territory claims (no contiguity graph yet — Phase D adds territory destruction)
+- Map expanded to 64×64; Colyseus buffer increased to 256 KB to handle 4,096 tiles
+
+### Immediate Next Steps
+
+1. Read `docs/architecture-plan.md` in full (Sections 1–7 are your roadmap)
+2. Coordinate schema migration with Mario (shared constants/validation)
+3. Coordinate with Gately on CLAIM_TILE/ASSIGN_PAWN message format
+4. Estimate test deletion effort (likely 50+ tests will break)
+5. Kick off Phase A in parallel with client work
+
+**Context:** User requested fundamental pivot from avatar-based to territory/commander-mode gameplay. This is Phase A of 4-phase implementation plan (A–D). After Phase A: join room → see 64×64 map → claim tiles → see territory. Phases B–D add buildings, waves, pawn commands, and multiplayer polish.
+

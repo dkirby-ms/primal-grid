@@ -233,3 +233,43 @@ Pemulis's 4.6.1–4.6.2 containerization work enables this WebSocket URL feature
 - Result: Client automatically connects to `wss://${location.host}` in production, no rebuild needed for different deployments
 - Local dev unaffected: client still uses `ws://localhost:2567` fallback
 - Test: 304 tests passing (includes Pemulis's server/Dockerfile work)
+
+---
+
+## 2026-02-27 — Phase A Architecture Plan & Team Kickoff
+
+**From:** Hal (orchestration log: 2026-02-27T00:45:00Z)
+
+**Architecture plan written** to `docs/architecture-plan.md` (33 KB). GDD v2 pivot (Rimworld-style) now ready for implementation. Phase A is a 10-item breakdown across server, client, and shared work.
+
+### Phase A Work Assignment (Client Track) — Gately
+
+**Parallel deliverables (5–7 days):**
+
+1. **HUD Redesign** — Remove avatar sprite rendering. Add territory UI (show owned tiles, count, claim preview). Add commander-mode camera (free pan/zoom, not avatar-follow). Remove WASD movement UI.
+
+2. **Tile Claim Overlay** — Show claimable tiles when player is in claim mode. Visual feedback (highlight adjacent tiles). Message: CLAIM_TILE (payload: tile position).
+
+3. **Creature Assignment Panel** — UI to assign tamed creatures to zones. Select creature → select zone → confirm. Message: ASSIGN_PAWN (payload: creature ID, zone X/Y).
+
+4. **Camera System** — Implement free-panning camera (not locked to avatar). Pan/zoom controls. Camera position (cameraX, cameraY) sent to server, reflected in PlayerState.
+
+5. **Message Protocol Updates** — Remove MOVE, GATHER, EAT, SELECT_CREATURE handlers. Add CLAIM_TILE, ASSIGN_PAWN handlers. Update CRAFT/PLACE/TAME/ABANDON/BREED/FARM_HARVEST to work with territory-based validation.
+
+### Key Decisions for Implementation
+
+- HUD pattern established in Phase 2.3: screen-fixed on `app.stage`. Extend this for territory UI.
+- Tile grid remains core rendering; expand to 64×64 (currently 32×32).
+- Commander-mode camera is stateful (position persists); coordinate with server for multiplayer viewport alignment
+- No avatar sprite; creature rendering continues (pawns, not player character)
+
+### Immediate Next Steps
+
+1. Read `docs/architecture-plan.md` in full (Sections 4, 7 detail client changes)
+2. Coordinate with Pemulis on CLAIM_TILE/ASSIGN_PAWN message format
+3. Sketch HUD layout (territory count, camera controls, zone selector)
+4. Estimate work for camera system (pan/zoom) vs. Phase 4.5 avatar-follow
+5. Kick off Phase A in parallel with server work
+
+**Context:** User requested fundamental pivot from avatar-based to territory/commander-mode gameplay. This is Phase A of 4-phase implementation plan (A–D). After Phase A: join room → see 64×64 map → claim tiles → see territory. Phases B–D add buildings, waves, pawn commands, and multiplayer polish.
+

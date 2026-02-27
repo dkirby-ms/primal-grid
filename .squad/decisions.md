@@ -1105,3 +1105,232 @@ Deploy Primal Grid to Azure so the prototype is playable from a public URL. Sing
 
 These architectural decisions (E1–E7) are locked for Phase 4.6 implementation. Changes require Hal's approval and full team re-scoping.
 
+
+## 2026-02-27: User Directive — Game Mechanic Redesign
+
+**Date:** 2026-02-27T00:33:27Z  
+**Author:** saitcho (via Copilot)  
+**Status:** Active
+
+### What
+
+Remove player avatar. Instead, player places tiles/claims territory. Indirectly control pawns (tamed creatures) under their domain. Core framework (Colyseus, PixiJS, tile grid, creature systems) stays intact.
+
+### Why
+
+User request — fundamental shift from direct avatar control to indirect territorial/tile-placement strategy.
+
+---
+
+## 2026-02-27: Primal Grid Pivot — Rimworld-style Multiplayer Arcade
+
+**Date:** 2026-02-27  
+**Author:** Hal (Lead)  
+**Status:** Active  
+**Scope:** Project-wide architecture pivot
+
+### Context
+
+User requested fundamental redesign: "Rimworld but multiplayer arcade game." Existing codebase (Phases 1–4 complete, 304 tests) has direct-control avatar model. New vision removes avatar entirely in favor of commander-mode indirect control.
+
+### Core Decisions
+
+1. **No Player Avatar** — Player is disembodied commander. `PlayerState` loses `x`, `y`, `hunger`, `health`. Interaction via UI (click to place, click to assign). Camera is free-panning, not avatar-following.
+
+2. **Territory System** — `TileState` gains `ownerID`. Players claim tiles adjacent to existing territory (contiguous expansion). Each player starts 3×3 + HQ. Territory = core resource.
+
+3. **Indirect Pawn Control** — Tamed dinos assigned commands (gather, guard, patrol) and zones, not direct movement. No pack-follow. Zone-based assignment replaces `SELECT_CREATURE`.
+
+4. **Tower Defense Waves** — Wild creatures spawn at map edges on timer, escalating. Turret structures auto-fire. Walls have HP. PvE is primary threat for MVP.
+
+5. **Round-Based Multiplayer** — 15–30 minute rounds. 2–4 players per room. Win by territory count or last HQ standing. No persistent progression between rounds (deferred).
+
+6. **Map Scale** — 64×64 (up from 32×32). 4,096 tiles. Monitor Colyseus sync bandwidth; interest management may be needed at 4 players.
+
+7. **Four Implementation Phases**
+   - **Phase A:** Strip avatar, add territory + camera (~1–2 weeks)
+   - **Phase B:** Building + turrets + waves (~1–2 weeks)
+   - **Phase C:** Pawn commands + auto-gather (~1–2 weeks)
+   - **Phase D:** Multiplayer polish + balance (~1 week)
+
+8. **What Survives** — Tile grid, biomes, creature AI FSM, taming/trust, breeding, structures, crafting/recipes, Colyseus architecture, PixiJS rendering (modified).
+
+9. **What's Cut** — Player avatar, WASD movement, manual gathering, player hunger/health/survival, pack follow, tool bonuses (axe/pickaxe).
+
+### Impact
+
+- All previous phase numbering (0–7) superseded by Phases A–D
+- `docs/gdd.md` is now active design document
+- `docs/design-sketch.md` is historical reference only
+- Existing tests for cut systems will be removed during Phase A
+- Existing tests for kept systems (creatures, taming, breeding, structures) remain valid
+
+### Risks
+
+- 64×64 map doubles state sync bandwidth — may need interest management
+- Indirect control can feel unresponsive if pawn AI is sluggish — tune tick rates
+- Round-based model needs good pacing or games drag — playtest early
+
+---
+
+## 2026-02-27: Phase A Architecture Plan
+
+**Date:** 2026-02-27  
+**Author:** Hal (Lead)  
+**Status:** Active
+
+### Context
+
+GDD v2 (`docs/gdd.md`) defines major pivot: remove player avatar, add territory/commander mode. Need detailed implementation spec mapping GDD onto existing codebase (post-Phase 4.5, 304 tests).
+
+### Implementation Spec (docs/architecture-plan.md)
+
+1. **Schema Changes**
+   - PlayerState: Remove `x`, `y`, `hunger`, `health`. Add `selectedTile`, `selectedCreature`, `cameraX` (7 removed, 3 added).
+   - TileState: Gain `ownerID` (who owns this tile).
+   - CreatureState: Gain `command` (gather/guard/patrol/none), `zoneX`, `zoneY` (zone assignment).
+   - StructureState: Gain `health` (turrets/walls can be damaged).
+   - GameState: Gain `roundTimer`, `roundPhase` (setup/active/ended).
+   - ItemType: Add Turret(6), HQ(7). Drop Axe(3), Pickaxe(4).
+
+2. **Message Protocol**
+   - Remove: MOVE, GATHER, EAT, SELECT_CREATURE
+   - Add: CLAIM_TILE (claim adjacent territory), ASSIGN_PAWN (assign creature to zone)
+   - Keep: CRAFT, PLACE, TAME, ABANDON, BREED, FARM_HARVEST (validation changes — territory-based instead of avatar-adjacent)
+
+3. **Tick Systems**
+   - Remove: `tickPlayerSurvival`, `tickPackFollow`
+   - Modify: `tickTrustDecay` (territory proximity instead of avatar proximity)
+   - New (Phase B): `tickWaveSpawner`, `tickTurrets`
+   - New (Phase C): `tickPawnGather`
+   - New (Phase D): `tickRoundTimer`
+
+4. **Client Changes**
+   - HUD redesign: Territory UI, commander-mode camera (free pan/zoom)
+   - Creature assignment panel (zone selection)
+   - Tile claim overlay (show claimable tiles)
+   - Remove WASD movement, avatar sprite rendering
+
+5. **Migration Strategy**
+   - Single clean break (not incremental). Avatar removal is too cross-cutting.
+   - Ordering: Shared schemas first → server logic → client UI
+   - Delete broken tests first, write new ones second
+   - Accepted ~180 test breakages
+
+6. **Phase A Scope** — 10 work items, two parallel tracks (server + client)
+   - **Server (Pemulis/Odie):** Schema migration, CLAIM_TILE/ASSIGN_PAWN handlers, territory validation, tick system cleanup
+   - **Client (Gately):** HUD redesign, camera logic, tile/creature UI, message protocol
+   - **Shared (Mario):** Constant definitions, validation helpers
+   - Est. 5–7 days. Deliverable: join room → see 64×64 map → claim tiles → see territory
+
+### Key Trade-offs
+
+- **Clean break vs. incremental** — Chose clean break. Accepted ~180 test breakages.
+- **Simple adjacency vs. contiguity graph** — Simple cardinal-adjacency for Phase A. No graph needed until territory destruction (Phase D).
+- **Craft→place vs. direct-place** — Kept craft→place flow. Simpler than recipe system rip.
+- **Map size 4x** — Accepted bandwidth risk. Colyseus delta-sync should handle 4,096 tiles. Buffer increased to 256 KB.
+
+### Consequences
+
+- All tests for MOVE, GATHER, EAT, survival, pack follow must be deleted
+- Server and client cannot deploy independently during Phase A
+- Phase B/C/D work items outlined at pseudocode level, not implementation-ready
+
+---
+
+## 2026-02-26: Scalability Roadmap — Primal Grid
+
+**Date:** 2026-02-26  
+**Author:** Hal (Lead)  
+**Status:** Active  
+**Context:** Single Colyseus room, single container (0.25 vCPU / 0.5 GB RAM), no persistence, no auth.
+
+### Executive Summary
+
+Primal Grid is colony survival, not MMO. **Phase S1 gets you to 20–40 players, probably all this game ever needs.** Phase S2 is safety net. Phases S3/S4 documented for completeness but unlikely.
+
+**Build for 20. Plan for 100. Document the path to 1000. Don't build for 1000.**
+
+### Current Snapshot
+
+| Component | Value |
+|---|---|
+| Server | Express + Colyseus, single process, single room |
+| State | `@colyseus/schema` v4, 32×32 = 1,024 tiles |
+| Tick rate | 4 Hz |
+| AI ticks | Every 2nd game tick (2 Hz effective) |
+| Encoder buffer | 128 KB |
+| Infra | Azure Container Apps, 0.25 vCPU, 0.5 GB RAM, 1 replica |
+| Creatures | 12 spawned on 32×32 map |
+| Client | PixiJS v8, DOM HUD, Vite build |
+
+### Phase S1 — Single-Room Optimization
+
+**Goal:** Maximize players per room. No infra changes.
+
+**Capacity estimate:** 15–25 concurrent players before degradation → 30–50 after optimizations.
+
+**Quick wins (ranked by impact/effort):**
+
+1. **Interest management** (Medium effort, High impact) — Only send state for entities within N tiles. Simplest: filter creature/structure by Manhattan distance ≤ 16.
+2. **Bump CPU/RAM** (Trivial effort, Medium impact) — Change Bicep to 0.5 vCPU / 1 GB. Costs ~$15/month more.
+3. **Creature cap** (Trivial effort, Medium impact) — Hard cap creatures at `players × 10`.
+4. **Spatial indexing** (Medium effort, Medium impact) — Grid-cell lookup for creature AI. Turns O(n²) into O(n).
+5. **State delta tuning** (Low effort, Low-Med impact) — Reduce TileState fields sent after initial sync.
+6. **Batch message processing** (Low effort, Low impact) — Dedup multiple MOVE messages per tick.
+
+**Verdict:** **Do this.** Cheap, practical, directly improves game.
+
+### Phase S2 — Multi-Room / Horizontal Scaling
+
+**Goal:** Support 50–200+ players with multiple rooms across processes.
+
+**Architecture:** Colyseus Presence (Redis) + multiple `GameRoom` instances + sticky sessions + Container Apps scaling.
+
+**Pattern:** Room-per-instance (each room is separate 32×32 world). Players pick a room or get auto-assigned to least-full. Right metaphor for colony game.
+
+**Capacity:** 50–200 concurrent (10–40 per room, up to 5 rooms).
+
+**Cost:** ~$50–80/month (5 replicas + Redis), up from ~$5. Only worth it at 50+ concurrent.
+
+**Verdict:** **Plan but don't build.** Document it. Implement when you consistently hit 30+ players.
+
+### Phase S3 — World Sharding
+
+**Goal:** Single contiguous world spanning multiple rooms/processes. Seamless cross-zone movement.
+
+**Trade-offs:** Massive complexity (zone boundaries, creature AI across zones, structure placement at edges). Latency during room transfers. Persistence needed (DB). Cost $200–400/month.
+
+**Verdict:** **Don't build.** Wrong pattern for this game. Primal Grid is inherently local. Room-per-instance is right metaphor. Sharding is MMO pattern — solving problem game doesn't have.
+
+### Phase S4 — MMO Patterns
+
+**Goal:** 1,000–10,000+ concurrent players in persistent, globally distributed world.
+
+**Requirements:** Game server mesh (Thundernetes/Agones), distributed state (Redis Cluster/Cosmos DB), event sourcing, CQRS, CDN, edge compute, auth layer. AKS cluster. 2–6 months infra engineering.
+
+**Cost:** $500–2000+/month.
+
+**Verdict:** **Never build.** Engineering effort exceeds total Phases 0–7. Needs commercial product + funded team. If game reaches this scale, you'd rewrite server anyway.
+
+### Summary Matrix
+
+| Phase | Players | Effort | Monthly Cost | Build? |
+|---|---|---|---|---|
+| **Current** | 15–25 | — | ~$5 | ✅ Here |
+| **S1** | 30–50 | 2–3 days | ~$10 | ✅ Yes |
+| **S2** | 50–200 | 1–2 weeks | ~$50–80 | ⏳ Plan, build when needed |
+| **S3** | 200–500 | 2–4 weeks | ~$200–400 | ❌ Wrong pattern |
+| **S4** | 1,000–10,000+ | 2–6 months | ~$500–2000+ | ❌ Never |
+
+### My Recommendation
+
+1. **Today:** Bump container to 0.5 vCPU / 1 GB. Add creature hard cap. 30 minutes.
+2. **This month:** Spatial indexing + interest management. 2–3 days.
+3. **At 30 players:** Phase S2 (Redis + multi-room). 1–2 weeks.
+4. **Never:** S3/S4. If game outgrows S2, hire infrastructure engineer.
+
+**Lean into the architecture.** Colony = local, bounded, base. Room-per-instance is natural scaling model. Don't fight it.
+
+— Hal
+
