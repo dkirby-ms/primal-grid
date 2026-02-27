@@ -24,15 +24,6 @@ const RESOURCE_COLORS: Record<number, number> = {
 
 const RESOURCE_DOT_SIZE = 5;
 const RESOURCE_DOT_OFFSET = 4;
-const TERRITORY_ALPHA = 0.25;
-
-/** Darken a numeric color by a factor (0–1). */
-function darkenColor(color: number, factor: number): number {
-  const r = Math.floor(((color >> 16) & 0xff) * factor);
-  const g = Math.floor(((color >> 8) & 0xff) * factor);
-  const b = Math.floor((color & 0xff) * factor);
-  return (r << 16) | (g << 8) | b;
-}
 
 /** Parse a CSS hex color string (e.g. "#FF0000") to a numeric color. */
 function parseColor(color: string): number {
@@ -146,11 +137,11 @@ export class GridRenderer {
 
     const key = `${x},${y}`;
     if (isClaiming) {
+      // Pulsing dashed border — no fill
       const colorStr = this.playerColors.get(claimingPlayerID) ?? '#ffffff';
       const color = parseColor(colorStr);
-      overlay.rect(0, 0, TILE_SIZE, TILE_SIZE);
-      overlay.fill({ color, alpha: 0.5 });
-      overlay.stroke({ width: 2, color: 0xffffff, alpha: 0.6 });
+      overlay.rect(1, 1, TILE_SIZE - 2, TILE_SIZE - 2);
+      overlay.stroke({ width: 2, color, alpha: 0.8 });
       overlay.visible = true;
       this.claimingTiles.set(key, { x, y });
     } else if (ownerID !== '') {
@@ -158,19 +149,67 @@ export class GridRenderer {
       overlay.alpha = 1.0;
       const colorStr = this.playerColors.get(ownerID) ?? '#ffffff';
       const color = parseColor(colorStr);
-      overlay.rect(0, 0, TILE_SIZE, TILE_SIZE);
 
-      if (shapeHP > 0) {
-        overlay.fill({ color, alpha: 0.6 });
-        overlay.stroke({ width: 1, color: darkenColor(color, 0.5) });
-      } else {
-        overlay.fill({ color, alpha: TERRITORY_ALPHA });
+      // Draw border edges only where neighbor is not same owner
+      const borderW = shapeHP > 0 ? 2 : 1.5;
+      const dirs: [number, number, number, number, number, number, number, number][] = [
+        // [nx, ny, lineX1, lineY1, lineX2, lineY2, ... unused]
+      ];
+      // Top edge
+      if (!this.isSameOwner(x, y - 1, ownerID)) {
+        overlay.moveTo(0, 0); overlay.lineTo(TILE_SIZE, 0);
+        overlay.stroke({ width: borderW, color });
       }
+      // Bottom edge
+      if (!this.isSameOwner(x, y + 1, ownerID)) {
+        overlay.moveTo(0, TILE_SIZE); overlay.lineTo(TILE_SIZE, TILE_SIZE);
+        overlay.stroke({ width: borderW, color });
+      }
+      // Left edge
+      if (!this.isSameOwner(x - 1, y, ownerID)) {
+        overlay.moveTo(0, 0); overlay.lineTo(0, TILE_SIZE);
+        overlay.stroke({ width: borderW, color });
+      }
+      // Right edge
+      if (!this.isSameOwner(x + 1, y, ownerID)) {
+        overlay.moveTo(TILE_SIZE, 0); overlay.lineTo(TILE_SIZE, TILE_SIZE);
+        overlay.stroke({ width: borderW, color });
+      }
+
       overlay.visible = true;
     } else {
       this.claimingTiles.delete(key);
       overlay.alpha = 1.0;
       overlay.visible = false;
+    }
+  }
+
+  /** Check if tile at (x,y) is owned by the given player. */
+  private isSameOwner(x: number, y: number, ownerID: string): boolean {
+    if (x < 0 || x >= this.mapSize || y < 0 || y >= this.mapSize) return false;
+    return this.lastOwnerIDs[y][x] === ownerID;
+  }
+
+  /** Force redraw of territory borders for a tile and its neighbors. */
+  private refreshTerritoryBorders(x: number, y: number): void {
+    const ownerID = this.lastOwnerIDs[y]?.[x] ?? '';
+    const shapeHP = this.lastShapeHPs[y]?.[x] ?? 0;
+    const isClaiming = this.lastClaiming[y]?.[x] ?? false;
+    // Reset cache to force redraw
+    this.lastOwnerIDs[y][x] = '__dirty__';
+    this.updateTerritoryOverlay(x, y, ownerID, shapeHP,
+      isClaiming ? ownerID : '', isClaiming ? 1 : 0);
+    // Also refresh cardinal neighbors so their borders update
+    for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || nx >= this.mapSize || ny < 0 || ny >= this.mapSize) continue;
+      const nOwner = this.lastOwnerIDs[ny][nx];
+      if (nOwner === '' || nOwner === '__dirty__') continue;
+      const nHP = this.lastShapeHPs[ny][nx];
+      const nClaiming = this.lastClaiming[ny][nx];
+      this.lastOwnerIDs[ny][nx] = '__dirty__';
+      this.updateTerritoryOverlay(nx, ny, nOwner, nHP,
+        nClaiming ? nOwner : '', nClaiming ? 1 : 0);
     }
   }
 
@@ -195,6 +234,7 @@ export class GridRenderer {
       if (!tiles || typeof (tiles as { forEach?: unknown }).forEach !== 'function') return;
 
       // forEach must be called directly on tiles — extracting loses ArraySchema 'this' binding
+      const changedTiles: { x: number; y: number }[] = [];
       (tiles as { forEach: (cb: (tile: unknown, key: unknown) => void) => void })
         .forEach((rawTile: unknown, key: unknown) => {
         const tile = rawTile as Record<string, unknown>;
@@ -209,6 +249,13 @@ export class GridRenderer {
         const shapeHP = (tile['shapeHP'] as number) ?? 0;
         const claimingPlayerID = (tile['claimingPlayerID'] as string) ?? '';
         const claimProgress = (tile['claimProgress'] as number) ?? 0;
+
+        // Track if ownership changed so we can refresh neighbor borders
+        const prevOwner = this.lastOwnerIDs[ty]?.[tx] ?? '';
+        if (prevOwner !== ownerID) {
+          changedTiles.push({ x: tx, y: ty });
+        }
+
         this.updateTerritoryOverlay(tx, ty, ownerID, shapeHP, claimingPlayerID, claimProgress);
 
         // Resource indicator
@@ -218,6 +265,11 @@ export class GridRenderer {
           this.updateResource(tx, ty, resType, resAmount);
         }
       });
+
+      // Refresh neighbor borders for tiles whose ownership changed
+      for (const { x: cx, y: cy } of changedTiles) {
+        this.refreshTerritoryBorders(cx, cy);
+      }
     });
   }
 
@@ -231,9 +283,8 @@ export class GridRenderer {
     overlay.clear();
     const colorStr = this.playerColors.get(playerId) ?? '#ffffff';
     const color = parseColor(colorStr);
-    overlay.rect(0, 0, TILE_SIZE, TILE_SIZE);
-    overlay.fill({ color, alpha: 0.5 });
-    overlay.stroke({ width: 2, color: 0xffffff, alpha: 0.6 });
+    overlay.rect(1, 1, TILE_SIZE - 2, TILE_SIZE - 2);
+    overlay.stroke({ width: 2, color, alpha: 0.8 });
     overlay.visible = true;
     this.claimingTiles.set(key, { x, y });
     // Mark cache as claiming so server state doesn't skip the update

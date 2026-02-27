@@ -95,7 +95,7 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
     hud.onInventoryUpdate = (resources) => craftMenu.updateResources(resources);
 
     // Input handler (click + craft/build)
-    const input = new InputHandler(room, grid.container);
+    const input = new InputHandler(room, grid.container, app.canvas);
     input.setCraftMenu(craftMenu);
     input.setHud(hud);
     input.setHelpScreen(helpScreen);

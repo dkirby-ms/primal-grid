@@ -17,6 +17,7 @@ const PLACEABLE_ITEMS: { type: ItemType; name: string }[] = [
 export class InputHandler {
   private room: Room;
   private worldContainer: Container;
+  private canvas: HTMLCanvasElement;
 
   private craftMenu: CraftMenu | null = null;
   private hud: HudDOM | null = null;
@@ -36,9 +37,10 @@ export class InputHandler {
   private mouseScreenX = 0;
   private mouseScreenY = 0;
 
-  constructor(room: Room, worldContainer: Container) {
+  constructor(room: Room, worldContainer: Container, canvas: HTMLCanvasElement) {
     this.room = room;
     this.worldContainer = worldContainer;
+    this.canvas = canvas;
     this.shapeKeys = Object.keys(SHAPE_CATALOG);
     this.bindKeys();
     this.bindClick();
@@ -86,10 +88,17 @@ export class InputHandler {
     };
   }
 
+  /** Convert viewport clientX/Y to canvas-local coordinates. */
+  private toCanvasCoords(clientX: number, clientY: number): { x: number; y: number } {
+    const rect = this.canvas.getBoundingClientRect();
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }
+
   private bindMouseTracking(): void {
     window.addEventListener('mousemove', (e) => {
-      this.mouseScreenX = e.clientX;
-      this.mouseScreenY = e.clientY;
+      const local = this.toCanvasCoords(e.clientX, e.clientY);
+      this.mouseScreenX = local.x;
+      this.mouseScreenY = local.y;
     });
   }
 
@@ -210,9 +219,10 @@ export class InputHandler {
   private bindClick(): void {
     window.addEventListener('click', (e) => {
       // Convert screen position to world tile
+      const local = this.toCanvasCoords(e.clientX, e.clientY);
       const scale = this.worldContainer.scale.x;
-      const worldX = (e.clientX - this.worldContainer.position.x) / scale;
-      const worldY = (e.clientY - this.worldContainer.position.y) / scale;
+      const worldX = (local.x - this.worldContainer.position.x) / scale;
+      const worldY = (local.y - this.worldContainer.position.y) / scale;
       const tileX = Math.floor(worldX / TILE_SIZE);
       const tileY = Math.floor(worldY / TILE_SIZE);
 
