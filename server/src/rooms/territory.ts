@@ -1,12 +1,12 @@
 import { GameState, TileState, PlayerState, StructureState, CreatureState } from "./GameState.js";
 import { TERRITORY, TileType, ItemType } from "@primal-grid/shared";
 
-/** Check if (x,y) is adjacent (cardinal) to any tile owned by playerId. */
+/** Check if (x,y) is adjacent (cardinal) to any tile owned or being claimed by playerId. */
 export function isAdjacentToTerritory(state: GameState, playerId: string, x: number, y: number): boolean {
   const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
   for (const [dx, dy] of dirs) {
     const neighbor = state.getTile(x + dx, y + dy);
-    if (neighbor && neighbor.ownerID === playerId) return true;
+    if (neighbor && (neighbor.ownerID === playerId || neighbor.claimingPlayerID === playerId)) return true;
   }
   return false;
 }
@@ -19,9 +19,9 @@ export function isShapeAdjacentToTerritory(
 ): boolean {
   for (const cell of cells) {
     if (isAdjacentToTerritory(state, playerId, cell.x, cell.y)) return true;
-    // Also count the cell itself as adjacent if already owned
+    // Also count the cell itself as adjacent if already owned or being claimed
     const tile = state.getTile(cell.x, cell.y);
-    if (tile && tile.ownerID === playerId) return true;
+    if (tile && (tile.ownerID === playerId || tile.claimingPlayerID === playerId)) return true;
   }
   return false;
 }

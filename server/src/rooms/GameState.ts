@@ -28,6 +28,12 @@ export class TileState extends Schema {
 
   @type("string")
   ownerID: string = "";
+
+  @type("number")
+  claimProgress: number = 0;
+
+  @type("string")
+  claimingPlayerID: string = "";
 }
 
 export class PlayerState extends Schema {

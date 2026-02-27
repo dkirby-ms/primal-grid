@@ -33,6 +33,7 @@ export class GameRoom extends Room {
 
     this.setSimulationInterval((_deltaTime) => {
       this.state.tick += 1;
+      this.tickClaiming();
       this.tickResourceRegen();
       this.tickCreatureAI();
       this.tickCreatureRespawn();
@@ -136,6 +137,7 @@ export class GameRoom extends Room {
       if (tile.type === TileType.Water || tile.type === TileType.Rock) return;
       if (tile.shapeHP > 0) return;
       if (tile.ownerID !== "" && tile.ownerID !== player.id) return;
+      if (tile.claimingPlayerID !== "" && tile.claimingPlayerID !== player.id) return;
 
       // Check no existing structure on this tile
       let occupied = false;
@@ -155,14 +157,17 @@ export class GameRoom extends Room {
     // Deduct wood
     player.wood -= cost;
 
-    // Apply shape
+    // Apply shape — start claiming for unowned tiles, reinforce instantly for owned
     for (const cell of absoluteCells) {
       const tile = this.state.getTile(cell.x, cell.y)!;
-      if (tile.ownerID !== player.id) {
-        tile.ownerID = player.id;
-        player.score += 1;
+      if (tile.ownerID === player.id) {
+        // Already owned — reinforce immediately
+        tile.shapeHP = SHAPE.BLOCK_HP;
+      } else {
+        // Start claiming process
+        tile.claimingPlayerID = player.id;
+        tile.claimProgress = 1;
       }
-      tile.shapeHP = SHAPE.BLOCK_HP;
     }
   }
 
@@ -502,6 +507,24 @@ export class GameRoom extends Room {
       case TileType.Highland: return ResourceType.Stone;
       case TileType.Sand: return Math.random() < RESOURCE_REGEN.SAND_FIBER_CHANCE ? ResourceType.Fiber : -1;
       default: return -1;
+    }
+  }
+
+  private tickClaiming() {
+    const len = this.state.tiles.length;
+    for (let i = 0; i < len; i++) {
+      const tile = this.state.tiles.at(i);
+      if (!tile || tile.claimProgress <= 0) continue;
+
+      tile.claimProgress += 1;
+      if (tile.claimProgress >= TERRITORY.CLAIM_TICKS) {
+        tile.ownerID = tile.claimingPlayerID;
+        tile.shapeHP = SHAPE.BLOCK_HP;
+        const player = this.state.players.get(tile.claimingPlayerID);
+        if (player) player.score += 1;
+        tile.claimingPlayerID = "";
+        tile.claimProgress = 0;
+      }
     }
   }
 

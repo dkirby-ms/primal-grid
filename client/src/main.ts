@@ -38,7 +38,10 @@ async function bootstrap(): Promise<void> {
 
   // --- Camera ---
   const camera = new Camera(grid.container, WIDTH, HEIGHT, grid.getMapSize());
-  app.ticker.add(() => camera.update());
+  app.ticker.add(() => {
+    camera.update();
+    grid.tick();
+  });
 
   // --- Help hint (bottom-right corner) ---
   const helpHint = new Text({

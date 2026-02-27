@@ -128,6 +128,8 @@ export const TERRITORY = {
   STARTING_FIBER: 0,
   /** Starting berries for new players. */
   STARTING_BERRIES: 5,
+  /** Ticks to claim a tile (8 ticks ≈ 2 seconds at 4 ticks/sec). */
+  CLAIM_TICKS: 8,
 } as const;
 
 /** Wave spawner constants (Phase B). */

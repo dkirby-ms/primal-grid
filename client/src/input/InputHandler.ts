@@ -251,7 +251,7 @@ export class InputHandler {
         }
       }
 
-      // Normal click: check for wild creature first, then no-op
+      // Normal click: check for wild creature first, then claim tile
       if (this.creatureRenderer) {
         const creatureId = this.creatureRenderer.getNearestWildCreature(tileX, tileY);
         if (creatureId) {
@@ -259,6 +259,9 @@ export class InputHandler {
           return;
         }
       }
+
+      // Default: claim single tile (mono shape) for territory expansion
+      this.room.send(PLACE_SHAPE, { shapeId: 'mono', x: tileX, y: tileY, rotation: 0 });
     });
   }
 }

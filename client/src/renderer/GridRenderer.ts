@@ -50,6 +50,8 @@ export class GridRenderer {
   private playerColors: Map<string, string> = new Map();
   private lastOwnerIDs: string[][] = [];
   private lastShapeHPs: number[][] = [];
+  private lastClaiming: boolean[][] = [];
+  private claimingTiles: Map<string, { x: number; y: number }> = new Map();
 
   constructor(mapSize: number = DEFAULT_MAP_SIZE) {
     this.container = new Container();
@@ -67,6 +69,7 @@ export class GridRenderer {
       this.territoryOverlays[y] = [];
       this.lastOwnerIDs[y] = [];
       this.lastShapeHPs[y] = [];
+      this.lastClaiming[y] = [];
       for (let x = 0; x < this.mapSize; x++) {
         const g = new Graphics();
         g.rect(0, 0, TILE_SIZE, TILE_SIZE);
@@ -83,6 +86,7 @@ export class GridRenderer {
         this.territoryOverlays[y][x] = overlay;
         this.lastOwnerIDs[y][x] = '';
         this.lastShapeHPs[y][x] = 0;
+        this.lastClaiming[y][x] = false;
 
         // Resource indicator (hidden by default)
         const dot = new Graphics();
@@ -120,17 +124,38 @@ export class GridRenderer {
     }
   }
 
-  /** Update the territory overlay for a tile. */
-  private updateTerritoryOverlay(x: number, y: number, ownerID: string, shapeHP: number = 0): void {
+  /** Update the territory overlay for a tile (owned or claiming). */
+  private updateTerritoryOverlay(
+    x: number, y: number, ownerID: string, shapeHP: number,
+    claimingPlayerID: string, claimProgress: number,
+  ): void {
     if (y < 0 || y >= this.mapSize || x < 0 || x >= this.mapSize) return;
-    if (this.lastOwnerIDs[y][x] === ownerID && this.lastShapeHPs[y][x] === shapeHP) return;
+
+    const isClaiming = claimProgress > 0 && claimingPlayerID !== '';
+    if (
+      this.lastOwnerIDs[y][x] === ownerID &&
+      this.lastShapeHPs[y][x] === shapeHP &&
+      this.lastClaiming[y][x] === isClaiming
+    ) return;
     this.lastOwnerIDs[y][x] = ownerID;
     this.lastShapeHPs[y][x] = shapeHP;
+    this.lastClaiming[y][x] = isClaiming;
 
     const overlay = this.territoryOverlays[y][x];
     overlay.clear();
 
-    if (ownerID !== '') {
+    const key = `${x},${y}`;
+    if (isClaiming) {
+      const colorStr = this.playerColors.get(claimingPlayerID) ?? '#ffffff';
+      const color = parseColor(colorStr);
+      overlay.rect(0, 0, TILE_SIZE, TILE_SIZE);
+      overlay.fill({ color, alpha: 0.5 });
+      overlay.stroke({ width: 2, color: 0xffffff, alpha: 0.6 });
+      overlay.visible = true;
+      this.claimingTiles.set(key, { x, y });
+    } else if (ownerID !== '') {
+      this.claimingTiles.delete(key);
+      overlay.alpha = 1.0;
       const colorStr = this.playerColors.get(ownerID) ?? '#ffffff';
       const color = parseColor(colorStr);
       overlay.rect(0, 0, TILE_SIZE, TILE_SIZE);
@@ -143,6 +168,8 @@ export class GridRenderer {
       }
       overlay.visible = true;
     } else {
+      this.claimingTiles.delete(key);
+      overlay.alpha = 1.0;
       overlay.visible = false;
     }
   }
@@ -180,7 +207,9 @@ export class GridRenderer {
         // Territory overlay
         const ownerID = (tile['ownerID'] as string) ?? '';
         const shapeHP = (tile['shapeHP'] as number) ?? 0;
-        this.updateTerritoryOverlay(tx, ty, ownerID, shapeHP);
+        const claimingPlayerID = (tile['claimingPlayerID'] as string) ?? '';
+        const claimProgress = (tile['claimProgress'] as number) ?? 0;
+        this.updateTerritoryOverlay(tx, ty, ownerID, shapeHP, claimingPlayerID, claimProgress);
 
         // Resource indicator
         const resType = tile['resourceType'] as number | undefined;
@@ -190,6 +219,15 @@ export class GridRenderer {
         }
       });
     });
+  }
+
+  /** Animate claiming tiles with a pulsing effect. Call from PixiJS ticker. */
+  public tick(): void {
+    if (this.claimingTiles.size === 0) return;
+    const pulse = 0.3 + 0.7 * Math.abs(Math.sin(Date.now() * 0.006));
+    for (const { x, y } of this.claimingTiles.values()) {
+      this.territoryOverlays[y][x].alpha = pulse;
+    }
   }
 
   public getMapSize(): number {
