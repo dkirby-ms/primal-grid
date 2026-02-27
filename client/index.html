@@ -129,6 +129,41 @@
         padding: 2px 0;
         color: #ccc;
       }
+      /* Shape carousel */
+      .shape-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 3px;
+        border: 2px solid transparent;
+        border-radius: 4px;
+        cursor: pointer;
+        min-width: 40px;
+      }
+      .shape-item.selected {
+        border-color: #ffcc00;
+        background: rgba(255,204,0,0.15);
+      }
+      .shape-item:hover {
+        background: rgba(255,255,255,0.08);
+      }
+      .shape-item .shape-label {
+        font-size: 8px;
+        color: #888;
+        margin-top: 2px;
+        white-space: nowrap;
+      }
+      .shape-grid {
+        display: grid;
+        gap: 1px;
+      }
+      .shape-cell {
+        width: 6px;
+        height: 6px;
+        border-radius: 1px;
+      }
+      .shape-cell.filled { background: #ffcc00; }
+      .shape-cell.empty { background: transparent; }
     </style>
   </head>
   <body>
@@ -136,6 +171,10 @@
       <div id="app"></div>
       <div id="hud-panel">
         <div id="build-indicator">🔨 BUILD MODE</div>
+        <div id="shape-carousel" class="hud-section" style="display:none;">
+          <h3>Shapes <span style="color:#666;font-size:9px">(Q/E cycle, R rotate)</span></h3>
+          <div id="shape-carousel-items" style="display:flex;gap:4px;overflow-x:auto;padding:2px 0;"></div>
+        </div>
         <div class="hud-section" id="territory-count">
           <h3>Territory</h3>
           <div style="font-size:16px;font-weight:bold;color:#ffd700">🏰 <span id="territory-count-val">0</span> tiles</div>

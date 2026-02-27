@@ -1,4 +1,5 @@
 import type { Room } from '@colyseus/sdk';
+import { SHAPE_CATALOG, type ShapeDef } from '@primal-grid/shared';
 
 /**
  * DOM-based HUD panel — replaces the canvas-rendered HudRenderer.
@@ -21,6 +22,10 @@ export class HudDOM {
   private buildIndicator: HTMLElement;
   private pawnList: HTMLElement;
   private pawnTitle: HTMLElement;
+  private shapeCarousel: HTMLElement;
+  private shapeCarouselItems: HTMLElement;
+  private shapeItemEls: HTMLElement[] = [];
+  private shapeKeys: string[] = [];
 
   /** Callback invoked with latest player resources for craft menu updates. */
   public onInventoryUpdate: ((resources: Record<string, number>) => void) | null = null;
@@ -46,6 +51,10 @@ export class HudDOM {
     this.buildIndicator = document.getElementById('build-indicator')!;
     this.pawnList = document.getElementById('pawn-list')!;
     this.pawnTitle = document.querySelector('#section-pawns .section-title') as HTMLElement;
+    this.shapeCarousel = document.getElementById('shape-carousel')!;
+    this.shapeCarouselItems = document.getElementById('shape-carousel-items')!;
+    this.shapeKeys = Object.keys(SHAPE_CATALOG);
+    this.buildShapeCarousel();
   }
 
   /** Show or hide build mode indicator with selected item name. */
@@ -56,6 +65,75 @@ export class HudDOM {
     } else {
       this.buildIndicator.classList.remove('active');
     }
+  }
+
+  /** Show/hide shape carousel and highlight selected shape. */
+  public setShapeMode(active: boolean, selectedIndex: number = 0, rotation: number = 0): void {
+    this.shapeCarousel.style.display = active ? 'block' : 'none';
+    if (!active) return;
+    for (let i = 0; i < this.shapeItemEls.length; i++) {
+      this.shapeItemEls[i].classList.toggle('selected', i === selectedIndex);
+    }
+    // Update the mini-grid for the selected shape to show current rotation
+    this.updateShapeGrid(selectedIndex, rotation);
+  }
+
+  /** Callback when user clicks a shape in the carousel. */
+  public onShapeSelect: ((index: number) => void) | null = null;
+
+  private buildShapeCarousel(): void {
+    this.shapeCarouselItems.innerHTML = '';
+    this.shapeItemEls = [];
+    for (let i = 0; i < this.shapeKeys.length; i++) {
+      const shapeDef = SHAPE_CATALOG[this.shapeKeys[i]];
+      const item = document.createElement('div');
+      item.className = 'shape-item';
+      item.title = shapeDef.name;
+
+      const grid = document.createElement('div');
+      grid.className = 'shape-grid';
+      grid.dataset.shapeIndex = String(i);
+      this.renderShapeGrid(grid, shapeDef, 0);
+      item.appendChild(grid);
+
+      const label = document.createElement('div');
+      label.className = 'shape-label';
+      label.textContent = shapeDef.name;
+      item.appendChild(label);
+
+      item.addEventListener('click', () => {
+        this.onShapeSelect?.(i);
+      });
+
+      this.shapeCarouselItems.appendChild(item);
+      this.shapeItemEls.push(item);
+    }
+  }
+
+  private renderShapeGrid(grid: HTMLElement, shapeDef: ShapeDef, rotation: number): void {
+    const cells = shapeDef.rotations[rotation] ?? shapeDef.rotations[0];
+    const maxDx = Math.max(...cells.map(c => c.dx)) + 1;
+    const maxDy = Math.max(...cells.map(c => c.dy)) + 1;
+
+    grid.style.gridTemplateColumns = `repeat(${maxDx}, 6px)`;
+    grid.innerHTML = '';
+    const filled = new Set(cells.map(c => `${c.dx},${c.dy}`));
+    for (let y = 0; y < maxDy; y++) {
+      for (let x = 0; x < maxDx; x++) {
+        const cell = document.createElement('div');
+        cell.className = `shape-cell ${filled.has(`${x},${y}`) ? 'filled' : 'empty'}`;
+        grid.appendChild(cell);
+      }
+    }
+  }
+
+  private updateShapeGrid(index: number, rotation: number): void {
+    const grid = this.shapeCarouselItems.querySelector(
+      `.shape-grid[data-shape-index="${index}"]`,
+    ) as HTMLElement | null;
+    if (!grid) return;
+    const shapeDef = SHAPE_CATALOG[this.shapeKeys[index]];
+    this.renderShapeGrid(grid, shapeDef, rotation);
   }
 
   /** Update the pack size display immediately (called by InputHandler on F key). */

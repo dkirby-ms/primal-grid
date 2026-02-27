@@ -55,6 +55,16 @@ export class InputHandler {
   /** Wire up the HUD for build mode indicator. */
   public setHud(hud: HudDOM): void {
     this.hud = hud;
+    // Wire carousel click → select shape
+    hud.onShapeSelect = (index: number) => {
+      this.shapeIndex = index;
+      this.shapeRotation = 0;
+      if (!this.shapeMode) {
+        this.shapeMode = true;
+        this.buildMode = false;
+      }
+      this.updateShapeHud();
+    };
   }
 
   /** Wire up the help screen for toggle. */
@@ -122,10 +132,8 @@ export class InputHandler {
         if (this.craftMenu?.isOpen()) return;
         this.shapeMode = !this.shapeMode;
         this.buildMode = false;
-        if (this.shapeMode) {
-          const shape = SHAPE_CATALOG[this.shapeKeys[this.shapeIndex]];
-          this.hud?.setBuildMode(true, `${shape.name} [R${this.shapeRotation}]`);
-        } else {
+        this.updateShapeHud();
+        if (!this.shapeMode) {
           this.hud?.setBuildMode(false);
         }
         return;
@@ -135,6 +143,7 @@ export class InputHandler {
       if (e.key === 'b' || e.key === 'B') {
         if (this.craftMenu?.isOpen()) return;
         this.shapeMode = false;
+        this.hud?.setShapeMode(false);
         this.buildMode = !this.buildMode;
         if (this.buildMode) {
           this.hud?.setBuildMode(true, PLACEABLE_ITEMS[this.buildIndex].name);
@@ -144,12 +153,29 @@ export class InputHandler {
         return;
       }
 
+      // Cycle shape: Q = prev, E = next
+      if (e.key === 'q' || e.key === 'Q') {
+        if (this.shapeMode) {
+          this.shapeIndex = (this.shapeIndex - 1 + this.shapeKeys.length) % this.shapeKeys.length;
+          this.shapeRotation = 0;
+          this.updateShapeHud();
+        }
+        return;
+      }
+      if (e.key === 'e' || e.key === 'E') {
+        if (this.shapeMode) {
+          this.shapeIndex = (this.shapeIndex + 1) % this.shapeKeys.length;
+          this.shapeRotation = 0;
+          this.updateShapeHud();
+        }
+        return;
+      }
+
       // Rotation (shape mode)
       if (e.key === 'r' || e.key === 'R') {
         if (this.shapeMode) {
           this.shapeRotation = (this.shapeRotation + 1) % 4;
-          const shape = SHAPE_CATALOG[this.shapeKeys[this.shapeIndex]];
-          this.hud?.setBuildMode(true, `${shape.name} [R${this.shapeRotation}]`);
+          this.updateShapeHud();
         }
         return;
       }
@@ -203,8 +229,7 @@ export class InputHandler {
         if (this.shapeMode && num <= this.shapeKeys.length) {
           this.shapeIndex = num - 1;
           this.shapeRotation = 0;
-          const shape = SHAPE_CATALOG[this.shapeKeys[this.shapeIndex]];
-          this.hud?.setBuildMode(true, `${shape.name} [R0]`);
+          this.updateShapeHud();
           return;
         }
         if (this.buildMode && num <= PLACEABLE_ITEMS.length) {
@@ -293,6 +318,15 @@ export class InputHandler {
     const playerId = this.room.sessionId;
     for (const c of cells) {
       this.gridRenderer.showOptimisticClaim(x + c.dx, y + c.dy, playerId);
+    }
+  }
+
+  /** Update HUD carousel + build indicator for current shape state. */
+  private updateShapeHud(): void {
+    const shape = SHAPE_CATALOG[this.shapeKeys[this.shapeIndex]];
+    this.hud?.setShapeMode(this.shapeMode, this.shapeIndex, this.shapeRotation);
+    if (this.shapeMode) {
+      this.hud?.setBuildMode(true, `${shape.name} [R${this.shapeRotation}]`);
     }
   }
 }
