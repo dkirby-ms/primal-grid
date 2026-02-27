@@ -13,8 +13,6 @@ export class HudDOM {
   private invStone: HTMLElement;
   private invFiber: HTMLElement;
   private invBerries: HTMLElement;
-  private craftWalls: HTMLElement;
-  private craftFloors: HTMLElement;
   private craftWorkbenches: HTMLElement;
   private craftFarms: HTMLElement;
   private creatureCounts: HTMLElement;
@@ -38,8 +36,6 @@ export class HudDOM {
     this.invStone = document.getElementById('inv-stone')!;
     this.invFiber = document.getElementById('inv-fiber')!;
     this.invBerries = document.getElementById('inv-berries')!;
-    this.craftWalls = document.getElementById('craft-walls')!;
-    this.craftFloors = document.getElementById('craft-floors')!;
     this.craftWorkbenches = document.getElementById('craft-workbenches')!;
     this.craftFarms = document.getElementById('craft-farms')!;
     this.creatureCounts = document.getElementById('creature-counts')!;
@@ -94,12 +90,8 @@ export class HudDOM {
           this.invBerries.textContent = String(berries);
 
           // Crafted items
-          const walls = (player['walls'] as number) ?? 0;
-          const floors = (player['floors'] as number) ?? 0;
           const workbenches = (player['workbenches'] as number) ?? 0;
           const farmPlots = (player['farmPlots'] as number) ?? 0;
-          this.craftWalls.textContent = String(walls);
-          this.craftFloors.textContent = String(floors);
           this.craftWorkbenches.textContent = String(workbenches);
           this.craftFarms.textContent = String(farmPlots);
 

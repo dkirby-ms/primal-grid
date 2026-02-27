@@ -23,6 +23,9 @@ export class TileState extends Schema {
   @type("number")
   resourceAmount: number = 0;
 
+  @type("number")
+  shapeHP: number = 0;
+
   @type("string")
   ownerID: string = "";
 }
@@ -45,12 +48,6 @@ export class PlayerState extends Schema {
 
   @type("number")
   berries: number = 0;
-
-  @type("number")
-  walls: number = 0;
-
-  @type("number")
-  floors: number = 0;
 
   @type("number")
   workbenches: number = 0;
@@ -191,12 +188,13 @@ export class GameState extends Schema {
     const tile = this.getTile(x, y);
     if (!tile) return false;
     if (tile.type === TileType.Water || tile.type === TileType.Rock) return false;
+    if (tile.shapeHP > 0) return false;
 
-    // Check for blocking structures (Wall, Workbench block; Floor, FarmPlot do not)
+    // Check for blocking structures (Workbench blocks; shape blocks handled via shapeHP above)
     let blocked = false;
     this.structures.forEach((s) => {
       if (s.x === x && s.y === y) {
-        if (s.structureType === ItemType.Wall || s.structureType === ItemType.Workbench) {
+        if (s.structureType === ItemType.Workbench) {
           blocked = true;
         }
       }

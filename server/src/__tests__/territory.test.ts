@@ -112,94 +112,6 @@ describe("Territory System", () => {
     });
   });
 
-  describe("claim tile", () => {
-    it("claim adjacent tile: ownerID set, wood decremented, score incremented", () => {
-      const room = createRoomWithMap(42);
-      const { client, player } = joinPlayer(room, "p1");
-      const scoreBefore = player.score;
-      const woodBefore = player.wood;
-
-      const target = findClaimableAdjacentTile(room, "p1");
-      expect(target).not.toBeNull();
-
-      room.handleClaimTile(client, { x: target!.x, y: target!.y });
-
-      const tile = room.state.getTile(target!.x, target!.y);
-      expect(tile.ownerID).toBe("p1");
-      expect(player.wood).toBe(woodBefore - TERRITORY.CLAIM_COST_WOOD);
-      expect(player.score).toBe(scoreBefore + 1);
-    });
-
-    it("claim non-adjacent tile rejected", () => {
-      const room = createRoomWithMap(42);
-      const { client, player } = joinPlayer(room, "p1");
-      const scoreBefore = player.score;
-      const woodBefore = player.wood;
-
-      const target = findNonAdjacentUnownedTile(room, "p1");
-      expect(target).not.toBeNull();
-
-      room.handleClaimTile(client, { x: target!.x, y: target!.y });
-
-      const tile = room.state.getTile(target!.x, target!.y);
-      expect(tile.ownerID).toBe("");
-      expect(player.wood).toBe(woodBefore);
-      expect(player.score).toBe(scoreBefore);
-    });
-
-    it("claim already-owned tile rejected", () => {
-      const room = createRoomWithMap(42);
-      const { client, player } = joinPlayer(room, "p1");
-
-      // Find a tile already owned by p1
-      let ownedTile: { x: number; y: number } | null = null;
-      for (let i = 0; i < room.state.tiles.length; i++) {
-        const tile = room.state.tiles.at(i)!;
-        if (tile.ownerID === "p1") { ownedTile = { x: tile.x, y: tile.y }; break; }
-      }
-      expect(ownedTile).not.toBeNull();
-
-      const woodBefore = player.wood;
-      const scoreBefore = player.score;
-      room.handleClaimTile(client, { x: ownedTile!.x, y: ownedTile!.y });
-
-      // Nothing changed
-      expect(player.wood).toBe(woodBefore);
-      expect(player.score).toBe(scoreBefore);
-    });
-
-    it("claim with no wood rejected", () => {
-      const room = createRoomWithMap(42);
-      const { client, player } = joinPlayer(room, "p1");
-      player.wood = 0;
-      const scoreBefore = player.score;
-
-      const target = findClaimableAdjacentTile(room, "p1");
-      expect(target).not.toBeNull();
-
-      room.handleClaimTile(client, { x: target!.x, y: target!.y });
-
-      const tile = room.state.getTile(target!.x, target!.y);
-      expect(tile.ownerID).toBe("");
-      expect(player.score).toBe(scoreBefore);
-    });
-
-    it("claim water/rock tile rejected", () => {
-      const room = createRoomWithMap(42);
-      const { client, player } = joinPlayer(room, "p1");
-      const woodBefore = player.wood;
-      const scoreBefore = player.score;
-
-      const target = findUnwalkableTile(room);
-      expect(target).not.toBeNull();
-
-      room.handleClaimTile(client, { x: target!.x, y: target!.y });
-
-      expect(player.wood).toBe(woodBefore);
-      expect(player.score).toBe(scoreBefore);
-    });
-  });
-
   describe("territory adjacency", () => {
     it("cardinal neighbors count as adjacent, isolated tiles do not", () => {
       const room = createRoomWithMap(42);
@@ -220,17 +132,9 @@ describe("Territory System", () => {
   });
 
   describe("score tracking", () => {
-    it("score matches actual tile count after multiple claims", () => {
+    it("score matches actual tile count from HQ spawn", () => {
       const room = createRoomWithMap(42);
-      const { client, player } = joinPlayer(room, "p1");
-      player.wood = 100; // enough for many claims
-
-      // Claim a few tiles
-      for (let i = 0; i < 3; i++) {
-        const target = findClaimableAdjacentTile(room, "p1");
-        if (!target) break;
-        room.handleClaimTile(client, { x: target.x, y: target.y });
-      }
+      const { player } = joinPlayer(room, "p1");
 
       const counts = getTerritoryCounts(room.state);
       const actualOwned = counts.get("p1") ?? 0;

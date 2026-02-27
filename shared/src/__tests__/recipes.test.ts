@@ -7,14 +7,14 @@ import { ItemType, ResourceType } from "../types.js";
 // ═══════════════════════════════════════════════════════════════════
 
 describe("Phase 3 — Recipe Definitions", () => {
-  const recipeIds = ["wall", "floor", "workbench", "farm_plot", "turret"];
+  const recipeIds = ["workbench", "farm_plot", "turret"];
 
-  it("all 5 recipes are defined", () => {
+  it("all 3 recipes are defined", () => {
     for (const id of recipeIds) {
       expect(RECIPES[id]).toBeDefined();
       expect(RECIPES[id].id).toBe(id);
     }
-    expect(Object.keys(RECIPES).length).toBe(5);
+    expect(Object.keys(RECIPES).length).toBe(3);
   });
 
   it("each recipe has valid output type and positive outputCount", () => {
@@ -42,8 +42,6 @@ describe("Phase 3 — Recipe Definitions", () => {
   });
 
   it("each recipe produces correct output type", () => {
-    expect(RECIPES.wall.output).toBe(ItemType.Wall);
-    expect(RECIPES.floor.output).toBe(ItemType.Floor);
     expect(RECIPES.workbench.output).toBe(ItemType.Workbench);
     expect(RECIPES.farm_plot.output).toBe(ItemType.FarmPlot);
     expect(RECIPES.turret.output).toBe(ItemType.Turret);
@@ -64,26 +62,26 @@ describe("Phase 3 — canCraft", () => {
     }
   });
 
-  it("returns false when player lacks wood for wall", () => {
+  it("returns false when player lacks wood for workbench", () => {
     const player = { wood: 0, stone: 10, fiber: 0, berries: 0 };
-    expect(canCraft(player, "wall")).toBe(false);
+    expect(canCraft(player, "workbench")).toBe(false);
   });
 
-  it("returns false when player lacks stone for wall", () => {
+  it("returns false when player lacks stone for workbench", () => {
     const player = { wood: 10, stone: 0, fiber: 0, berries: 0 };
-    expect(canCraft(player, "wall")).toBe(false);
+    expect(canCraft(player, "workbench")).toBe(false);
   });
 
   it("returns false when player has exactly 1 less than required", () => {
-    // Wall needs wood:5, stone:2
-    const player = { wood: 4, stone: 2, fiber: 0, berries: 0 };
-    expect(canCraft(player, "wall")).toBe(false);
+    // Workbench needs wood:5, stone:3
+    const player = { wood: 4, stone: 3, fiber: 0, berries: 0 };
+    expect(canCraft(player, "workbench")).toBe(false);
   });
 
   it("returns true when player has exactly the required amounts", () => {
-    // Wall needs wood:5, stone:2
-    const player = { wood: 5, stone: 2, fiber: 0, berries: 0 };
-    expect(canCraft(player, "wall")).toBe(true);
+    // Workbench needs wood:5, stone:3
+    const player = { wood: 5, stone: 3, fiber: 0, berries: 0 };
+    expect(canCraft(player, "workbench")).toBe(true);
   });
 
   it("returns false for unknown recipe ID", () => {
@@ -101,8 +99,6 @@ describe("Phase 3 — canCraft", () => {
 
 describe("Phase 3 — getItemField", () => {
   it("maps each ItemType to the correct inventory field", () => {
-    expect(getItemField(ItemType.Wall)).toBe("walls");
-    expect(getItemField(ItemType.Floor)).toBe("floors");
     expect(getItemField(ItemType.Workbench)).toBe("workbenches");
     expect(getItemField(ItemType.FarmPlot)).toBe("farmPlots");
     expect(getItemField(ItemType.Turret)).toBe("turrets");

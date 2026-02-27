@@ -29,6 +29,8 @@ export interface ITileState {
   resourceType: number;
   /** Resource amount remaining (0-10). */
   resourceAmount: number;
+  /** Hit points of a placed shape block on this tile (0 = no block). */
+  shapeHP: number;
   /** Player who owns this tile (empty string = unclaimed). */
   ownerID: string;
 }
@@ -98,8 +100,6 @@ export interface IPlayerState {
   stone: number;
   fiber: number;
   berries: number;
-  walls: number;
-  floors: number;
   workbenches: number;
   farmPlots: number;
   turrets: number;

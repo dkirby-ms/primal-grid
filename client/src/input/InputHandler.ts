@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { PLACE, FARM_HARVEST, TAME, CLAIM_TILE, ItemType } from '@primal-grid/shared';
+import { PLACE, FARM_HARVEST, TAME, ItemType } from '@primal-grid/shared';
 import { TILE_SIZE } from '../renderer/GridRenderer.js';
 import type { Container } from 'pixi.js';
 import type { CraftMenu } from '../ui/CraftMenu.js';
@@ -9,8 +9,6 @@ import type { CreatureRenderer } from '../renderer/CreatureRenderer.js';
 import type { Camera } from '../renderer/Camera.js';
 
 const PLACEABLE_ITEMS: { type: ItemType; name: string }[] = [
-  { type: ItemType.Wall, name: 'Wall' },
-  { type: ItemType.Floor, name: 'Floor' },
   { type: ItemType.Workbench, name: 'Workbench' },
   { type: ItemType.FarmPlot, name: 'FarmPlot' },
 ];
@@ -159,8 +157,7 @@ export class InputHandler {
         return;
       }
 
-      // Normal click: claim tile
-      this.room.send(CLAIM_TILE, { x: tileX, y: tileY });
+      // Normal click: no-op (claim tile removed)
     });
   }
 }

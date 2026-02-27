@@ -120,8 +120,6 @@ export const FARM = {
 export const TERRITORY = {
   /** Starting territory radius in tiles. */
   STARTING_SIZE: 3,
-  /** Wood cost to claim one tile. */
-  CLAIM_COST_WOOD: 1,
   /** Starting wood for new players. */
   STARTING_WOOD: 10,
   /** Starting stone for new players. */
@@ -156,6 +154,24 @@ export const TURRET = {
 export const ROUND = {
   /** Round duration in ticks (3600 ticks = 15 minutes at 4 ticks/sec). */
   DURATION_TICKS: 3600,
+} as const;
+
+/** Shape placement cost and durability constants. */
+export const SHAPE = {
+  COST_WOOD_PER_CELL: 2,
+  BLOCK_HP: 100,
+} as const;
+
+/** Worker unit constants. */
+export const WORKER = {
+  HEALTH: 50,
+  GATHER_AMOUNT: 1,
+} as const;
+
+/** Passive territory income constants. */
+export const TERRITORY_INCOME = {
+  INTERVAL_TICKS: 40,
+  AMOUNT: 1,
 } as const;
 
 /** Pawn command constants (Phase C). */

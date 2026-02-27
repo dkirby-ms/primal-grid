@@ -4,14 +4,16 @@ import { generateProceduralMap } from "./mapGenerator.js";
 import { tickCreatureAI } from "./creatureAI.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
-  CRAFT, PLACE, FARM_HARVEST, TAME, ABANDON, BREED, CLAIM_TILE,
+  CRAFT, PLACE, FARM_HARVEST, TAME, ABANDON, BREED,
+  PLACE_SHAPE,
   ResourceType, TileType, ItemType, Personality,
   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
   CREATURE_AI, CREATURE_RESPAWN, FARM, TAMING, BREEDING, TERRITORY,
+  TERRITORY_INCOME, SHAPE, SHAPE_CATALOG,
   RECIPES, canCraft, getItemField,
 } from "@primal-grid/shared";
-import type { CraftPayload, PlacePayload, FarmHarvestPayload, TamePayload, AbandonPayload, BreedPayload, ClaimTilePayload } from "@primal-grid/shared";
-import { isAdjacentToTerritory, claimTile, spawnHQ } from "./territory.js";
+import type { CraftPayload, PlacePayload, FarmHarvestPayload, TamePayload, AbandonPayload, BreedPayload, PlaceShapePayload } from "@primal-grid/shared";
+import { spawnHQ, isShapeAdjacentToTerritory } from "./territory.js";
 
 const PLAYER_COLORS = [
   "#e6194b", "#3cb44b", "#4363d8", "#f58231",
@@ -36,6 +38,7 @@ export class GameRoom extends Room {
       this.tickCreatureRespawn();
       this.tickTrustDecay();
       this.tickFarms();
+      this.tickTerritoryIncome();
     }, 1000 / TICK_RATE);
 
     this.onMessage(CRAFT, (client, message: CraftPayload) => {
@@ -62,8 +65,8 @@ export class GameRoom extends Room {
       this.handleBreed(client, message);
     });
 
-    this.onMessage(CLAIM_TILE, (client, message: ClaimTilePayload) => {
-      this.handleClaimTile(client, message);
+    this.onMessage(PLACE_SHAPE, (client, message: PlaceShapePayload) => {
+      this.handlePlaceShape(client, message);
     });
 
     console.log("[GameRoom] Room created.");
@@ -78,9 +81,13 @@ export class GameRoom extends Room {
 
     // Spawn HQ and claim starting territory
     const hqPos = this.findHQSpawnLocation();
+    if (this.nextStructureId == null) this.nextStructureId = 0;
+    if (this.nextCreatureId == null) this.nextCreatureId = 0;
     const idRef = { value: this.nextStructureId };
-    spawnHQ(this.state, player, hqPos.x, hqPos.y, idRef);
+    const creatureIdRef = { value: this.nextCreatureId };
+    spawnHQ(this.state, player, hqPos.x, hqPos.y, idRef, creatureIdRef);
     this.nextStructureId = idRef.value;
+    this.nextCreatureId = creatureIdRef.value;
 
     console.log(`[GameRoom] Client joined: ${client.sessionId}, HQ at (${hqPos.x}, ${hqPos.y})`);
   }
@@ -101,28 +108,58 @@ export class GameRoom extends Room {
     generateProceduralMap(this.state, seed, DEFAULT_MAP_SIZE, DEFAULT_MAP_SIZE);
   }
 
-  private handleClaimTile(client: Client, message: ClaimTilePayload) {
+  private handlePlaceShape(client: Client, message: PlaceShapePayload) {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
 
-    const { x, y } = message;
-    if (!Number.isInteger(x) || !Number.isInteger(y)) return;
+    const { shapeId, x, y, rotation } = message;
 
-    const tile = this.state.getTile(x, y);
-    if (!tile) return;
-    if (tile.type === TileType.Water || tile.type === TileType.Rock) return;
+    // Validate shape exists
+    const shapeDef = SHAPE_CATALOG[shapeId];
+    if (!shapeDef) return;
 
-    // Tile must be unclaimed
-    if (tile.ownerID !== "") return;
+    // Validate rotation
+    if (rotation !== 0 && rotation !== 1 && rotation !== 2 && rotation !== 3) return;
 
-    // Must be adjacent to player's existing territory
-    if (!isAdjacentToTerritory(this.state, client.sessionId, x, y)) return;
+    // Get rotated cells and compute absolute positions
+    const rotatedCells = shapeDef.rotations[rotation];
+    const absoluteCells = rotatedCells.map((c) => ({ x: x + c.dx, y: y + c.dy }));
 
-    // Must have resources to pay
-    if (player.wood < TERRITORY.CLAIM_COST_WOOD) return;
+    // Validate ALL cells
+    for (const cell of absoluteCells) {
+      const tile = this.state.getTile(cell.x, cell.y);
+      if (!tile) return;
+      if (tile.type === TileType.Water || tile.type === TileType.Rock) return;
+      if (tile.shapeHP > 0) return;
+      if (tile.ownerID !== "" && tile.ownerID !== player.id) return;
 
-    player.wood -= TERRITORY.CLAIM_COST_WOOD;
-    claimTile(this.state, client.sessionId, x, y);
+      // Check no existing structure on this tile
+      let occupied = false;
+      this.state.structures.forEach((s) => {
+        if (s.x === cell.x && s.y === cell.y) occupied = true;
+      });
+      if (occupied) return;
+    }
+
+    // Validate adjacency to existing territory
+    if (!isShapeAdjacentToTerritory(this.state, player.id, absoluteCells)) return;
+
+    // Validate cost
+    const cost = absoluteCells.length * SHAPE.COST_WOOD_PER_CELL;
+    if (player.wood < cost) return;
+
+    // Deduct wood
+    player.wood -= cost;
+
+    // Apply shape
+    for (const cell of absoluteCells) {
+      const tile = this.state.getTile(cell.x, cell.y)!;
+      if (tile.ownerID !== player.id) {
+        tile.ownerID = player.id;
+        player.score += 1;
+      }
+      tile.shapeHP = SHAPE.BLOCK_HP;
+    }
   }
 
   /** Find a walkable tile at least 10 tiles from any existing HQ. */
@@ -183,7 +220,7 @@ export class GameRoom extends Room {
     if (!Number.isInteger(itemType)) return;
 
     // Validate item type is placeable
-    const placeableTypes = [ItemType.Wall, ItemType.Floor, ItemType.Workbench, ItemType.FarmPlot, ItemType.Turret, ItemType.HQ];
+    const placeableTypes = [ItemType.Workbench, ItemType.FarmPlot, ItemType.Turret, ItemType.HQ];
     if (!placeableTypes.includes(itemType)) return;
 
     // Check player has the item
@@ -375,6 +412,33 @@ export class GameRoom extends Room {
         structure.cropReady = true;
       }
     });
+  }
+
+  private tickTerritoryIncome() {
+    if (this.state.tick % TERRITORY_INCOME.INTERVAL_TICKS !== 0) return;
+
+    const len = this.state.tiles.length;
+    for (let i = 0; i < len; i++) {
+      const tile = this.state.tiles.at(i);
+      if (!tile) continue;
+      if (tile.ownerID === "" || tile.resourceAmount <= 0) continue;
+      if (tile.shapeHP > 0) continue;
+      const owner = this.state.players.get(tile.ownerID);
+      if (!owner) continue;
+
+      const amount = TERRITORY_INCOME.AMOUNT;
+      switch (tile.resourceType) {
+        case ResourceType.Wood:    owner.wood    += amount; break;
+        case ResourceType.Stone:   owner.stone   += amount; break;
+        case ResourceType.Fiber:   owner.fiber   += amount; break;
+        case ResourceType.Berries: owner.berries += amount; break;
+        default: continue;
+      }
+      tile.resourceAmount -= amount;
+      if (tile.resourceAmount <= 0) {
+        tile.resourceType = -1;
+      }
+    }
   }
 
   private tickCreatureAI() {

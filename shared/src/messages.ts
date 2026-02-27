@@ -6,8 +6,8 @@ export const FARM_HARVEST = "farm_harvest" as const;
 export const TAME = "tame" as const;
 export const ABANDON = "abandon" as const;
 export const BREED = "breed" as const;
-export const CLAIM_TILE = "claim_tile" as const;
 export const ASSIGN_PAWN = "assign_pawn" as const;
+export const PLACE_SHAPE = "place_shape" as const;
 
 // --- Message payload interfaces ---
 
@@ -47,14 +47,16 @@ export interface BreedPayload {
   creatureId: string;
 }
 
-export interface ClaimTilePayload {
-  x: number;
-  y: number;
-}
-
 export interface AssignPawnPayload {
   creatureId: string;
   command: "idle" | "gather" | "guard" | "patrol";
   zoneX?: number;
   zoneY?: number;
+}
+
+export interface PlaceShapePayload {
+  shapeId: string;
+  x: number;
+  y: number;
+  rotation: number;
 }

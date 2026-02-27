@@ -110,7 +110,7 @@ describe("Phase A — HUD State Contract", () => {
 
   describe("inventory fields present and non-negative", () => {
     const INVENTORY_FIELDS = ["wood", "stone", "fiber", "berries"];
-    const CRAFTED_FIELDS = ["walls", "floors", "workbenches", "farmPlots", "turrets"];
+    const CRAFTED_FIELDS = ["workbenches", "farmPlots", "turrets"];
 
     it("new player has all crafted fields initialized to 0", () => {
       const room = createRoomWithMap(42);
@@ -125,7 +125,7 @@ describe("Phase A — HUD State Contract", () => {
       const { client, player } = joinPlayer(room, "p1");
       giveResources(player, { wood: 100, stone: 100, fiber: 100, berries: 100 });
       if (room.handleCraft) {
-        room.handleCraft(client, { recipeId: "wall" } as CraftPayload);
+        room.handleCraft(client, { recipeId: "workbench" } as CraftPayload);
       }
       for (const field of INVENTORY_FIELDS) {
         expect((player as any)[field]).toBeGreaterThanOrEqual(0);
@@ -185,10 +185,10 @@ describe("Phase A — HUD State Contract", () => {
       const { client: c1, player: p1 } = joinPlayer(room, "p1");
       const { client: c2, player: p2 } = joinPlayer(room, "p2");
       giveResources(p1, { wood: 100, stone: 100 });
-      room.handleCraft(c1, { recipeId: "wall" } as CraftPayload);
+      room.handleCraft(c1, { recipeId: "workbench" } as CraftPayload);
       // p1 crafted, p2 did not
-      expect(p1.walls).toBe(1);
-      expect(p2.walls).toBe(0);
+      expect(p1.workbenches).toBe(1);
+      expect(p2.workbenches).toBe(0);
     });
 
     it("taming one creature does not affect another player's creature count", () => {
@@ -209,8 +209,8 @@ describe("Phase A — HUD State Contract", () => {
         if (c.ownerID === "p1") p1Owned++;
         if (c.ownerID === "p2") p2Owned++;
       });
-      expect(p1Owned).toBe(1);
-      expect(p2Owned).toBe(0);
+      expect(p1Owned).toBe(2); // 1 tamed + 1 worker
+      expect(p2Owned).toBe(1); // 1 worker
     });
   });
 
@@ -222,9 +222,9 @@ describe("Phase A — HUD State Contract", () => {
       // Give enough to craft
       giveResources(player, { wood: 50, stone: 50, fiber: 50, berries: 50 });
 
-      // Craft a wall
+      // Craft a workbench
       if (room.handleCraft) {
-        room.handleCraft(client, { recipeId: "wall" } as CraftPayload);
+        room.handleCraft(client, { recipeId: "workbench" } as CraftPayload);
       }
 
       // Tame a creature
@@ -239,8 +239,6 @@ describe("Phase A — HUD State Contract", () => {
       expect(player.stone).toBeGreaterThanOrEqual(0);
       expect(player.fiber).toBeGreaterThanOrEqual(0);
       expect(player.berries).toBeGreaterThanOrEqual(0);
-      expect(typeof player.walls).toBe("number");
-      expect(typeof player.floors).toBe("number");
       expect(typeof player.workbenches).toBe("number");
       expect(typeof player.farmPlots).toBe("number");
       expect(typeof player.turrets).toBe("number");

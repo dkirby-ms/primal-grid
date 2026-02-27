@@ -45,14 +45,14 @@ describe("Phase 3 — Crafting: Successful Craft", () => {
     const room = createRoomWithMap(42);
     const { client, player } = joinPlayer(room, "crafter");
 
-    // Give enough for a wall (wood:5, stone:2)
+    // Give enough for a workbench (wood:5, stone:3)
     giveResources(player, { wood: 10, stone: 5 });
 
-    room.handleCraft(client, { recipeId: "wall" } as CraftPayload);
+    room.handleCraft(client, { recipeId: "workbench" } as CraftPayload);
 
     expect(player.wood).toBe(5); // 10 - 5
-    expect(player.stone).toBe(3); // 5 - 2
-    expect(player.walls).toBe(1);
+    expect(player.stone).toBe(2); // 5 - 3
+    expect(player.workbenches).toBe(1);
   });
 
   it("crafting farm_plot produces exactly 1 farmPlot", () => {
@@ -88,12 +88,12 @@ describe("Phase 3 — Crafting: Failure Cases", () => {
 
     giveResources(player, { wood: 1, stone: 0 });
 
-    room.handleCraft(client, { recipeId: "wall" } as CraftPayload);
+    room.handleCraft(client, { recipeId: "workbench" } as CraftPayload);
 
     // Resources unchanged, no item produced
     expect(player.wood).toBe(1);
     expect(player.stone).toBe(0);
-    expect(player.walls).toBe(0);
+    expect(player.workbenches).toBe(0);
   });
 
   it("invalid recipe ID: no crash, no state change", () => {
@@ -107,7 +107,7 @@ describe("Phase 3 — Crafting: Failure Cases", () => {
     }).not.toThrow();
 
     expect(player.wood).toBe(99);
-    expect(player.walls).toBe(0);
+    expect(player.workbenches).toBe(0);
   });
 
   it("zero resources: craft fails cleanly", () => {
@@ -117,8 +117,8 @@ describe("Phase 3 — Crafting: Failure Cases", () => {
     // Reset resources to 0
     giveResources(player, { wood: 0, stone: 0, fiber: 0, berries: 0 });
 
-    room.handleCraft(client, { recipeId: "wall" } as CraftPayload);
+    room.handleCraft(client, { recipeId: "workbench" } as CraftPayload);
 
-    expect(player.walls).toBe(0);
+    expect(player.workbenches).toBe(0);
   });
 });

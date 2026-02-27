@@ -14,23 +14,6 @@ export interface RecipeDef {
 }
 
 export const RECIPES: Record<string, RecipeDef> = {
-  wall: {
-    id: "wall",
-    output: ItemType.Wall,
-    outputCount: 1,
-    ingredients: [
-      { resource: "wood", amount: 5 },
-      { resource: "stone", amount: 2 },
-    ],
-  },
-  floor: {
-    id: "floor",
-    output: ItemType.Floor,
-    outputCount: 1,
-    ingredients: [
-      { resource: "wood", amount: 3 },
-    ],
-  },
   workbench: {
     id: "workbench",
     output: ItemType.Workbench,
@@ -62,8 +45,6 @@ export const RECIPES: Record<string, RecipeDef> = {
 
 /** Map from ItemType to the player inventory field name. */
 const ITEM_TYPE_TO_FIELD: Record<number, string> = {
-  [ItemType.Wall]: "walls",
-  [ItemType.Floor]: "floors",
   [ItemType.Workbench]: "workbenches",
   [ItemType.FarmPlot]: "farmPlots",
   [ItemType.Turret]: "turrets",

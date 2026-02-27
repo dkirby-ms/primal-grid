@@ -78,30 +78,30 @@ function simulateTick(room: any): void {
 // ═══════════════════════════════════════════════════════════════════
 
 describe("Phase 3 Integration — Craft → Place → Verify", () => {
-  it("full loop: craft wall → place on owned tile → walkability blocked", () => {
+  it("full loop: craft workbench → place on owned tile → walkability blocked", () => {
     const room = createRoomWithMap(42);
     const { client, player } = joinPlayer(room, "loop-builder");
 
-    // Give player enough resources for a wall (wood:5, stone:2)
-    giveResources(player, { wood: 5, stone: 2 });
+    // Give player enough resources for a workbench (wood:5, stone:3)
+    giveResources(player, { wood: 5, stone: 3 });
 
-    // Step 1: Craft wall
-    room.handleCraft(client, { recipeId: "wall" } as CraftPayload);
-    expect(player.walls).toBe(1);
+    // Step 1: Craft workbench
+    room.handleCraft(client, { recipeId: "workbench" } as CraftPayload);
+    expect(player.workbenches).toBe(1);
     expect(player.wood).toBe(0);
     expect(player.stone).toBe(0);
 
-    // Step 2: Place wall on owned tile
+    // Step 2: Place workbench on owned tile
     const pos = findOwnedWalkableTile(room, "loop-builder");
     if (!pos) return;
 
     room.handlePlace(client, {
-      itemType: ItemType.Wall,
+      itemType: ItemType.Workbench,
       x: pos.x,
       y: pos.y,
     } as PlacePayload);
 
-    expect(player.walls).toBe(0);
+    expect(player.workbenches).toBe(0);
     expect(room.state.isWalkable(pos.x, pos.y)).toBe(false);
   });
 
@@ -163,19 +163,19 @@ describe("Phase 3 Integration — Ecosystem Stability with Structures", () => {
     const room = createRoomWithMap(42);
     room.spawnCreatures();
 
-    // Place several structures
+    // Place several workbench structures
     const w = room.state.mapWidth;
     let placed = 0;
     for (let y = 1; y < w - 1 && placed < 5; y++) {
       for (let x = 1; x < w - 1 && placed < 5; x++) {
         if (room.state.isWalkable(x, y)) {
-          const wall = new StructureState();
-          wall.id = `stability_wall_${placed}`;
-          wall.structureType = ItemType.Wall;
-          wall.x = x;
-          wall.y = y;
-          wall.placedBy = "test";
-          room.state.structures.set(wall.id, wall);
+          const wb = new StructureState();
+          wb.id = `stability_wb_${placed}`;
+          wb.structureType = ItemType.Workbench;
+          wb.x = x;
+          wb.y = y;
+          wb.placedBy = "test";
+          room.state.structures.set(wb.id, wb);
           placed++;
         }
       }
@@ -193,25 +193,25 @@ describe("Phase 3 Integration — Ecosystem Stability with Structures", () => {
     expect(room.state.creatures.size).toBeGreaterThan(0);
   });
 
-  it("creature cannot move to tile with Wall", () => {
+  it("creature cannot move to tile with Workbench", () => {
     const room = createRoomWithMap(42);
     room.state.creatures.clear();
 
     const pair = findAdjacentWalkablePair(room);
     if (!pair) return;
 
-    // Place a wall at target
-    const wall = new StructureState();
-    wall.id = "blocker_wall";
-    wall.structureType = ItemType.Wall;
-    wall.x = pair.target.x;
-    wall.y = pair.target.y;
-    wall.placedBy = "test";
-    room.state.structures.set(wall.id, wall);
+    // Place a workbench at target
+    const wb = new StructureState();
+    wb.id = "blocker_wb";
+    wb.structureType = ItemType.Workbench;
+    wb.x = pair.target.x;
+    wb.y = pair.target.y;
+    wb.placedBy = "test";
+    room.state.structures.set(wb.id, wb);
 
-    // Place herbivore next to wall
+    // Place herbivore next to workbench
     const creature = new CreatureState();
-    creature.id = "wall_avoider";
+    creature.id = "wb_avoider";
     creature.creatureType = "herbivore";
     creature.x = pair.player.x;
     creature.y = pair.player.y;
@@ -220,14 +220,14 @@ describe("Phase 3 Integration — Ecosystem Stability with Structures", () => {
     creature.currentState = "wander";
     room.state.creatures.set(creature.id, creature);
 
-    // Run AI ticks — creature must never land on wall tile
+    // Run AI ticks — creature must never land on workbench tile
     for (let i = 0; i < 50; i++) {
       room.state.tick += CREATURE_AI.TICK_INTERVAL;
       tickCreatureAI(room.state);
-      const c = room.state.creatures.get("wall_avoider");
+      const c = room.state.creatures.get("wb_avoider");
       if (c) {
-        const onWall = c.x === pair.target.x && c.y === pair.target.y;
-        expect(onWall).toBe(false);
+        const onWB = c.x === pair.target.x && c.y === pair.target.y;
+        expect(onWB).toBe(false);
       }
     }
   });
