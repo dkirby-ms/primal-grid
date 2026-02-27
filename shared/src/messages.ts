@@ -1,35 +1,15 @@
 // --- Message type constants ---
 
-export const MOVE = "move" as const;
-export const GATHER = "gather" as const;
-export const EAT = "eat" as const;
 export const CRAFT = "craft" as const;
 export const PLACE = "place" as const;
 export const FARM_HARVEST = "farm_harvest" as const;
 export const TAME = "tame" as const;
 export const ABANDON = "abandon" as const;
-export const SELECT_CREATURE = "select_creature" as const;
 export const BREED = "breed" as const;
+export const CLAIM_TILE = "claim_tile" as const;
+export const ASSIGN_PAWN = "assign_pawn" as const;
 
 // --- Message payload interfaces ---
-
-/** Direction-based movement: -1, 0, or 1 per axis. */
-export interface MovePayload {
-  /** Horizontal direction (-1 = left, 0 = none, 1 = right). */
-  dx: number;
-  /** Vertical direction (-1 = up, 0 = none, 1 = down). */
-  dy: number;
-}
-
-/** Alias for move message sent from client to server. */
-export type MoveMessage = MovePayload;
-
-export interface GatherPayload {
-  /** Tile X coordinate to gather from. */
-  x: number;
-  /** Tile Y coordinate to gather from. */
-  y: number;
-}
 
 export interface CraftPayload {
   /** Recipe identifier to craft. */
@@ -62,12 +42,19 @@ export interface AbandonPayload {
   creatureId: string;
 }
 
-export interface SelectCreaturePayload {
-  /** ID of the creature to select/deselect. */
-  creatureId: string;
-}
-
 export interface BreedPayload {
   /** ID of the target creature to breed. Server auto-finds mate within 1 tile. */
   creatureId: string;
+}
+
+export interface ClaimTilePayload {
+  x: number;
+  y: number;
+}
+
+export interface AssignPawnPayload {
+  creatureId: string;
+  command: "idle" | "gather" | "guard" | "patrol";
+  zoneX?: number;
+  zoneY?: number;
 }

@@ -1,16 +1,17 @@
 import { Room, Client, CloseCode } from "colyseus";
 import { GameState, PlayerState, CreatureState, StructureState } from "./GameState.js";
 import { generateProceduralMap } from "./mapGenerator.js";
-import { tickCreatureAI, moveToward } from "./creatureAI.js";
+import { tickCreatureAI } from "./creatureAI.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
-  MOVE, GATHER, EAT, CRAFT, PLACE, FARM_HARVEST, TAME, ABANDON, SELECT_CREATURE, BREED,
+  CRAFT, PLACE, FARM_HARVEST, TAME, ABANDON, BREED, CLAIM_TILE,
   ResourceType, TileType, ItemType, Personality,
   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
-  PLAYER_SURVIVAL, CREATURE_AI, CREATURE_RESPAWN, FARM, TAMING, BREEDING,
+  CREATURE_AI, CREATURE_RESPAWN, FARM, TAMING, BREEDING, TERRITORY,
   RECIPES, canCraft, getItemField,
 } from "@primal-grid/shared";
-import type { MovePayload, GatherPayload, CraftPayload, PlacePayload, FarmHarvestPayload, TamePayload, AbandonPayload, SelectCreaturePayload, BreedPayload } from "@primal-grid/shared";
+import type { CraftPayload, PlacePayload, FarmHarvestPayload, TamePayload, AbandonPayload, BreedPayload, ClaimTilePayload } from "@primal-grid/shared";
+import { isAdjacentToTerritory, claimTile, spawnHQ } from "./territory.js";
 
 const PLAYER_COLORS = [
   "#e6194b", "#3cb44b", "#4363d8", "#f58231",
@@ -22,8 +23,6 @@ export class GameRoom extends Room {
   state = new GameState();
   private nextCreatureId = 0;
   private nextStructureId = 0;
-  /** Server-only session state: selected pack per player (not synced to client). */
-  playerSelectedPacks = new Map<string, Set<string>>();
 
   override onCreate(options: Record<string, unknown>) {
     const seed = typeof options?.seed === "number" ? options.seed : DEFAULT_MAP_SEED;
@@ -32,26 +31,12 @@ export class GameRoom extends Room {
 
     this.setSimulationInterval((_deltaTime) => {
       this.state.tick += 1;
-      this.tickPlayerSurvival();
       this.tickResourceRegen();
       this.tickCreatureAI();
       this.tickCreatureRespawn();
       this.tickTrustDecay();
       this.tickFarms();
-      this.tickPackFollow();
     }, 1000 / TICK_RATE);
-
-    this.onMessage(MOVE, (client, message: MovePayload) => {
-      this.handleMove(client, message);
-    });
-
-    this.onMessage(GATHER, (client, message: GatherPayload) => {
-      this.handleGather(client, message);
-    });
-
-    this.onMessage(EAT, (client) => {
-      this.handleEat(client);
-    });
 
     this.onMessage(CRAFT, (client, message: CraftPayload) => {
       this.handleCraft(client, message);
@@ -73,12 +58,12 @@ export class GameRoom extends Room {
       this.handleAbandon(client, message);
     });
 
-    this.onMessage(SELECT_CREATURE, (client, message: SelectCreaturePayload) => {
-      this.handleSelectCreature(client, message);
-    });
-
     this.onMessage(BREED, (client, message: BreedPayload) => {
       this.handleBreed(client, message);
+    });
+
+    this.onMessage(CLAIM_TILE, (client, message: ClaimTilePayload) => {
+      this.handleClaimTile(client, message);
     });
 
     console.log("[GameRoom] Room created.");
@@ -89,23 +74,19 @@ export class GameRoom extends Room {
     player.id = client.sessionId;
     player.color = PLAYER_COLORS[this.state.players.size % PLAYER_COLORS.length];
 
-    const spawn = this.findRandomWalkableTile();
-    player.x = spawn.x;
-    player.y = spawn.y;
-
     this.state.players.set(client.sessionId, player);
-    console.log(`[GameRoom] Client joined: ${client.sessionId} at (${spawn.x}, ${spawn.y})`);
-  }
 
-  /** Ensure playerSelectedPacks is initialized (tests skip constructor). */
-  private ensurePacks(): Map<string, Set<string>> {
-    if (!this.playerSelectedPacks) this.playerSelectedPacks = new Map<string, Set<string>>();
-    return this.playerSelectedPacks;
+    // Spawn HQ and claim starting territory
+    const hqPos = this.findHQSpawnLocation();
+    const idRef = { value: this.nextStructureId };
+    spawnHQ(this.state, player, hqPos.x, hqPos.y, idRef);
+    this.nextStructureId = idRef.value;
+
+    console.log(`[GameRoom] Client joined: ${client.sessionId}, HQ at (${hqPos.x}, ${hqPos.y})`);
   }
 
   override onLeave(client: Client, code: number) {
     this.state.players.delete(client.sessionId);
-    this.ensurePacks().delete(client.sessionId);
     const consented = code === CloseCode.CONSENTED;
     console.log(
       `[GameRoom] Client left: ${client.sessionId} (consented: ${consented})`
@@ -116,76 +97,59 @@ export class GameRoom extends Room {
     console.log("[GameRoom] Room disposed.");
   }
 
-  private handleMove(client: Client, message: MovePayload) {
-    const player = this.state.players.get(client.sessionId);
-    if (!player) return;
-
-    const { dx, dy } = message;
-    // Validate direction values are -1, 0, or 1
-    if (!Number.isInteger(dx) || !Number.isInteger(dy)) return;
-    if (dx < -1 || dx > 1 || dy < -1 || dy > 1) return;
-    if (dx === 0 && dy === 0) return;
-
-    const newX = player.x + dx;
-    const newY = player.y + dy;
-
-    if (this.state.isWalkable(newX, newY)) {
-      player.x = newX;
-      player.y = newY;
-    }
-  }
-
   private generateMap(seed: number = DEFAULT_MAP_SEED) {
     generateProceduralMap(this.state, seed, DEFAULT_MAP_SIZE, DEFAULT_MAP_SIZE);
   }
 
-  private handleGather(client: Client, message: GatherPayload) {
+  private handleClaimTile(client: Client, message: ClaimTilePayload) {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
 
     const { x, y } = message;
     if (!Number.isInteger(x) || !Number.isInteger(y)) return;
 
-    // Player must be on or adjacent to the tile
-    const dx = Math.abs(player.x - x);
-    const dy = Math.abs(player.y - y);
-    if (dx > 1 || dy > 1) return;
-
     const tile = this.state.getTile(x, y);
-    if (!tile || tile.resourceType < 0 || tile.resourceAmount <= 0) return;
+    if (!tile) return;
+    if (tile.type === TileType.Water || tile.type === TileType.Rock) return;
 
-    // Decrement resource, increment player inventory
-    tile.resourceAmount -= 1;
-    // Tool bonus: +1 yield if player has appropriate tool
-    let bonus = 0;
-    if (tile.resourceType === ResourceType.Wood && player.axes >= 1) bonus = 1;
-    if (tile.resourceType === ResourceType.Stone && player.pickaxes >= 1) bonus = 1;
-    const yield_ = 1 + bonus;
-    switch (tile.resourceType) {
-      case ResourceType.Wood: player.wood += yield_; break;
-      case ResourceType.Stone: player.stone += yield_; break;
-      case ResourceType.Fiber: player.fiber += 1; break;
-      case ResourceType.Berries: player.berries += 1; break;
-    }
+    // Tile must be unclaimed
+    if (tile.ownerID !== "") return;
 
-    // Deplete tile if empty
-    if (tile.resourceAmount <= 0) {
-      tile.resourceAmount = 0;
-      tile.resourceType = -1;
-    }
+    // Must be adjacent to player's existing territory
+    if (!isAdjacentToTerritory(this.state, client.sessionId, x, y)) return;
+
+    // Must have resources to pay
+    if (player.wood < TERRITORY.CLAIM_COST_WOOD) return;
+
+    player.wood -= TERRITORY.CLAIM_COST_WOOD;
+    claimTile(this.state, client.sessionId, x, y);
   }
 
-  private handleEat(client: Client) {
-    const player = this.state.players.get(client.sessionId);
-    if (!player) return;
-    if (player.berries <= 0) return;
-    if (player.hunger >= PLAYER_SURVIVAL.MAX_HUNGER) return;
+  /** Find a walkable tile at least 10 tiles from any existing HQ. */
+  private findHQSpawnLocation(): { x: number; y: number } {
+    const MIN_HQ_DISTANCE = 10;
+    const w = this.state.mapWidth;
+    const h = this.state.mapHeight;
 
-    player.berries -= 1;
-    player.hunger = Math.min(
-      player.hunger + PLAYER_SURVIVAL.BERRY_HUNGER_RESTORE,
-      PLAYER_SURVIVAL.MAX_HUNGER,
-    );
+    // Collect existing HQ positions
+    const hqs: { x: number; y: number }[] = [];
+    this.state.players.forEach((p) => {
+      if (p.hqX >= 0 && p.hqY >= 0) hqs.push({ x: p.hqX, y: p.hqY });
+    });
+
+    // Try random walkable tiles far from other HQs
+    for (let attempts = 0; attempts < 200; attempts++) {
+      const x = Math.floor(Math.random() * w);
+      const y = Math.floor(Math.random() * h);
+      if (!this.state.isWalkable(x, y)) continue;
+      const tooClose = hqs.some(
+        (hq) => Math.abs(hq.x - x) + Math.abs(hq.y - y) < MIN_HQ_DISTANCE,
+      );
+      if (!tooClose) return { x, y };
+    }
+
+    // Fallback: any walkable tile
+    return this.findRandomWalkableTile();
   }
 
   private handleCraft(client: Client, message: CraftPayload) {
@@ -218,8 +182,8 @@ export class GameRoom extends Room {
     if (!Number.isInteger(x) || !Number.isInteger(y)) return;
     if (!Number.isInteger(itemType)) return;
 
-    // Validate item type is placeable (Wall, Floor, Workbench, FarmPlot)
-    const placeableTypes = [ItemType.Wall, ItemType.Floor, ItemType.Workbench, ItemType.FarmPlot];
+    // Validate item type is placeable
+    const placeableTypes = [ItemType.Wall, ItemType.Floor, ItemType.Workbench, ItemType.FarmPlot, ItemType.Turret, ItemType.HQ];
     if (!placeableTypes.includes(itemType)) return;
 
     // Check player has the item
@@ -238,10 +202,9 @@ export class GameRoom extends Room {
     });
     if (occupied) return;
 
-    // Validate player is adjacent or on tile
-    const dx = Math.abs(player.x - x);
-    const dy = Math.abs(player.y - y);
-    if (dx > 1 || dy > 1) return;
+    // Validate tile is owned by the player
+    const placeTile = this.state.getTile(x, y);
+    if (!placeTile || placeTile.ownerID !== client.sessionId) return;
 
     // FarmPlot restricted to Grassland/Forest tiles
     if (itemType === ItemType.FarmPlot) {
@@ -275,10 +238,9 @@ export class GameRoom extends Room {
     const { x, y } = message;
     if (!Number.isInteger(x) || !Number.isInteger(y)) return;
 
-    // Player must be adjacent or on tile
-    const dx = Math.abs(player.x - x);
-    const dy = Math.abs(player.y - y);
-    if (dx > 1 || dy > 1) return;
+    // Tile must be owned by the player
+    const harvestTile = this.state.getTile(x, y);
+    if (!harvestTile || harvestTile.ownerID !== client.sessionId) return;
 
     // Find farm plot at this tile
     let farm: StructureState | undefined;
@@ -312,9 +274,16 @@ export class GameRoom extends Room {
     // Must be wild
     if (creature.ownerID !== "") return;
 
-    // Must be adjacent (Manhattan distance <= 1)
-    const dist = Math.abs(player.x - creature.x) + Math.abs(player.y - creature.y);
-    if (dist > 1) return;
+    // Creature must be on or adjacent to a tile owned by the player
+    let nearTerritory = false;
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const t = this.state.getTile(creature.x + dx, creature.y + dy);
+        if (t && t.ownerID === client.sessionId) { nearTerritory = true; break; }
+      }
+      if (nearTerritory) break;
+    }
+    if (!nearTerritory) return;
 
     // Check pack size limit
     let ownedCount = 0;
@@ -323,14 +292,9 @@ export class GameRoom extends Room {
     });
     if (ownedCount >= TAMING.MAX_PACK_SIZE) return;
 
-    // Cost: 1 berry (herbivore) or 1 meat (carnivore)
-    if (creature.creatureType === "herbivore") {
-      if (player.berries < 1) return;
-      player.berries -= 1;
-    } else {
-      if (player.meat < 1) return;
-      player.meat -= 1;
-    }
+    // Cost: 1 berry for all creature types
+    if (player.berries < 1) return;
+    player.berries -= 1;
 
     // Tame: set owner, apply personality-based initial trust
     creature.ownerID = client.sessionId;
@@ -359,8 +323,6 @@ export class GameRoom extends Room {
     creature.ownerID = "";
     creature.trust = 0;
     creature.zeroTrustTicks = 0;
-    // Remove from any selected pack
-    this.ensurePacks().forEach((pack) => pack.delete(creatureId));
   }
 
   private tickTrustDecay() {
@@ -370,15 +332,16 @@ export class GameRoom extends Room {
       const owner = this.state.players.get(creature.ownerID);
       if (!owner) return;
 
-      const dist = Math.abs(creature.x - owner.x) + Math.abs(creature.y - owner.y);
+      const tile = this.state.getTile(creature.x, creature.y);
+      const inTerritory = tile?.ownerID === creature.ownerID;
 
-      // Proximity trust gain: +1 per 10 ticks if within 3 tiles
-      if (dist <= 3 && this.state.tick % 10 === 0) {
+      // Proximity trust gain: +1 per 10 ticks if in territory
+      if (inTerritory && this.state.tick % 10 === 0) {
         creature.trust = Math.min(100, creature.trust + TAMING.TRUST_PER_PROXIMITY_TICK);
       }
 
-      // Trust decay: -1 per 20 ticks if owner > 3 tiles away
-      if (dist > 3 && this.state.tick % 20 === 0) {
+      // Trust decay: -1 per 20 ticks if outside territory
+      if (!inTerritory && this.state.tick % 20 === 0) {
         creature.trust = Math.max(0, creature.trust - TAMING.TRUST_DECAY_ALONE);
       }
 
@@ -388,8 +351,6 @@ export class GameRoom extends Room {
         if (creature.zeroTrustTicks >= TAMING.ZERO_TRUST_ABANDON_TICKS) {
           creature.ownerID = "";
           creature.zeroTrustTicks = 0;
-          // Remove from selected pack on auto-abandon
-          this.ensurePacks().forEach((pack) => pack.delete(creature.id));
         }
       } else {
         creature.zeroTrustTicks = 0;
@@ -416,30 +377,9 @@ export class GameRoom extends Room {
     });
   }
 
-  private tickPlayerSurvival() {
-    if (this.state.tick % PLAYER_SURVIVAL.HUNGER_TICK_INTERVAL !== 0) return;
-
-    this.state.players.forEach((player) => {
-      player.hunger = Math.max(0, player.hunger - PLAYER_SURVIVAL.HUNGER_DRAIN);
-
-      if (player.hunger <= 0) {
-        player.health = Math.max(
-          PLAYER_SURVIVAL.HEALTH_FLOOR,
-          player.health - PLAYER_SURVIVAL.STARVATION_DAMAGE,
-        );
-      }
-    });
-  }
-
   private tickCreatureAI() {
     if (this.state.tick % CREATURE_AI.TICK_INTERVAL !== 0) return;
-    // Collect all creatures currently in any player's selected pack
-    const packs = this.ensurePacks();
-    const packIds = new Set<string>();
-    packs.forEach((pack) => {
-      pack.forEach((id) => packIds.add(id));
-    });
-    tickCreatureAI(this.state, packIds);
+    tickCreatureAI(this.state);
   }
 
   /** Biome-to-resource mapping for regeneration. */
@@ -530,36 +470,6 @@ export class GameRoom extends Room {
         this.spawnOneCreature(typeKey);
         count++;
       }
-    }
-  }
-
-  handleSelectCreature(client: Client, message: SelectCreaturePayload) {
-    const player = this.state.players.get(client.sessionId);
-    if (!player) return;
-
-    const { creatureId } = message;
-    if (!creatureId) return;
-    const creature = this.state.creatures.get(creatureId);
-    if (!creature) return;
-
-    // Must own the creature
-    if (creature.ownerID !== client.sessionId) return;
-
-    // Must have trust >= 70 (obedient)
-    if (creature.trust < TAMING.TRUST_AT_OBEDIENT) return;
-
-    let pack = this.ensurePacks().get(client.sessionId);
-    if (!pack) {
-      pack = new Set<string>();
-      this.ensurePacks().set(client.sessionId, pack);
-    }
-
-    // Toggle: if already in pack, remove; otherwise add
-    if (pack.has(creatureId)) {
-      pack.delete(creatureId);
-    } else {
-      if (pack.size >= TAMING.MAX_PACK_SIZE) return;
-      pack.add(creatureId);
     }
   }
 
@@ -658,28 +568,6 @@ export class GameRoom extends Room {
       if (!occupied) return { x: nx, y: ny };
     }
     return null;
-  }
-
-  private tickPackFollow() {
-    const packs = this.ensurePacks();
-    for (const [playerId, pack] of packs) {
-      const owner = this.state.players.get(playerId);
-      if (!owner) { packs.delete(playerId); continue; }
-
-      for (const creatureId of pack) {
-        const creature = this.state.creatures.get(creatureId);
-        if (!creature || creature.ownerID !== playerId) {
-          pack.delete(creatureId);
-          continue;
-        }
-
-        const dist = Math.abs(creature.x - owner.x) + Math.abs(creature.y - owner.y);
-        if (dist > 1) {
-          moveToward(creature, owner.x, owner.y, this.state);
-        }
-        creature.currentState = "follow";
-      }
-    }
   }
 
   private findWalkableTileInBiomes(preferredBiomes: Set<number>): { x: number; y: number } {

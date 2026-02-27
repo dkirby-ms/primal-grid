@@ -29,6 +29,8 @@ export interface ITileState {
   resourceType: number;
   /** Resource amount remaining (0-10). */
   resourceAmount: number;
+  /** Player who owns this tile (empty string = unclaimed). */
+  ownerID: string;
 }
 
 /** Creature type identifiers. */
@@ -55,6 +57,12 @@ export interface ICreatureState {
   speed: number;
   personality: string;
   lastBredTick: number;
+  /** Active command assigned by owner. */
+  command: string;
+  /** X coordinate of assigned zone. */
+  zoneX: number;
+  /** Y coordinate of assigned zone. */
+  zoneY: number;
 }
 
 /** Craftable / placeable item types. */
@@ -62,9 +70,9 @@ export enum ItemType {
   Wall = 0,
   Floor = 1,
   Workbench = 2,
-  Axe = 3,
-  Pickaxe = 4,
   FarmPlot = 5,
+  Turret = 6,
+  HQ = 7,
 }
 
 /** State of a structure placed in the world. */
@@ -78,25 +86,27 @@ export interface IStructureState {
   growthProgress?: number;
   /** Whether a farm plot crop is ready for harvest. */
   cropReady?: boolean;
+  /** Structure hit points. */
+  health: number;
 }
 
 /** State of a player in the game world. */
 export interface IPlayerState {
   id: string;
-  x: number;
-  y: number;
   color: string;
   wood: number;
   stone: number;
   fiber: number;
   berries: number;
-  meat: number;
-  hunger: number;
-  health: number;
   walls: number;
   floors: number;
   workbenches: number;
-  axes: number;
-  pickaxes: number;
   farmPlots: number;
+  turrets: number;
+  /** X coordinate of player's HQ tile. */
+  hqX: number;
+  /** Y coordinate of player's HQ tile. */
+  hqY: number;
+  /** Player score for the current round. */
+  score: number;
 }

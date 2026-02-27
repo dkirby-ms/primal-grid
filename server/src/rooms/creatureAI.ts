@@ -11,13 +11,10 @@ export type AIState = "idle" | "wander" | "eat" | "flee" | "hunt";
  * Run one AI step for all creatures. Called every CREATURE_AI.TICK_INTERVAL ticks.
  * Modifies creature states in-place. Removes dead creatures from state.
  */
-export function tickCreatureAI(state: GameState, skipIds?: Set<string>): void {
+export function tickCreatureAI(state: GameState): void {
   const toRemove: string[] = [];
 
   state.creatures.forEach((creature) => {
-    // Skip creatures managed by pack follow
-    if (skipIds?.has(creature.id)) return;
-
     // Drain hunger
     creature.hunger = Math.max(0, creature.hunger - CREATURE_AI.HUNGER_DRAIN);
 

@@ -2,7 +2,7 @@
 export const TICK_RATE = 4;
 
 /** Default world map size (tiles per side). */
-export const DEFAULT_MAP_SIZE = 32;
+export const DEFAULT_MAP_SIZE = 64;
 
 /** Default Colyseus server port. */
 export const SERVER_PORT = 2567;
@@ -40,28 +40,10 @@ export const RESOURCE_REGEN = {
 
 /** Creature spawning constants. */
 export const CREATURE_SPAWN = {
-  /** Number of herbivores to spawn on 32×32 map. */
-  HERBIVORE_COUNT: 8,
-  /** Number of carnivores to spawn on 32×32 map. */
-  CARNIVORE_COUNT: 4,
-} as const;
-
-/** Player survival constants. */
-export const PLAYER_SURVIVAL = {
-  /** Starting hunger value. */
-  MAX_HUNGER: 100,
-  /** Starting health value. */
-  MAX_HEALTH: 100,
-  /** Ticks between hunger decrements (8 ticks = 2 seconds at 4 ticks/sec). */
-  HUNGER_TICK_INTERVAL: 8,
-  /** Hunger lost per interval. */
-  HUNGER_DRAIN: 1,
-  /** Health lost per tick when starving. */
-  STARVATION_DAMAGE: 1,
-  /** Minimum health when starving (no player death). */
-  HEALTH_FLOOR: 1,
-  /** Hunger restored per berry consumed. */
-  BERRY_HUNGER_RESTORE: 20,
+  /** Number of herbivores to spawn on 64×64 map. */
+  HERBIVORE_COUNT: 32,
+  /** Number of carnivores to spawn on 64×64 map. */
+  CARNIVORE_COUNT: 16,
 } as const;
 
 /** Creature respawning constants. */
@@ -132,4 +114,56 @@ export const FARM = {
   READY_THRESHOLD: 100,
   /** Base berry yield on harvest. */
   BASE_HARVEST_YIELD: 3,
+} as const;
+
+/** Territory claim constants. */
+export const TERRITORY = {
+  /** Starting territory radius in tiles. */
+  STARTING_SIZE: 3,
+  /** Wood cost to claim one tile. */
+  CLAIM_COST_WOOD: 1,
+  /** Starting wood for new players. */
+  STARTING_WOOD: 10,
+  /** Starting stone for new players. */
+  STARTING_STONE: 5,
+  /** Starting fiber for new players. */
+  STARTING_FIBER: 0,
+  /** Starting berries for new players. */
+  STARTING_BERRIES: 5,
+} as const;
+
+/** Wave spawner constants (Phase B). */
+export const WAVE_SPAWNER = {
+  /** Ticks between waves (240 ticks = 60 seconds at 4 ticks/sec). */
+  INTERVAL_TICKS: 240,
+  /** Base number of creatures per wave. */
+  BASE_WAVE_SIZE: 3,
+  /** Additional creatures per wave number. */
+  ESCALATION_PER_WAVE: 1,
+} as const;
+
+/** Turret constants (Phase B). */
+export const TURRET = {
+  /** Turret firing range in tiles. */
+  RANGE: 2,
+  /** Damage per turret shot. */
+  DAMAGE: 15,
+  /** Ticks between turret shots. */
+  FIRE_INTERVAL: 4,
+} as const;
+
+/** Round timer constants (Phase D). */
+export const ROUND = {
+  /** Round duration in ticks (3600 ticks = 15 minutes at 4 ticks/sec). */
+  DURATION_TICKS: 3600,
+} as const;
+
+/** Pawn command constants (Phase C). */
+export const PAWN_COMMAND = {
+  /** Ticks between pawn gather attempts. */
+  GATHER_INTERVAL: 4,
+  /** Guard detection radius in tiles. */
+  GUARD_RANGE: 3,
+  /** Patrol movement: ticks between steps. */
+  PATROL_STEP_INTERVAL: 2,
 } as const;

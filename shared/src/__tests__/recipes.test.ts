@@ -7,14 +7,14 @@ import { ItemType, ResourceType } from "../types.js";
 // ═══════════════════════════════════════════════════════════════════
 
 describe("Phase 3 — Recipe Definitions", () => {
-  const recipeIds = ["wall", "floor", "workbench", "axe", "pickaxe", "farm_plot"];
+  const recipeIds = ["wall", "floor", "workbench", "farm_plot", "turret"];
 
-  it("all 6 recipes are defined", () => {
+  it("all 5 recipes are defined", () => {
     for (const id of recipeIds) {
       expect(RECIPES[id]).toBeDefined();
       expect(RECIPES[id].id).toBe(id);
     }
-    expect(Object.keys(RECIPES).length).toBe(6);
+    expect(Object.keys(RECIPES).length).toBe(5);
   });
 
   it("each recipe has valid output type and positive outputCount", () => {
@@ -45,9 +45,8 @@ describe("Phase 3 — Recipe Definitions", () => {
     expect(RECIPES.wall.output).toBe(ItemType.Wall);
     expect(RECIPES.floor.output).toBe(ItemType.Floor);
     expect(RECIPES.workbench.output).toBe(ItemType.Workbench);
-    expect(RECIPES.axe.output).toBe(ItemType.Axe);
-    expect(RECIPES.pickaxe.output).toBe(ItemType.Pickaxe);
     expect(RECIPES.farm_plot.output).toBe(ItemType.FarmPlot);
+    expect(RECIPES.turret.output).toBe(ItemType.Turret);
   });
 
   it("each recipe produces exactly 1 item", () => {
@@ -105,9 +104,8 @@ describe("Phase 3 — getItemField", () => {
     expect(getItemField(ItemType.Wall)).toBe("walls");
     expect(getItemField(ItemType.Floor)).toBe("floors");
     expect(getItemField(ItemType.Workbench)).toBe("workbenches");
-    expect(getItemField(ItemType.Axe)).toBe("axes");
-    expect(getItemField(ItemType.Pickaxe)).toBe("pickaxes");
     expect(getItemField(ItemType.FarmPlot)).toBe("farmPlots");
+    expect(getItemField(ItemType.Turret)).toBe("turrets");
   });
 
   it("returns undefined for unknown ItemType", () => {

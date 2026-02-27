@@ -22,17 +22,14 @@ export class TileState extends Schema {
 
   @type("number")
   resourceAmount: number = 0;
+
+  @type("string")
+  ownerID: string = "";
 }
 
 export class PlayerState extends Schema {
   @type("string")
   id: string = "";
-
-  @type("number")
-  x: number = 0;
-
-  @type("number")
-  y: number = 0;
 
   @type("string")
   color: string = "#ffffff";
@@ -50,15 +47,6 @@ export class PlayerState extends Schema {
   berries: number = 0;
 
   @type("number")
-  meat: number = 0;
-
-  @type("number")
-  hunger: number = 100;
-
-  @type("number")
-  health: number = 100;
-
-  @type("number")
   walls: number = 0;
 
   @type("number")
@@ -68,13 +56,19 @@ export class PlayerState extends Schema {
   workbenches: number = 0;
 
   @type("number")
-  axes: number = 0;
-
-  @type("number")
-  pickaxes: number = 0;
-
-  @type("number")
   farmPlots: number = 0;
+
+  @type("number")
+  turrets: number = 0;
+
+  @type("number")
+  hqX: number = -1;
+
+  @type("number")
+  hqY: number = -1;
+
+  @type("number")
+  score: number = 0;
 }
 
 export class CreatureState extends Schema {
@@ -114,6 +108,15 @@ export class CreatureState extends Schema {
   @type("number")
   lastBredTick: number = 0;
 
+  @type("string")
+  command: string = "idle";
+
+  @type("number")
+  zoneX: number = -1;
+
+  @type("number")
+  zoneY: number = -1;
+
   /** Consecutive ticks at trust=0 (for auto-abandon). Not synced to client. */
   zeroTrustTicks: number = 0;
 }
@@ -139,11 +142,20 @@ export class StructureState extends Schema {
 
   @type("boolean")
   cropReady: boolean = false;
+
+  @type("number")
+  health: number = -1;
 }
 
 export class GameState extends Schema {
   @type("number")
   tick: number = 0;
+
+  @type("number")
+  roundTimer: number = -1;
+
+  @type("string")
+  roundPhase: string = "playing";
 
   @type([TileState])
   tiles = new ArraySchema<TileState>();

@@ -287,12 +287,11 @@ All Phase 4 gameplay loops verified end-to-end:
 
 **Context:** User requested fundamental pivot from avatar-based to territory/commander-mode gameplay. This is Phase A of 4-phase implementation plan (A–D). Shared work is critical path — schema alignment gates both server and client. After Phase A: join room → see 64×64 map → claim tiles → see territory. Phases B–D add buildings, waves, pawn commands, and multiplayer polish.
 
-
 ---
 
-## A10 — Test Rebuild & Integration
+## A10 — Test Rebuild & Integration — COMPLETE
 
-**Date:** $(date +%Y-%m-%d)
+**Date:** 2026-02-27
 **Ticket:** A10
 **Status:** ✅ Complete — 0 failures, 240 tests passing
 
@@ -327,10 +326,56 @@ Rebuilt the entire test suite after the A1–A9 colony commander pivot. Started 
 **Created (1 file):**
 - `territory.test.ts` — 8 tests: HQ spawn, claim adjacent, reject non-adjacent/owned/no-wood/unwalkable, adjacency check, score tracking
 
-### Learnings
+### Key Insights
 
-1. **Schema is the single source of truth.** Every test failure traced back to PlayerState field changes (removed x/y/hunger/health/meat/axes/pickaxes, added hqX/hqY/score). When schema changes, tests MUST change.
-2. **Territory ownership replaced player adjacency.** The pattern `tile.ownerID === client.sessionId` replaced all `isAdjacentToPlayer` checks. This was the most pervasive change across tests.
-3. **`Object.create(GameRoom.prototype)` test pattern** skips constructor, so new Map/Set properties need lazy null-guard init. This pattern is fragile but deeply embedded.
+1. **Schema is the single source of truth.** Every test failure traced back to PlayerState field changes. When schema changes, tests MUST change.
+2. **Territory ownership replaced player adjacency.** The pattern `tile.ownerID === client.sessionId` replaced all adjacency checks.
+3. **`Object.create(GameRoom.prototype)` test pattern** skips constructor. New Map/Set properties need lazy null-guard init.
 4. **Creature count scaling with map size matters.** The unique-position spawn test was deterministic with 12 creatures on 32×32 but probabilistically fails with 48 on 64×64. Test assertions must account for scaling.
 5. **joinPlayer helper > placePlayerAt.** The old `placePlayerAt(room, id, x, y)` set player.x/y which no longer exist. The new `joinPlayer(room, id)` calls `room.onJoin(client)` which triggers full territory setup.
+
+---
+
+## Phase A Completion Summary (All Agents)
+
+**Date:** 2026-02-27  
+**Status:** ✅ All 10 Phase A items complete and passing 240/240 tests
+
+### Agent Work Summary
+
+| Agent | Tasks | Status |
+|-------|-------|--------|
+| **Pemulis** (Systems Dev) | A1, A2, A3, A4, A5 | ✅ Complete |
+| **Gately** (Game Dev) | A6, A7, A8, A9 | ✅ Complete |
+| **Steeply** (Tester) | A10 | ✅ Complete |
+
+### Game Pivot Summary
+
+**From:** Avatar-based survival gameplay  
+**To:** Colony commander mode (territory ownership, base-building focus)
+
+**Key Features Implemented:**
+- Territory claiming and expansion (ownerID-based ownership)
+- HQ spawning with 3×3 starting territory
+- Free-pan camera (no avatar following)
+- Territory visualization (color-coded tiles)
+- Score tracking (territory count)
+- Updated HUD (removed survival stats)
+- Click-to-claim input model
+- Map 64×64 (doubled from 32×32)
+
+**Removed Systems:**
+- Player avatar (no x/y coordinates)
+- Survival mechanics (hunger, health, eating)
+- Player inventory (meat, axes, pickaxes)
+- Direct creature control (replaced with pawn assignment)
+- Avatar-based adjacency checks
+
+**Test Results:**
+- Before: 105 failures, 201 passing, 306 total
+- After: 0 failures, 240 passing, 240 total
+- Net: Removed 66 obsolete tests, passed all new tests
+
+### Foundation Established
+
+Phase A foundation pivot complete. All code compiles, all tests pass. Ready for Phase B (wave spawners, turret defense, creature zone UI).

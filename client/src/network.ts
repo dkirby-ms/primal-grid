@@ -11,8 +11,19 @@ export function onConnectionStatus(cb: StatusCallback): void {
   statusCallback = cb;
 }
 
+function getServerUrl(): string {
+  if (import.meta.env.VITE_WS_URL) {
+    return import.meta.env.VITE_WS_URL as string;
+  }
+  if (import.meta.env.PROD) {
+    const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+    return `${protocol}://${location.host}`;
+  }
+  return `ws://localhost:${SERVER_PORT}`;
+}
+
 export async function connect(): Promise<Room> {
-  const client = new Client(`ws://localhost:${SERVER_PORT}`);
+  const client = new Client(getServerUrl());
   statusCallback?.('connecting');
   console.log('[network] Connecting to server…');
 

@@ -287,3 +287,104 @@ Gately's 4.6.1 WebSocket URL work (`client/src/network.ts`) complements this con
 
 **Context:** User requested fundamental pivot from avatar-based to territory/commander-mode gameplay. This is Phase A of 4-phase implementation plan (A–D). After Phase A: join room → see 64×64 map → claim tiles → see territory. Phases B–D add buildings, waves, pawn commands, and multiplayer polish.
 
+---
+
+## 2026-02-27 — Phase A Complete: Shared Schema & Territory System Landed
+
+**Status:** All 5 Phase A (Pemulis) work items complete and merged. Tests: 240/240 passing.
+
+### A1 — Shared Schema & Constants Migration
+- **IPlayerState:** Removed `x`, `y`, `hunger`, `health`, `meat`, `axes`, `pickaxes`. Added `hqX`, `hqY`, `score`, `turrets`.
+- **ITileState:** Added `ownerID: string` (territory ownership).
+- **ICreatureState:** Added `command`, `zoneX`, `zoneY` (pawn assignment).
+- **IStructureState:** Added `health` (destructible).
+- **ItemType enum:** Removed Axe(3), Pickaxe(4). Added Turret(6), HQ(7).
+- **Constants:** Map size 32→64. Removed PLAYER_SURVIVAL. Creature counts 4x'd. Added TERRITORY, WAVE_SPAWNER, TURRET, ROUND, PAWN_COMMAND enums.
+- **Messages:** Removed MOVE/GATHER/EAT/SELECT_CREATURE. Added CLAIM_TILE, ASSIGN_PAWN.
+- **Recipes:** Removed axe/pickaxe. Added turret (wood:5, stone:5).
+- **Decision:** Kept berries in IPlayerState — still needed for taming/breeding costs despite removed survival system.
+
+### A2+A3 — Server Schema Migration & Handler Cleanup
+- **Territory ownership replaces adjacency checks:** All handlers now check `tile.ownerID === client.sessionId` instead of `Math.abs(player.x - target)`. Fundamental model shift.
+- **Taming cost unified to berries:** All creature types now cost 1 berry (herbivores & carnivores). Previously carnivores cost meat (removed).
+- **Trust decay uses territory instead of distance:** `tickTrustDecay` checks if creature's tile is owned by creature's owner. Creatures inside territory gain trust; outside decay.
+- **Tame territory check:** 3×3 area (±1 from player-owned tile).
+- **Compilation:** Zero TypeScript errors. All GameRoom handlers updated.
+- **Note:** Pre-existing tests break due to schema removals; deletion in scope for A10 (Steeply).
+
+### A4 — Territory System & HQ Spawning
+- **Pure functions in `server/src/rooms/territory.ts`:**
+  - `isAdjacentToTerritory(x, y, state)` — cardinal adjacency check (4 directions, no diagonals)
+  - `claimTile(x, y, sessionId, state)` — mark tile with ownerID, increment score
+  - `spawnHQ(x, y, playerId, idRef, state)` — place HQ structure, claim 3×3 + cardinal neighbors
+  - `getTerritoryCounts(sessionId, state)` — count player's claimed tiles
+- **HQ spawning at join:** `onJoin()` now spawns HQ with 3×3 starting territory and starting resources (15 berries, 10 wood, 5 stone).
+- **findHQSpawnLocation():** Places HQs ≥10 Manhattan distance apart. 200 random attempts before fallback.
+- **Ref object pattern:** `spawnHQ` takes `{ value: number }` for nextStructureId so it can increment without coupling to GameRoom.
+- **CLAIM_TILE handler:** Validates player owns adjacent tile, claims tile, updates score.
+- **Compilation:** Zero TypeScript errors.
+
+### A5 — Map Scaling
+- Map doubled from 32×32 to 64×64 (per A1 constants).
+- Camera viewport adjusted for new scale.
+- Colyseus buffer increased to 256 KB to handle 4,096 tiles.
+
+### Downstream Coordination
+
+**Gately (A6-A9):** Camera free-pan (A6), avatar removal + territory rendering (A7), HUD overhaul (A8), input rewrite to CLAIM_TILE (A9). All complete, tests rewritten.
+
+**Steeply (A10):** Test rebuild — deleted 3 obsolete test files (movement, gathering, survival), rewrote 12 test files for new schema, created new territory test file. Result: 240/240 passing.
+
+### Summary
+
+Phase A foundation pivot complete. Server-side: removed avatar properties, implemented territory ownership, HQ spawning, and adjacency-based tile claiming. Schema is production-ready. All 10 Phase A items (A1–A10) complete and passing 240/240 tests. Ready for Phase B (waves, turrets, pawn command UI).
+
+
+### Task A1 — Shared Schema & Constants Update (Pivot Foundation)
+
+- **types.ts:** Added `ownerID` to ITileState (territory ownership). Added `command`, `zoneX`, `zoneY` to ICreatureState (pawn commands). Added `health` to IStructureState (destructible buildings). Removed `x`, `y`, `hunger`, `health`, `meat`, `axes`, `pickaxes` from IPlayerState; added `hqX`, `hqY`, `score`, `turrets`. ItemType: removed Axe=3/Pickaxe=4, added Turret=6/HQ=7.
+- **constants.ts:** DEFAULT_MAP_SIZE 32→64. Removed PLAYER_SURVIVAL block entirely (no more direct survival mechanics). CREATURE_SPAWN scaled: herbivores 8→32, carnivores 4→16. Added 5 new constant blocks: TERRITORY, WAVE_SPAWNER, TURRET, ROUND, PAWN_COMMAND — all from architecture-plan.md §5.
+- **messages.ts:** Removed MOVE, GATHER, EAT, SELECT_CREATURE and their payload types (MovePayload, GatherPayload, MoveMessage, SelectCreaturePayload). Added CLAIM_TILE, ASSIGN_PAWN with ClaimTilePayload and AssignPawnPayload.
+- **recipes.ts:** Removed axe/pickaxe recipes and their ITEM_TYPE_TO_FIELD entries. Added turret recipe (wood:5, stone:5). Added Turret→"turrets" mapping. Recipe count 6→5.
+- **Tests updated:** messages.test.ts rewritten for new message constants. recipes.test.ts updated: recipe count 6→5, removed Axe/Pickaxe assertions, added Turret assertions.
+- **Shared compiles clean** (`tsc --noEmit -p shared/tsconfig.json` — zero errors). Downstream server/client will break — that's expected and handled in later tasks.
+- **Key decision:** Kept `berries` in IPlayerState inventory even though survival is gone — berries still used for taming/breeding feed cost.
+
+## A2+A3: Server Schema Migration + Handler Cleanup
+
+### What Changed
+**GameState.ts (A2):**
+- TileState: Added `ownerID` field for territory ownership
+- PlayerState: Removed x, y, hunger, health, meat, axes, pickaxes. Added hqX, hqY, score, turrets.
+- CreatureState: Added command, zoneX, zoneY for pawn command system
+- StructureState: Added health field (-1 = indestructible)
+- GameState: Added roundTimer, roundPhase for round-based play
+
+**GameRoom.ts (A3):**
+- Removed handlers: MOVE, GATHER, EAT, SELECT_CREATURE and all associated methods
+- Removed tick systems: tickPlayerSurvival, tickPackFollow
+- Removed playerSelectedPacks property and ensurePacks() helper
+- handlePlace: Replaced avatar adjacency check with territory ownership check (tile.ownerID === sessionId). Updated placeableTypes to include Turret and HQ.
+- handleFarmHarvest: Replaced adjacency check with territory ownership check
+- handleTame: Replaced adjacency check with territory check (creature on/adjacent to owned tile). Unified taming cost to berries for all creature types.
+- handleAbandon: Removed ensurePacks references
+- tickTrustDecay: Replaced distance-to-owner check with territory-based check (tile.ownerID === creature.ownerID)
+- tickCreatureAI: Removed skipIds/packIds logic, calls tickCreatureAI(state) with no skip set
+- onJoin: No longer sets player.x/y spawn position
+- onLeave: Removed ensurePacks cleanup
+
+**creatureAI.ts:**
+- Removed optional skipIds parameter and early-return check from tickCreatureAI()
+
+### Compilation Status
+- Server source (`server/src/rooms/`) compiles clean (zero errors)
+- Test files have expected errors — they reference removed methods (handleMove, handleGather, handleEat, tickPlayerSurvival, etc.) and removed fields (player.x, player.y, player.hunger, player.health). These tests need rewriting in a later task.
+
+## Learnings
+- Territory ownership (`tile.ownerID`) replaces all avatar-adjacency checks — this is the new proximity model for the colony commander pivot
+- The `owner` variable in tickTrustDecay is still fetched but no longer used for distance calc — it's kept for the null guard (skip creatures whose owner left)
+- Shared package must be rebuilt (`npx tsc` in shared/) before server can see new enum values like ItemType.Turret/HQ
+- Territory logic (isAdjacentToTerritory, claimTile, spawnHQ, getTerritoryCounts) lives in `server/src/rooms/territory.ts` — extracted for testability
+- spawnHQ uses a `{ value: number }` ref object pattern so the caller (GameRoom) can track nextStructureId mutations across the boundary
+- HQ spawn uses Manhattan distance ≥10 from existing HQs; falls back to any walkable tile after 200 random attempts
+- CLAIM_TILE validation chain: tile exists → not water/rock → unclaimed → adjacent to territory → player has wood ≥ CLAIM_COST_WOOD

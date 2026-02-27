@@ -49,7 +49,7 @@
         letter-spacing: 1px;
         margin-bottom: 6px;
       }
-      /* Health / Hunger bars */
+      /* Stat bars (legacy, kept for potential reuse) */
       .stat-bar-wrap {
         margin-bottom: 4px;
       }
@@ -71,8 +71,6 @@
         border-radius: 3px;
         transition: width 0.15s ease, background 0.3s ease;
       }
-      .stat-bar-fill.health { background: #2ecc71; }
-      .stat-bar-fill.hunger { background: #f39c12; }
       /* Inventory items */
       .inv-row {
         display: flex;
@@ -127,19 +125,9 @@
       <div id="app"></div>
       <div id="hud-panel">
         <div id="build-indicator">🔨 BUILD MODE</div>
-        <div class="hud-section" id="section-health">
-          <h3>Health</h3>
-          <div class="stat-bar-wrap">
-            <div class="bar-label"><span>❤️ Health</span><span id="health-val">100/100</span></div>
-            <div class="stat-bar"><div class="stat-bar-fill health" id="health-fill" style="width:100%"></div></div>
-          </div>
-        </div>
-        <div class="hud-section" id="section-hunger">
-          <h3>Hunger</h3>
-          <div class="stat-bar-wrap">
-            <div class="bar-label"><span>🍖 Hunger</span><span id="hunger-val">100/100</span></div>
-            <div class="stat-bar"><div class="stat-bar-fill hunger" id="hunger-fill" style="width:100%"></div></div>
-          </div>
+        <div class="hud-section" id="territory-count">
+          <h3>Territory</h3>
+          <div style="font-size:16px;font-weight:bold;color:#ffd700">🏰 <span id="territory-count-val">0</span> tiles</div>
         </div>
         <div class="hud-section" id="section-inventory">
           <h3>Inventory</h3>
@@ -147,14 +135,11 @@
           <div class="inv-row"><span class="inv-icon">🪨 Stone</span><span class="inv-count" id="inv-stone">0</span></div>
           <div class="inv-row"><span class="inv-icon">🌿 Fiber</span><span class="inv-count" id="inv-fiber">0</span></div>
           <div class="inv-row"><span class="inv-icon">🫐 Berries</span><span class="inv-count" id="inv-berries">0</span></div>
-          <div class="inv-row"><span class="inv-icon">🥩 Meat</span><span class="inv-count" id="inv-meat">0</span></div>
         </div>
         <div class="hud-section" id="section-crafted">
           <h3>Crafted Items</h3>
           <div class="inv-row"><span class="inv-icon">🧱 Walls</span><span class="inv-count" id="craft-walls">0</span></div>
           <div class="inv-row"><span class="inv-icon">🟫 Floors</span><span class="inv-count" id="craft-floors">0</span></div>
-          <div class="inv-row"><span class="inv-icon">🪓 Axes</span><span class="inv-count" id="craft-axes">0</span></div>
-          <div class="inv-row"><span class="inv-icon">⛏️ Pickaxes</span><span class="inv-count" id="craft-pickaxes">0</span></div>
           <div class="inv-row"><span class="inv-icon">🔨 Workbenches</span><span class="inv-count" id="craft-workbenches">0</span></div>
           <div class="inv-row"><span class="inv-icon">🌾 Farms</span><span class="inv-count" id="craft-farms">0</span></div>
         </div>

@@ -40,24 +40,6 @@ export const RECIPES: Record<string, RecipeDef> = {
       { resource: "stone", amount: 3 },
     ],
   },
-  axe: {
-    id: "axe",
-    output: ItemType.Axe,
-    outputCount: 1,
-    ingredients: [
-      { resource: "wood", amount: 3 },
-      { resource: "stone", amount: 1 },
-    ],
-  },
-  pickaxe: {
-    id: "pickaxe",
-    output: ItemType.Pickaxe,
-    outputCount: 1,
-    ingredients: [
-      { resource: "wood", amount: 2 },
-      { resource: "stone", amount: 3 },
-    ],
-  },
   farm_plot: {
     id: "farm_plot",
     output: ItemType.FarmPlot,
@@ -67,6 +49,15 @@ export const RECIPES: Record<string, RecipeDef> = {
       { resource: "fiber", amount: 2 },
     ],
   },
+  turret: {
+    id: "turret",
+    output: ItemType.Turret,
+    outputCount: 1,
+    ingredients: [
+      { resource: "wood", amount: 5 },
+      { resource: "stone", amount: 5 },
+    ],
+  },
 } as const;
 
 /** Map from ItemType to the player inventory field name. */
@@ -74,9 +65,8 @@ const ITEM_TYPE_TO_FIELD: Record<number, string> = {
   [ItemType.Wall]: "walls",
   [ItemType.Floor]: "floors",
   [ItemType.Workbench]: "workbenches",
-  [ItemType.Axe]: "axes",
-  [ItemType.Pickaxe]: "pickaxes",
   [ItemType.FarmPlot]: "farmPlots",
+  [ItemType.Turret]: "turrets",
 };
 
 export function getItemField(itemType: number): string | undefined {

@@ -1,6 +1,5 @@
 import { Application, Text } from 'pixi.js';
 import { GridRenderer } from './renderer/GridRenderer.js';
-import { PlayerRenderer } from './renderer/PlayerRenderer.js';
 import { CreatureRenderer } from './renderer/CreatureRenderer.js';
 import { StructureRenderer } from './renderer/StructureRenderer.js';
 import { Camera } from './renderer/Camera.js';
@@ -60,20 +59,22 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
     // Bind renderers to server state
     grid.bindToRoom(room);
 
-    const players = new PlayerRenderer(room.sessionId);
-    grid.container.addChild(players.container);
-    players.bindToRoom(room);
-
     const creatures = new CreatureRenderer(room.sessionId);
     grid.container.addChild(creatures.container);
     creatures.bindToRoom(room);
 
-    // Structure renderer (walls, floors, workbenches, farm plots)
+    // Structure renderer (walls, floors, workbenches, farm plots, HQ)
     const structures = new StructureRenderer();
     grid.container.addChild(structures.container);
     structures.bindToRoom(room);
 
-    // HUD (DOM-based side panel, replaces canvas HudRenderer)
+    // Center camera on local player's HQ
+    const localPlayer = room.state.players.get(room.sessionId);
+    if (localPlayer) {
+      camera.centerOnHQ(localPlayer.hqX, localPlayer.hqY);
+    }
+
+    // HUD (DOM-based side panel)
     const hud = new HudDOM(room.sessionId);
     hud.bindToRoom(room);
 
@@ -88,14 +89,13 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
     // Feed inventory updates to craft menu for affordability display
     hud.onInventoryUpdate = (resources) => craftMenu.updateResources(resources);
 
-    // Input handler (arrow keys + click + craft/build/harvest)
+    // Input handler (click + craft/build)
     const input = new InputHandler(room, grid.container);
     input.setCraftMenu(craftMenu);
     input.setHud(hud);
     input.setHelpScreen(helpScreen);
     input.setCreatureRenderer(creatures);
     input.setCamera(camera);
-    camera.setTrackingTarget(() => ({ x: hud.localPlayerX, y: hud.localPlayerY }));
   } catch {
     console.warn('[main] Server unavailable — running in offline mode.');
   }

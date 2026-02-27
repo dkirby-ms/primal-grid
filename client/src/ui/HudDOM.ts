@@ -8,19 +8,13 @@ export class HudDOM {
   private localSessionId: string;
 
   // DOM element references (cached for perf)
-  private healthFill: HTMLElement;
-  private healthVal: HTMLElement;
-  private hungerFill: HTMLElement;
-  private hungerVal: HTMLElement;
+  private territoryCount: HTMLElement;
   private invWood: HTMLElement;
   private invStone: HTMLElement;
   private invFiber: HTMLElement;
   private invBerries: HTMLElement;
-  private invMeat: HTMLElement;
   private craftWalls: HTMLElement;
   private craftFloors: HTMLElement;
-  private craftAxes: HTMLElement;
-  private craftPickaxes: HTMLElement;
   private craftWorkbenches: HTMLElement;
   private craftFarms: HTMLElement;
   private creatureCounts: HTMLElement;
@@ -31,27 +25,21 @@ export class HudDOM {
   /** Callback invoked with latest player resources for craft menu updates. */
   public onInventoryUpdate: ((resources: Record<string, number>) => void) | null = null;
 
-  /** Readable player position for farm harvest. */
-  public localPlayerX = 0;
-  public localPlayerY = 0;
+  /** HQ position for colony interactions. */
+  public localHqX = 0;
+  public localHqY = 0;
   public packSize = 0;
 
   constructor(localSessionId: string) {
     this.localSessionId = localSessionId;
 
-    this.healthFill = document.getElementById('health-fill')!;
-    this.healthVal = document.getElementById('health-val')!;
-    this.hungerFill = document.getElementById('hunger-fill')!;
-    this.hungerVal = document.getElementById('hunger-val')!;
+    this.territoryCount = document.getElementById('territory-count-val')!;
     this.invWood = document.getElementById('inv-wood')!;
     this.invStone = document.getElementById('inv-stone')!;
     this.invFiber = document.getElementById('inv-fiber')!;
     this.invBerries = document.getElementById('inv-berries')!;
-    this.invMeat = document.getElementById('inv-meat')!;
     this.craftWalls = document.getElementById('craft-walls')!;
     this.craftFloors = document.getElementById('craft-floors')!;
-    this.craftAxes = document.getElementById('craft-axes')!;
-    this.craftPickaxes = document.getElementById('craft-pickaxes')!;
     this.craftWorkbenches = document.getElementById('craft-workbenches')!;
     this.craftFarms = document.getElementById('craft-farms')!;
     this.creatureCounts = document.getElementById('creature-counts')!;
@@ -87,38 +75,31 @@ export class HudDOM {
           const id = (player['id'] as string) ?? key;
           if (id !== this.localSessionId) return;
 
-          const health = (player['health'] as number) ?? 100;
-          const hunger = (player['hunger'] as number) ?? 100;
+          // Colony HQ position
+          this.localHqX = (player['hqX'] as number) ?? 0;
+          this.localHqY = (player['hqY'] as number) ?? 0;
 
-          this.updateHealth(health);
-          this.updateHunger(hunger);
-
-          this.localPlayerX = (player['x'] as number) ?? 0;
-          this.localPlayerY = (player['y'] as number) ?? 0;
+          // Territory count
+          const score = (player['score'] as number) ?? 0;
+          this.territoryCount.textContent = String(score);
 
           // Inventory
           const wood = (player['wood'] as number) ?? 0;
           const stone = (player['stone'] as number) ?? 0;
           const fiber = (player['fiber'] as number) ?? 0;
           const berries = (player['berries'] as number) ?? 0;
-          const meat = (player['meat'] as number) ?? 0;
           this.invWood.textContent = String(wood);
           this.invStone.textContent = String(stone);
           this.invFiber.textContent = String(fiber);
           this.invBerries.textContent = String(berries);
-          this.invMeat.textContent = String(meat);
 
           // Crafted items
           const walls = (player['walls'] as number) ?? 0;
           const floors = (player['floors'] as number) ?? 0;
-          const axes = (player['axes'] as number) ?? 0;
-          const pickaxes = (player['pickaxes'] as number) ?? 0;
           const workbenches = (player['workbenches'] as number) ?? 0;
           const farmPlots = (player['farmPlots'] as number) ?? 0;
           this.craftWalls.textContent = String(walls);
           this.craftFloors.textContent = String(floors);
-          this.craftAxes.textContent = String(axes);
-          this.craftPickaxes.textContent = String(pickaxes);
           this.craftWorkbenches.textContent = String(workbenches);
           this.craftFarms.textContent = String(farmPlots);
 
@@ -159,24 +140,6 @@ export class HudDOM {
         this.updateTamedDisplay(ownedHerbs, ownedCarns, herbTrusts, carnTrusts);
       }
     });
-  }
-
-  private updateHealth(value: number): void {
-    const clamped = Math.max(0, Math.min(100, value));
-    const ratio = clamped / 100;
-    const color = ratio > 0.5 ? '#2ecc71' : ratio > 0.25 ? '#f39c12' : '#e74c3c';
-    this.healthFill.style.width = `${ratio * 100}%`;
-    this.healthFill.style.background = color;
-    this.healthVal.textContent = `${Math.round(clamped)}/100`;
-  }
-
-  private updateHunger(value: number): void {
-    const clamped = Math.max(0, Math.min(100, value));
-    const ratio = clamped / 100;
-    const color = ratio > 0.5 ? '#f39c12' : ratio > 0.25 ? '#e67e22' : '#e74c3c';
-    this.hungerFill.style.width = `${ratio * 100}%`;
-    this.hungerFill.style.background = color;
-    this.hungerVal.textContent = `${Math.round(clamped)}/100`;
   }
 
   private updateTamedDisplay(
