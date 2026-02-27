@@ -17,9 +17,10 @@ describe("PlayerState", () => {
   it("can be instantiated with defaults", () => {
     const player = new PlayerState();
     expect(player.id).toBe("");
-    expect(player.x).toBe(0);
-    expect(player.y).toBe(0);
     expect(player.color).toBe("#ffffff");
+    expect(player.hqX).toBe(-1);
+    expect(player.hqY).toBe(-1);
+    expect(player.score).toBe(0);
   });
 });
 

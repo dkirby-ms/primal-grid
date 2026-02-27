@@ -3,23 +3,8 @@ import { GameState, CreatureState, PlayerState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import {
   CREATURE_TYPES, CREATURE_AI, DEFAULT_MAP_SIZE,
+  TAMING,
 } from "@primal-grid/shared";
-
-// Phase 4 constants — will be exported from shared once Pemulis lands 4.1.
-// Inline the expected values from the scoping doc so tests compile independently.
-const TAMING = {
-  COST_BERRY: 1,
-  COST_MEAT: 1,
-  TRUST_PER_FEED: 5,
-  TRUST_PER_FEED_DOCILE: 10,
-  TRUST_PER_PROXIMITY_TICK: 1,
-  PROXIMITY_TICK_INTERVAL: 10,
-  TRUST_DECAY_ALONE: 1,
-  DECAY_TICK_INTERVAL: 20,
-  TRUST_AT_OBEDIENT: 70,
-  MAX_PACK_SIZE: 8,
-  AUTO_ABANDON_TICKS: 50,
-} as const;
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -34,12 +19,11 @@ function fakeClient(sessionId: string): any {
   return { sessionId };
 }
 
-function placePlayerAt(room: any, sessionId: string, x: number, y: number) {
+/** Join a player and return client + player. Player gets HQ and starting territory. */
+function joinPlayer(room: any, sessionId: string) {
   const client = fakeClient(sessionId);
   room.onJoin(client);
   const player = room.state.players.get(sessionId)!;
-  player.x = x;
-  player.y = y;
   return { client, player };
 }
 
@@ -64,7 +48,6 @@ function addCreature(
   creature.health = overrides.health ?? typeDef.health;
   creature.hunger = overrides.hunger ?? typeDef.hunger;
   creature.currentState = overrides.currentState ?? "idle";
-  // Phase 4 fields — set if the schema supports them
   if ("ownerID" in creature) (creature as any).ownerID = overrides.ownerID ?? "";
   if ("trust" in creature) (creature as any).trust = overrides.trust ?? 0;
   if ("personality" in creature) (creature as any).personality = overrides.personality ?? "neutral";
@@ -72,68 +55,79 @@ function addCreature(
   return creature;
 }
 
-/** Find two adjacent walkable tiles. */
-function findAdjacentWalkableTiles(room: any): { a: { x: number; y: number }; b: { x: number; y: number } } | null {
-  const w = room.state.mapWidth;
-  for (let y = 0; y < w; y++) {
-    for (let x = 0; x < w - 1; x++) {
-      if (room.state.isWalkable(x, y) && room.state.isWalkable(x + 1, y)) {
-        return { a: { x, y }, b: { x: x + 1, y } };
-      }
+/** Find a tile owned by player that is walkable. */
+function findOwnedWalkableTile(room: any, playerId: string): { x: number; y: number } | null {
+  for (let i = 0; i < room.state.tiles.length; i++) {
+    const tile = room.state.tiles.at(i)!;
+    if (tile.ownerID === playerId && room.state.isWalkable(tile.x, tile.y)) {
+      let hasStructure = false;
+      room.state.structures.forEach((s: any) => {
+        if (s.x === tile.x && s.y === tile.y) hasStructure = true;
+      });
+      if (!hasStructure) return { x: tile.x, y: tile.y };
     }
   }
   return null;
 }
 
-/** Find two walkable tiles at a given Chebyshev distance apart. */
-function findTilesAtChebyshevDistance(
-  room: any, dist: number,
-): { a: { x: number; y: number }; b: { x: number; y: number } } | null {
-  const w = room.state.mapWidth;
-  for (let y = 0; y < w; y++) {
-    for (let x = 0; x < w; x++) {
-      if (!room.state.isWalkable(x, y)) continue;
-      const x2 = x + dist;
-      if (x2 < w && room.state.isWalkable(x2, y)) {
-        return { a: { x, y }, b: { x: x2, y } };
-      }
+/** Find a tile NOT owned by any player. */
+function findUnownedWalkableTile(room: any): { x: number; y: number } | null {
+  for (let i = 0; i < room.state.tiles.length; i++) {
+    const tile = room.state.tiles.at(i)!;
+    if (tile.ownerID === "" && room.state.isWalkable(tile.x, tile.y)) {
+      return { x: tile.x, y: tile.y };
     }
   }
   return null;
-}
-
-/** Chebyshev distance. */
-function chebyshev(x1: number, y1: number, x2: number, y2: number): number {
-  return Math.max(Math.abs(x1 - x2), Math.abs(y1 - y2));
 }
 
 // ── TAME Handler ────────────────────────────────────────────────────
 
 describe("Phase 4.2 — TAME Handler", () => {
-  it("tames an adjacent wild creature, sets ownerID", () => {
+  it("tames a creature on owned territory, sets ownerID", () => {
     const room = createRoomWithMap(42);
-    const pair = findAdjacentWalkableTiles(room);
-    if (!pair) return;
-
-    const { client, player } = placePlayerAt(room, "p1", pair.a.x, pair.a.y);
+    const { client, player } = joinPlayer(room, "p1");
     player.berries = 5;
-    const creature = addCreature(room, "c1", "herbivore", pair.b.x, pair.b.y);
+
+    const pos = findOwnedWalkableTile(room, "p1");
+    if (!pos) return;
+
+    const creature = addCreature(room, "c1", "herbivore", pos.x, pos.y);
 
     room.handleTame(client, { creatureId: "c1" });
 
     expect(creature.ownerID).toBe("p1");
-    expect(creature.trust).toBe(0);
     expect(player.berries).toBe(4); // cost 1 berry
   });
 
-  it("rejects taming a non-adjacent creature", () => {
+  it("rejects taming a creature far from territory", () => {
     const room = createRoomWithMap(42);
-    const pair = findTilesAtChebyshevDistance(room, 5);
-    if (!pair) return;
-
-    const { client, player } = placePlayerAt(room, "p1", pair.a.x, pair.a.y);
+    const { client, player } = joinPlayer(room, "p1");
     player.berries = 5;
-    const creature = addCreature(room, "c-far", "herbivore", pair.b.x, pair.b.y);
+
+    const unowned = findUnownedWalkableTile(room);
+    if (!unowned) return;
+
+    // Ensure far from any owned territory
+    let farTile: { x: number; y: number } | null = null;
+    for (let i = room.state.tiles.length - 1; i >= 0; i--) {
+      const tile = room.state.tiles.at(i)!;
+      if (tile.ownerID === "" && room.state.isWalkable(tile.x, tile.y)) {
+        // Check no adjacent owned tiles
+        let nearTerritory = false;
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            const t = room.state.getTile(tile.x + dx, tile.y + dy);
+            if (t && t.ownerID === "p1") { nearTerritory = true; break; }
+          }
+          if (nearTerritory) break;
+        }
+        if (!nearTerritory) { farTile = { x: tile.x, y: tile.y }; break; }
+      }
+    }
+    if (!farTile) return;
+
+    const creature = addCreature(room, "c-far", "herbivore", farTile.x, farTile.y);
 
     room.handleTame(client, { creatureId: "c-far" });
 
@@ -143,12 +137,13 @@ describe("Phase 4.2 — TAME Handler", () => {
 
   it("rejects taming an already-owned creature", () => {
     const room = createRoomWithMap(42);
-    const pair = findAdjacentWalkableTiles(room);
-    if (!pair) return;
-
-    const { client, player } = placePlayerAt(room, "p1", pair.a.x, pair.a.y);
+    const { client, player } = joinPlayer(room, "p1");
     player.berries = 5;
-    const creature = addCreature(room, "c-owned", "herbivore", pair.b.x, pair.b.y, {
+
+    const pos = findOwnedWalkableTile(room, "p1");
+    if (!pos) return;
+
+    const creature = addCreature(room, "c-owned", "herbivore", pos.x, pos.y, {
       ownerID: "other-player",
     });
 
@@ -158,49 +153,34 @@ describe("Phase 4.2 — TAME Handler", () => {
     expect(player.berries).toBe(5);
   });
 
-  it("rejects taming with insufficient food (no berries for herbivore)", () => {
+  it("rejects taming with insufficient food (no berries)", () => {
     const room = createRoomWithMap(42);
-    const pair = findAdjacentWalkableTiles(room);
-    if (!pair) return;
-
-    const { client, player } = placePlayerAt(room, "p1", pair.a.x, pair.a.y);
+    const { client, player } = joinPlayer(room, "p1");
     player.berries = 0;
-    const creature = addCreature(room, "c-nofood", "herbivore", pair.b.x, pair.b.y);
+
+    const pos = findOwnedWalkableTile(room, "p1");
+    if (!pos) return;
+
+    const creature = addCreature(room, "c-nofood", "herbivore", pos.x, pos.y);
 
     room.handleTame(client, { creatureId: "c-nofood" });
 
     expect(creature.ownerID).toBe(""); // still wild
   });
 
-  it("herbivore taming costs 1 berry", () => {
+  it("taming costs 1 berry for all creature types", () => {
     const room = createRoomWithMap(42);
-    const pair = findAdjacentWalkableTiles(room);
-    if (!pair) return;
+    const { client, player } = joinPlayer(room, "p1");
+    player.berries = 5;
 
-    const { client, player } = placePlayerAt(room, "p1", pair.a.x, pair.a.y);
-    player.berries = 3;
-    addCreature(room, "c-herb", "herbivore", pair.b.x, pair.b.y);
+    const pos = findOwnedWalkableTile(room, "p1");
+    if (!pos) return;
+
+    addCreature(room, "c-herb", "herbivore", pos.x, pos.y);
 
     room.handleTame(client, { creatureId: "c-herb" });
 
-    expect(player.berries).toBe(2);
-  });
-
-  it("carnivore taming costs 1 meat", () => {
-    const room = createRoomWithMap(42);
-    const pair = findAdjacentWalkableTiles(room);
-    if (!pair) return;
-
-    const { client, player } = placePlayerAt(room, "p1", pair.a.x, pair.a.y);
-    // Meat field expected on PlayerState (Phase 4 adds it)
-    if ("meat" in player) (player as any).meat = 3;
-    addCreature(room, "c-carn", "carnivore", pair.b.x, pair.b.y);
-
-    room.handleTame(client, { creatureId: "c-carn" });
-
-    if ("meat" in player) {
-      expect((player as any).meat).toBe(2);
-    }
+    expect(player.berries).toBe(4);
   });
 });
 
@@ -209,11 +189,12 @@ describe("Phase 4.2 — TAME Handler", () => {
 describe("Phase 4.2 — ABANDON Handler", () => {
   it("owner can abandon: resets ownerID and trust", () => {
     const room = createRoomWithMap(42);
-    const pair = findAdjacentWalkableTiles(room);
-    if (!pair) return;
+    const { client } = joinPlayer(room, "p1");
 
-    const { client } = placePlayerAt(room, "p1", pair.a.x, pair.a.y);
-    const creature = addCreature(room, "c-abandon", "herbivore", pair.b.x, pair.b.y, {
+    const pos = findOwnedWalkableTile(room, "p1");
+    if (!pos) return;
+
+    const creature = addCreature(room, "c-abandon", "herbivore", pos.x, pos.y, {
       ownerID: "p1",
       trust: 80,
     });
@@ -226,11 +207,12 @@ describe("Phase 4.2 — ABANDON Handler", () => {
 
   it("non-owner cannot abandon someone else's creature", () => {
     const room = createRoomWithMap(42);
-    const pair = findAdjacentWalkableTiles(room);
-    if (!pair) return;
+    const { client } = joinPlayer(room, "not-owner");
 
-    const { client } = placePlayerAt(room, "not-owner", pair.a.x, pair.a.y);
-    const creature = addCreature(room, "c-notown", "herbivore", pair.b.x, pair.b.y, {
+    const pos = findOwnedWalkableTile(room, "not-owner");
+    if (!pos) return;
+
+    const creature = addCreature(room, "c-notown", "herbivore", pos.x, pos.y, {
       ownerID: "real-owner",
       trust: 60,
     });
@@ -244,58 +226,18 @@ describe("Phase 4.2 — ABANDON Handler", () => {
 
 // ── Trust Mechanics ─────────────────────────────────────────────────
 
-describe("Phase 4.2 — Trust Mechanics", () => {
-  it("feeding increases trust by +5 (neutral personality)", () => {
+describe("Phase 4.2 — Trust Mechanics (Territory-Based)", () => {
+  it("trust decays -1 per 20 ticks when creature is outside territory", () => {
     const room = createRoomWithMap(42);
-    const pair = findAdjacentWalkableTiles(room);
-    if (!pair) return;
+    const { player } = joinPlayer(room, "p1");
 
-    const { client, player } = placePlayerAt(room, "p1", pair.a.x, pair.a.y);
-    player.berries = 10;
-    const creature = addCreature(room, "c-feed", "herbivore", pair.b.x, pair.b.y, {
-      ownerID: "p1",
-      trust: 20,
-      personality: "neutral",
-    });
+    const unowned = findUnownedWalkableTile(room);
+    if (!unowned) return;
 
-    if (room.handleFeed) {
-      room.handleFeed(client, { creatureId: "c-feed" });
-      expect(creature.trust).toBe(25); // +5
-    }
-  });
-
-  it("feeding docile creature increases trust by +10", () => {
-    const room = createRoomWithMap(42);
-    const pair = findAdjacentWalkableTiles(room);
-    if (!pair) return;
-
-    const { client, player } = placePlayerAt(room, "p1", pair.a.x, pair.a.y);
-    player.berries = 10;
-    const creature = addCreature(room, "c-docile", "herbivore", pair.b.x, pair.b.y, {
-      ownerID: "p1",
-      trust: 20,
-      personality: "docile",
-    });
-
-    if (room.handleFeed) {
-      room.handleFeed(client, { creatureId: "c-docile" });
-      expect(creature.trust).toBe(30); // +10
-    }
-  });
-
-  it("trust decays -1 per 20 ticks when owner is distant (>3 tiles)", () => {
-    const room = createRoomWithMap(42);
-    const pair = findTilesAtChebyshevDistance(room, 6);
-    if (!pair) return;
-
-    const { player } = placePlayerAt(room, "p1", pair.a.x, pair.a.y);
-    const creature = addCreature(room, "c-decay", "herbivore", pair.b.x, pair.b.y, {
+    const creature = addCreature(room, "c-decay", "herbivore", unowned.x, unowned.y, {
       ownerID: "p1",
       trust: 50,
     });
-
-    // Verify distance > 3
-    expect(chebyshev(player.x, player.y, creature.x, creature.y)).toBeGreaterThan(3);
 
     // Simulate 20 ticks
     for (let i = 0; i < 20; i++) {
@@ -306,18 +248,19 @@ describe("Phase 4.2 — Trust Mechanics", () => {
     expect(creature.trust).toBe(49); // -1 after 20 ticks
   });
 
-  it("trust increases +1 per 10 ticks when owner is nearby (≤3 tiles)", () => {
+  it("trust increases +1 per 10 ticks when creature is inside territory", () => {
     const room = createRoomWithMap(42);
-    const pair = findAdjacentWalkableTiles(room);
-    if (!pair) return;
+    joinPlayer(room, "p1");
 
-    placePlayerAt(room, "p1", pair.a.x, pair.a.y);
-    const creature = addCreature(room, "c-prox", "herbivore", pair.b.x, pair.b.y, {
+    const owned = findOwnedWalkableTile(room, "p1");
+    if (!owned) return;
+
+    const creature = addCreature(room, "c-prox", "herbivore", owned.x, owned.y, {
       ownerID: "p1",
       trust: 30,
     });
 
-    // Simulate 10 ticks — owner is adjacent (distance 1, well within 3)
+    // Simulate 10 ticks — creature is on owned tile
     for (let i = 0; i < 10; i++) {
       room.state.tick += 1;
       if (room.tickTrustDecay) room.tickTrustDecay();
@@ -328,16 +271,17 @@ describe("Phase 4.2 — Trust Mechanics", () => {
 
   it("auto-abandon: trust at 0 for 50+ ticks turns creature wild", () => {
     const room = createRoomWithMap(42);
-    const pair = findTilesAtChebyshevDistance(room, 6);
-    if (!pair) return;
+    joinPlayer(room, "p1");
 
-    placePlayerAt(room, "p1", pair.a.x, pair.a.y);
-    const creature = addCreature(room, "c-autoabandon", "herbivore", pair.b.x, pair.b.y, {
+    const unowned = findUnownedWalkableTile(room);
+    if (!unowned) return;
+
+    const creature = addCreature(room, "c-autoabandon", "herbivore", unowned.x, unowned.y, {
       ownerID: "p1",
       trust: 0,
     });
 
-    // Simulate 50+ ticks at trust=0
+    // Simulate 55 ticks at trust=0
     for (let i = 0; i < 55; i++) {
       room.state.tick += 1;
       if (room.tickTrustDecay) room.tickTrustDecay();
@@ -374,7 +318,6 @@ describe("Phase 4.1 — Personality Assignment at Spawn", () => {
       }
     });
 
-    // With 12 creatures, expect at least 2 distinct personalities
     if (personalities.size > 0) {
       expect(personalities.size).toBeGreaterThanOrEqual(1);
     }

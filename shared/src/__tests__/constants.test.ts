@@ -6,8 +6,8 @@ describe("shared constants", () => {
     expect(TICK_RATE).toBe(4);
   });
 
-  it("exports DEFAULT_MAP_SIZE as 32", () => {
-    expect(DEFAULT_MAP_SIZE).toBe(32);
+  it("exports DEFAULT_MAP_SIZE as 64", () => {
+    expect(DEFAULT_MAP_SIZE).toBe(64);
   });
 
   it("exports SERVER_PORT as 2567", () => {

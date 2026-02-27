@@ -287,3 +287,50 @@ All Phase 4 gameplay loops verified end-to-end:
 
 **Context:** User requested fundamental pivot from avatar-based to territory/commander-mode gameplay. This is Phase A of 4-phase implementation plan (A–D). Shared work is critical path — schema alignment gates both server and client. After Phase A: join room → see 64×64 map → claim tiles → see territory. Phases B–D add buildings, waves, pawn commands, and multiplayer polish.
 
+
+---
+
+## A10 — Test Rebuild & Integration
+
+**Date:** $(date +%Y-%m-%d)
+**Ticket:** A10
+**Status:** ✅ Complete — 0 failures, 240 tests passing
+
+### Summary
+
+Rebuilt the entire test suite after the A1–A9 colony commander pivot. Started with 105 failures across 16 test files. Ended with 0 failures, 240 passing tests across 24 files (down from 306 total — deleted obsolete tests, added territory tests).
+
+### Changes Made
+
+**Deleted (3 files — tested removed systems):**
+- `player-survival.test.ts` — hunger, health, EAT handler (all removed)
+- `movement-validation.test.ts` — handleMove, player x/y (all removed)
+- `resources-gathering.test.ts` — handleGather, gathering mechanics (all removed)
+
+**Modified (12 files):**
+- `constants.test.ts` — DEFAULT_MAP_SIZE 32→64
+- `GameState.test.ts` — PlayerState defaults: removed x/y, added hqX/hqY/score
+- `player-lifecycle.test.ts` — Full rewrite for hqX/hqY, starting resources, HQ structure
+- `grid-generation.test.ts` — 64×64 map size
+- `procedural-map-generation.test.ts` — 64×64, hqX/hqY spawn
+- `creature-spawning.test.ts` — 48 creatures, relaxed unique-position check
+- `crafting.test.ts` — Removed axe/pickaxe recipes, removed tool bonus tests
+- `structures.test.ts` — Territory ownership required for placement
+- `farming.test.ts` — Territory ownership for placement/harvest
+- `base-building-integration.test.ts` — Removed gather/craft/place loops
+- `taming.test.ts` — Territory-based taming, unified berry cost
+- `creature-systems-integration.test.ts` — Removed pack follow, territory trust decay
+
+**Fixed (1 file):**
+- `hud-state-contract.test.ts` — Removed PLAYER_SURVIVAL/handleEat/handleGather/health/hunger/meat/axes/pickaxes, kept inventory and creature HUD tests
+
+**Created (1 file):**
+- `territory.test.ts` — 8 tests: HQ spawn, claim adjacent, reject non-adjacent/owned/no-wood/unwalkable, adjacency check, score tracking
+
+### Learnings
+
+1. **Schema is the single source of truth.** Every test failure traced back to PlayerState field changes (removed x/y/hunger/health/meat/axes/pickaxes, added hqX/hqY/score). When schema changes, tests MUST change.
+2. **Territory ownership replaced player adjacency.** The pattern `tile.ownerID === client.sessionId` replaced all `isAdjacentToPlayer` checks. This was the most pervasive change across tests.
+3. **`Object.create(GameRoom.prototype)` test pattern** skips constructor, so new Map/Set properties need lazy null-guard init. This pattern is fragile but deeply embedded.
+4. **Creature count scaling with map size matters.** The unique-position spawn test was deterministic with 12 creatures on 32×32 but probabilistically fails with 48 on 64×64. Test assertions must account for scaling.
+5. **joinPlayer helper > placePlayerAt.** The old `placePlayerAt(room, id, x, y)` set player.x/y which no longer exist. The new `joinPlayer(room, id)` calls `room.onJoin(client)` which triggers full territory setup.

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { GameState, PlayerState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
-import { TileType, DEFAULT_MAP_SIZE } from "@primal-grid/shared";
+import { TileType, DEFAULT_MAP_SIZE, TERRITORY } from "@primal-grid/shared";
 
 /** Create a room-like object with generated map for lifecycle testing. */
 function createRoom(): any {
@@ -17,7 +17,7 @@ function fakeClient(sessionId: string): any {
 }
 
 describe("Player Lifecycle", () => {
-  it("player joins → appears in room state with valid position", () => {
+  it("player joins → appears in room state with HQ position", () => {
     const room = createRoom();
     const client = fakeClient("player-1");
     room.onJoin(client);
@@ -25,23 +25,22 @@ describe("Player Lifecycle", () => {
     const player = room.state.players.get("player-1");
     expect(player).toBeDefined();
     expect(player!.id).toBe("player-1");
-    expect(player!.x).toBeGreaterThanOrEqual(0);
-    expect(player!.x).toBeLessThan(DEFAULT_MAP_SIZE);
-    expect(player!.y).toBeGreaterThanOrEqual(0);
-    expect(player!.y).toBeLessThan(DEFAULT_MAP_SIZE);
+    expect(player!.hqX).toBeGreaterThanOrEqual(0);
+    expect(player!.hqX).toBeLessThan(DEFAULT_MAP_SIZE);
+    expect(player!.hqY).toBeGreaterThanOrEqual(0);
+    expect(player!.hqY).toBeLessThan(DEFAULT_MAP_SIZE);
   });
 
-  it("player position is on a walkable tile (not water, not rock)", () => {
+  it("player HQ is on a walkable tile (not water, not rock)", () => {
     const room = createRoom();
     const client = fakeClient("player-spawn");
     room.onJoin(client);
 
     const player = room.state.players.get("player-spawn");
     expect(player).toBeDefined();
-    expect(room.state.isWalkable(player!.x, player!.y)).toBe(true);
+    expect(room.state.isWalkable(player!.hqX, player!.hqY)).toBe(true);
 
-    // Verify the tile is specifically not water or rock
-    const tile = room.state.getTile(player!.x, player!.y);
+    const tile = room.state.getTile(player!.hqX, player!.hqY);
     expect(tile).toBeDefined();
     expect(tile!.type).not.toBe(TileType.Water);
     expect(tile!.type).not.toBe(TileType.Rock);
@@ -57,6 +56,27 @@ describe("Player Lifecycle", () => {
     expect(player!.color).toBeDefined();
     expect(player!.color).not.toBe("#ffffff");
     expect(player!.color).toMatch(/^#[0-9a-f]{6}$/i);
+  });
+
+  it("player gets starting resources on join", () => {
+    const room = createRoom();
+    room.onJoin(fakeClient("res-check"));
+    const player = room.state.players.get("res-check")!;
+    expect(player.wood).toBe(TERRITORY.STARTING_WOOD);
+    expect(player.stone).toBe(TERRITORY.STARTING_STONE);
+    expect(player.berries).toBe(TERRITORY.STARTING_BERRIES);
+  });
+
+  it("player gets HQ structure and territory on join", () => {
+    const room = createRoom();
+    room.onJoin(fakeClient("hq-check"));
+    const player = room.state.players.get("hq-check")!;
+
+    // HQ structure should exist
+    expect(room.state.structures.size).toBeGreaterThanOrEqual(1);
+
+    // Player should have claimed some tiles (score > 0)
+    expect(player.score).toBeGreaterThan(0);
   });
 
   it("second player joins → both visible in state", () => {
@@ -112,13 +132,14 @@ describe("Player Lifecycle", () => {
 
   it("player spawn is deterministically walkable across multiple joins", () => {
     const room = createRoom();
-    // Join 10 players — all should land on walkable tiles
     for (let i = 0; i < 10; i++) {
       room.onJoin(fakeClient(`stress-${i}`));
     }
     expect(room.state.players.size).toBe(10);
     room.state.players.forEach((player: PlayerState) => {
-      expect(room.state.isWalkable(player.x, player.y)).toBe(true);
+      expect(player.hqX).toBeGreaterThanOrEqual(0);
+      expect(player.hqY).toBeGreaterThanOrEqual(0);
+      expect(room.state.isWalkable(player.hqX, player.hqY)).toBe(true);
     });
   });
 });

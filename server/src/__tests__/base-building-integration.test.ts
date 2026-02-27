@@ -7,7 +7,7 @@ import {
   RECIPES, FARM, CREATURE_AI,
   DEFAULT_MAP_SIZE,
 } from "@primal-grid/shared";
-import type { CraftPayload, PlacePayload, GatherPayload, FarmHarvestPayload } from "@primal-grid/shared";
+import type { CraftPayload, PlacePayload, FarmHarvestPayload } from "@primal-grid/shared";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -23,12 +23,11 @@ function fakeClient(sessionId: string): any {
   return { sessionId };
 }
 
-function placePlayerAt(room: any, sessionId: string, x: number, y: number) {
+/** Join a player and return client + player. Player gets HQ and starting territory. */
+function joinPlayer(room: any, sessionId: string) {
   const client = fakeClient(sessionId);
   room.onJoin(client);
   const player = room.state.players.get(sessionId)!;
-  player.x = x;
-  player.y = y;
   return { client, player };
 }
 
@@ -38,6 +37,22 @@ function giveResources(player: any, resources: Partial<Record<string, number>>) 
   }
 }
 
+/** Find a tile owned by the player that is walkable and has no structure. */
+function findOwnedWalkableTile(room: any, playerId: string, biome?: number): { x: number; y: number } | null {
+  for (let i = 0; i < room.state.tiles.length; i++) {
+    const tile = room.state.tiles.at(i)!;
+    if (tile.ownerID === playerId && room.state.isWalkable(tile.x, tile.y)) {
+      if (biome !== undefined && tile.type !== biome) continue;
+      let hasStructure = false;
+      room.state.structures.forEach((s: any) => {
+        if (s.x === tile.x && s.y === tile.y) hasStructure = true;
+      });
+      if (!hasStructure) return { x: tile.x, y: tile.y };
+    }
+  }
+  return null;
+}
+
 function findAdjacentWalkablePair(room: any): { player: { x: number; y: number }; target: { x: number; y: number } } | null {
   const w = room.state.mapWidth;
   for (let y = 1; y < w - 1; y++) {
@@ -45,36 +60,6 @@ function findAdjacentWalkablePair(room: any): { player: { x: number; y: number }
       if (room.state.isWalkable(x, y) && room.state.isWalkable(x + 1, y)) {
         return { player: { x, y }, target: { x: x + 1, y } };
       }
-    }
-  }
-  return null;
-}
-
-function findAdjacentPairWithBiome(
-  room: any, targetBiome: number,
-): { player: { x: number; y: number }; target: { x: number; y: number } } | null {
-  const w = room.state.mapWidth;
-  for (let y = 0; y < w; y++) {
-    for (let x = 0; x < w; x++) {
-      const tile = room.state.getTile(x, y);
-      if (!tile || tile.type !== targetBiome) continue;
-      for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-        const px = x + dx;
-        const py = y + dy;
-        if (px >= 0 && px < w && py >= 0 && py < w && room.state.isWalkable(px, py)) {
-          return { player: { x: px, y: py }, target: { x, y } };
-        }
-      }
-    }
-  }
-  return null;
-}
-
-function findResourceTileOfType(room: any, resType: number): any | null {
-  for (let i = 0; i < room.state.tiles.length; i++) {
-    const tile = room.state.tiles.at(i)!;
-    if (tile.resourceType === resType && tile.resourceAmount > 0 && room.state.isWalkable(tile.x, tile.y)) {
-      return tile;
     }
   }
   return null;
@@ -92,13 +77,10 @@ function simulateTick(room: any): void {
 // Phase 3.7 — Base Building Integration Tests
 // ═══════════════════════════════════════════════════════════════════
 
-describe("Phase 3 Integration — Gather → Craft → Place → Verify", () => {
-  it("full loop: gather resources → craft wall → place wall → walkability blocked", () => {
+describe("Phase 3 Integration — Craft → Place → Verify", () => {
+  it("full loop: craft wall → place on owned tile → walkability blocked", () => {
     const room = createRoomWithMap(42);
-    const pair = findAdjacentWalkablePair(room);
-    if (!pair) return;
-
-    const { client, player } = placePlayerAt(room, "loop-builder", pair.player.x, pair.player.y);
+    const { client, player } = joinPlayer(room, "loop-builder");
 
     // Give player enough resources for a wall (wood:5, stone:2)
     giveResources(player, { wood: 5, stone: 2 });
@@ -109,26 +91,23 @@ describe("Phase 3 Integration — Gather → Craft → Place → Verify", () => 
     expect(player.wood).toBe(0);
     expect(player.stone).toBe(0);
 
-    // Step 2: Place wall on adjacent tile
+    // Step 2: Place wall on owned tile
+    const pos = findOwnedWalkableTile(room, "loop-builder");
+    if (!pos) return;
+
     room.handlePlace(client, {
       itemType: ItemType.Wall,
-      x: pair.target.x,
-      y: pair.target.y,
+      x: pos.x,
+      y: pos.y,
     } as PlacePayload);
 
     expect(player.walls).toBe(0);
-    expect(room.state.structures.size).toBe(1);
-
-    // Step 3: Verify walkability is blocked
-    expect(room.state.isWalkable(pair.target.x, pair.target.y)).toBe(false);
+    expect(room.state.isWalkable(pos.x, pos.y)).toBe(false);
   });
 
-  it("full loop: gather → craft farm → place → growth ticks → harvest → berries gained", () => {
+  it("full loop: craft farm → place on owned Grassland → growth ticks → harvest → berries gained", () => {
     const room = createRoomWithMap(42);
-    const pair = findAdjacentPairWithBiome(room, TileType.Grassland);
-    if (!pair) return;
-
-    const { client, player } = placePlayerAt(room, "farm-loop", pair.player.x, pair.player.y);
+    const { client, player } = joinPlayer(room, "farm-loop");
 
     // Give enough resources for farm_plot (wood:4, fiber:2)
     giveResources(player, { wood: 4, fiber: 2 });
@@ -137,23 +116,27 @@ describe("Phase 3 Integration — Gather → Craft → Place → Verify", () => 
     room.handleCraft(client, { recipeId: "farm_plot" } as CraftPayload);
     expect(player.farmPlots).toBe(1);
 
-    // Step 2: Place farm plot
+    // Step 2: Place farm plot on owned Grassland
+    const pos = findOwnedWalkableTile(room, "farm-loop", TileType.Grassland)
+      || findOwnedWalkableTile(room, "farm-loop", TileType.Forest);
+    if (!pos) return;
+
+    const structsBefore = room.state.structures.size;
     room.handlePlace(client, {
       itemType: ItemType.FarmPlot,
-      x: pair.target.x,
-      y: pair.target.y,
+      x: pos.x,
+      y: pos.y,
     } as PlacePayload);
     expect(player.farmPlots).toBe(0);
-    expect(room.state.structures.size).toBe(1);
+    expect(room.state.structures.size).toBe(structsBefore + 1);
 
     // Step 3: Tick until crop is ready
     let farm: any = null;
     room.state.structures.forEach((s: any) => {
-      if (s.structureType === ItemType.FarmPlot) farm = s;
+      if (s.structureType === ItemType.FarmPlot && s.x === pos.x && s.y === pos.y) farm = s;
     });
     expect(farm).not.toBeNull();
 
-    // Tick many times to grow the farm
     for (let i = 0; i < 500; i++) {
       room.state.tick += 1;
       if (typeof room.tickFarms === "function") room.tickFarms();
@@ -165,57 +148,13 @@ describe("Phase 3 Integration — Gather → Craft → Place → Verify", () => 
     // Step 4: Harvest
     const berriesBefore = player.berries;
     room.handleFarmHarvest(client, {
-      x: pair.target.x,
-      y: pair.target.y,
+      x: pos.x,
+      y: pos.y,
     } as FarmHarvestPayload);
 
     expect(player.berries).toBeGreaterThan(berriesBefore);
     expect(farm.growthProgress).toBe(0);
     expect(farm.cropReady).toBe(false);
-  });
-});
-
-describe("Phase 3 Integration — Tool Bonus Loop", () => {
-  it("craft axe → gather wood → verify +1 yield", () => {
-    const room = createRoomWithMap(42);
-    const woodTile = findResourceTileOfType(room, ResourceType.Wood);
-    if (!woodTile) return;
-
-    const { client, player } = placePlayerAt(room, "axe-loop", woodTile.x, woodTile.y);
-
-    // Give resources for axe (wood:3, stone:1)
-    giveResources(player, { wood: 3, stone: 1 });
-
-    // Craft axe
-    room.handleCraft(client, { recipeId: "axe" } as CraftPayload);
-    expect(player.axes).toBe(1);
-    expect(player.wood).toBe(0);
-
-    // Gather wood with axe — should get +1 bonus = 2
-    room.handleGather(client, { x: woodTile.x, y: woodTile.y } as GatherPayload);
-
-    expect(player.wood).toBe(2);
-  });
-
-  it("craft pickaxe → gather stone → verify +1 yield", () => {
-    const room = createRoomWithMap(42);
-    const stoneTile = findResourceTileOfType(room, ResourceType.Stone);
-    if (!stoneTile) return;
-
-    const { client, player } = placePlayerAt(room, "pick-loop", stoneTile.x, stoneTile.y);
-
-    // Give resources for pickaxe (wood:2, stone:3)
-    giveResources(player, { wood: 2, stone: 3 });
-
-    // Craft pickaxe
-    room.handleCraft(client, { recipeId: "pickaxe" } as CraftPayload);
-    expect(player.pickaxes).toBe(1);
-    expect(player.stone).toBe(0);
-
-    // Gather stone with pickaxe — should get +1 bonus = 2
-    room.handleGather(client, { x: stoneTile.x, y: stoneTile.y } as GatherPayload);
-
-    expect(player.stone).toBe(2);
   });
 });
 
@@ -291,34 +230,5 @@ describe("Phase 3 Integration — Ecosystem Stability with Structures", () => {
         expect(onWall).toBe(false);
       }
     }
-  });
-
-  it("multiple structures don't break player movement", () => {
-    const room = createRoomWithMap(42);
-
-    // Place 3 walls
-    let wallCount = 0;
-    for (let y = 5; y < 8; y++) {
-      for (let x = 5; x < 8 && wallCount < 3; x++) {
-        if (room.state.isWalkable(x, y)) {
-          const wall = new StructureState();
-          wall.id = `mv_wall_${wallCount}`;
-          wall.structureType = ItemType.Wall;
-          wall.x = x;
-          wall.y = y;
-          wall.placedBy = "test";
-          room.state.structures.set(wall.id, wall);
-          wallCount++;
-        }
-      }
-    }
-
-    // Player should still spawn and move on non-wall tiles
-    const client = fakeClient("move-test");
-    room.onJoin(client);
-    const player = room.state.players.get("move-test")!;
-
-    // Player should be on a walkable tile
-    expect(room.state.isWalkable(player.x, player.y)).toBe(true);
   });
 });

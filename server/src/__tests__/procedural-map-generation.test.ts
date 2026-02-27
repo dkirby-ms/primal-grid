@@ -43,10 +43,10 @@ const NON_WALKABLE = new Set([TileType.Water, TileType.Rock]);
 describe("Phase 2.1 — Procedural Map Generation", () => {
   // ── Map size ──────────────────────────────────────────────────────
   describe("map size", () => {
-    it("generated map is correct size (32×32 = 1024 tiles)", () => {
+    it("generated map is correct size (64×64 = 4096 tiles)", () => {
       const room = createRoomWithMap(42);
       expect(room.state.tiles.length).toBe(DEFAULT_MAP_SIZE * DEFAULT_MAP_SIZE);
-      expect(room.state.tiles.length).toBe(1024);
+      expect(room.state.tiles.length).toBe(4096);
     });
 
     it("map dimensions match DEFAULT_MAP_SIZE", () => {
@@ -274,14 +274,16 @@ describe("Phase 2.1 — Procedural Map Generation", () => {
       room.onJoin(fakeClient("spawn-test"));
       const player = room.state.players.get("spawn-test")!;
       expect(player).toBeDefined();
-      expect(room.state.isWalkable(player.x, player.y)).toBe(true);
+      expect(player.hqX).toBeGreaterThanOrEqual(0);
+      expect(player.hqY).toBeGreaterThanOrEqual(0);
+      expect(room.state.isWalkable(player.hqX, player.hqY)).toBe(true);
     });
 
     it("player spawn tile is not Water or Rock", () => {
       const room = createRoomWithMap(42);
       room.onJoin(fakeClient("spawn-biome"));
       const player = room.state.players.get("spawn-biome")!;
-      const tile = room.state.getTile(player.x, player.y)!;
+      const tile = room.state.getTile(player.hqX, player.hqY)!;
       expect(tile).toBeDefined();
       expect(tile.type).not.toBe(TileType.Water);
       expect(tile.type).not.toBe(TileType.Rock);
@@ -294,8 +296,10 @@ describe("Phase 2.1 — Procedural Map Generation", () => {
       }
       expect(room.state.players.size).toBe(10);
       room.state.players.forEach((player: any) => {
-        expect(room.state.isWalkable(player.x, player.y)).toBe(true);
-        const tile = room.state.getTile(player.x, player.y)!;
+        expect(player.hqX).toBeGreaterThanOrEqual(0);
+        expect(player.hqY).toBeGreaterThanOrEqual(0);
+        expect(room.state.isWalkable(player.hqX, player.hqY)).toBe(true);
+        const tile = room.state.getTile(player.hqX, player.hqY)!;
         expect(tile.type).not.toBe(TileType.Water);
         expect(tile.type).not.toBe(TileType.Rock);
       });
