@@ -1,7 +1,7 @@
 import { GameState, CreatureState } from "./GameState.js";
 import {
   CREATURE_AI, CREATURE_TYPES,
-  ResourceType, TileType, WORKER,
+  ResourceType, TileType, WORKER, PAWN_COMMAND,
 } from "@primal-grid/shared";
 
 /** FSM states for creature AI. */
@@ -15,16 +15,21 @@ export function tickCreatureAI(state: GameState): void {
   const toRemove: string[] = [];
 
   state.creatures.forEach((creature) => {
-    // Workers with gather command skip normal AI
-    if (creature.ownerID !== "" && creature.command === "gather") {
-      // Workers don't drain hunger
-      // Death check (workers can be killed by hostile creatures)
+    // Tamed creature — handle pawn commands, skip wild AI
+    if (creature.ownerID !== "") {
       if (creature.health <= 0) {
         toRemove.push(creature.id);
         return;
       }
-      tickWorkerGather(creature, state);
-      return; // skip wild AI entirely
+      // Skip hunger drain — fed by colony
+      if (creature.command === "gather") {
+        tickGatherPawn(creature, state);
+      } else if (creature.command === "guard") {
+        tickGuardPawn(creature, state);
+      } else {
+        tickIdlePawn(creature, state);
+      }
+      return;
     }
 
     // Drain hunger
@@ -255,6 +260,168 @@ export function pathfindAStar(
 ): { x: number; y: number } | null {
   // TODO Phase 5: Implement A* pathfinding
   return null; // Falls through to greedy movement
+}
+
+function tickGatherPawn(creature: CreatureState, state: GameState): void {
+  const zone = { x: creature.zoneX, y: creature.zoneY };
+  const dist = Math.abs(creature.x - zone.x) + Math.abs(creature.y - zone.y);
+
+  // If far from zone, move toward it
+  if (dist > 2) {
+    moveToward(creature, zone.x, zone.y, state);
+    creature.currentState = "wander";
+    return;
+  }
+
+  // In zone — try to harvest current tile
+  const tile = state.getTile(creature.x, creature.y);
+  if (tile && tile.resourceType >= 0 && tile.resourceAmount > 0) {
+    tile.resourceAmount -= 1;
+
+    const owner = state.players.get(creature.ownerID);
+    if (owner) {
+      switch (tile.resourceType) {
+        case ResourceType.Wood: owner.wood += 1; break;
+        case ResourceType.Stone: owner.stone += 1; break;
+        case ResourceType.Fiber: owner.fiber += 1; break;
+        case ResourceType.Berries: owner.berries += 1; break;
+      }
+    }
+
+    if (tile.resourceAmount <= 0) {
+      tile.resourceAmount = 0;
+      tile.resourceType = -1;
+    }
+
+    creature.currentState = "eat";
+    return;
+  }
+
+  // No resource on current tile — find nearest resource tile in owner's territory
+  const target = findNearestOwnedResource(creature, state);
+  if (target) {
+    moveToward(creature, target.x, target.y, state);
+    creature.currentState = "wander";
+  } else {
+    wanderNear(creature, zone.x, zone.y, state);
+    creature.currentState = "idle";
+  }
+}
+
+function tickGuardPawn(creature: CreatureState, state: GameState): void {
+  const guardRange = PAWN_COMMAND.GUARD_RANGE;
+  const zone = { x: creature.zoneX, y: creature.zoneY };
+
+  // Priority 1: Attack nearest wild hostile in range
+  let nearestHostile: CreatureState | null = null;
+  let nearestDist = Infinity;
+
+  state.creatures.forEach((other) => {
+    if (other.ownerID !== "") return;
+    if (other.id === creature.id) return;
+    const d = Math.abs(other.x - zone.x) + Math.abs(other.y - zone.y);
+    if (d <= guardRange && d < nearestDist) {
+      nearestHostile = other;
+      nearestDist = d;
+    }
+  });
+
+  if (nearestHostile) {
+    const nh = nearestHostile as CreatureState;
+    const attackDist = Math.abs(creature.x - nh.x) + Math.abs(creature.y - nh.y);
+    if (attackDist <= 1) {
+      nh.health -= CREATURE_AI.HUNT_DAMAGE;
+      creature.currentState = "hunt";
+      if (nh.health <= 0) {
+        state.creatures.delete(nh.id);
+      }
+      return;
+    }
+    moveToward(creature, nh.x, nh.y, state);
+    creature.currentState = "hunt";
+    return;
+  }
+
+  // Priority 2: Return to post if too far
+  const distToPost = Math.abs(creature.x - zone.x) + Math.abs(creature.y - zone.y);
+  if (distToPost > 3) {
+    moveToward(creature, zone.x, zone.y, state);
+    creature.currentState = "wander";
+    return;
+  }
+
+  // Priority 3: Idle near post
+  creature.currentState = "idle";
+}
+
+function tickIdlePawn(creature: CreatureState, state: GameState): void {
+  const tile = state.getTile(creature.x, creature.y);
+  const inTerritory = tile !== undefined && tile.ownerID === creature.ownerID;
+
+  if (!inTerritory) {
+    const target = findNearestOwnedTile(creature, state);
+    if (target) {
+      moveToward(creature, target.x, target.y, state);
+    }
+    creature.currentState = "wander";
+    return;
+  }
+
+  // Wander within territory — pick random adjacent owned tile
+  const dirs: [number, number][] = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+  const candidates: { x: number; y: number }[] = [];
+  for (const [dx, dy] of dirs) {
+    const nx = creature.x + dx;
+    const ny = creature.y + dy;
+    const t = state.getTile(nx, ny);
+    if (t && state.isWalkable(nx, ny) && t.ownerID === creature.ownerID) {
+      candidates.push({ x: nx, y: ny });
+    }
+  }
+
+  if (candidates.length > 0 && Math.random() < 0.3) {
+    const pick = candidates[Math.floor(Math.random() * candidates.length)];
+    creature.x = pick.x;
+    creature.y = pick.y;
+  }
+  creature.currentState = "idle";
+}
+
+/** Search expanding rings for the nearest tile owned by the creature's owner. */
+function findNearestOwnedTile(
+  creature: CreatureState, state: GameState,
+): { x: number; y: number } | null {
+  const MAX_RADIUS = 10;
+  for (let r = 1; r <= MAX_RADIUS; r++) {
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dy = -r; dy <= r; dy++) {
+        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+        const tx = creature.x + dx;
+        const ty = creature.y + dy;
+        const tile = state.getTile(tx, ty);
+        if (tile && tile.ownerID === creature.ownerID && state.isWalkable(tx, ty)) {
+          return { x: tx, y: ty };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/** Pick a random adjacent walkable tile within ~3 tiles of center. */
+function wanderNear(
+  creature: CreatureState, centerX: number, centerY: number, state: GameState,
+): void {
+  const dirs = shuffleDirections();
+  for (const [dx, dy] of dirs) {
+    const nx = creature.x + dx;
+    const ny = creature.y + dy;
+    if (!state.isWalkable(nx, ny)) continue;
+    if (Math.abs(nx - centerX) + Math.abs(ny - centerY) > 3) continue;
+    creature.x = nx;
+    creature.y = ny;
+    return;
+  }
 }
 
 function tickWorkerGather(creature: CreatureState, state: GameState): void {
