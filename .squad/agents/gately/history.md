@@ -325,3 +325,10 @@ All 10 Phase A items (A1–A10) complete across all agents. Tests: 240/240 passi
 - `SHAPE_CATALOG` and `PLACE_SHAPE` imported from `@primal-grid/shared` (already exported from B1).
 - Worker creature rendering confirmed handled automatically by existing CreatureRenderer (reads CREATURE_TYPES icon/color).
 - All 230 tests pass after changes.
+
+### Phase C5 — Click-to-Tame UI (2026-02-27)
+- **InputHandler.ts:** Removed I-key taming handler. Added click-to-tame in `bindClick()`: when not in build/shape mode, normal click checks `CreatureRenderer.getNearestWildCreature(tileX, tileY)` for a wild creature at the clicked tile. If found, sends `TAME { creatureId }` instead of falling through to no-op.
+- **HelpScreen.ts:** Removed `['I', 'Tame creature (cursor tile)']` entry. Added `['Click creature', 'Tame wild creature']` entry.
+- **Priority order for clicks:** Shape mode → Build mode → Wild creature tame → no-op. Ready for C6 to insert pawn selection between tame and no-op.
+- **TAME import** was already present in InputHandler; no new imports needed.
+- All 230 tests pass. Clean typecheck.

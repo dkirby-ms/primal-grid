@@ -145,18 +145,6 @@ export class InputHandler {
         return;
       }
 
-      // Tame wild creature near cursor
-      if (e.key === 'i' || e.key === 'I') {
-        if (this.creatureRenderer) {
-          const tile = this.screenToTile();
-          const creatureId = this.creatureRenderer.getNearestWildCreature(tile.x, tile.y);
-          if (creatureId) {
-            this.room.send(TAME, { creatureId });
-          }
-        }
-        return;
-      }
-
       // Number keys: craft (when menu open) or cycle build item
       if (e.key >= '1' && e.key <= '9') {
         const num = parseInt(e.key, 10);
@@ -205,7 +193,14 @@ export class InputHandler {
         return;
       }
 
-      // Normal click: no-op (claim tile removed)
+      // Normal click: check for wild creature first, then no-op
+      if (this.creatureRenderer) {
+        const creatureId = this.creatureRenderer.getNearestWildCreature(tileX, tileY);
+        if (creatureId) {
+          this.room.send(TAME, { creatureId });
+          return;
+        }
+      }
     });
   }
 }

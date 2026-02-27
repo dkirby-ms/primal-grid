@@ -8,13 +8,13 @@ const BODY_SIZE = 12;
 
 const KEYBINDINGS: [string, string][] = [
   ['Click', 'Claim tile / Place structure (build)'],
+  ['Click creature', 'Tame wild creature'],
   ['W A S D', 'Pan camera'],
   ['Scroll', 'Zoom in / out'],
   ['C', 'Open / close craft menu'],
   ['V', 'Toggle build mode'],
   ['1-9', 'Craft item (menu) / Select build item'],
   ['H', 'Harvest farm (cursor tile)'],
-  ['I', 'Tame creature (cursor tile)'],
   ['?', 'Toggle this help screen'],
 ];
 
