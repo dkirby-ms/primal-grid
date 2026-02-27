@@ -221,6 +221,25 @@ export class GridRenderer {
     });
   }
 
+  /** Show an optimistic claiming overlay immediately (before server confirms). */
+  public showOptimisticClaim(x: number, y: number, playerId: string): void {
+    if (y < 0 || y >= this.mapSize || x < 0 || x >= this.mapSize) return;
+    const key = `${x},${y}`;
+    if (this.claimingTiles.has(key)) return;
+
+    const overlay = this.territoryOverlays[y][x];
+    overlay.clear();
+    const colorStr = this.playerColors.get(playerId) ?? '#ffffff';
+    const color = parseColor(colorStr);
+    overlay.rect(0, 0, TILE_SIZE, TILE_SIZE);
+    overlay.fill({ color, alpha: 0.5 });
+    overlay.stroke({ width: 2, color: 0xffffff, alpha: 0.6 });
+    overlay.visible = true;
+    this.claimingTiles.set(key, { x, y });
+    // Mark cache as claiming so server state doesn't skip the update
+    this.lastClaiming[y][x] = true;
+  }
+
   /** Animate claiming tiles with a pulsing effect. Call from PixiJS ticker. */
   public tick(): void {
     if (this.claimingTiles.size === 0) return;

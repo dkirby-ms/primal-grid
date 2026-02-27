@@ -7,6 +7,7 @@ import type { HudDOM } from '../ui/HudDOM.js';
 import type { HelpScreen } from '../ui/HelpScreen.js';
 import type { CreatureRenderer } from '../renderer/CreatureRenderer.js';
 import type { Camera } from '../renderer/Camera.js';
+import type { GridRenderer } from '../renderer/GridRenderer.js';
 
 const PLACEABLE_ITEMS: { type: ItemType; name: string }[] = [
   { type: ItemType.Workbench, name: 'Workbench' },
@@ -28,6 +29,7 @@ export class InputHandler {
   private shapeKeys: string[] = [];
   private creatureRenderer: CreatureRenderer | null = null;
   private camera: Camera | null = null;
+  private gridRenderer: GridRenderer | null = null;
   private selectedPawnId: string | null = null;
   private pawnCommandMode: 'none' | 'gather' | 'guard' = 'none';
 
@@ -66,6 +68,11 @@ export class InputHandler {
   /** Wire up the camera. */
   public setCamera(camera: Camera): void {
     this.camera = camera;
+  }
+
+  /** Wire up the grid renderer for optimistic claim visuals. */
+  public setGridRenderer(gr: GridRenderer): void {
+    this.gridRenderer = gr;
   }
 
   /** Convert current mouse screen position to tile coordinates. */
@@ -214,6 +221,7 @@ export class InputHandler {
       // Shape mode: place shape
       if (this.shapeMode) {
         const shapeId = this.shapeKeys[this.shapeIndex];
+        this.showOptimisticClaim(shapeId, tileX, tileY, this.shapeRotation);
         this.room.send(PLACE_SHAPE, { shapeId, x: tileX, y: tileY, rotation: this.shapeRotation });
         return;
       }
@@ -261,7 +269,20 @@ export class InputHandler {
       }
 
       // Default: claim single tile (mono shape) for territory expansion
+      this.showOptimisticClaim('mono', tileX, tileY, 0);
       this.room.send(PLACE_SHAPE, { shapeId: 'mono', x: tileX, y: tileY, rotation: 0 });
     });
+  }
+
+  /** Show optimistic claiming overlay for all cells of a shape. */
+  private showOptimisticClaim(shapeId: string, x: number, y: number, rotation: number): void {
+    if (!this.gridRenderer) return;
+    const shapeDef = SHAPE_CATALOG[shapeId];
+    if (!shapeDef) return;
+    const cells = shapeDef.rotations[rotation] ?? shapeDef.rotations[0];
+    const playerId = this.room.sessionId;
+    for (const c of cells) {
+      this.gridRenderer.showOptimisticClaim(x + c.dx, y + c.dy, playerId);
+    }
   }
 }

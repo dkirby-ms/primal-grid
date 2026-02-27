@@ -101,6 +101,7 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
     input.setHelpScreen(helpScreen);
     input.setCreatureRenderer(creatures);
     input.setCamera(camera);
+    input.setGridRenderer(grid);
   } catch (err) {
     console.error('[main] Post-connect error:', err);
   }
