@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { PLACE, FARM_HARVEST, TAME, ItemType } from '@primal-grid/shared';
+import { PLACE, PLACE_SHAPE, FARM_HARVEST, TAME, ItemType, SHAPE_CATALOG } from '@primal-grid/shared';
 import { TILE_SIZE } from '../renderer/GridRenderer.js';
 import type { Container } from 'pixi.js';
 import type { CraftMenu } from '../ui/CraftMenu.js';
@@ -22,6 +22,10 @@ export class InputHandler {
   private helpScreen: HelpScreen | null = null;
   private buildMode = false;
   private buildIndex = 0;
+  private shapeMode = false;
+  private shapeIndex = 0;
+  private shapeRotation = 0;
+  private shapeKeys: string[] = [];
   private creatureRenderer: CreatureRenderer | null = null;
   private camera: Camera | null = null;
 
@@ -31,6 +35,7 @@ export class InputHandler {
   constructor(room: Room, worldContainer: Container) {
     this.room = room;
     this.worldContainer = worldContainer;
+    this.shapeKeys = Object.keys(SHAPE_CATALOG);
     this.bindKeys();
     this.bindClick();
     this.bindMouseTracking();
@@ -94,11 +99,40 @@ export class InputHandler {
         return;
       }
 
-      // Build mode toggle
+      // Shape mode toggle
       if (e.key === 'v' || e.key === 'V') {
         if (this.craftMenu?.isOpen()) return;
+        this.shapeMode = !this.shapeMode;
+        this.buildMode = false;
+        if (this.shapeMode) {
+          const shape = SHAPE_CATALOG[this.shapeKeys[this.shapeIndex]];
+          this.hud?.setBuildMode(true, `${shape.name} [R${this.shapeRotation}]`);
+        } else {
+          this.hud?.setBuildMode(false);
+        }
+        return;
+      }
+
+      // Structure build mode toggle
+      if (e.key === 'b' || e.key === 'B') {
+        if (this.craftMenu?.isOpen()) return;
+        this.shapeMode = false;
         this.buildMode = !this.buildMode;
-        this.hud?.setBuildMode(this.buildMode, PLACEABLE_ITEMS[this.buildIndex].name);
+        if (this.buildMode) {
+          this.hud?.setBuildMode(true, PLACEABLE_ITEMS[this.buildIndex].name);
+        } else {
+          this.hud?.setBuildMode(false);
+        }
+        return;
+      }
+
+      // Rotation (shape mode)
+      if (e.key === 'r' || e.key === 'R') {
+        if (this.shapeMode) {
+          this.shapeRotation = (this.shapeRotation + 1) % 4;
+          const shape = SHAPE_CATALOG[this.shapeKeys[this.shapeIndex]];
+          this.hud?.setBuildMode(true, `${shape.name} [R${this.shapeRotation}]`);
+        }
         return;
       }
 
@@ -130,6 +164,13 @@ export class InputHandler {
           this.craftMenu.craftByIndex(num);
           return;
         }
+        if (this.shapeMode && num <= this.shapeKeys.length) {
+          this.shapeIndex = num - 1;
+          this.shapeRotation = 0;
+          const shape = SHAPE_CATALOG[this.shapeKeys[this.shapeIndex]];
+          this.hud?.setBuildMode(true, `${shape.name} [R0]`);
+          return;
+        }
         if (this.buildMode && num <= PLACEABLE_ITEMS.length) {
           this.buildIndex = num - 1;
           this.hud?.setBuildMode(true, PLACEABLE_ITEMS[this.buildIndex].name);
@@ -149,6 +190,13 @@ export class InputHandler {
       const tileY = Math.floor(worldY / TILE_SIZE);
 
       if (tileX < 0 || tileY < 0) return;
+
+      // Shape mode: place shape
+      if (this.shapeMode) {
+        const shapeId = this.shapeKeys[this.shapeIndex];
+        this.room.send(PLACE_SHAPE, { shapeId, x: tileX, y: tileY, rotation: this.shapeRotation });
+        return;
+      }
 
       // Build mode: place structure
       if (this.buildMode) {

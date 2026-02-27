@@ -40,4 +40,16 @@ export const CREATURE_TYPES: Record<string, CreatureTypeDef> = {
     minPopulation: 2,
     personalityChart: [10, 30, 60],
   },
+  worker: {
+    name: "Worker",
+    icon: "🐜",
+    health: 50,
+    hunger: 100,
+    speed: 1,
+    detectionRadius: 0,
+    preferredBiomes: [],
+    color: "#FFD700",
+    minPopulation: 0,
+    personalityChart: [100, 0, 0] as const,
+  },
 } as const;

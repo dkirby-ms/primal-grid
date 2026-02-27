@@ -26,6 +26,14 @@ const RESOURCE_DOT_SIZE = 5;
 const RESOURCE_DOT_OFFSET = 4;
 const TERRITORY_ALPHA = 0.25;
 
+/** Darken a numeric color by a factor (0–1). */
+function darkenColor(color: number, factor: number): number {
+  const r = Math.floor(((color >> 16) & 0xff) * factor);
+  const g = Math.floor(((color >> 8) & 0xff) * factor);
+  const b = Math.floor((color & 0xff) * factor);
+  return (r << 16) | (g << 8) | b;
+}
+
 /** Parse a CSS hex color string (e.g. "#FF0000") to a numeric color. */
 function parseColor(color: string): number {
   if (color.startsWith('#')) return parseInt(color.slice(1), 16);
@@ -41,6 +49,7 @@ export class GridRenderer {
   private mapSize: number;
   private playerColors: Map<string, string> = new Map();
   private lastOwnerIDs: string[][] = [];
+  private lastShapeHPs: number[][] = [];
 
   constructor(mapSize: number = DEFAULT_MAP_SIZE) {
     this.container = new Container();
@@ -57,6 +66,7 @@ export class GridRenderer {
       this.resourceDots[y] = [];
       this.territoryOverlays[y] = [];
       this.lastOwnerIDs[y] = [];
+      this.lastShapeHPs[y] = [];
       for (let x = 0; x < this.mapSize; x++) {
         const g = new Graphics();
         g.rect(0, 0, TILE_SIZE, TILE_SIZE);
@@ -72,6 +82,7 @@ export class GridRenderer {
         this.territoryContainer.addChild(overlay);
         this.territoryOverlays[y][x] = overlay;
         this.lastOwnerIDs[y][x] = '';
+        this.lastShapeHPs[y][x] = 0;
 
         // Resource indicator (hidden by default)
         const dot = new Graphics();
@@ -110,18 +121,26 @@ export class GridRenderer {
   }
 
   /** Update the territory overlay for a tile. */
-  private updateTerritoryOverlay(x: number, y: number, ownerID: string): void {
+  private updateTerritoryOverlay(x: number, y: number, ownerID: string, shapeHP: number = 0): void {
     if (y < 0 || y >= this.mapSize || x < 0 || x >= this.mapSize) return;
-    if (this.lastOwnerIDs[y][x] === ownerID) return;
+    if (this.lastOwnerIDs[y][x] === ownerID && this.lastShapeHPs[y][x] === shapeHP) return;
     this.lastOwnerIDs[y][x] = ownerID;
+    this.lastShapeHPs[y][x] = shapeHP;
 
     const overlay = this.territoryOverlays[y][x];
     overlay.clear();
 
     if (ownerID !== '') {
       const colorStr = this.playerColors.get(ownerID) ?? '#ffffff';
+      const color = parseColor(colorStr);
       overlay.rect(0, 0, TILE_SIZE, TILE_SIZE);
-      overlay.fill({ color: parseColor(colorStr), alpha: TERRITORY_ALPHA });
+
+      if (shapeHP > 0) {
+        overlay.fill({ color, alpha: 0.6 });
+        overlay.stroke({ width: 1, color: darkenColor(color, 0.5) });
+      } else {
+        overlay.fill({ color, alpha: TERRITORY_ALPHA });
+      }
       overlay.visible = true;
     } else {
       overlay.visible = false;
@@ -160,7 +179,8 @@ export class GridRenderer {
 
         // Territory overlay
         const ownerID = (tile['ownerID'] as string) ?? '';
-        this.updateTerritoryOverlay(tx, ty, ownerID);
+        const shapeHP = (tile['shapeHP'] as number) ?? 0;
+        this.updateTerritoryOverlay(tx, ty, ownerID, shapeHP);
 
         // Resource indicator
         const resType = tile['resourceType'] as number | undefined;

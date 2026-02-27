@@ -310,3 +310,18 @@ All 5 Gately tasks (A6–A9 + part of HUD) complete. Client-side pivot from avat
 - Input rewritten for new game mode
 
 All 10 Phase A items (A1–A10) complete across all agents. Tests: 240/240 passing. Ready for Phase B.
+
+### Phase A UAT — Post-Connect Crash Fix (2026-02-25)
+- **Root cause:** `room.state.players.get(sessionId)` on main.ts line 72 crashed because Colyseus SDK 0.17 resolves `joinOrCreate` on `JOIN_ROOM`, before `ROOM_STATE` arrives. The reflected schema initializes all fields (including `players` MapSchema) to `undefined`. Calling `.get()` on `undefined` throws TypeError.
+- **Hidden by:** bare `catch {}` block (no error variable) that logged a misleading "Server unavailable" message for ALL errors, not just connection failures.
+- **Fix 1:** Changed `catch {}` to `catch (err) { console.error('[main] Post-connect error:', err); }` — critical for future debugging.
+- **Fix 2:** Replaced synchronous `room.state.players.get()` with `room.onStateChange.once()` callback that defers camera centering until the first state sync, using optional chaining (`players?.get()`).
+- **Lesson:** In Colyseus SDK 0.17, never access `room.state` collections synchronously after `joinOrCreate`. State fields are `undefined` until `ROOM_STATE` message arrives. Use `onStateChange.once()` for one-shot post-connect logic.
+
+### Phase B8+B9 — Client Shape Placement UI + Rendering Updates (2026-02-25)
+- **B8 InputHandler:** Added shape placement mode toggled by 'V' key. Repurposed old build mode key to shape mode; moved structure build mode (workbench/farm) to 'B' key. Shape selection via number keys, rotation via 'R' key. Click in shape mode sends `PLACE_SHAPE` message with shapeId, x, y, rotation.
+- **B9 GridRenderer:** Shape blocks (shapeHP > 0) render with higher alpha (0.6) and a darkened border stroke to visually distinguish them from open territory (alpha 0.25). Added `lastShapeHPs` tracking array for change-detection.
+- Added `darkenColor()` helper for darkening numeric colors by a factor.
+- `SHAPE_CATALOG` and `PLACE_SHAPE` imported from `@primal-grid/shared` (already exported from B1).
+- Worker creature rendering confirmed handled automatically by existing CreatureRenderer (reads CREATURE_TYPES icon/color).
+- All 230 tests pass after changes.

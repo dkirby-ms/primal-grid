@@ -186,7 +186,8 @@ describe("Phase 4.8 Integration — Breeding Cycle", () => {
 
     // Breed multiple times to overcome 50% chance
     let offspring: any = null;
-    const knownIds = new Set(["pa", "pb"]);
+    const knownIds = new Set<string>();
+    room.state.creatures.forEach((c: any) => knownIds.add(c.id));
 
     for (let attempt = 0; attempt < 20 && !offspring; attempt++) {
       parentA.lastBredTick = 0;
@@ -332,7 +333,7 @@ describe("Phase 4.8 Integration — Ecosystem with Tamed Creatures", () => {
       room.handleTame(client, { creatureId: cId });
     }
 
-    expect(countOwned(room, "p1")).toBe(3);
+    expect(countOwned(room, "p1")).toBe(4); // 3 tamed + 1 worker from HQ
 
     // Run 250 ticks — respawning should sustain wild populations
     for (let i = 0; i < 250; i++) {

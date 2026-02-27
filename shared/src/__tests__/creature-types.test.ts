@@ -49,14 +49,16 @@ describe("Phase 2.4 — Creature Type Definitions", () => {
     }
   });
 
-  it("all creature types have a positive detection radius", () => {
+  it("all wild creature types have a positive detection radius", () => {
     for (const creature of Object.values(CREATURE_TYPES) as any[]) {
+      if (creature.minPopulation === 0) continue;
       expect(creature.detectionRadius).toBeGreaterThan(0);
     }
   });
 
-  it("all creature types have a non-empty preferredBiomes array", () => {
+  it("all wild creature types have a non-empty preferredBiomes array", () => {
     for (const creature of Object.values(CREATURE_TYPES) as any[]) {
+      if (creature.minPopulation === 0) continue;
       expect(Array.isArray(creature.preferredBiomes)).toBe(true);
       expect(creature.preferredBiomes.length).toBeGreaterThan(0);
     }

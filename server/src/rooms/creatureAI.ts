@@ -1,7 +1,7 @@
 import { GameState, CreatureState } from "./GameState.js";
 import {
   CREATURE_AI, CREATURE_TYPES,
-  ResourceType, TileType,
+  ResourceType, TileType, WORKER,
 } from "@primal-grid/shared";
 
 /** FSM states for creature AI. */
@@ -15,6 +15,18 @@ export function tickCreatureAI(state: GameState): void {
   const toRemove: string[] = [];
 
   state.creatures.forEach((creature) => {
+    // Workers with gather command skip normal AI
+    if (creature.ownerID !== "" && creature.command === "gather") {
+      // Workers don't drain hunger
+      // Death check (workers can be killed by hostile creatures)
+      if (creature.health <= 0) {
+        toRemove.push(creature.id);
+        return;
+      }
+      tickWorkerGather(creature, state);
+      return; // skip wild AI entirely
+    }
+
     // Drain hunger
     creature.hunger = Math.max(0, creature.hunger - CREATURE_AI.HUNGER_DRAIN);
 
@@ -243,6 +255,93 @@ export function pathfindAStar(
 ): { x: number; y: number } | null {
   // TODO Phase 5: Implement A* pathfinding
   return null; // Falls through to greedy movement
+}
+
+function tickWorkerGather(creature: CreatureState, state: GameState): void {
+  const owner = state.players.get(creature.ownerID);
+  if (!owner) return;
+
+  // Check if current tile has resources to gather
+  const currentTile = state.getTile(creature.x, creature.y);
+  if (currentTile && currentTile.ownerID === creature.ownerID
+      && currentTile.resourceAmount > 0 && currentTile.resourceType >= 0) {
+    // Gather from current tile
+    const amount = Math.min(WORKER.GATHER_AMOUNT, currentTile.resourceAmount);
+    currentTile.resourceAmount -= amount;
+
+    // Add to owner's stockpile based on resource type
+    switch (currentTile.resourceType) {
+      case ResourceType.Wood:    owner.wood    += amount; break;
+      case ResourceType.Stone:   owner.stone   += amount; break;
+      case ResourceType.Fiber:   owner.fiber   += amount; break;
+      case ResourceType.Berries: owner.berries += amount; break;
+    }
+
+    // If tile depleted, clear resource type
+    if (currentTile.resourceAmount <= 0) {
+      currentTile.resourceAmount = 0;
+      currentTile.resourceType = -1;
+    }
+
+    // Don't move this tick — gathering takes the action
+    creature.currentState = "eat";
+    return;
+  }
+
+  // Find nearest resource tile in owned territory
+  const target = findNearestOwnedResource(creature, state);
+  if (target) {
+    creature.currentState = "wander";
+    moveToward(creature, target.x, target.y, state);
+    return;
+  }
+
+  // No resources available — wander within territory
+  wanderInTerritory(creature, state);
+}
+
+function findNearestOwnedResource(
+  creature: CreatureState, state: GameState,
+): { x: number; y: number } | null {
+  let nearest: { x: number; y: number } | null = null;
+  let bestDist = Infinity;
+
+  // Scan a reasonable radius around the creature
+  const SCAN_RADIUS = 10;
+  for (let dy = -SCAN_RADIUS; dy <= SCAN_RADIUS; dy++) {
+    for (let dx = -SCAN_RADIUS; dx <= SCAN_RADIUS; dx++) {
+      const tx = creature.x + dx;
+      const ty = creature.y + dy;
+      const tile = state.getTile(tx, ty);
+      if (!tile) continue;
+      if (tile.ownerID !== creature.ownerID) continue;  // only owned tiles
+      if (tile.resourceAmount <= 0 || tile.resourceType < 0) continue;
+      if (!state.isWalkable(tx, ty)) continue;  // respect shape blocks
+      const dist = Math.abs(dx) + Math.abs(dy);
+      if (dist > 0 && dist < bestDist) {
+        bestDist = dist;
+        nearest = { x: tx, y: ty };
+      }
+    }
+  }
+  return nearest;
+}
+
+function wanderInTerritory(creature: CreatureState, state: GameState): void {
+  // Try to wander to an adjacent owned walkable tile
+  const dirs = shuffleDirections();
+  for (const [dx, dy] of dirs) {
+    const nx = creature.x + dx;
+    const ny = creature.y + dy;
+    const tile = state.getTile(nx, ny);
+    if (tile && tile.ownerID === creature.ownerID && state.isWalkable(nx, ny)) {
+      creature.x = nx;
+      creature.y = ny;
+      creature.currentState = "wander";
+      return;
+    }
+  }
+  creature.currentState = "idle";
 }
 
 /** Fisher-Yates shuffle of the 4 cardinal directions. */

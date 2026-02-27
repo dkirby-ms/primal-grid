@@ -68,11 +68,13 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
     grid.container.addChild(structures.container);
     structures.bindToRoom(room);
 
-    // Center camera on local player's HQ
-    const localPlayer = room.state.players.get(room.sessionId);
-    if (localPlayer) {
-      camera.centerOnHQ(localPlayer.hqX, localPlayer.hqY);
-    }
+    // Center camera on local player's HQ once state has synced
+    room.onStateChange.once(() => {
+      const localPlayer = room.state.players?.get(room.sessionId);
+      if (localPlayer) {
+        camera.centerOnHQ(localPlayer.hqX, localPlayer.hqY);
+      }
+    });
 
     // HUD (DOM-based side panel)
     const hud = new HudDOM(room.sessionId);
@@ -96,8 +98,8 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
     input.setHelpScreen(helpScreen);
     input.setCreatureRenderer(creatures);
     input.setCamera(camera);
-  } catch {
-    console.warn('[main] Server unavailable — running in offline mode.');
+  } catch (err) {
+    console.error('[main] Post-connect error:', err);
   }
 }
 

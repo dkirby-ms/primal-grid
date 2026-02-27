@@ -1,4 +1,4 @@
-import { GameState, TileState, PlayerState, StructureState } from "./GameState.js";
+import { GameState, TileState, PlayerState, StructureState, CreatureState } from "./GameState.js";
 import { TERRITORY, TileType, ItemType } from "@primal-grid/shared";
 
 /** Check if (x,y) is adjacent (cardinal) to any tile owned by playerId. */
@@ -7,6 +7,21 @@ export function isAdjacentToTerritory(state: GameState, playerId: string, x: num
   for (const [dx, dy] of dirs) {
     const neighbor = state.getTile(x + dx, y + dy);
     if (neighbor && neighbor.ownerID === playerId) return true;
+  }
+  return false;
+}
+
+/** Check if any cell in the shape is adjacent to (or inside) the player's existing territory. */
+export function isShapeAdjacentToTerritory(
+  state: GameState,
+  playerId: string,
+  cells: Array<{ x: number; y: number }>
+): boolean {
+  for (const cell of cells) {
+    if (isAdjacentToTerritory(state, playerId, cell.x, cell.y)) return true;
+    // Also count the cell itself as adjacent if already owned
+    const tile = state.getTile(cell.x, cell.y);
+    if (tile && tile.ownerID === playerId) return true;
   }
   return false;
 }
@@ -21,13 +36,14 @@ export function claimTile(state: GameState, playerId: string, x: number, y: numb
   if (player) player.score += 1;
 }
 
-/** Spawn HQ for a player: place HQ structure, claim 3×3 area, set starting resources. */
+/** Spawn HQ for a player: place HQ structure, claim 3×3 area, set starting resources, spawn worker. */
 export function spawnHQ(
   state: GameState,
   player: PlayerState,
   hqX: number,
   hqY: number,
   nextStructureId: { value: number },
+  nextCreatureId?: { value: number },
 ): void {
   // Place HQ structure
   const hq = new StructureState();
@@ -62,6 +78,24 @@ export function spawnHQ(
   player.stone = TERRITORY.STARTING_STONE;
   player.fiber = TERRITORY.STARTING_FIBER;
   player.berries = TERRITORY.STARTING_BERRIES;
+
+  // Spawn starting worker creature at HQ
+  if (nextCreatureId) {
+    const WORKER_HEALTH = 50; // TODO: import from shared WORKER constants when available
+    const worker = new CreatureState();
+    worker.id = `creature_${nextCreatureId.value++}`;
+    worker.creatureType = "worker";
+    worker.x = hqX;
+    worker.y = hqY;
+    worker.health = WORKER_HEALTH;
+    worker.hunger = 100;
+    worker.personality = "docile";
+    worker.currentState = "idle";
+    worker.ownerID = player.id;
+    worker.trust = 100;
+    worker.command = "gather";
+    state.creatures.set(worker.id, worker);
+  }
 }
 
 /** Get count of tiles owned by each player. */

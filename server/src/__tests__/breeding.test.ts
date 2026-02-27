@@ -269,6 +269,9 @@ describe("Phase 4.4 — Offspring Traits", () => {
 
     if (!room.handleBreed) return;
 
+    const knownIds = new Set<string>();
+    room.state.creatures.forEach((c: any) => knownIds.add(c.id));
+
     // Breed multiple times to get at least one offspring (50% chance each)
     let offspring: any = null;
     for (let attempt = 0; attempt < 20; attempt++) {
@@ -278,7 +281,7 @@ describe("Phase 4.4 — Offspring Traits", () => {
       if (room.state.creatures.size > sizeBefore) {
         // Find the new creature
         room.state.creatures.forEach((c: any) => {
-          if (c.id !== "trait-a" && c.id !== "trait-b" && !offspring) {
+          if (!knownIds.has(c.id) && !offspring) {
             offspring = c;
           }
         });
@@ -315,6 +318,9 @@ describe("Phase 4.4 — Offspring Traits", () => {
 
     if (!room.handleBreed) return;
 
+    const knownIds = new Set<string>();
+    room.state.creatures.forEach((c: any) => knownIds.add(c.id));
+
     let offspring: any = null;
     for (let attempt = 0; attempt < 20; attempt++) {
       const sizeBefore = room.state.creatures.size;
@@ -322,7 +328,7 @@ describe("Phase 4.4 — Offspring Traits", () => {
 
       if (room.state.creatures.size > sizeBefore) {
         room.state.creatures.forEach((c: any) => {
-          if (c.id !== "inh-a" && c.id !== "inh-b" && !offspring) {
+          if (!knownIds.has(c.id) && !offspring) {
             offspring = c;
           }
         });
@@ -349,8 +355,8 @@ describe("Phase 4.4 — Pack Size Limit", () => {
     const { client, player } = placePlayerAt(room, "p1", pos.a.x, pos.a.y);
     player.berries = 50;
 
-    // Fill up to MAX_PACK_SIZE with owned creatures
-    for (let i = 0; i < TAMING.MAX_PACK_SIZE; i++) {
+    // Fill up to MAX_PACK_SIZE with owned creatures (minus 1 for the worker spawned at HQ)
+    for (let i = 0; i < TAMING.MAX_PACK_SIZE - 1; i++) {
       // Place them all on the same tile (pack members, not breeding pairs)
       addCreature(room, `pack-${i}`, "herbivore", pos.b.x, pos.b.y, {
         ownerID: "p1", trust: 90,

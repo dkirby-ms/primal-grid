@@ -388,3 +388,30 @@ Phase A foundation pivot complete. Server-side: removed avatar properties, imple
 - spawnHQ uses a `{ value: number }` ref object pattern so the caller (GameRoom) can track nextStructureId mutations across the boundary
 - HQ spawn uses Manhattan distance ≥10 from existing HQs; falls back to any walkable tile after 200 random attempts
 - CLAIM_TILE validation chain: tile exists → not water/rock → unclaimed → adjacent to territory → player has wood ≥ CLAIM_COST_WOOD
+
+### B1 — Shape Data & Shared Types (2026-02-26)
+
+- Created `shared/src/data/shapes.ts` with `ShapeDef` interface, `rotateCell`, `computeRotations`, and `SHAPE_CATALOG` (11 polyomino shapes: mono through tetra_j). Each shape has 4 pre-computed rotations normalized to non-negative offsets.
+- Added `shapeHP: number` to `ITileState` in `shared/src/types.ts` — tracks hit points of shape blocks on tiles.
+- Added `SHAPE`, `WORKER`, `TERRITORY_INCOME` constant objects to `shared/src/constants.ts`.
+- Added `PLACE_SHAPE` message constant and `PlaceShapePayload` interface to `shared/src/messages.ts`.
+- Exported shapes module from `shared/src/index.ts` as `./data/shapes.js` (ESM pattern).
+- All 240 existing tests pass. Shared compiles clean with `tsc --noEmit`.
+- Rotation formula: 90° CW is `{dx: dy, dy: -dx}`, then normalize by subtracting min offsets.
+
+### B7 — Territory Income Tick
+
+- **`tickTerritoryIncome()`** added to `server/src/rooms/GameRoom.ts` — passive resource income from owned tiles.
+- Runs every `TERRITORY_INCOME.INTERVAL_TICKS` (40 ticks = 10s). Iterates tiles via `tiles.at(i)` for-loop (same pattern as `tickResourceRegen`).
+- For each owned tile with resources: switches on `ResourceType` enum to increment the correct player field (wood/stone/fiber/berries), decrements tile resourceAmount, marks tile depleted (resourceType=-1) when empty.
+- TODO left for `shapeHP === 0` check — B1's `shapeHP` field not yet compiled into server. All tiles currently have no shape blocks so behavior is correct.
+- Wired into `setSimulationInterval` callback in `onCreate()` alongside other tick methods.
+- `TERRITORY_INCOME` constant imported from `@primal-grid/shared` (already added by B1).
+
+### B5 — Worker Pawn Spawn (2026-02-25)
+
+- Added `worker` creature type to `shared/src/data/creatures.ts`: health=50, hunger=100, speed=1, detectionRadius=0, preferredBiomes=[], color="#FFD700", minPopulation=0, personalityChart=[100,0,0] (always docile). Workers are player-owned units, not wild — hence zero minPopulation and no detection/biomes.
+- Modified `spawnHQ()` in `server/src/rooms/territory.ts` to auto-spawn one worker creature at HQ position when a player joins. Worker gets `ownerID=player.id`, `trust=100`, `command="gather"`, `personality="docile"`, `currentState="idle"`.
+- `spawnHQ()` signature extended with optional `nextCreatureId?: { value: number }` ref parameter (same pattern as `nextStructureId`) to generate unique `creature_N` IDs.
+- **Null guard pattern critical:** `if (this.nextCreatureId == null) this.nextCreatureId = 0;` in `onJoin()` — tests use `Object.create(GameRoom.prototype)` which skips constructor, leaving private fields undefined. Without the guard, IDs become `creature_undefined` / `creature_NaN`.
+- Updated 4 test files to account for worker spawn: breeding offspring detection uses `knownIds` set (pre-populated with all existing creature IDs before breeding loop), creature count expectations incremented by 1 per player, shared creature-types tests filter `minPopulation === 0` types from wild-only assertions.
