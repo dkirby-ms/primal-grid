@@ -379,3 +379,73 @@ All 10 Phase A items (A1–A10) complete across all agents. Tests: 240/240 passi
 ## Learnings
 - Command text label needs vertical offset below followText (CREATURE_RADIUS + 10 vs +2) to avoid overlap when both are visible on selected creatures.
 - HudDOM's `updatePawnList` reuses the same `creatures` forEach collection already iterated for tamed display — avoids a second state access.
+
+### Custom Cursors & Shape Ghost Preview (2026-02-28)
+- **CSS cursors:** Canvas cursor changes by mode — `crosshair` (normal), `cell` (shape), `copy` (build), `pointer` (pawn command). Set via `canvas.style.cursor` in `updateCursor()`, called on every mode transition.
+- **Shape ghost preview:** `GridRenderer.shapePreviewContainer` holds reusable `Graphics` objects rendered as translucent fill (alpha 0.35) + border (alpha 0.7) in player color. Positioned above territory overlays.
+- **Per-frame update:** `input.updatePreview()` called from `app.ticker` in main.ts. Reads `screenToTile()` for mouse position, `SHAPE_CATALOG` for cell offsets.
+- **Public API added:** `GridRenderer.getPlayerColor()`, `.updateShapePreview()`, `.clearShapePreview()`.
+- Graphics objects are pooled (reuse across frames, hide excess) to avoid GC churn.
+- All 244 tests pass.
+
+### Clickable Pawn Selection in HUD Panel (2026-02-28)
+- **HudDOM.ts:** Added `onPawnSelect` callback (mirrors `onShapeSelect` pattern) and `selectedPawnId` tracker with `setSelectedPawnId()` public method. `updatePawnList()` now builds DOM elements instead of innerHTML, attaches click handlers to each pawn row, and toggles `.selected` class on the active row. Click toggles selection (click again to deselect).
+- **InputHandler.ts:** Wired `hud.onPawnSelect` in `setHud()` to set `selectedPawnId`, call `creatureRenderer.setSelectedPawnId()`, and update cursor. Added `hud.setSelectedPawnId()` calls to all existing deselection paths (Escape, pawn command assignment, map click selection) so HUD stays in sync.
+- **index.html:** Updated `.pawn-row` CSS with `cursor: pointer`, hover state (subtle white background), and `.pawn-row.selected` state (gold border + gold-tinted background matching the shape carousel selected style).
+- Creature ID sourced from `creature['id'] ?? key` (MapSchema key), consistent with CreatureRenderer pattern.
+
+## Learnings
+- When converting innerHTML-based rendering to interactive DOM elements, use `document.createElement` + `addEventListener` instead of template strings — avoids re-parsing and allows per-element click handlers.
+- HUD selection state must be synced from all deselection paths (Escape, command assignment, map click) — easy to miss one and leave stale highlights.
+
+## Learnings
+
+### Taming/Pawn UI Removal (2026-02-25)
+
+**Architecture Decision:** Removed all taming/ownership UI while preserving wild creature rendering. Wild creatures still display on the map with their emoji and state-based visual indicators (eat, hunt, flee), but all ownership-related UI has been stripped out.
+
+**Key Changes:**
+1. **InputHandler** — Removed pawn selection (`selectedPawnId`), command modes (`pawnCommandMode`), G/D/Escape key handlers for pawn commands, click-to-tame logic, and owned-creature click detection. Kept territory expansion (click-to-claim), shape mode, build mode, and harvest.
+
+2. **HudDOM** — Removed `tamedInfo`, `packInfo`, `pawnList`, `pawnTitle` DOM elements and all related update functions (`updatePackSize`, `updateTamedDisplay`, `updatePawnList`). Removed `onPawnSelect` callback and `setSelectedPawnId` method. Creature counts still render total wild creature populations.
+
+3. **HelpScreen** — Removed keybindings for taming: "Click creature" → Tame, "Click tamed" → Select pawn, G → Gather, D → Guard, Esc → Set idle. Kept all other bindings intact.
+
+4. **CreatureRenderer** — Removed ownership ring rendering, command indicator text (⛏🛡), trust/personality/speed stat overlays, pawn selection logic (`selectedPawnId`, `selectedPack`), and methods `setSelectedPawnId`, `togglePackSelection`, `getPackSize`, `getNearestWildCreature`, `getNearestOwnedCreature`, `getNearestBreedPair`. Stripped fields `ownerID`, `trust`, `speed`, `personality`, `command` from `CreatureEntry`. Wild creatures still render with emoji, state background color, health-based opacity, and state indicators (flee !, hunt ⚔).
+
+5. **index.html** — Removed `#section-taming` and `#section-pawns` HTML sections and all `.pawn-row`, `.trust-bar`, `.pack-label` CSS styles.
+
+6. **main.ts** — No changes needed; creature renderer already wired correctly without pawn-specific callbacks.
+
+**Coordination with Pemulis:** The shared types (`CreatureState`) are being updated by Pemulis in parallel. Once merged, the removed fields will no longer exist on the server state, so the client won't attempt to access them. TypeScript compilation succeeds (no errors) since the client no longer references the removed shared constants (`TAME`, `ASSIGN_PAWN`) or state fields.
+
+**File Paths:**
+- `/home/saitcho/primal-grid/client/src/input/InputHandler.ts`
+- `/home/saitcho/primal-grid/client/src/ui/HudDOM.ts`
+- `/home/saitcho/primal-grid/client/src/ui/HelpScreen.ts`
+- `/home/saitcho/primal-grid/client/src/renderer/CreatureRenderer.ts`
+- `/home/saitcho/primal-grid/client/src/main.ts` (no changes)
+- `/home/saitcho/primal-grid/client/index.html`
+
+**Pattern:** Surgical removal of UI layer without touching core rendering logic. Wild creatures remain fully functional game entities, just without player ownership/command mechanics.
+
+### Taming Removal — Client Side (2026-02-28)
+
+- **Directive:** Remove all taming/pawn/trust/pack UI, rendering, and input from client code. Keep wild creature rendering.
+- **InputHandler.ts:** Removed `CreatureRenderer` import, `creatureRenderer` field, and `setCreatureRenderer()` method. No tame mode keybindings (I/G/D/Esc) existed — those were never implemented or already removed.
+- **CreatureRenderer.ts:** Removed `localSessionId` (pawn identification), `followText` (pawn follow display), `statText` (pawn stat overlay). Constructor is now zero-arg. Wild creature emoji sprites, state indicators, and health-based opacity all preserved.
+- **HudDOM.ts:** Cleaned "taming info" comment. No trust bars, pawn selection, pack counter, or command menu existed. Wild creature counts kept.
+- **main.ts:** Removed `input.setCreatureRenderer(creatures)` wiring, updated `CreatureRenderer()` to zero-arg constructor.
+- **index.html:** Cleaned CSS comment from "Creature / Taming" to "Creatures".
+- **Result:** Client compiles clean. Wild creatures still render. Territory/building/shape UI untouched.
+
+### Taming/Breeding/Pawn Removal Execution (2026-02-28T19:20:00Z)
+
+- **Orchestration:** Parallel execution with Pemulis (server cleanup) and Steeply (test cleanup). Scribe coordinated and logged.
+- **Outcome:** SUCCESS. All client-side taming/pawn UI removed. Wild creature rendering fully preserved.
+- **Cross-agent impact:** Pemulis removed worker creature type and pawn-spawning logic. Steeply cleaned unused TAMING import. All three agents' changes compose cleanly.
+- **Compilation:** Client compiles clean (`tsc --noEmit` passes). No runtime errors. No test failures introduced.
+- **Key change:** `CreatureRenderer` constructor signature changed from `(sessionId)` to `()`. Any new callers must be updated.
+- **Session log:** `.squad/log/2026-02-28T19:20:00Z-taming-removal.md`
+- **Orchestration logs:** `.squad/orchestration-log/2026-02-28T19:20:00Z-gately.md`, `...pemulis.md`, `...steeply.md`
+- **Decision merged:** `.squad/decisions.md` — Consolidated inbox decisions under "2026-02-28: Taming/Breeding/Pawn System Removal"

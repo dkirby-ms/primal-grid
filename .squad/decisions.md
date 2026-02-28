@@ -1599,6 +1599,72 @@ Decisions in this log follow:
 
 ---
 
+---
+
+## 2026-02-28: Custom Cursors & Shape Ghost Preview
+
+**Author:** Gately (Game Dev)  
+**Date:** 2026-02-28  
+**Status:** Implemented
+
+### Context
+Players needed visual feedback for what mode they're in and where shapes would land before clicking.
+
+### Decision
+- CSS cursors on the canvas element change per input mode (crosshair/cell/copy/pointer).
+- Shape ghost preview rendered as a PixiJS Container of pooled Graphics objects in GridRenderer, positioned above territory overlays.
+- Preview driven per-frame from `input.updatePreview()` wired into `app.ticker`.
+- `GridRenderer.getPlayerColor()` added as public API so InputHandler can read player color without duplicating the player color map.
+
+### Tradeoffs
+- Ghost preview uses pooled Graphics (hide/show) instead of destroy/create to avoid GC pressure.
+- `updateCursor()` is called on every mode transition rather than per-frame — avoids unnecessary DOM writes.
+
+---
+
+## 2026-02-28: Taming/Breeding/Pawn System Removal
+
+**Author:** Pemulis (Systems Dev), Gately (Game Dev), Steeply (Tester)  
+**Date:** 2026-02-28  
+**Status:** Executed  
+**Requested by:** dkirby-ms
+
+### Context
+The taming, breeding, trust, pack, and pawn command systems are being removed from the game. Creatures remain as wild environmental entities only. This decision consolidates concurrent work by three agents.
+
+### Server-Side Removal (Pemulis)
+- **shared/src/data/creatures.ts:** Removed `worker` creature type, `personalityChart` field, `speed` field, and dangling `Personality` import
+- **server/src/rooms/territory.ts:** Removed `nextCreatureId` parameter from `spawnHQ()`
+- **server/src/rooms/GameRoom.ts:** Removed `creatureIdRef` logic from `onJoin()`
+- **server/src/rooms/creatureAI.ts:** Cleaned "Exported for pack follow" comment on `moveToward()`
+
+### Client-Side Removal (Gately)
+- **InputHandler.ts:** Removed `CreatureRenderer` import, field, and `setCreatureRenderer()` method
+- **CreatureRenderer.ts:** Removed `localSessionId` field/parameter, `followText` DOM element, `statText` DOM element
+- **HudDOM.ts:** Cleaned taming comment; wild creature counts preserved
+- **main.ts:** Removed `input.setCreatureRenderer(creatures)` wiring; updated `CreatureRenderer()` constructor call
+- **index.html:** Cleaned CSS comment from "Creature / Taming" to "Creatures"
+
+### Test-Side Cleanup (Steeply)
+- **No dedicated taming test files exist** (`taming.test.ts`, `breeding.test.ts`, `pawnCommands.test.ts` — all absent)
+- **hud-state-contract.test.ts:** Removed unused `TAMING` import
+- All creature tests remain (wild-only), all `ownerID` references are territory-related
+
+### What Remains
+- Wild creature spawning, despawn, respawning
+- Wild creature AI: wander, flee, hunt, graze, eat FSM
+- Movement utilities: `moveToward`, `moveAwayFrom`, `pathfindAStar`
+- All ecosystem simulation mechanics
+- Creature rendering with state indicators (flee/hunt/graze)
+- Territory/building/shape UI completely untouched
+
+### Test Results
+- **197 passing, 1 failing** (pre-existing respawn threshold bug)
+- Client compiles clean (`tsc --noEmit` passes)
+- No wild creature simulation breakage
+
+---
+
 **Maintained by:** Scribe  
-**Last Updated:** 2026-02-27T14:10:00Z  
-**Total Decisions:** 40+ (consolidated from inbox)
+**Last Updated:** 2026-02-28T19:20:00Z  
+**Total Decisions:** 43+ (consolidated from inbox)

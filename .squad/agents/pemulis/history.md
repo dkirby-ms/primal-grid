@@ -452,3 +452,22 @@ Phase A foundation pivot complete. Server-side: removed avatar properties, imple
 - Added helpers: `findNearestOwnedTile` (ring search), `wanderNear` (random step within 3 tiles of center).
 - Old `tickWorkerGather` kept as dead code — removing it risks test breakage from import/reference checks. Can be cleaned up in a future pass.
 - All 230 tests green. The idle-duration transition test (`creature-ai.test.ts`) is flaky when run with full suite but passes in isolation — pre-existing randomness issue, not related to this change.
+
+### Taming/Breeding/Pawn Removal Directive (2026-02-27)
+
+- **Directive:** Remove all taming, breeding, trust, pack, and pawn command systems. Creatures remain wild environmental entities only.
+- **Files changed:** `shared/src/data/creatures.ts` (removed worker type, personalityChart, speed, Personality import), `server/src/rooms/territory.ts` (removed nextCreatureId param from spawnHQ, removed CreatureState import), `server/src/rooms/GameRoom.ts` (removed creatureIdRef worker-spawn logic from onJoin), `server/src/rooms/creatureAI.ts` (cleaned pack follow comment).
+- **Key finding:** Most taming/pawn code was never built into the main codebase — the Phase C pawn FSM and Phase D breeding existed only in test expectations and design docs. The actual server code had minimal taming surface: worker creature type definition, spawnHQ worker-spawn plumbing, and personality/speed fields on CreatureTypeDef.
+- **What survived:** Wild creature spawning, AI (wander/flee/hunt/graze), respawning, ecosystem simulation — all untouched. 197/199 tests pass; 2 failures are test-side references to removed fields (Steeply's domain).
+- **Architecture note:** CreatureState schema was already clean (no ownerID, trust, command fields). The taming system was designed in docs but never schema-implemented — only the worker creature type and personality data structures were coded.
+
+### Taming/Breeding/Pawn Removal Execution (2026-02-28T19:20:00Z)
+
+- **Orchestration:** Parallel execution with Gately (client cleanup) and Steeply (test cleanup). Scribe coordinated and logged.
+- **Outcome:** SUCCESS. All server-side taming/worker code removed. Wild creature simulation fully preserved.
+- **Cross-agent impact:** Gately's client cleanup removed pawn input handlers and trust display. Steeply removed unused TAMING import. All three agents' changes compose cleanly.
+- **Test status:** 197/199 passing. 2 expected failures in creature-types.test.ts and creature-systems-integration.test.ts (test-side references to removed speed field and worker type). Pre-existing respawn threshold failure unrelated.
+- **Note:** The codebase contained only minimal taming code (worker type, personality/speed fields, spawnHQ plumbing). The full Phase C pawn system (ASSIGN_PAWN routing, FSM, HUD, multi-select) was designed but never schema-implemented. Directive removed all remnants cleanly.
+- **Session log:** `.squad/log/2026-02-28T19:20:00Z-taming-removal.md`
+- **Orchestration logs:** `.squad/orchestration-log/2026-02-28T19:20:00Z-pemulis.md`, `...gately.md`, `...steeply.md`
+- **Decision merged:** `.squad/decisions.md` — Consolidated inbox decisions under "2026-02-28: Taming/Breeding/Pawn System Removal"
