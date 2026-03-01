@@ -63,6 +63,12 @@ export class PlayerState extends Schema {
 
   @type("number")
   score: number = 0;
+
+  @type("number")
+  level: number = 1;
+
+  @type("number")
+  xp: number = 0;
 }
 
 export class CreatureState extends Schema {

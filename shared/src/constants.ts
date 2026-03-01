@@ -72,49 +72,7 @@ export const CREATURE_AI = {
   HUNT_DAMAGE: 25,
 } as const;
 
-/** Taming system constants. */
-export const TAMING = {
-  /** Trust gained per feed interaction (docile creatures get double). */
-  TRUST_PER_FEED: 5,
-  /** Trust gained per proximity tick (every 10 ticks within detection radius). */
-  TRUST_PER_PROXIMITY_TICK: 1,
-  /** Trust lost per decay tick (every 20 ticks if owner distance > 3). */
-  TRUST_DECAY_ALONE: 1,
-  /** Trust penalty when creature takes damage. */
-  TRUST_DAMAGE_PENALTY: 10,
-  /** Trust threshold at which creature obeys commands. */
-  TRUST_AT_OBEDIENT: 70,
-  /** Maximum tamed creatures per player. */
-  MAX_PACK_SIZE: 8,
-  /** Ticks of zero trust before auto-abandon. */
-  ZERO_TRUST_ABANDON_TICKS: 50,
-} as const;
 
-/** Breeding system constants. */
-export const BREEDING = {
-  /** Berry cost per breeding attempt. */
-  FOOD_COST: 10,
-  /** Cooldown ticks between breeding attempts per creature. */
-  COOLDOWN_TICKS: 100,
-  /** Offspring initial trust (pre-bonded). */
-  OFFSPRING_TRUST: 50,
-  /** Maximum trait mutation per breeding (±1 per trait). */
-  TRAIT_MUTATION_RANGE: 1,
-  /** Hard cap on trait delta values. */
-  TRAIT_CAP: 3,
-} as const;
-
-/** Farm system constants. */
-export const FARM = {
-  /** Ticks between farm growth updates (8 ticks = 2s at 4 ticks/sec). */
-  TICK_INTERVAL: 8,
-  /** Base growth rate per tick (multiplied by tile fertility). */
-  GROWTH_RATE: 5,
-  /** Growth threshold at which crop becomes ready (0-100). */
-  READY_THRESHOLD: 100,
-  /** Base berry yield on harvest. */
-  BASE_HARVEST_YIELD: 3,
-} as const;
 
 /** Territory claim constants. */
 export const TERRITORY = {
@@ -142,16 +100,6 @@ export const WAVE_SPAWNER = {
   ESCALATION_PER_WAVE: 1,
 } as const;
 
-/** Turret constants (Phase B). */
-export const TURRET = {
-  /** Turret firing range in tiles. */
-  RANGE: 2,
-  /** Damage per turret shot. */
-  DAMAGE: 15,
-  /** Ticks between turret shots. */
-  FIRE_INTERVAL: 4,
-} as const;
-
 /** Round timer constants (Phase D). */
 export const ROUND = {
   /** Round duration in ticks (3600 ticks = 15 minutes at 4 ticks/sec). */
@@ -164,24 +112,23 @@ export const SHAPE = {
   BLOCK_HP: 100,
 } as const;
 
-/** Worker unit constants. */
-export const WORKER = {
-  HEALTH: 50,
-  GATHER_AMOUNT: 1,
-} as const;
-
 /** Passive territory income constants. */
 export const TERRITORY_INCOME = {
   INTERVAL_TICKS: 40,
   AMOUNT: 1,
 } as const;
 
-/** Pawn command constants (Phase C). */
-export const PAWN_COMMAND = {
-  /** Ticks between pawn gather attempts. */
-  GATHER_INTERVAL: 4,
-  /** Guard detection radius in tiles. */
-  GUARD_RANGE: 3,
-  /** Patrol movement: ticks between steps. */
-  PATROL_STEP_INTERVAL: 2,
+/** Progression level definitions. */
+export const PROGRESSION = {
+  MAX_LEVEL: 7,
+  XP_PER_TILE_CLAIMED: 1,
+  LEVELS: [
+    { level: 1, xpRequired: 0,   shapes: ["tetra_o", "tetra_i"] },
+    { level: 2, xpRequired: 10,  shapes: ["tetra_t"] },
+    { level: 3, xpRequired: 25,  shapes: ["tetra_l"] },
+    { level: 4, xpRequired: 45,  shapes: ["tetra_j"] },
+    { level: 5, xpRequired: 70,  shapes: ["tetra_s", "tetra_z"] },
+    { level: 6, xpRequired: 100, shapes: [], abilities: ["pets"] },
+    { level: 7, xpRequired: 140, shapes: [], abilities: ["pet_breeding"] },
+  ],
 } as const;

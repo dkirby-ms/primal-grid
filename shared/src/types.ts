@@ -68,4 +68,8 @@ export interface IPlayerState {
   hqY: number;
   /** Player score for the current round. */
   score: number;
+  /** Player's current level (1–7). */
+  level: number;
+  /** Experience points earned this round. */
+  xp: number;
 }

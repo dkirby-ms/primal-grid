@@ -9,6 +9,7 @@ import {
   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
   CREATURE_AI, CREATURE_RESPAWN, TERRITORY,
   TERRITORY_INCOME, SHAPE, SHAPE_CATALOG,
+  PROGRESSION, getAvailableShapes, getLevelForXP,
 } from "@primal-grid/shared";
 import type { PlaceShapePayload } from "@primal-grid/shared";
 import { spawnHQ, isShapeAdjacentToTerritory } from "./territory.js";
@@ -83,6 +84,10 @@ export class GameRoom extends Room {
     // Validate shape exists
     const shapeDef = SHAPE_CATALOG[shapeId];
     if (!shapeDef) return;
+
+    // Validate player has unlocked this shape
+    const available = getAvailableShapes(player.level);
+    if (!available.includes(shapeId)) return;
 
     // Validate rotation
     if (rotation !== 0 && rotation !== 1 && rotation !== 2 && rotation !== 3) return;
@@ -206,7 +211,14 @@ export class GameRoom extends Room {
         tile.ownerID = tile.claimingPlayerID;
         tile.shapeHP = SHAPE.BLOCK_HP;
         const player = this.state.players.get(tile.claimingPlayerID);
-        if (player) player.score += 1;
+        if (player) {
+          player.score += 1;
+          player.xp += PROGRESSION.XP_PER_TILE_CLAIMED;
+          const newLevel = getLevelForXP(player.xp);
+          if (newLevel > player.level) {
+            player.level = newLevel;
+          }
+        }
         tile.claimingPlayerID = "";
         tile.claimProgress = 0;
       }

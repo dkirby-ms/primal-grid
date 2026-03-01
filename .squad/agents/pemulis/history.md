@@ -498,3 +498,13 @@ Phase A foundation pivot complete. Server-side: removed avatar properties, imple
 - **Gately outcome:** Client compiles clean. CraftMenu.ts and StructureRenderer.ts deleted. All craft/structure references stripped from main.ts, InputHandler.ts, HudDOM.ts, index.html. B-key shape mode preserved. No dead references remain.
 - **Steeply outcome:** 150/151 tests pass (1 pre-existing flaky). player-lifecycle.test.ts, territory.test.ts, hud-state-contract.test.ts cleaned of structure references. Zero references to removed systems remain.
 - **Outcome:** Shapes-only architecture complete across all three packages. All systems compile clean. Shapes are the sole structure build mechanic. HQ is coordinate-based.
+
+### Progression System — Level/XP Implementation (2026-02-27)
+
+- **PROGRESSION constant:** 7 levels in shared/src/constants.ts. XP thresholds: 0, 10, 25, 45, 70, 100, 140. Shape unlocks per level (tetra_o/i at L1, t at L2, l at L3, j at L4, s/z at L5). Ability flags at L6 (pets) and L7 (pet_breeding).
+- **Helper functions:** shared/src/data/progression.ts — getLevelForXP(), getAvailableShapes(), xpForNextLevel(), hasAbility(). All pure functions, no state. Exported via shared index.
+- **Schema changes:** level (default 1) and xp (default 0) added to IPlayerState interface and PlayerState @type schema. Synced via Colyseus delta.
+- **Shape gating:** Server-authoritative check in handlePlaceShape — getAvailableShapes(player.level) validates shape is unlocked before placement proceeds.
+- **XP grant + level-up:** In tickClaiming, when tile finishes claiming: player.xp += PROGRESSION.XP_PER_TILE_CLAIMED, then getLevelForXP() check for level-up. Inline pattern, not separate helper (only one XP source currently).
+- **Test results:** 180/181 pass (30 new progression tests). 1 pre-existing creature respawn flake unrelated.
+- **Architecture note:** XP is per-round (resets with round). Abilities are string flags — extensible without schema changes. Future XP sources plug into same pattern.
