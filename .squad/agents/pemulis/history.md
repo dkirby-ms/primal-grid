@@ -471,3 +471,22 @@ Phase A foundation pivot complete. Server-side: removed avatar properties, imple
 - **Session log:** `.squad/log/2026-02-28T19:20:00Z-taming-removal.md`
 - **Orchestration logs:** `.squad/orchestration-log/2026-02-28T19:20:00Z-pemulis.md`, `...gately.md`, `...steeply.md`
 - **Decision merged:** `.squad/decisions.md` — Consolidated inbox decisions under "2026-02-28: Taming/Breeding/Pawn System Removal"
+
+### Structure Placement Removal — Shapes-Only Build Mode (2026-02-28)
+
+- **Directive:** Remove all structure placement mechanics from the server. Build mode is shapes-only via PLACE_SHAPE.
+- **Files changed:** `shared/src/types.ts` (removed Workbench/FarmPlot/Turret from ItemType, removed inventory fields from IPlayerState), `shared/src/messages.ts` (removed CRAFT/PLACE/FARM_HARVEST constants and payloads), `shared/src/data/recipes.ts` (gutted — all recipes produced structures), `shared/src/constants.ts` (removed FARM and TURRET constants), `shared/src/index.ts` (removed recipes re-export), `server/src/rooms/GameState.ts` (removed workbenches/farmPlots/turrets from PlayerState, removed Workbench-blocking from isWalkable), `server/src/rooms/GameRoom.ts` (removed handlePlace/handleCraft/handleFarmHarvest/tickFarms methods, message listeners, and related imports).
+- **What survived:** StructureState + structures MapSchema (HQ is a structure), PLACE_SHAPE handler, shape/territory mechanics, HQ spawning, all resource fields, nextStructureId for HQ IDs.
+- **Key finding:** The structure check in handlePlaceShape (prevents placing shapes on HQ tiles) still references `this.state.structures.forEach` — this is correct and necessary since HQ remains a structure.
+- **Test status:** 150/151 passing. 1 pre-existing flaky respawn threshold test. Structure/crafting/farming test files already removed by Steeply.
+
+### Shapes-Only Cleanup — Full Structure Removal (2026-02-28)
+
+- **Directive:** Complete removal of StructureState, structures MapSchema, and remaining Wall/Floor ItemType entries. HQ is now coordinate-only (hqX/hqY on PlayerState), no longer a StructureState entry.
+- **shared/src/types.ts:** Removed `Wall=0` and `Floor=1` from ItemType enum (kept `HQ=7`). Removed entire `IStructureState` interface.
+- **server/src/rooms/GameState.ts:** Removed `StructureState` class (25 lines). Removed `structures` MapSchema from `GameState`. Removed `ItemType` import (no longer needed).
+- **server/src/rooms/GameRoom.ts:** Removed `nextStructureId` field. Removed structure occupation check from `handlePlaceShape` (the `structures.forEach` loop). Simplified `onJoin` to call `spawnHQ()` without idRef parameter.
+- **server/src/rooms/territory.ts:** Removed `StructureState` import, `ItemType` import, `TileState` (unused), and `nextStructureId` parameter from `spawnHQ()`. Removed HQ StructureState creation (7 lines). HQ now only sets player.hqX/hqY + claims 3×3 territory + grants starting resources.
+- **What survived:** All shape placement (PLACE_SHAPE handler, SHAPE_CATALOG, adjacency validation, claiming tick). All territory mechanics (ownerID, claimProgress, territory income). HQ spawn position (hqX/hqY). All creature systems untouched. ItemType.HQ kept for potential future use.
+- **Gotcha:** Client still references `StructureState` and old `ItemType` entries (StructureRenderer.ts, main.ts). Gately needs to clean that up. Tests also reference `structures` MapSchema — Steeply's job.
+- **Compile status:** `shared` builds clean, `server --noEmit` passes.

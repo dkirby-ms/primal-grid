@@ -1,5 +1,5 @@
-import { GameState, TileState, PlayerState, StructureState, CreatureState } from "./GameState.js";
-import { TERRITORY, TileType, ItemType } from "@primal-grid/shared";
+import { GameState, PlayerState } from "./GameState.js";
+import { TERRITORY, TileType } from "@primal-grid/shared";
 
 /** Check if (x,y) is adjacent (cardinal) to any tile owned or being claimed by playerId. */
 export function isAdjacentToTerritory(state: GameState, playerId: string, x: number, y: number): boolean {
@@ -36,25 +36,13 @@ export function claimTile(state: GameState, playerId: string, x: number, y: numb
   if (player) player.score += 1;
 }
 
-/** Spawn HQ for a player: place HQ structure, claim 3×3 area, set starting resources, spawn worker. */
+/** Spawn HQ for a player: claim 3×3 area and set starting resources. */
 export function spawnHQ(
   state: GameState,
   player: PlayerState,
   hqX: number,
   hqY: number,
-  nextStructureId: { value: number },
-  nextCreatureId?: { value: number },
 ): void {
-  // Place HQ structure
-  const hq = new StructureState();
-  hq.id = `structure_${nextStructureId.value++}`;
-  hq.structureType = ItemType.HQ;
-  hq.x = hqX;
-  hq.y = hqY;
-  hq.placedBy = player.id;
-  hq.health = -1; // indestructible for now
-  state.structures.set(hq.id, hq);
-
   // Set player HQ position
   player.hqX = hqX;
   player.hqY = hqY;
@@ -78,24 +66,6 @@ export function spawnHQ(
   player.stone = TERRITORY.STARTING_STONE;
   player.fiber = TERRITORY.STARTING_FIBER;
   player.berries = TERRITORY.STARTING_BERRIES;
-
-  // Spawn starting worker creature at HQ
-  if (nextCreatureId) {
-    const WORKER_HEALTH = 50; // TODO: import from shared WORKER constants when available
-    const worker = new CreatureState();
-    worker.id = `creature_${nextCreatureId.value++}`;
-    worker.creatureType = "worker";
-    worker.x = hqX;
-    worker.y = hqY;
-    worker.health = WORKER_HEALTH;
-    worker.hunger = 100;
-    worker.personality = "docile";
-    worker.currentState = "idle";
-    worker.ownerID = player.id;
-    worker.trust = 100;
-    worker.command = "gather";
-    state.creatures.set(worker.id, worker);
-  }
 }
 
 /** Get count of tiles owned by each player. */

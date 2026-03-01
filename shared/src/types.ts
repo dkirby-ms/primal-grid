@@ -38,13 +38,6 @@ export interface ITileState {
 /** Creature type identifiers. */
 export type CreatureType = 'herbivore' | 'carnivore';
 
-/** Creature personality types — affects taming speed and behavior. */
-export enum Personality {
-  Docile = "docile",
-  Neutral = "neutral",
-  Aggressive = "aggressive",
-}
-
 /** State of a creature in the game world. */
 export interface ICreatureState {
   id: string;
@@ -54,42 +47,11 @@ export interface ICreatureState {
   health: number;
   hunger: number;
   currentState: string;
-  ownerID: string;
-  trust: number;
-  speed: number;
-  personality: string;
-  lastBredTick: number;
-  /** Active command assigned by owner. */
-  command: string;
-  /** X coordinate of assigned zone. */
-  zoneX: number;
-  /** Y coordinate of assigned zone. */
-  zoneY: number;
 }
 
-/** Craftable / placeable item types. */
+/** Placeable item types. */
 export enum ItemType {
-  Wall = 0,
-  Floor = 1,
-  Workbench = 2,
-  FarmPlot = 5,
-  Turret = 6,
   HQ = 7,
-}
-
-/** State of a structure placed in the world. */
-export interface IStructureState {
-  id: string;
-  structureType: number;
-  x: number;
-  y: number;
-  placedBy: string;
-  /** Growth progress for farm plots (0-100). */
-  growthProgress?: number;
-  /** Whether a farm plot crop is ready for harvest. */
-  cropReady?: boolean;
-  /** Structure hit points. */
-  health: number;
 }
 
 /** State of a player in the game world. */
@@ -100,9 +62,6 @@ export interface IPlayerState {
   stone: number;
   fiber: number;
   berries: number;
-  workbenches: number;
-  farmPlots: number;
-  turrets: number;
   /** X coordinate of player's HQ tile. */
   hqX: number;
   /** Y coordinate of player's HQ tile. */

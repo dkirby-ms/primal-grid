@@ -1,5 +1,5 @@
 import { Schema, type, ArraySchema, MapSchema } from "@colyseus/schema";
-import { TileType, ItemType, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED } from "@primal-grid/shared";
+import { TileType, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED } from "@primal-grid/shared";
 
 export class TileState extends Schema {
   @type("number")
@@ -56,15 +56,6 @@ export class PlayerState extends Schema {
   berries: number = 0;
 
   @type("number")
-  workbenches: number = 0;
-
-  @type("number")
-  farmPlots: number = 0;
-
-  @type("number")
-  turrets: number = 0;
-
-  @type("number")
   hqX: number = -1;
 
   @type("number")
@@ -95,59 +86,6 @@ export class CreatureState extends Schema {
 
   @type("string")
   currentState: string = "idle";
-
-  @type("string")
-  ownerID: string = "";
-
-  @type("number")
-  trust: number = 0;
-
-  @type("number")
-  speed: number = 0;
-
-  @type("string")
-  personality: string = "neutral";
-
-  @type("number")
-  lastBredTick: number = 0;
-
-  @type("string")
-  command: string = "idle";
-
-  @type("number")
-  zoneX: number = -1;
-
-  @type("number")
-  zoneY: number = -1;
-
-  /** Consecutive ticks at trust=0 (for auto-abandon). Not synced to client. */
-  zeroTrustTicks: number = 0;
-}
-
-export class StructureState extends Schema {
-  @type("string")
-  id: string = "";
-
-  @type("number")
-  structureType: number = ItemType.Wall;
-
-  @type("number")
-  x: number = 0;
-
-  @type("number")
-  y: number = 0;
-
-  @type("string")
-  placedBy: string = "";
-
-  @type("number")
-  growthProgress: number = 0;
-
-  @type("boolean")
-  cropReady: boolean = false;
-
-  @type("number")
-  health: number = -1;
 }
 
 export class GameState extends Schema {
@@ -169,9 +107,6 @@ export class GameState extends Schema {
   @type({ map: CreatureState })
   creatures = new MapSchema<CreatureState>();
 
-  @type({ map: StructureState })
-  structures = new MapSchema<StructureState>();
-
   @type("number")
   mapWidth: number = DEFAULT_MAP_SIZE;
 
@@ -189,22 +124,12 @@ export class GameState extends Schema {
     return this.tiles.at(y * this.mapWidth + x);
   }
 
-  /** Check if tile at (x, y) is walkable (not water, not rock, no blocking structure). */
+  /** Check if tile at (x, y) is walkable (not water, not rock, no shape block). */
   isWalkable(x: number, y: number): boolean {
     const tile = this.getTile(x, y);
     if (!tile) return false;
     if (tile.type === TileType.Water || tile.type === TileType.Rock) return false;
     if (tile.shapeHP > 0) return false;
-
-    // Check for blocking structures (Workbench blocks; shape blocks handled via shapeHP above)
-    let blocked = false;
-    this.structures.forEach((s) => {
-      if (s.x === x && s.y === y) {
-        if (s.structureType === ItemType.Workbench) {
-          blocked = true;
-        }
-      }
-    });
-    return !blocked;
+    return true;
   }
 }
