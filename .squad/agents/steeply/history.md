@@ -460,3 +460,33 @@ File: `server/src/__tests__/pawnCommands.test.ts`
 - **Session log:** `.squad/log/2026-02-28T19:20:00Z-taming-removal.md`
 - **Orchestration logs:** `.squad/orchestration-log/2026-02-28T19:20:00Z-steeply.md`, `...pemulis.md`, `...gately.md`
 - **Decision merged:** `.squad/decisions.md` — Consolidated inbox decisions under "2026-02-28: Taming/Breeding/Pawn System Removal"
+
+### Structure/Crafting/Farming Test Cleanup (2026-02-28)
+
+- **Deleted 5 test files** (100% about removed features): `structures.test.ts`, `crafting.test.ts`, `farming.test.ts`, `recipes.test.ts`, `base-building-integration.test.ts`.
+- **Updated 3 test files** to remove structure/crafting references:
+  - `hud-state-contract.test.ts` — removed crafting tests (handleCraft, RECIPES, CraftPayload), kept creature HUD and player starting state tests.
+  - `messages.test.ts` — removed CRAFT/PLACE message constant tests, kept PLACE_SHAPE test.
+  - `territory.test.ts` — removed unused `StructureState` import, kept all territory/HQ tests.
+- **Test results:** 149/151 passing across 15/17 files. 2 pre-existing creature AI failures (idle→wander timing, respawn count threshold) — unrelated to cleanup.
+- **Net reduction:** ~48 tests removed (was ~197, now 151). All removed tests were for workbench/farm/turret placement, crafting recipes, farm growth/harvest, and structure-creature interaction.
+- **Kept all tests for:** PLACE_SHAPE territory claiming, shape validation, territory adjacency, creature AI, ecosystem simulation, resource gathering, HQ spawn.
+
+### Shapes-Only Cleanup — Second Pass (2026-02-28)
+
+- **Reviewed all 11 server test files + 6 shared test files** for lingering structure/craft/farm references.
+- **3 files updated:**
+  - `player-lifecycle.test.ts` — removed `structures.size` assertion (line 76), replaced with HQ position + score check. Test renamed from "HQ structure and territory" to "HQ position and territory".
+  - `territory.test.ts` — removed `structures.forEach` HQ lookup (8 lines) and `ItemType` import. Removed `nextStructureId` from helper. Replaced structure assertion with `isWalkable` check on HQ tile. Test renamed to reflect no structure dependency.
+  - `hud-state-contract.test.ts` — removed `nextStructureId = 0` from helper.
+- **No test files removed** — the Phase 3 test files (crafting, structures, farming, base-building-integration, recipes) were already absent from the filesystem.
+- **All grid-generation, GameState, GameRoom, creature-ai, creature-spawning, ecosystem-integration, creature-systems-integration tests left untouched** — no structure references found.
+- **Zero remaining references** to `structures.`, `StructureState`, `nextStructureId`, `handleCraft`, `handlePlace` (non-shape), `handleFarmHarvest`, `tickFarms`, or removed ItemType entries across all test files.
+
+### Shapes-Only Cleanup — Integration Session (2026-03-01)
+
+- **Session:** Shapes-only cleanup orchestrated across Pemulis (Systems Dev), Gately (Game Dev), and Steeply (Tester).
+- **Pemulis outcome:** Server and shared packages compile clean. StructureState, structures MapSchema, IStructureState, Wall/Floor ItemType all removed. HQ is now coordinate-based. All shape/territory/creature mechanics untouched.
+- **Gately outcome:** Client compiles clean. CraftMenu.ts and StructureRenderer.ts deleted. All craft/structure references stripped from main/InputHandler/HudDOM/index.html.
+- **Steeply outcome:** 150/151 tests pass (1 pre-existing flaky respawn test, unrelated). player-lifecycle.test.ts, territory.test.ts, hud-state-contract.test.ts cleaned. Zero references to removed systems remain.
+- **Outcome:** Shapes-only architecture complete. All systems compile clean. Suite ready for shapes-only Phase 4+.

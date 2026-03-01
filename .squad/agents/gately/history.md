@@ -449,3 +449,30 @@ All 10 Phase A items (A1–A10) complete across all agents. Tests: 240/240 passi
 - **Session log:** `.squad/log/2026-02-28T19:20:00Z-taming-removal.md`
 - **Orchestration logs:** `.squad/orchestration-log/2026-02-28T19:20:00Z-gately.md`, `...pemulis.md`, `...steeply.md`
 - **Decision merged:** `.squad/decisions.md` — Consolidated inbox decisions under "2026-02-28: Taming/Breeding/Pawn System Removal"
+
+### Unified Build Mode — Shapes Only (2026-02-28)
+
+- **Directive:** Merge shape mode and build mode into a single "build mode" (`B` key) that only places polyomino shapes. Remove `V` key, structure placement, and default click-to-claim.
+- **InputHandler.ts:** Removed `PLACE` import, `ItemType` import, `PLACEABLE_ITEMS` constant, `shapeMode` field, `buildIndex` field. `buildMode` is now the sole mode toggle. `Q`/`E`/`R`/number keys all check `buildMode`. Click handler only sends `PLACE_SHAPE` in build mode; bare clicks do nothing. Cursor: `cell` in build mode, `crosshair` otherwise (removed `copy` cursor for old structure mode).
+- **HudDOM.ts:** Merged `setShapeMode()` into `setBuildMode()`. Single method now takes `(active, selectedIndex, rotation)` and controls both the text indicator and shape carousel. No more separate shape/build UI states.
+- **HelpScreen.ts:** Updated keybindings: `B` = "Toggle build mode (shapes)", removed `V`, click = "Place shape (build mode)".
+- **StructureRenderer.ts:** No changes — still renders HQ, farms, workbenches from server Colyseus state. This is a state renderer, not input.
+- **main.ts:** No changes — StructureRenderer kept for server-driven rendering.
+- **Result:** Client compiles clean. Build mode is unified. No `V` key. No structure placement from client. No accidental territory claims on bare clicks.
+
+### Shapes-Only Cleanup — Client (2026-02-28)
+- **Deleted:** `CraftMenu.ts` (entire craft menu UI) and `StructureRenderer.ts` (wall/floor/workbench/farm rendering). Structures no longer exist in schema.
+- **main.ts:** Removed imports/instantiation of CraftMenu and StructureRenderer. Removed `setCraftMenu()` wiring and `onInventoryUpdate` feed to craft menu.
+- **InputHandler.ts:** Removed CraftMenu import, `craftMenu` property, `setCraftMenu()` method. Removed C-key craft toggle, H-key farm harvest, `FARM_HARVEST` import. Removed craft menu number-key handling. **Kept:** B-key build mode, Q/E cycling, R rotation, number-key shape selection, PLACE_SHAPE sending.
+- **HudDOM.ts:** Removed `craftWorkbenches`, `craftFarms` DOM references and update logic. Removed `onInventoryUpdate` callback (only fed CraftMenu). Kept shape carousel, territory, inventory, creatures.
+- **index.html:** Removed entire "Crafted Items" HUD section (walls/floors/workbenches/farms DOM elements).
+- **Gotcha:** HudDOM still had `onInventoryUpdate` after the first edit pass — the earlier taming removal had shifted lines. Required a second pass to match.
+- **Result:** Client compiles clean (`tsc --noEmit` passes). Zero references to CraftMenu, StructureRenderer, or FARM_HARVEST remain in client/src/.
+
+### Shapes-Only Cleanup — Integration Session (2026-03-01)
+
+- **Session:** Shapes-only cleanup orchestrated across Pemulis (Systems Dev), Gately (Game Dev), and Steeply (Tester).
+- **Pemulis outcome:** Server and shared packages compile clean. StructureState, structures MapSchema, IStructureState, Wall/Floor ItemType all removed. HQ is now coordinate-based. All shape/territory/creature mechanics untouched.
+- **Gately outcome:** Client compiles clean. CraftMenu.ts and StructureRenderer.ts deleted. All craft/structure references stripped from main.ts, InputHandler.ts, HudDOM.ts, index.html. B-key shape mode preserved. No dead references remain.
+- **Steeply outcome:** 150/151 tests pass (1 pre-existing flaky). Tests cleaned of structure references.
+- **Outcome:** Shapes-only architecture complete. All systems compile clean. Shapes are the sole structure build mechanic.

@@ -490,3 +490,11 @@ Phase A foundation pivot complete. Server-side: removed avatar properties, imple
 - **What survived:** All shape placement (PLACE_SHAPE handler, SHAPE_CATALOG, adjacency validation, claiming tick). All territory mechanics (ownerID, claimProgress, territory income). HQ spawn position (hqX/hqY). All creature systems untouched. ItemType.HQ kept for potential future use.
 - **Gotcha:** Client still references `StructureState` and old `ItemType` entries (StructureRenderer.ts, main.ts). Gately needs to clean that up. Tests also reference `structures` MapSchema — Steeply's job.
 - **Compile status:** `shared` builds clean, `server --noEmit` passes.
+
+### Shapes-Only Cleanup — Integration Session (2026-03-01)
+
+- **Session:** Shapes-only cleanup orchestrated across Pemulis (Systems Dev), Gately (Game Dev), and Steeply (Tester).
+- **Pemulis outcome:** Server and shared packages compile clean. StructureState, structures MapSchema, IStructureState, Wall/Floor ItemType all removed. HQ is now coordinate-based (hqX/hqY on PlayerState). Structure occupation check removed from PLACE_SHAPE. nextStructureId and related HQ StructureState creation removed. All shape/territory/creature mechanics untouched.
+- **Gately outcome:** Client compiles clean. CraftMenu.ts and StructureRenderer.ts deleted. All craft/structure references stripped from main.ts, InputHandler.ts, HudDOM.ts, index.html. B-key shape mode preserved. No dead references remain.
+- **Steeply outcome:** 150/151 tests pass (1 pre-existing flaky). player-lifecycle.test.ts, territory.test.ts, hud-state-contract.test.ts cleaned of structure references. Zero references to removed systems remain.
+- **Outcome:** Shapes-only architecture complete across all three packages. All systems compile clean. Shapes are the sole structure build mechanic. HQ is coordinate-based.

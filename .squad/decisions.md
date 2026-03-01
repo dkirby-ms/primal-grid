@@ -1668,3 +1668,56 @@ The taming, breeding, trust, pack, and pawn command systems are being removed fr
 **Maintained by:** Scribe  
 **Last Updated:** 2026-02-28T19:20:00Z  
 **Total Decisions:** 43+ (consolidated from inbox)
+
+## 2026-03-01: Shapes-Only Cleanup — Unified Build Architecture
+
+**Date:** 2026-03-01  
+**Authors:** Pemulis (Systems Dev), Gately (Game Dev), Steeply (Tester)  
+**Status:** ✅ ACTIVE  
+**Requested by:** dkirby-ms
+
+### Context
+Per Hal's unified shapes-only design, the `StructureState` schema, the `structures` MapSchema, and all crafting/farming handlers have been fully removed from server, shared, and client code. Shapes are now the sole structure build mechanic. HQ is tracked via coordinate-based fields (`hqX`, `hqY`) on PlayerState.
+
+### Server & Shared Removal (Pemulis)
+- **Removed:** `StructureState` class, `structures` MapSchema from GameState, `IStructureState` interface
+- **Removed:** `ItemType.Wall`, `ItemType.Floor`, `ItemType.FarmPlot`, `ItemType.Workbench` enum entries
+- **Removed:** Structure occupation check in PLACE_SHAPE handler, `nextStructureId` from GameRoom and `spawnHQ()`
+- **Removed:** HQ StructureState creation in territory.ts
+- **Kept:** `ItemType.HQ` (for potential client reference), all shape/territory/claiming mechanics, all creature systems
+- **Status:** ✅ `shared` builds clean, ✅ `server` compiles clean
+
+### Client-Side Removal (Gately)
+- **Removed:** `CraftMenu.ts` file entirely, `StructureRenderer.ts` file entirely
+- **Cleaned:** main.ts, InputHandler.ts, HudDOM.ts, index.html of all craft/structure references
+- **Removed:** C-key craft toggle, H-key farm harvest, craft number-key handlers
+- **Kept:** B-key build mode, Q/E shape cycling, R rotation, PLACE_SHAPE message sending, shape ghost preview, territory display
+- **Status:** ✅ Client compiles clean
+
+### Test Cleanup (Steeply)
+- **Updated:** player-lifecycle.test.ts (removed `structures.size` assertion, replaced with HQ position check)
+- **Updated:** territory.test.ts (removed `structures.forEach` HQ lookup, replaced with `isWalkable` check on HQ tile)
+- **Updated:** hud-state-contract.test.ts (removed `nextStructureId = 0` from helper)
+- **No files deleted** — Phase 3 test files (crafting, structures, farming, base-building-integration, recipes) already absent
+- **Status:** ✅ 150/151 tests pass (1 pre-existing flaky respawn test, unrelated)
+
+### What Remains
+- All shape mechanics (11-polyomino catalog, placement, adjacency, rotation)
+- All territory mechanics (passive income, worker gathering, territory expansion)
+- All creature systems (wild AI, ecosystem simulation)
+- All HUD elements (shape carousel, territory display, creature counts, resource inventory)
+- HQ display logic now via GridRenderer territory overlays (not StructureRenderer)
+
+### Implications
+- **No crafting recipes** — shapes are the exclusive build system
+- **No farming/workbenches** — all production via passive income + worker gathering
+- **No structure placement UI** — B-key mode places shapes only
+- **Shapes are permanent** — shapeHP field on TileState handles durability
+- **HQ is coordinate-based** — no StructureState overhead
+
+### Compilation Status
+- ✅ shared: `npx tsc` passes
+- ✅ server: `npx tsc --noEmit` passes
+- ✅ client: `tsc --noEmit` passes
+- ✅ tests: 150/151 passing
+
