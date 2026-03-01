@@ -490,3 +490,12 @@ File: `server/src/__tests__/pawnCommands.test.ts`
 - **Gately outcome:** Client compiles clean. CraftMenu.ts and StructureRenderer.ts deleted. All craft/structure references stripped from main/InputHandler/HudDOM/index.html.
 - **Steeply outcome:** 150/151 tests pass (1 pre-existing flaky respawn test, unrelated). player-lifecycle.test.ts, territory.test.ts, hud-state-contract.test.ts cleaned. Zero references to removed systems remain.
 - **Outcome:** Shapes-only architecture complete. All systems compile clean. Suite ready for shapes-only Phase 4+.
+
+### Progression System — Test Scaffolding (2026-02-27)
+
+- **File created:** `server/src/__tests__/progression.test.ts` — 6 test suites, 28 test cases covering the progression/leveling system from design doc.
+- **Unit tests:** `getLevelForXP` (8 cases: boundaries, exact thresholds, max cap), `getAvailableShapes` (6 cases: cumulative unlocks per level, no extras beyond level 5), `xpForNextLevel` (4 cases: each level threshold, null at max), `hasAbility` (6 cases: pets at 6, pet_breeding at 7, nonexistent abilities).
+- **Integration tests:** Shape gating (3 cases: level-locked shape rejected, unlocked shape accepted, starter shape always valid), XP/level-up (3 cases: XP increments on tile claim, level updates at threshold crossing, max level cap).
+- **Pattern:** Tests follow existing conventions — `Object.create(GameRoom.prototype)`, `fakeClient()`, vitest describe/it/expect. Integration tests manipulate `player.level`/`player.xp` directly and call `room.tickClaiming()` to simulate the server loop.
+- **Status:** Tests written against design doc API. Will fail until Pemulis finishes implementing `PROGRESSION` constant, helper functions (`getLevelForXP`, `getAvailableShapes`, `xpForNextLevel`, `hasAbility`), and the `level`/`xp` fields on PlayerState.
+- **Imports expected:** `getLevelForXP`, `getAvailableShapes`, `xpForNextLevel`, `hasAbility`, `PROGRESSION` all from `@primal-grid/shared`.

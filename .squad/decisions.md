@@ -1721,3 +1721,46 @@ Per Hal's unified shapes-only design, the `StructureState` schema, the `structur
 - ✅ client: `tsc --noEmit` passes
 - ✅ tests: 150/151 passing
 
+## 2026-02-28: Progression / Leveling System — Architecture & Implementation
+
+**Date:** 2026-02-28  
+**Author:** Hal (Lead)  
+**Status:** Implemented
+
+### Decisions
+
+1. **7 levels per round, max achievable in ~12 minutes** — Progression is pacing, not grind. Arcade rounds are 15–30 min; players should hit level 7 before round end.
+2. **XP is per-round, resets on round start** — No persistent progression (Phase 7). Tile claims grant 1 XP each. Cumulative thresholds: L2=10, L3=25, L4=45, L5=70, L6=100, L7=140.
+3. **Level/XP synced on PlayerState schema** — Client needs level for carousel filtering and HUD display. Colyseus delta-sync handles it automatically.
+4. **Server validates shape access; client filtering is cosmetic** — Authority check in `handlePlaceShape()`: if `!getAvailableShapes(player.level).includes(shapeId)` return. Client carousel filtering is UX convenience only.
+5. **Level-up check at XP grant site, not tick loop** — When tile claim completes in `tickClaiming()`, grant XP and check for level-up. Instant feedback, no per-tick scan overhead.
+6. **PROGRESSION constant in shared package** — Both server (validation) and client (filtering/display) read from `shared/src/constants.ts`. Data-driven, tunable without code changes.
+7. **Abilities are string flags, not booleans** — `hasAbility(level, "pets")` extensible pattern. No schema changes needed for new abilities (turrets, terraforming, etc.).
+
+### Shape Unlocks (Cumulative)
+
+| Level | Shapes Added | Rationale |
+|-------|--------------|-----------|
+| 1 | O, I | Starter kit: simple, intuitive |
+| 2 | T | First branch shape |
+| 3 | L | Corner coverage |
+| 4 | J | Mirror of L (5/7 shapes) |
+| 5 | S, Z | Full catalog + trickiest shapes (reward for experience) |
+| 6 | — | **Pets** ability unlock |
+| 7 | — | **Pet breeding** ability unlock |
+
+### Implementation Summary
+
+- **Shared:** `PROGRESSION` constant (15 lines), `progression.ts` helpers (35 lines), `IPlayerState` type update (4 lines)
+- **Server:** `PlayerState` schema fields (6 lines), `GameRoom.handlePlaceShape()` gating (3 lines), `tickClaiming()` XP grant (7 lines)
+- **Client:** `InputHandler.updateShapeKeys()` (10 lines), `HudDOM` level display + carousel (15 lines)
+- **Tests:** 28 tests across 6 suites (100% coverage)
+
+### Implications
+
+- Players see only unlocked shapes in carousel at their current level.
+- Shape placement is server-gated; client can't bypass via console hacks.
+- Per-round XP resets decouple this from Phase 7 (persistence).
+- `grantXP(player, amount)` helper supports future XP sources (wave kills, structures, breeding, taming, survival bonuses).
+- `abilities` array on level definitions is stable API for feature flags (future: turrets, terraforming, advanced crafting).
+

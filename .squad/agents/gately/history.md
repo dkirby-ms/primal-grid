@@ -31,6 +31,13 @@ Next: Phase D spawns 2026-02-28.
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
+### Progression UI (2026-02-28)
+
+- **Level/XP HUD section:** Added to index.html above shapes carousel. Uses existing stat-bar-wrap/stat-bar CSS classes for XP progress bar. Cyan (#7ecfff) color scheme to distinguish from gold territory display.
+- **Shape gating (client):** HudDOM and InputHandler both use `getAvailableShapes(level)` from shared instead of `Object.keys(SHAPE_CATALOG)`. Carousel rebuilds dynamically when level changes.
+- **Level change wiring:** HudDOM.updateLevelDisplay() detects level changes and fires onLevelChange callback. main.ts wires this to InputHandler.updateShapeKeys(). No polling needed — driven by Colyseus onStateChange sync reading player.level.
+- **Parallel work pattern:** Shared helpers (getAvailableShapes, xpForNextLevel) were being built by Pemulis simultaneously. Worked from design doc API shapes, compiled successfully after shared was built.
+
 ### Phase C — Pawn Commands UI & Phase B Shape Rendering (2026-02-27)
 
 - **Click-to-tame:** Press I, click creature → pawn creation. Berries cost. Immediate feedback. Integrates with existing creature system.
