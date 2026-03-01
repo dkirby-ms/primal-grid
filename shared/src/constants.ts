@@ -69,7 +69,7 @@ export const CREATURE_AI = {
   /** Resource amount consumed when herbivore grazes. */
   GRAZE_AMOUNT: 1,
   /** Health damage dealt by carnivore per hunt attack. */
-  HUNT_DAMAGE: 25,
+  HUNT_DAMAGE: 30,
 } as const;
 
 

@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { SHAPE_CATALOG, type ShapeDef } from '@primal-grid/shared';
+import { SHAPE_CATALOG, type ShapeDef, getAvailableShapes, xpForNextLevel } from '@primal-grid/shared';
 
 /**
  * DOM-based HUD panel — replaces the canvas-rendered HudRenderer.
@@ -14,26 +14,20 @@ export class HudDOM {
   private invStone: HTMLElement;
   private invFiber: HTMLElement;
   private invBerries: HTMLElement;
-  private craftWorkbenches: HTMLElement;
-  private craftFarms: HTMLElement;
   private creatureCounts: HTMLElement;
-  private tamedInfo: HTMLElement;
-  private packInfo: HTMLElement;
   private buildIndicator: HTMLElement;
-  private pawnList: HTMLElement;
-  private pawnTitle: HTMLElement;
   private shapeCarousel: HTMLElement;
   private shapeCarouselItems: HTMLElement;
   private shapeItemEls: HTMLElement[] = [];
   private shapeKeys: string[] = [];
-
-  /** Callback invoked with latest player resources for craft menu updates. */
-  public onInventoryUpdate: ((resources: Record<string, number>) => void) | null = null;
+  private levelVal: HTMLElement;
+  private xpText: HTMLElement;
+  private xpBarFill: HTMLElement;
+  private currentLevel = 1;
 
   /** HQ position for colony interactions. */
   public localHqX = 0;
   public localHqY = 0;
-  public packSize = 0;
 
   constructor(localSessionId: string) {
     this.localSessionId = localSessionId;
@@ -43,53 +37,63 @@ export class HudDOM {
     this.invStone = document.getElementById('inv-stone')!;
     this.invFiber = document.getElementById('inv-fiber')!;
     this.invBerries = document.getElementById('inv-berries')!;
-    this.craftWorkbenches = document.getElementById('craft-workbenches')!;
-    this.craftFarms = document.getElementById('craft-farms')!;
     this.creatureCounts = document.getElementById('creature-counts')!;
-    this.tamedInfo = document.getElementById('tamed-info')!;
-    this.packInfo = document.getElementById('pack-info')!;
     this.buildIndicator = document.getElementById('build-indicator')!;
-    this.pawnList = document.getElementById('pawn-list')!;
-    this.pawnTitle = document.querySelector('#section-pawns .section-title') as HTMLElement;
     this.shapeCarousel = document.getElementById('shape-carousel')!;
     this.shapeCarouselItems = document.getElementById('shape-carousel-items')!;
-    this.shapeKeys = Object.keys(SHAPE_CATALOG);
+    this.levelVal = document.getElementById('level-val')!;
+    this.xpText = document.getElementById('xp-text')!;
+    this.xpBarFill = document.getElementById('xp-bar-fill')!;
+    this.shapeKeys = getAvailableShapes(this.currentLevel);
     this.buildShapeCarousel();
   }
 
-  /** Show or hide build mode indicator with selected item name. */
-  public setBuildMode(active: boolean, itemName?: string): void {
+  /** Show or hide build mode indicator and shape carousel. */
+  public setBuildMode(active: boolean, selectedIndex: number = 0, rotation: number = 0): void {
     if (active) {
-      this.buildIndicator.textContent = `🔨 BUILD MODE [${itemName ?? ''}]`;
+      const shape = SHAPE_CATALOG[this.shapeKeys[selectedIndex]];
+      this.buildIndicator.textContent = `🔨 BUILD MODE [${shape?.name ?? ''}]`;
       this.buildIndicator.classList.add('active');
     } else {
       this.buildIndicator.classList.remove('active');
     }
-  }
-
-  /** Show/hide shape carousel and highlight selected shape. */
-  public setShapeMode(active: boolean, selectedIndex: number = 0, rotation: number = 0): void {
     this.shapeCarousel.style.display = active ? 'block' : 'none';
     if (!active) return;
     for (let i = 0; i < this.shapeItemEls.length; i++) {
       this.shapeItemEls[i].classList.toggle('selected', i === selectedIndex);
     }
-    // Update the mini-grid for the selected shape to show current rotation
     this.updateShapeGrid(selectedIndex, rotation);
   }
 
   /** Callback when user clicks a shape in the carousel. */
   public onShapeSelect: ((index: number) => void) | null = null;
 
-  /** Callback when user clicks a pawn row in the HUD panel. */
-  public onPawnSelect: ((creatureId: string) => void) | null = null;
+  /** Callback when level changes (carousel rebuilt, shape list changed). */
+  public onLevelChange: ((level: number) => void) | null = null;
 
-  /** Currently selected pawn ID for HUD highlight. */
-  private selectedPawnId: string | null = null;
+  /** Update the level/XP display. */
+  public updateLevelDisplay(level: number, xp: number): void {
+    this.levelVal.textContent = String(level);
+    const nextXp = xpForNextLevel(level);
+    if (nextXp !== null) {
+      const pct = Math.min(100, Math.round((xp / nextXp) * 100));
+      this.xpText.textContent = `${xp} / ${nextXp}`;
+      this.xpBarFill.style.width = `${pct}%`;
+    } else {
+      this.xpText.textContent = `${xp} (MAX)`;
+      this.xpBarFill.style.width = '100%';
+    }
+    if (level !== this.currentLevel) {
+      this.currentLevel = level;
+      this.updateCarouselForLevel(level);
+      this.onLevelChange?.(level);
+    }
+  }
 
-  /** Set which pawn is selected (highlights the row). */
-  public setSelectedPawnId(id: string | null): void {
-    this.selectedPawnId = id;
+  /** Rebuild the carousel to show only shapes available at the given level. */
+  public updateCarouselForLevel(level: number): void {
+    this.shapeKeys = getAvailableShapes(level);
+    this.buildShapeCarousel();
   }
 
   private buildShapeCarousel(): void {
@@ -147,12 +151,6 @@ export class HudDOM {
     this.renderShapeGrid(grid, shapeDef, rotation);
   }
 
-  /** Update the pack size display immediately (called by InputHandler on F key). */
-  public updatePackSize(size: number): void {
-    this.packSize = size;
-    this.packInfo.textContent = `Pack: ${size}/8`;
-  }
-
   /** Listen to Colyseus state and update DOM elements for the local player. */
   public bindToRoom(room: Room): void {
     room.onStateChange((state: Record<string, unknown>) => {
@@ -172,6 +170,11 @@ export class HudDOM {
           const score = (player['score'] as number) ?? 0;
           this.territoryCount.textContent = String(score);
 
+          // Level / XP
+          const level = (player['level'] as number) ?? 1;
+          const xp = (player['xp'] as number) ?? 0;
+          this.updateLevelDisplay(level, xp);
+
           // Inventory
           const wood = (player['wood'] as number) ?? 0;
           const stone = (player['stone'] as number) ?? 0;
@@ -181,124 +184,23 @@ export class HudDOM {
           this.invStone.textContent = String(stone);
           this.invFiber.textContent = String(fiber);
           this.invBerries.textContent = String(berries);
-
-          // Crafted items
-          const workbenches = (player['workbenches'] as number) ?? 0;
-          const farmPlots = (player['farmPlots'] as number) ?? 0;
-          this.craftWorkbenches.textContent = String(workbenches);
-          this.craftFarms.textContent = String(farmPlots);
-
-          if (this.onInventoryUpdate) {
-            this.onInventoryUpdate({ wood, stone, fiber, berries });
-          }
         });
       }
 
-      // Creature counts + taming info
+      // Creature counts
       const creatures = state['creatures'] as
         | { forEach: (cb: (creature: Record<string, unknown>, key: string) => void) => void }
         | undefined;
       if (creatures && typeof creatures.forEach === 'function') {
         let herbs = 0;
         let carns = 0;
-        let ownedHerbs = 0;
-        let ownedCarns = 0;
-        const herbTrusts: number[] = [];
-        const carnTrusts: number[] = [];
         creatures.forEach((creature) => {
           const t = (creature['creatureType'] as string) ?? 'herbivore';
           if (t === 'carnivore') carns++;
           else herbs++;
-          const ownerId = (creature['ownerID'] as string) ?? '';
-          if (ownerId === this.localSessionId) {
-            const trust = (creature['trust'] as number) ?? 0;
-            if (t === 'carnivore') {
-              ownedCarns++;
-              carnTrusts.push(trust);
-            } else {
-              ownedHerbs++;
-              herbTrusts.push(trust);
-            }
-          }
         });
         this.creatureCounts.textContent = `🦕 ${herbs}  🦖 ${carns}`;
-        this.updateTamedDisplay(ownedHerbs, ownedCarns, herbTrusts, carnTrusts);
-        this.updatePawnList(creatures);
       }
     });
-  }
-
-  private updateTamedDisplay(
-    ownedHerbs: number,
-    ownedCarns: number,
-    herbTrusts: number[],
-    carnTrusts: number[],
-  ): void {
-    if (ownedHerbs === 0 && ownedCarns === 0) {
-      this.tamedInfo.innerHTML = '<span style="color:#666;font-size:11px">No tamed creatures</span>';
-      this.packInfo.textContent = this.packSize > 0 ? `Pack: ${this.packSize}/8` : '';
-      return;
-    }
-
-    let html = '';
-    if (ownedHerbs > 0) {
-      html += `<div class="creature-row">🦕 ${ownedHerbs} herbivore${ownedHerbs > 1 ? 's' : ''}</div>`;
-      for (const trust of herbTrusts) {
-        const color = trust >= 60 ? '#2ecc71' : trust >= 30 ? '#f39c12' : '#e74c3c';
-        html += `<div class="trust-bar"><div class="trust-bar-fill" style="width:${trust}%;background:${color}"></div></div>`;
-      }
-    }
-    if (ownedCarns > 0) {
-      html += `<div class="creature-row">🦖 ${ownedCarns} carnivore${ownedCarns > 1 ? 's' : ''}</div>`;
-      for (const trust of carnTrusts) {
-        const color = trust >= 60 ? '#2ecc71' : trust >= 30 ? '#f39c12' : '#e74c3c';
-        html += `<div class="trust-bar"><div class="trust-bar-fill" style="width:${trust}%;background:${color}"></div></div>`;
-      }
-    }
-    this.tamedInfo.innerHTML = html;
-    this.packInfo.textContent = `Pack: ${this.packSize}/8`;
-  }
-
-  private updatePawnList(
-    creatures: { forEach: (cb: (creature: Record<string, unknown>, key: string) => void) => void },
-  ): void {
-    if (!this.pawnList) return;
-    let pawnCount = 0;
-
-    interface PawnEntry { id: string; creatureType: string; command: string; trust: number }
-    const pawns: PawnEntry[] = [];
-    creatures.forEach((creature, key) => {
-      const ownerId = (creature['ownerID'] as string) ?? '';
-      if (ownerId !== this.localSessionId) return;
-      const id = (creature['id'] as string) ?? key;
-      pawns.push({
-        id,
-        creatureType: (creature['creatureType'] as string) ?? 'herbivore',
-        command: (creature['command'] as string) ?? 'idle',
-        trust: (creature['trust'] as number) ?? 0,
-      });
-    });
-
-    pawnCount = pawns.length;
-    this.pawnList.innerHTML = '';
-    if (pawns.length === 0) {
-      this.pawnList.innerHTML = '<div style="color:#888;font-size:11px">No tamed creatures</div>';
-    } else {
-      for (const pawn of pawns) {
-        const emoji = pawn.creatureType === 'carnivore' ? '🦖' : '🦕';
-        const cmdIcon = pawn.command === 'gather' ? '⛏' : pawn.command === 'guard' ? '🛡' : '💤';
-        const trustPct = Math.round(pawn.trust);
-        const row = document.createElement('div');
-        row.className = 'pawn-row' + (this.selectedPawnId === pawn.id ? ' selected' : '');
-        row.textContent = `${emoji} ${pawn.creatureType} [${cmdIcon} ${pawn.command}] Trust: ${trustPct}%`;
-        row.addEventListener('click', () => {
-          const newId = this.selectedPawnId === pawn.id ? null : pawn.id;
-          this.selectedPawnId = newId;
-          this.onPawnSelect?.(newId!);
-        });
-        this.pawnList.appendChild(row);
-      }
-    }
-    if (this.pawnTitle) this.pawnTitle.textContent = `🐾 Pawns (${pawnCount}/8)`;
   }
 }

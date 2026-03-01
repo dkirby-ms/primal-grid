@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { GameState, PlayerState, StructureState } from "../rooms/GameState.js";
+import { GameState, PlayerState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import { isAdjacentToTerritory, getTerritoryCounts } from "../rooms/territory.js";
 import {
-  TERRITORY, TileType, ItemType, DEFAULT_MAP_SIZE,
+  TERRITORY, TileType, DEFAULT_MAP_SIZE,
 } from "@primal-grid/shared";
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -11,7 +11,6 @@ import {
 function createRoomWithMap(seed?: number): any {
   const room = Object.create(GameRoom.prototype) as any;
   room.state = new GameState();
-  room.nextStructureId = 0;
   room.generateMap(seed);
   return room;
 }
@@ -76,7 +75,7 @@ function findUnwalkableTile(room: any): { x: number; y: number } | null {
 describe("Territory System", () => {
 
   describe("HQ spawn", () => {
-    it("player joins → HQ structure placed, 3×3 territory claimed, score reflects tiles", () => {
+    it("player joins → HQ position set, 3×3 territory claimed, score reflects tiles", () => {
       const room = createRoomWithMap(42);
       const { player } = joinPlayer(room, "p1");
 
@@ -84,16 +83,8 @@ describe("Territory System", () => {
       expect(player.hqX).toBeGreaterThanOrEqual(0);
       expect(player.hqY).toBeGreaterThanOrEqual(0);
 
-      // HQ structure exists
-      let hqFound = false;
-      room.state.structures.forEach((s: any) => {
-        if (s.structureType === ItemType.HQ && s.placedBy === "p1") {
-          hqFound = true;
-          expect(s.x).toBe(player.hqX);
-          expect(s.y).toBe(player.hqY);
-        }
-      });
-      expect(hqFound).toBe(true);
+      // HQ tile is walkable
+      expect(room.state.isWalkable(player.hqX, player.hqY)).toBe(true);
 
       // Territory claimed — count owned tiles
       const counts = getTerritoryCounts(room.state);

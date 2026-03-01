@@ -67,13 +67,14 @@ describe("Player Lifecycle", () => {
     expect(player.berries).toBe(TERRITORY.STARTING_BERRIES);
   });
 
-  it("player gets HQ structure and territory on join", () => {
+  it("player gets HQ position and territory on join", () => {
     const room = createRoom();
     room.onJoin(fakeClient("hq-check"));
     const player = room.state.players.get("hq-check")!;
 
-    // HQ structure should exist
-    expect(room.state.structures.size).toBeGreaterThanOrEqual(1);
+    // HQ position should be set
+    expect(player.hqX).toBeGreaterThanOrEqual(0);
+    expect(player.hqY).toBeGreaterThanOrEqual(0);
 
     // Player should have claimed some tiles (score > 0)
     expect(player.score).toBeGreaterThan(0);

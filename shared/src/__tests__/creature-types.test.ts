@@ -43,12 +43,6 @@ describe("Phase 2.4 — Creature Type Definitions", () => {
     }
   });
 
-  it("all creature types have a speed value", () => {
-    for (const creature of Object.values(CREATURE_TYPES) as any[]) {
-      expect(creature.speed).toBeGreaterThan(0);
-    }
-  });
-
   it("all wild creature types have a positive detection radius", () => {
     for (const creature of Object.values(CREATURE_TYPES) as any[]) {
       if (creature.minPopulation === 0) continue;

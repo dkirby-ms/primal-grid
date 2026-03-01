@@ -7,20 +7,15 @@ const HEADER_SIZE = 16;
 const BODY_SIZE = 12;
 
 const KEYBINDINGS: [string, string][] = [
-  ['Click', 'Claim tile / Place structure (build)'],
-  ['Click creature', 'Tame wild creature'],
+  ['B', 'Toggle build mode (shapes)'],
+  ['Q / E', 'Prev / Next shape'],
+  ['R', 'Rotate shape'],
+  ['Click', 'Place shape (build mode)'],
   ['W A S D', 'Pan camera'],
   ['Scroll', 'Zoom in / out'],
   ['C', 'Open / close craft menu'],
-  ['V', 'Toggle shape mode'],
-  ['Q / E', 'Prev / Next shape'],
-  ['R', 'Rotate shape'],
   ['1-9', 'Craft item (menu) / Select shape'],
   ['H', 'Harvest farm (cursor tile)'],
-  ['Click tamed', 'Select pawn'],
-  ['G', 'Assign gather (then click tile)'],
-  ['D', 'Assign guard (then click tile)'],
-  ['Esc', 'Deselect pawn / Set idle'],
   ['?', 'Toggle this help screen'],
 ];
 

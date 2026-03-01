@@ -1,12 +1,10 @@
 import { Application, Text } from 'pixi.js';
 import { GridRenderer } from './renderer/GridRenderer.js';
 import { CreatureRenderer } from './renderer/CreatureRenderer.js';
-import { StructureRenderer } from './renderer/StructureRenderer.js';
 import { Camera } from './renderer/Camera.js';
 import { InputHandler } from './input/InputHandler.js';
 import { ConnectionStatusUI } from './ui/ConnectionStatus.js';
 import { HudDOM } from './ui/HudDOM.js';
-import { CraftMenu } from './ui/CraftMenu.js';
 import { HelpScreen } from './ui/HelpScreen.js';
 import { connect, disconnect, onConnectionStatus } from './network.js';
 
@@ -62,12 +60,7 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
     // Bind renderers to server state
     grid.bindToRoom(room);
 
-    // Structure renderer (walls, floors, workbenches, farm plots, HQ) — added first so creatures draw on top
-    const structures = new StructureRenderer();
-    grid.container.addChild(structures.container);
-    structures.bindToRoom(room);
-
-    const creatures = new CreatureRenderer(room.sessionId);
+    const creatures = new CreatureRenderer();
     grid.container.addChild(creatures.container);
     creatures.bindToRoom(room);
 
@@ -83,25 +76,21 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
     const hud = new HudDOM(room.sessionId);
     hud.bindToRoom(room);
 
-    // Craft menu overlay (screen-fixed)
-    const craftMenu = new CraftMenu(room);
-    app.stage.addChild(craftMenu.container);
-
     // Help screen overlay (screen-fixed, on top)
     const helpScreen = new HelpScreen(WIDTH, HEIGHT);
     app.stage.addChild(helpScreen.container);
 
-    // Feed inventory updates to craft menu for affordability display
-    hud.onInventoryUpdate = (resources) => craftMenu.updateResources(resources);
-
-    // Input handler (click + craft/build)
+    // Input handler (click + build)
     const input = new InputHandler(room, grid.container, app.canvas);
-    input.setCraftMenu(craftMenu);
     input.setHud(hud);
     input.setHelpScreen(helpScreen);
-    input.setCreatureRenderer(creatures);
     input.setCamera(camera);
     input.setGridRenderer(grid);
+
+    // Wire level changes → update input + HUD carousel
+    hud.onLevelChange = (level: number) => {
+      input.updateShapeKeys(level);
+    };
 
     // Update shape ghost preview every frame
     app.ticker.add(() => {

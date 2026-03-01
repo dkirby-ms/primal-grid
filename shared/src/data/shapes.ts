@@ -42,14 +42,6 @@ function shape(id: string, name: string, cells: Cell[]): ShapeDef {
 }
 
 export const SHAPE_CATALOG: Record<string, ShapeDef> = {
-  mono: shape("mono", "Mono", [{ dx: 0, dy: 0 }]),
-  domino: shape("domino", "Domino", [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }]),
-  tromino_i: shape("tromino_i", "Tromino I", [
-    { dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 },
-  ]),
-  tromino_l: shape("tromino_l", "Tromino L", [
-    { dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 1, dy: 1 },
-  ]),
   tetra_i: shape("tetra_i", "Tetra I", [
     { dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 }, { dx: 3, dy: 0 },
   ]),

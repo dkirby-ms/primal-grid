@@ -95,50 +95,10 @@
         border-bottom: 1px solid #2a2a4a;
       }
       #build-indicator.active { display: block; }
-      /* Creature / Taming */
+      /* Creatures */
       .creature-row {
         font-size: 12px;
         padding: 1px 0;
-      }
-      .trust-bar {
-        width: 100%;
-        height: 6px;
-        background: #222;
-        border-radius: 2px;
-        overflow: hidden;
-        margin: 2px 0 4px;
-      }
-      .trust-bar-fill {
-        height: 100%;
-        border-radius: 2px;
-        transition: width 0.15s ease;
-      }
-      .pack-label {
-        font-size: 11px;
-        color: #ffd700;
-        margin-top: 4px;
-      }
-      /* Pawn HUD panel */
-      .section-title {
-        font-size: 11px;
-        color: #aaa;
-        margin-bottom: 4px;
-      }
-      .pawn-row {
-        font-size: 11px;
-        padding: 3px 4px;
-        color: #ccc;
-        cursor: pointer;
-        border: 1px solid transparent;
-        border-radius: 3px;
-        transition: background 0.1s ease, border-color 0.1s ease;
-      }
-      .pawn-row:hover {
-        background: rgba(255,255,255,0.08);
-      }
-      .pawn-row.selected {
-        border-color: #ffd700;
-        background: rgba(255,204,0,0.15);
       }
       /* Shape carousel */
       .shape-item {
@@ -175,7 +135,7 @@
       }
       .shape-cell.filled { background: #ffcc00; }
       .shape-cell.empty { background: transparent; }
-      #shape-carousel-items::-webkit-scrollbar { display: none; }
+      /* carousel wraps — no scrollbar needed */
     </style>
   </head>
   <body>
@@ -183,9 +143,19 @@
       <div id="app"></div>
       <div id="hud-panel">
         <div id="build-indicator">🔨 BUILD MODE</div>
+        <div class="hud-section" id="section-level">
+          <h3>Level</h3>
+          <div style="font-size:14px;font-weight:bold;color:#7ecfff">⭐ Level <span id="level-val">1</span></div>
+          <div class="stat-bar-wrap" style="margin-top:4px;">
+            <div class="bar-label"><span>XP</span><span id="xp-text">0 / 10</span></div>
+            <div class="stat-bar">
+              <div class="stat-bar-fill" id="xp-bar-fill" style="width:0%;background:#7ecfff;"></div>
+            </div>
+          </div>
+        </div>
         <div id="shape-carousel" class="hud-section" style="display:none;">
           <h3>Shapes <span style="color:#666;font-size:9px">(Q/E cycle, R rotate)</span></h3>
-          <div id="shape-carousel-items" style="display:flex;gap:4px;overflow-x:auto;padding:2px 0;scrollbar-width:none;"></div>
+          <div id="shape-carousel-items" style="display:flex;flex-wrap:wrap;gap:4px;padding:2px 0;"></div>
         </div>
         <div class="hud-section" id="territory-count">
           <h3>Territory</h3>
@@ -198,25 +168,9 @@
           <div class="inv-row"><span class="inv-icon">🌿 Fiber</span><span class="inv-count" id="inv-fiber">0</span></div>
           <div class="inv-row"><span class="inv-icon">🫐 Berries</span><span class="inv-count" id="inv-berries">0</span></div>
         </div>
-        <div class="hud-section" id="section-crafted">
-          <h3>Crafted Items</h3>
-          <div class="inv-row"><span class="inv-icon">🧱 Walls</span><span class="inv-count" id="craft-walls">0</span></div>
-          <div class="inv-row"><span class="inv-icon">🟫 Floors</span><span class="inv-count" id="craft-floors">0</span></div>
-          <div class="inv-row"><span class="inv-icon">🔨 Workbenches</span><span class="inv-count" id="craft-workbenches">0</span></div>
-          <div class="inv-row"><span class="inv-icon">🌾 Farms</span><span class="inv-count" id="craft-farms">0</span></div>
-        </div>
         <div class="hud-section" id="section-creatures">
           <h3>Creatures</h3>
           <div class="creature-row" id="creature-counts">🦕 0 &nbsp; 🦖 0</div>
-        </div>
-        <div class="hud-section" id="section-taming">
-          <h3>Taming / Pack</h3>
-          <div id="tamed-info"></div>
-          <div class="pack-label" id="pack-info"></div>
-        </div>
-        <div class="hud-section" id="section-pawns">
-          <div class="section-title">🐾 Pawns (0/8)</div>
-          <div id="pawn-list"></div>
         </div>
       </div>
     </div>

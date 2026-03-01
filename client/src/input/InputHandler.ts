@@ -1,38 +1,25 @@
 import type { Room } from '@colyseus/sdk';
-import { PLACE, PLACE_SHAPE, FARM_HARVEST, TAME, ASSIGN_PAWN, ItemType, SHAPE_CATALOG } from '@primal-grid/shared';
+import { PLACE_SHAPE, SHAPE_CATALOG, getAvailableShapes } from '@primal-grid/shared';
 import { TILE_SIZE } from '../renderer/GridRenderer.js';
 import type { Container } from 'pixi.js';
-import type { CraftMenu } from '../ui/CraftMenu.js';
 import type { HudDOM } from '../ui/HudDOM.js';
 import type { HelpScreen } from '../ui/HelpScreen.js';
-import type { CreatureRenderer } from '../renderer/CreatureRenderer.js';
 import type { Camera } from '../renderer/Camera.js';
 import type { GridRenderer } from '../renderer/GridRenderer.js';
-
-const PLACEABLE_ITEMS: { type: ItemType; name: string }[] = [
-  { type: ItemType.Workbench, name: 'Workbench' },
-  { type: ItemType.FarmPlot, name: 'FarmPlot' },
-];
 
 export class InputHandler {
   private room: Room;
   private worldContainer: Container;
   private canvas: HTMLCanvasElement;
 
-  private craftMenu: CraftMenu | null = null;
   private hud: HudDOM | null = null;
   private helpScreen: HelpScreen | null = null;
   private buildMode = false;
-  private buildIndex = 0;
-  private shapeMode = false;
   private shapeIndex = 0;
   private shapeRotation = 0;
   private shapeKeys: string[] = [];
-  private creatureRenderer: CreatureRenderer | null = null;
   private camera: Camera | null = null;
   private gridRenderer: GridRenderer | null = null;
-  private selectedPawnId: string | null = null;
-  private pawnCommandMode: 'none' | 'gather' | 'guard' = 'none';
 
   private mouseScreenX = 0;
   private mouseScreenY = 0;
@@ -41,58 +28,30 @@ export class InputHandler {
     this.room = room;
     this.worldContainer = worldContainer;
     this.canvas = canvas;
-    this.shapeKeys = Object.keys(SHAPE_CATALOG);
+    this.shapeKeys = getAvailableShapes(1);
     this.bindKeys();
     this.bindClick();
     this.bindMouseTracking();
     this.updateCursor();
   }
 
-  /** Wire up the craft menu for toggle and number-key crafting. */
-  public setCraftMenu(menu: CraftMenu): void {
-    this.craftMenu = menu;
-  }
-
   /** Wire up the HUD for build mode indicator. */
   public setHud(hud: HudDOM): void {
     this.hud = hud;
-    // Wire pawn row click → select/deselect pawn
-    hud.onPawnSelect = (creatureId: string) => {
-      if (creatureId) {
-        this.selectedPawnId = creatureId;
-        this.pawnCommandMode = 'none';
-        this.creatureRenderer?.setSelectedPawnId(creatureId);
-        hud.setSelectedPawnId(creatureId);
-      } else {
-        this.selectedPawnId = null;
-        this.pawnCommandMode = 'none';
-        this.creatureRenderer?.setSelectedPawnId(null);
-        hud.setSelectedPawnId(null);
-        hud.setBuildMode(false);
-      }
-      this.updateCursor();
-    };
-
     // Wire carousel click → select shape
     hud.onShapeSelect = (index: number) => {
       this.shapeIndex = index;
       this.shapeRotation = 0;
-      if (!this.shapeMode) {
-        this.shapeMode = true;
-        this.buildMode = false;
+      if (!this.buildMode) {
+        this.buildMode = true;
       }
-      this.updateShapeHud();
+      this.updateBuildHud();
     };
   }
 
   /** Wire up the help screen for toggle. */
   public setHelpScreen(helpScreen: HelpScreen): void {
     this.helpScreen = helpScreen;
-  }
-
-  /** Wire up the creature renderer for taming queries. */
-  public setCreatureRenderer(cr: CreatureRenderer): void {
-    this.creatureRenderer = cr;
   }
 
   /** Wire up the camera. */
@@ -138,20 +97,11 @@ export class InputHandler {
         return;
       }
 
-      // Craft menu toggle
-      if (e.key === 'c' || e.key === 'C') {
-        if (this.buildMode) return;
-        this.craftMenu?.toggle();
-        return;
-      }
-
-      // Shape mode toggle
-      if (e.key === 'v' || e.key === 'V') {
-        if (this.craftMenu?.isOpen()) return;
-        this.shapeMode = !this.shapeMode;
-        this.buildMode = false;
-        this.updateShapeHud();
-        if (!this.shapeMode) {
+      // Build mode toggle (shape placement)
+      if (e.key === 'b' || e.key === 'B') {
+        this.buildMode = !this.buildMode;
+        this.updateBuildHud();
+        if (!this.buildMode) {
           this.hud?.setBuildMode(false);
           this.gridRenderer?.clearShapePreview();
         }
@@ -159,108 +109,40 @@ export class InputHandler {
         return;
       }
 
-      // Structure build mode toggle
-      if (e.key === 'b' || e.key === 'B') {
-        if (this.craftMenu?.isOpen()) return;
-        this.shapeMode = false;
-        this.hud?.setShapeMode(false);
-        this.gridRenderer?.clearShapePreview();
-        this.buildMode = !this.buildMode;
-        if (this.buildMode) {
-          this.hud?.setBuildMode(true, PLACEABLE_ITEMS[this.buildIndex].name);
-        } else {
-          this.hud?.setBuildMode(false);
-        }
-        this.updateCursor();
-        return;
-      }
-
       // Cycle shape: Q = prev, E = next
       if (e.key === 'q' || e.key === 'Q') {
-        if (this.shapeMode) {
+        if (this.buildMode) {
           this.shapeIndex = (this.shapeIndex - 1 + this.shapeKeys.length) % this.shapeKeys.length;
           this.shapeRotation = 0;
-          this.updateShapeHud();
+          this.updateBuildHud();
         }
         return;
       }
       if (e.key === 'e' || e.key === 'E') {
-        if (this.shapeMode) {
+        if (this.buildMode) {
           this.shapeIndex = (this.shapeIndex + 1) % this.shapeKeys.length;
           this.shapeRotation = 0;
-          this.updateShapeHud();
+          this.updateBuildHud();
         }
         return;
       }
 
-      // Rotation (shape mode)
+      // Rotation (build mode)
       if (e.key === 'r' || e.key === 'R') {
-        if (this.shapeMode) {
+        if (this.buildMode) {
           this.shapeRotation = (this.shapeRotation + 1) % 4;
-          this.updateShapeHud();
+          this.updateBuildHud();
         }
         return;
       }
 
-      // Pawn command: assign gather mode
-      if (e.key === 'g' || e.key === 'G') {
-        if (this.selectedPawnId) {
-          this.pawnCommandMode = 'gather';
-          this.hud?.setBuildMode(true, 'Assign Gather (click tile)');
-          this.updateCursor();
-        }
-        return;
-      }
-
-      // Pawn command: assign guard mode
-      if (e.key === 'd' || e.key === 'D') {
-        if (this.selectedPawnId) {
-          this.pawnCommandMode = 'guard';
-          this.hud?.setBuildMode(true, 'Assign Guard (click tile)');
-          this.updateCursor();
-        }
-        return;
-      }
-
-      // Escape: deselect pawn / set idle
-      if (e.key === 'Escape') {
-        if (this.selectedPawnId) {
-          this.room.send(ASSIGN_PAWN, { creatureId: this.selectedPawnId, command: 'idle' });
-          this.selectedPawnId = null;
-          this.pawnCommandMode = 'none';
-          this.creatureRenderer?.setSelectedPawnId(null);
-          this.hud?.setSelectedPawnId(null);
-          this.hud?.setBuildMode(false);
-          this.updateCursor();
-          return;
-        }
-      }
-
-      // Farm harvest at cursor tile
-      if (e.key === 'h' || e.key === 'H') {
-        const tile = this.screenToTile();
-        if (tile.x >= 0 && tile.y >= 0) {
-          this.room.send(FARM_HARVEST, { x: tile.x, y: tile.y });
-        }
-        return;
-      }
-
-      // Number keys: craft (when menu open) or cycle build item
+      // Number keys: select shape (build mode)
       if (e.key >= '1' && e.key <= '9') {
         const num = parseInt(e.key, 10);
-        if (this.craftMenu?.isOpen()) {
-          this.craftMenu.craftByIndex(num);
-          return;
-        }
-        if (this.shapeMode && num <= this.shapeKeys.length) {
+        if (this.buildMode && num <= this.shapeKeys.length) {
           this.shapeIndex = num - 1;
           this.shapeRotation = 0;
-          this.updateShapeHud();
-          return;
-        }
-        if (this.buildMode && num <= PLACEABLE_ITEMS.length) {
-          this.buildIndex = num - 1;
-          this.hud?.setBuildMode(true, PLACEABLE_ITEMS[this.buildIndex].name);
+          this.updateBuildHud();
           return;
         }
       }
@@ -279,62 +161,13 @@ export class InputHandler {
 
       if (tileX < 0 || tileY < 0) return;
 
-      // Shape mode: place shape
-      if (this.shapeMode) {
+      // Build mode: place shape
+      if (this.buildMode) {
         const shapeId = this.shapeKeys[this.shapeIndex];
         this.showOptimisticClaim(shapeId, tileX, tileY, this.shapeRotation);
         this.room.send(PLACE_SHAPE, { shapeId, x: tileX, y: tileY, rotation: this.shapeRotation });
         return;
       }
-
-      // Build mode: place structure
-      if (this.buildMode) {
-        const item = PLACEABLE_ITEMS[this.buildIndex];
-        this.room.send(PLACE, { itemType: item.type, x: tileX, y: tileY });
-        return;
-      }
-
-      // Pawn command mode: assign command to selected pawn at clicked tile
-      if (this.pawnCommandMode !== 'none' && this.selectedPawnId) {
-        this.room.send(ASSIGN_PAWN, {
-          creatureId: this.selectedPawnId,
-          command: this.pawnCommandMode,
-          zoneX: tileX,
-          zoneY: tileY,
-        });
-        this.selectedPawnId = null;
-        this.pawnCommandMode = 'none';
-        this.creatureRenderer?.setSelectedPawnId(null);
-        this.hud?.setSelectedPawnId(null);
-        this.hud?.setBuildMode(false);
-        this.updateCursor();
-        return;
-      }
-
-      // Click on tamed creature owned by local player: select pawn
-      if (this.creatureRenderer) {
-        const ownedId = this.creatureRenderer.getNearestOwnedCreature(tileX, tileY);
-        if (ownedId) {
-          this.selectedPawnId = ownedId;
-          this.pawnCommandMode = 'none';
-          this.creatureRenderer.setSelectedPawnId(ownedId);
-          this.hud?.setSelectedPawnId(ownedId);
-          return;
-        }
-      }
-
-      // Normal click: check for wild creature first, then claim tile
-      if (this.creatureRenderer) {
-        const creatureId = this.creatureRenderer.getNearestWildCreature(tileX, tileY);
-        if (creatureId) {
-          this.room.send(TAME, { creatureId });
-          return;
-        }
-      }
-
-      // Default: claim single tile (mono shape) for territory expansion
-      this.showOptimisticClaim('mono', tileX, tileY, 0);
-      this.room.send(PLACE_SHAPE, { shapeId: 'mono', x: tileX, y: tileY, rotation: 0 });
     });
   }
 
@@ -350,24 +183,26 @@ export class InputHandler {
     }
   }
 
-  /** Update HUD carousel + build indicator for current shape state. */
-  private updateShapeHud(): void {
+  /** Update HUD carousel + build indicator for current build state. */
+  private updateBuildHud(): void {
     const shape = SHAPE_CATALOG[this.shapeKeys[this.shapeIndex]];
-    this.hud?.setShapeMode(this.shapeMode, this.shapeIndex, this.shapeRotation);
-    if (this.shapeMode) {
-      this.hud?.setBuildMode(true, `${shape.name} [R${this.shapeRotation}]`);
-    }
+    this.hud?.setBuildMode(this.buildMode, this.shapeIndex, this.shapeRotation);
     this.updateCursor();
+  }
+
+  /** Update available shape keys when the player's level changes. */
+  public updateShapeKeys(level: number): void {
+    this.shapeKeys = getAvailableShapes(level);
+    this.shapeIndex = Math.min(this.shapeIndex, this.shapeKeys.length - 1);
+    if (this.buildMode) {
+      this.updateBuildHud();
+    }
   }
 
   /** Set the canvas CSS cursor based on the current input mode. */
   private updateCursor(): void {
-    if (this.shapeMode) {
+    if (this.buildMode) {
       this.canvas.style.cursor = 'cell';
-    } else if (this.buildMode) {
-      this.canvas.style.cursor = 'copy';
-    } else if (this.pawnCommandMode !== 'none') {
-      this.canvas.style.cursor = 'pointer';
     } else {
       this.canvas.style.cursor = 'crosshair';
     }
@@ -376,7 +211,7 @@ export class InputHandler {
   /** Called each frame to update the shape ghost preview on the map. */
   public updatePreview(): void {
     if (!this.gridRenderer) return;
-    if (!this.shapeMode) {
+    if (!this.buildMode) {
       this.gridRenderer.clearShapePreview();
       return;
     }
