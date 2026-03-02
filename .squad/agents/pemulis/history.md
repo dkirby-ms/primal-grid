@@ -508,3 +508,11 @@ Phase A foundation pivot complete. Server-side: removed avatar properties, imple
 - **XP grant + level-up:** In tickClaiming, when tile finishes claiming: player.xp += PROGRESSION.XP_PER_TILE_CLAIMED, then getLevelForXP() check for level-up. Inline pattern, not separate helper (only one XP source currently).
 - **Test results:** 180/181 pass (30 new progression tests). 1 pre-existing creature respawn flake unrelated.
 - **Architecture note:** XP is per-round (resets with round). Abilities are string flags — extensible without schema changes. Future XP sources plug into same pattern.
+
+### Input System Refactor — Always-Active Carousel (2026-03-02)
+
+- **Agent:** Gately (Game Dev)
+- **Change:** Build mode (B-key toggle) removed. Shapes are now selected directly via number keys, Q/E cycling, or carousel clicks. Same key/click deselects (toggle). Escape and right-click also deselect. Carousel always visible in HUD.
+- **Impact on Pemulis:** Input system no longer has mode-based state (build mode on/off). Selection is 1-keypress away at all times. This simplifies input dispatch and removes the B-key bind. Server-side shape gating remains unchanged (shape must be in getAvailableShapes() for the level).
+- **Files modified:** client/src/game/input-handler.ts, client/src/game/hud.ts, client/src/game/game-manager.ts, client/src/game/ui-factory.ts
+- **Compile status:** TypeScript clean, no errors.

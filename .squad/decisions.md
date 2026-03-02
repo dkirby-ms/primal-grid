@@ -1764,3 +1764,14 @@ Per Hal's unified shapes-only design, the `StructureState` schema, the `structur
 - `grantXP(player, amount)` helper supports future XP sources (wave kills, structures, breeding, taming, survival bonuses).
 - `abilities` array on level definitions is stable API for feature flags (future: turrets, terraforming, advanced crafting).
 
+
+---
+
+#### Remove Build Mode — Direct Shape Selection
+**Author:** Gately (Game Dev)
+**Date:** 2026-03-02
+**Status:** ✅ ACTIVE
+
+Build mode (B-key toggle) has been removed. Shapes are now selected directly via number keys, Q/E cycling, or carousel clicks, with toggle behavior (same key/click deselects). Escape and right-click deselect. Shape stays selected after placement for rapid building. The carousel is always visible in the HUD.
+
+**Details:** The old flow (press B → enter build mode → select shape → place → press B to exit) added unnecessary friction. The new flow (press 1 → place, place, place → Esc) is faster and more intuitive. This removes the concept of "modes" from the input system — the presence of a selected shape IS the mode, and it's always one keypress away.

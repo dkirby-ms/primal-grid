@@ -498,3 +498,15 @@ All 10 Phase A items (A1–A10) complete across all agents. Tests: 240/240 passi
 - **Coordination:** Hal's Select-to-Place design and Gately's UI layout converged perfectly. Both designs specify same state model (`selectedShapeIndex: number | null`), same key bindings, same interaction flow, same visual feedback.
 - **Decision merged:** Both proposals merged to `.squad/decisions.md` as "Select-to-Place Build Mode Removal". Inbox files deleted. Orchestration logs written. Ready for implementation pending dkirby-ms approval.
 
+
+### Build Mode Removal — Always-Visible Shape Carousel (2026-03-02)
+
+- **Build mode eliminated:** Removed `buildMode` boolean toggle entirely from InputHandler. Replaced with `selectedShapeIndex` (-1 = nothing selected, >=0 = shape active). No more B-key toggle.
+- **Carousel always visible:** Shape carousel in index.html moved after creatures section, `display:none` removed, hint line added ("Click shape · R rotate · Esc deselect"). Build indicator div + CSS deleted.
+- **Toggle selection:** Number keys, Q/E cycling, and carousel clicks all use toggle behavior (click same shape = deselect). Q starts at last shape, E starts at first when nothing selected.
+- **Deselect mechanisms:** Escape key and right-click both deselect the current shape, clear preview, reset cursor.
+- **Shape stays selected after placement** for rapid building — no need to re-enter build mode.
+- **HudDOM:** Removed `buildIndicator` property and `setBuildMode()`. Added `setSelectedShape(index, rotation)` which highlights carousel item and updates grid rotation.
+- **HelpScreen:** Removed B key, C key, H key entries. Updated click/number key descriptions. Added Esc entry.
+- **Key files:** `client/index.html`, `client/src/input/InputHandler.ts`, `client/src/ui/HudDOM.ts`, `client/src/ui/HelpScreen.ts`
+- **Gotcha:** The old shape-carousel div had to be manually deleted after inserting the new one post-creatures — the move left a duplicate that needed cleanup.
