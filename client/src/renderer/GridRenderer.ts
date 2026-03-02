@@ -1,4 +1,4 @@
-import { Container, Graphics } from 'pixi.js';
+import { Container, Graphics, Text } from 'pixi.js';
 import { TileType, ResourceType, DEFAULT_MAP_SIZE } from '@primal-grid/shared';
 import type { Room } from '@colyseus/sdk';
 
@@ -37,8 +37,10 @@ export class GridRenderer {
   private resourceDots: Graphics[][] = [];
   private territoryOverlays: Graphics[][] = [];
   private territoryContainer: Container;
+  private hqContainer: Container;
   private shapePreviewContainer: Container;
   private shapePreviewGraphics: Graphics[] = [];
+  private hqMarkers: Map<string, Container> = new Map();
   private mapSize: number;
   private playerColors: Map<string, string> = new Map();
   private lastOwnerIDs: string[][] = [];
@@ -49,10 +51,12 @@ export class GridRenderer {
   constructor(mapSize: number = DEFAULT_MAP_SIZE) {
     this.container = new Container();
     this.territoryContainer = new Container();
+    this.hqContainer = new Container();
     this.shapePreviewContainer = new Container();
     this.mapSize = mapSize;
     this.buildGrid();
     this.container.addChild(this.territoryContainer);
+    this.container.addChild(this.hqContainer);
     this.container.addChild(this.shapePreviewContainer);
   }
 
@@ -225,13 +229,31 @@ export class GridRenderer {
       // Cache player colors for territory overlay
       const players = s['players'];
       if (players && typeof (players as { forEach?: unknown }).forEach === 'function') {
+        const currentPlayerIds = new Set<string>();
         (players as { forEach: (cb: (p: unknown, k: unknown) => void) => void })
           .forEach((rawPlayer: unknown, key: unknown) => {
           const player = rawPlayer as Record<string, unknown>;
           const id = (player['id'] as string) ?? String(key);
           const color = (player['color'] as string) ?? '#ffffff';
+          const hqX = (player['hqX'] as number) ?? -1;
+          const hqY = (player['hqY'] as number) ?? -1;
           this.playerColors.set(id, color);
+          currentPlayerIds.add(id);
+
+          // Render HQ marker if player has an HQ
+          if (hqX >= 0 && hqY >= 0) {
+            this.updateHQMarker(id, hqX, hqY, color);
+          } else {
+            this.removeHQMarker(id);
+          }
         });
+
+        // Remove markers for players who left
+        for (const playerId of this.hqMarkers.keys()) {
+          if (!currentPlayerIds.has(playerId)) {
+            this.removeHQMarker(playerId);
+          }
+        }
       }
 
       const tiles = s['tiles'];
@@ -345,5 +367,42 @@ export class GridRenderer {
 
   public getMapSize(): number {
     return this.mapSize;
+  }
+
+  /** Update or create an HQ marker for a player at the given tile coordinates. */
+  private updateHQMarker(playerId: string, hqX: number, hqY: number, color: string): void {
+    let marker = this.hqMarkers.get(playerId);
+    if (!marker) {
+      marker = new Container();
+      this.hqContainer.addChild(marker);
+      this.hqMarkers.set(playerId, marker);
+
+      const g = new Graphics();
+      const colorNum = parseColor(color);
+      g.rect(2, 2, TILE_SIZE - 4, TILE_SIZE - 4);
+      g.fill(colorNum);
+      g.rect(1, 1, TILE_SIZE - 2, TILE_SIZE - 2);
+      g.stroke({ width: 2, color: 0xffd700 });
+      marker.addChild(g);
+
+      const label = new Text({
+        text: '🏰',
+        style: { fontSize: 18, fontFamily: 'monospace' },
+      });
+      label.anchor.set(0.5, 0.5);
+      label.position.set(TILE_SIZE / 2, TILE_SIZE / 2);
+      marker.addChild(label);
+    }
+
+    marker.position.set(hqX * TILE_SIZE, hqY * TILE_SIZE);
+  }
+
+  /** Remove the HQ marker for a player. */
+  private removeHQMarker(playerId: string): void {
+    const marker = this.hqMarkers.get(playerId);
+    if (marker) {
+      this.hqContainer.removeChild(marker);
+      this.hqMarkers.delete(playerId);
+    }
   }
 }

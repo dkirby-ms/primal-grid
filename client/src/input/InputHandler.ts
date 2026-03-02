@@ -136,6 +136,13 @@ export class InputHandler {
         return;
       }
 
+      // Center camera on HQ
+      if (e.key === ' ') {
+        e.preventDefault();
+        this.camera?.centerOnHQ(this.hud?.localHqX ?? 0, this.hud?.localHqY ?? 0);
+        return;
+      }
+
       // Number keys: select shape (build mode)
       if (e.key >= '1' && e.key <= '9') {
         const num = parseInt(e.key, 10);

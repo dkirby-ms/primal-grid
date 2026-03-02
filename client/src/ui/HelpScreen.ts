@@ -13,6 +13,7 @@ const KEYBINDINGS: [string, string][] = [
   ['Click', 'Place shape (build mode)'],
   ['W A S D', 'Pan camera'],
   ['Scroll', 'Zoom in / out'],
+  ['Space', 'Center on castle'],
   ['C', 'Open / close craft menu'],
   ['1-9', 'Craft item (menu) / Select shape'],
   ['H', 'Harvest farm (cursor tile)'],
