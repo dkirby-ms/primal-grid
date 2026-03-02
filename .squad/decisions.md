@@ -1775,3 +1775,160 @@ Per Hal's unified shapes-only design, the `StructureState` schema, the `structur
 Build mode (B-key toggle) has been removed. Shapes are now selected directly via number keys, Q/E cycling, or carousel clicks, with toggle behavior (same key/click deselects). Escape and right-click deselect. Shape stays selected after placement for rapid building. The carousel is always visible in the HUD.
 
 **Details:** The old flow (press B → enter build mode → select shape → place → press B to exit) added unnecessary friction. The new flow (press 1 → place, place, place → Esc) is faster and more intuitive. This removes the concept of "modes" from the input system — the presence of a selected shape IS the mode, and it's always one keypress away.
+
+---
+
+## 2026-03-02: Resource Display UX Research — Design Alternatives
+
+### Hal (Lead) — Design Direction & Trade-offs
+
+**Date:** 2026-03-02  
+**Status:** PROPOSAL (awaiting dkirby-ms approval)  
+**Owner:** Hal (Lead)  
+
+#### Problem Statement
+
+Current resource indicators (small 5×5 colored dots in tile top-right corner) have these issues:
+
+1. **No quantity feedback** — Dot is binary (on/off); players can't tell if a tile has 1 or 10 wood without clicking
+2. **Low visual salience** — Small dot disappears at distance or against dark terrain (forests)
+3. **No strategic information density** — Commander-based gameplay (new pawn system) requires scanning tiles to find high-value gathering zones; current dots force clicking to learn value
+4. **Cognitive load** — Players must memorize 4-color mapping (wood=brown, stone=gray, fiber=green, berries=magenta)
+5. **Doesn't scale to multiplayer** — 64×64 map with dozens of visible tiles benefits from clearer resource visualization
+
+**Context:** The pivot to "Rimworld but multiplayer arcade" changed player role from avatar-based gathering to commander-based pawn assignment. This makes resource discovery a strategic map-scanning task, not a mechanical one.
+
+#### Design Research
+
+Analyzed four alternatives:
+
+| Option | Approach | Pros | Cons | Cost |
+|--------|----------|------|------|------|
+| **A: Quantity Bar** (RECOMMENDED) | Fill-height bar (0–10 units) in tile corner | Quantity at glance, minimal space, integrates naturally, no text overhead | Still requires color learning, top-right is competitive real estate | 1 day |
+| **B: Icon + Count** | Glyph (🌲, 🪨, etc.) + small number label | Unambiguous, exact amount, position doesn't compete with UI | Text rendering overhead (expensive on 64×64), cramped if multi-resource, emoji inconsistency | 2–3 days |
+| **C: Border Accent** | Colored tile border or corner accent, opacity ∝ amount | Elegant, integrated, no text, works at any zoom | Opacity-based quantity is soft/imprecise, may conflict with territory borders | 1.5 days |
+| **D: Hover Tooltip** | Show info only on hover/click | Zero clutter, exact info, scales to multi-resource | Breaks arcade flow, tedious for map scanning | 1 day |
+
+#### Recommendation: Option A (Quantity Bar)
+
+**Visual:**
+```
+Forest tile with 8/10 wood:
+┌──────────────────┐
+│ ████████░░░░░░░░ │ (bar at top-right)
+│                  │
+│ [Forest terrain] │
+└──────────────────┘
+```
+
+**Implementation Details:**
+- **Position:** Top-right corner of tile (current location, unchanged)
+- **Height:** 3 pixels (minimal, doesn't block view)
+- **Width:** 12–14 pixels (fits tile corner)
+- **Fill:** 0–10 segments (each segment = 1 unit), full bar = 10 units
+- **Color:** Same 4-color scheme (wood=brown #8b4513, stone=gray #999999, fiber=light green #90ee90, berries=magenta #da70d6)
+- **File to modify:** `client/src/renderer/GridRenderer.ts`
+- **Effort:** 1 day (code + testing)
+
+**Rationale:**
+1. Quantity at a glance — bar height is intuitive. Full bar = "worth gathering," empty bar = "skip."
+2. Strategic clarity — enables sub-second visual assessment for commander role
+3. Arcade pace — zero friction. No hover delays, no text rendering
+4. Multiplayer scale — works well on 64×64 maps with 20+ visible tiles per screen
+5. Performance — single graphics draw call per tile, no text rendering overhead
+6. Flexibility — can evolve to multi-color stacking (2–3 hrs) or micro-chart (4–6 hrs)
+
+#### Alternative: Option C (Border Accent) — Backup
+
+If dkirby-ms prefers more integrated, elegant look: Color tile border; stroke width ∝ amount.
+
+**Pros:** More elegant aesthetic, integrated with grid, minimal footprint
+**Cons:** Opacity-based quantity less precise, may conflict with territory borders, 1.5 day implementation
+
+---
+
+### Gately (Game Dev) — Rendering Implementation Research
+
+**Owner:** Gately  
+**Status:** Proposal for review  
+
+#### Problem
+Current resource display (5×5 colored squares, top-right corner) is too small to scan and doesn't convey resource quantity. Players miss resources at any zoom level except full zoom-in.
+
+#### Deep-Dive Findings
+- **Current:** 1.6% of tile area, solid color square, no amount encoding
+- **Constraints:** 32×32 tile space is tight; territory borders, HQ markers already use corners
+- **Opportunities:** Canvas 2D can do scaling, patterns, pie charts, bars efficiently
+
+#### Proposed Solution: Pie Chart Indicator (Alternative to Hal's bars)
+- **Visual:** 12–14px circle in top-right, pie wedge fills clockwise (0→360°) as amount increases
+- **Type ID:** Color of outline (existing RESOURCE_COLORS map)
+- **Amount:** Pie fill % (assuming max of ~100 resources per tile)
+- **Implementation:** PixiJS `Graphics.arc()` + trig for wedge, no text labels
+- **Effort:** 1–1.5 hours
+- **Performance:** Minimal (one arc + fill per tile per update)
+- **Zoom-invariant:** Works at 0.5× to 3× zoom
+
+#### Alternatives Considered
+1. **Scaled squares** — Too subtle, still tiny
+2. **Side bars** — Good but less polished
+3. **Icon + text** — Too heavy at scale, hard to read small text
+4. **Pie chart** ← **RECOMMENDED**
+
+---
+
+### Pemulis (Systems Dev) — Resource Data Model Analysis
+
+**Date:** 2026-03-03  
+**Requested by:** dkirby-ms (UX feedback on resource tile display)  
+
+#### Data Available per Tile
+
+| Field | Type | Range | Purpose |
+|-------|------|-------|---------|
+| `resourceType` | number (enum) | -1 or 0–3 | Wood, Stone, Fiber, Berries; -1 = none |
+| `resourceAmount` | number | 0–10 | Quantity of resource remaining on tile |
+| `fertility` | number | 0.0–1.0 | Biome fertility (implicit richness) |
+| `moisture` | number | 0.0–1.0 | Moisture level (affects biome) |
+| `type` | TileType enum | — | Biome (Forest, Grassland, Highland, Sand, etc.) |
+
+**Currently Exposed to Client:** `resourceType`, `resourceAmount`.
+
+#### Multi-Resource Support
+
+**Current Status:** Single resource per tile by design.
+
+**To Enable:** Would require schema evolution (array-based or slots) + creature AI refactor for 2+ weeks. Not recommended without explicit gameplay need.
+
+#### Resource "Richness"
+
+Can infer from existing `fertility` field [0.0–1.0] (already biome-aware: Forest 0.7–1.0, Highland 0.1–0.2, Sand 0.1–0.2). Or add lightweight `resourceQuality` field (5-line backend addition, backward-compatible, zero gameplay impact).
+
+#### Biome-Based Clustering
+
+Resources are entirely biome-driven, deterministic by location (no scattered anomalies). Clustering observable at Simplex noise FBM scale (~16–32 tiles wide). Client can compute heatmaps or density overlays using biome zones.
+
+| Biome | Resource | Amount | Notes |
+|-------|----------|--------|-------|
+| Forest | Wood | 1–10 | High-density zones (elevation > 0.65, moisture > 0.50) |
+| Grassland | Fiber/Berries | 1–10 | 50/50 split; broad coverage |
+| Highland | Stone | 1–10 | High elevation > 0.80; sparse moisture |
+| Sand | Fiber | 1–5 or none | 30% spawn chance; poorest biomes |
+| Swamp | None | — | Regenerates as Grassland default |
+| Desert/Water/Rock | None | — | Biome ineligible |
+
+#### Recommendation
+
+**For immediate UX improvement:**
+1. Use existing `fertility` field to infer tile richness (no backend changes)
+2. Add `resourceQuality` if visual distinction desired (5-line addition, backward-compatible)
+3. Visualize biome clusters via heatmaps/region labels (no schema changes)
+4. Defer multi-resource unless gameplay need drives it
+
+**Verdict:** Data model is adequate. Bottleneck is client-side visualization strategy, not server-side data depth.
+
+#### Files Involved
+- **Shared:** `shared/src/types.ts` (ITileState), `shared/src/constants.ts`
+- **Server:** `server/src/rooms/mapGenerator.ts`, `GameRoom.ts`, `creatureAI.ts`, `GameState.ts`
+- **Client:** `client/src/renderer/GridRenderer.ts`
+

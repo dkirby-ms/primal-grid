@@ -516,3 +516,68 @@ Phase A foundation pivot complete. Server-side: removed avatar properties, imple
 - **Impact on Pemulis:** Input system no longer has mode-based state (build mode on/off). Selection is 1-keypress away at all times. This simplifies input dispatch and removes the B-key bind. Server-side shape gating remains unchanged (shape must be in getAvailableShapes() for the level).
 - **Files modified:** client/src/game/input-handler.ts, client/src/game/hud.ts, client/src/game/game-manager.ts, client/src/game/ui-factory.ts
 - **Compile status:** TypeScript clean, no errors.
+
+## Learnings
+
+### Resource Data Model Analysis (2026-03-03)
+
+**Current Resource Data per Tile (ITileState):**
+- `resourceType: number` — Enum: Wood(0), Stone(1), Fiber(2), Berries(3), or -1 for none. Single resource per tile.
+- `resourceAmount: number` — Range [0-10]. Represents quantity; regenerates at REGEN_AMOUNT (1) every 80 ticks once depleted.
+- Also available: `fertility: number` (0.0–1.0), `moisture: number` (0.0–1.0) — Generated via Simplex noise, biome-aware, not directly exposed as display data currently.
+
+**Resource Generation Patterns (mapGenerator.ts):**
+- Forest tiles always get Wood; amount randomized 1–10.
+- Grassland tiles: 50/50 Fiber or Berries; amount randomized 1–10.
+- Highland tiles always get Stone; amount randomized 1–10.
+- Sand tiles: 30% chance Fiber (amount 1–5), 70% no resource. Poorest biome.
+- Water/Rock/Desert/Swamp: No resources generated initially.
+- **Clustering:** Resources are deterministic per biome zone (not random clusters). Biome zones are generated via dual-layer Simplex noise (elevation + moisture FBM). This creates natural geographic resource regions (forests concentrated, highlands dense with stone, etc.).
+
+**Server Resource Consumption:**
+- Creature grazing (herbivores): Consumes 1 unit per eat cycle, seeks tiles with resourceAmount > 0.
+- Player resource harvesting: Players extract 1 unit per tick from owned tiles with resources, converted to player inventory (wood/stone/fiber/berries counters on IPlayerState).
+- Resource regeneration: Depleted tiles (resourceAmount = 0, resourceType = -1) respawn their biome-default resource type after 20 seconds.
+
+**Multi-Resource Feasibility:**
+- Current schema allows only single `resourceType` per tile. To support multiple resources per tile, would need either:
+  1. Upgrade to `resourceTypes: number[]` and `resourceAmounts: number[]` (backward-compatible if serialized as variable-length arrays), OR
+  2. Create a new ResourceSlot interface (max 2–3 resources per tile) with fixed array size.
+- Server logic would need to expand `assignResource()` to return array, update creature AI's resource-finding logic, and adjust player harvest UI.
+
+**Resource Richness/Quality Dimension:**
+- Not currently tracked. Could be modeled as:
+  1. **Implicit via fertility:** Tiles already have fertility [0.0–1.0]. Could use this to modulate resourceAmount ceiling (fertile Forest yields higher max than barren Desert).
+  2. **Explicit via new field:** Add `resourceQuality: number` [0.0–1.0], derived from fertility + moisture during generation. This would be a backward-compatible schema addition (new @type field).
+  3. **Biome variance:** Some biomes (Highland, Sand) already generate smaller amounts (1–5 vs 1–10). Could expand this pattern deliberately per display strategy.
+
+**Data Model Changes Minimal:**
+- **For multi-resource:** 1 schema change (resourceTypes/Amounts arrays or slots), 2–3 message handler updates, creature AI refactor.
+- **For richness:** 1 new schema field (resourceQuality or use existing fertility), 0 behavior changes (purely display-facing).
+- **For visual clustering hints:** No changes needed; use existing biome zones (TileType) + Simplex noise parameters to inform heatmaps or density visualizations client-side.
+
+**What the Data Supports:**
+- All display needs can be satisfied with current data:
+  - Single-resource dense tile view ✓ (resourceType + resourceAmount)
+  - Implicit richness via fertility ✓ (already present)
+  - Biome-based clustering ✓ (biome zones determine resource type deterministically)
+  - Regeneration status ✓ (can infer from amount vs max)
+- Adding quality as explicit dimension: Trivial schema addition, supports "ore vein richness" visual metaphors.
+- Multiple resources per tile: Moderate complexity, requires array serialization + creature AI refactor, but schema-compatible.
+
+### 2026-03-02 Resource Data Model Analysis for Display
+
+Pemulis analyzed resource data model to assess viability of display alternatives proposed by Hal and Gately (spawned as background agent, 2026-03-02T20:00:16Z). Coordinated with Hal (design) and Gately (rendering).
+
+**Findings:**
+- **Current data:** resourceType (enum 0–3), resourceAmount (0–10), fertility, moisture, biome type per tile
+- **Multi-resource support:** Single-resource design is intentional. Multi-resource possible but deferred (requires schema evolution + creature AI refactor, 2+ weeks)
+- **Richness indicator:** Can infer from existing fertility field [0.0–1.0] (biome-aware). Or add lightweight resourceQuality field (5-line backend addition, backward-compatible, zero gameplay impact)
+- **Biome clustering:** Resources are deterministic by biome, fully clustered (~16–32 tile regions). No scattered anomalies. Client can compute heatmaps using existing biome data
+- **Recommendation:** No backend changes needed for immediate UX improvement. All display approaches (Hal's bars, Gately's pie) viable with current schema
+
+**Status:** Decision merged to `.squad/decisions.md`. Data model confirmed as no blocker for Hal's or Gately's implementation.
+
+**Cross-agent insight:** Parallel research enabled Pemulis to confirm viability while Hal and Gately designed independently. No data work required; bottleneck is purely client-side visualization strategy.
+
+**Session log:** `.squad/log/2026-03-02T20-00-16Z-resource-display-research.md`

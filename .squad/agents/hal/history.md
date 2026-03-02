@@ -10,6 +10,8 @@
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
+- **Resource display design researched & recommended (2026-03-02):** User expressed dissatisfaction with current 5×5 dot resource indicators (top-right corner, color-coded by type, binary visibility). Analysis found four viable alternatives: (A) Quantity bar (recommended), (B) Icon+count label, (C) Border accent, (D) Hover tooltip. Recommendation: **Option A (Quantity Bar)** — shows resourceAmount 0–10 via bar fill height, integrates naturally with tile, zero friction for arcade pace, 1-day implementation. Reasoning: current system lacks quantity feedback (binary on/off), has low visual salience, and doesn't support strategic map scanning needed for commander-based gathering (new pawn system). Bar fills the gap without complexity. File: `.squad/decisions/inbox/hal-resource-display-design.md`.
+
 - **Phase A UAT checklist authored:** Comprehensive manual testing guide (13 sections, 80+ test cases) grouped by feature area (initialization, territory, camera, structures, resources, crafting, creatures, HUD, help, polish, edge cases). Includes smoke test (5–10 min quick validation). File: `.squad/decisions/inbox/hal-phase-a-uat.md`. Ready for dkirby-ms to execute in browser before Phase B kickoff. All 239/240 tests passing (1 pre-existing flaky creature-ai test unrelated to Phase A pivot).
 
 - **Architecture:** Client-server via Colyseus (WebSocket). PixiJS v8 for 2D canvas rendering. Vite bundler. Monorepo with three packages: `client`, `server`, `shared`.
@@ -136,3 +138,17 @@ Phase 4.5 (HUD Redesign) is complete as of 2026-02-26T13:57:00Z. Three-day sprin
 - **Architecture insight:** Build mode is 100% client-side. Server message contract (`PLACE_SHAPE { shapeId, x, y, rotation }`) is mode-agnostic. Any client interaction redesign that produces the same message is backward-compatible.
 - **User preference:** dkirby-ms wants shapes carousel always visible, no explicit build mode, shapes under creatures list in status panel.
 - **2026-03-02 Select-to-Place design finalized:** Hal authored full design proposal for build mode removal. Gately authored complementary UI layout & interaction design. Both converge on select-to-place model: carousel always visible below creatures, click shape to arm (armed state = `selectedShapeIndex !== null`), Escape/right-click to disarm, stay armed after placement for rapid builder flow. Zero server changes. ~80 lines across 4 client files. Decision merged to `.squad/decisions.md`. Orchestration logs: `.squad/orchestration-log/2026-03-02T15-15-48Z-hal.md`. Session log: `.squad/log/2026-03-02T15-15-48Z-shapes-carousel-design.md`. Awaiting dkirby-ms approval to begin implementation.
+
+### 2026-03-02 Resource Display UX Research Coordinated
+
+Hal coordinated parallel research with Gately (Game Dev) and Pemulis (Systems Dev) on resource display UX alternatives. Spawned 3 agents (background mode) to analyze approaches independently:
+
+- **Hal's analysis:** Designed Option A (Quantity Bar) as primary recommendation — fill-height bar (0–10 units) in tile corner, minimal footprint, 1-day implementation, intuitive quantity at glance. Analyzed 4 alternatives (Bar, Icon+Count, Border Accent, Hover Tooltip). Full decision at `.squad/decisions.md` with design spec, pseudocode, and rationale. Alternative Option C (Border Accent) identified as backup if dkirby-ms wants more integrated look.
+- **Gately's analysis:** Proposed pie chart wedge renderer (12–14px circle, 0–360° fill) as elegant alternative. PixiJS implementation ~1–1.5 hours, zoom-invariant. Decision merged to `.squad/decisions.md`.
+- **Pemulis's analysis:** Confirmed current data model (resourceType + resourceAmount) supports all display approaches. Single-resource design is intentional; multi-resource possible but deferred (2+ weeks). Added richness via fertility field or lightweight resourceQuality addition. No backend blockers. Decision merged to `.squad/decisions.md`.
+
+**Status:** Three decisions merged to `.squad/decisions.md`. Awaiting dkirby-ms approval to select Hal's bars or Gately's pie chart for implementation.
+
+**Session log:** `.squad/log/2026-03-02T20-00-16Z-resource-display-research.md`
+
+**Pattern:** Parallel research sprint reduces sequential blocking. Three semi-independent analyses converge on viable trade-offs (bars vs. pie) without blocking on any single decision. Pemulis confirms no data work, so Hal's and Gately's work is pure design iteration.

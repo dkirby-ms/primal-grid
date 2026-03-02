@@ -510,3 +510,43 @@ All 10 Phase A items (A1–A10) complete across all agents. Tests: 240/240 passi
 - **HelpScreen:** Removed B key, C key, H key entries. Updated click/number key descriptions. Added Esc entry.
 - **Key files:** `client/index.html`, `client/src/input/InputHandler.ts`, `client/src/ui/HudDOM.ts`, `client/src/ui/HelpScreen.ts`
 - **Gotcha:** The old shape-carousel div had to be manually deleted after inserting the new one post-creatures — the move left a duplicate that needed cleanup.
+
+### Resource Rendering Deep-Dive & Alternatives (2026-02-28)
+
+**Request:** dkirby-ms asked to research alternatives to current 5×5 resource dots (too small, doesn't show quantity).
+
+**Current Implementation Audit:**
+- Baseline: 5×5px colored squares, top-right corner of each 32×32 tile
+- Code: `GridRenderer.updateResource()` uses single `rect() → fill()` per resource type
+- Colors: Wood=brown (#8B4513), Stone=gray (#999999), Fiber=light-green (#90EE90), Berries=magenta (#DA70D6)
+- Visibility: Hidden when resourceAmount=0, shown solid when >0
+- Space usage: ~1.6% of tile area (25 / 1024 pixels)
+- **Issue:** Too small to scan; no visual encoding of quantity
+
+**4 Concrete Alternatives Researched:**
+
+1. **Scaled Squares** — Size grows with amount (3–8px). Pros: instant impl, low perf. Cons: still too small at zoom-out.
+
+2. **Stacked Bars** — Vertical gauge on tile edge (height = amount %). Pros: visible far away, RTS-familiar. Cons: needs max scaling, edge placement.
+
+3. **Pie Chart** — Circular indicator, pie wedge fills with amount. Pros: polished, visible at any zoom, can center-label. Cons: more Canvas math, slight perf cost.
+
+4. **Icon + Text Label** — Emoji (🪵🪨) + amount number. Pros: explicit. Cons: heavy text rendering, clutter.
+
+**Recommendation:** Implement **Pie Chart (Alt 3)** — best balance of polish, visibility, and zoom-invariance. Effort: 1–1.5 hrs. PixiJS Graphics.arc() + trig for pie wedge fill.
+
+### 2026-03-02 Resource Display Rendering Research
+
+Gately analyzed pie chart wedge as alternative resource display approach (spawned as background agent, 2026-03-02T20:00:16Z). Coordinated with Hal (design) and Pemulis (data) on parallel research.
+
+**Findings:**
+- **Recommended:** Pie chart indicator (12–14px circle, wedge fills 0–360° as amount increases)
+- **Rationale:** Elegant, zoom-invariant (0.5× to 3×), minimal perf impact (one arc + fill per tile per update)
+- **Implementation:** PixiJS Graphics.arc() + trig for wedge, no text labels, ~1–1.5 hours
+- **Alternatives rejected:** Scaled squares (too subtle), side bars (less polished), icon+text (text rendering expensive on 64×64 map)
+
+**Status:** Decision merged to `.squad/decisions.md`. Awaiting dkirby-ms approval to select pie chart or Hal's quantity bar for implementation.
+
+**Cross-agent insight:** Pemulis confirmed all rendering approaches viable with current data model. Gately and Hal both produced viable 1–1.5 day implementations. dkirby-ms final decision will determine which agent implements.
+
+**Session log:** `.squad/log/2026-03-02T20-00-16Z-resource-display-research.md`
