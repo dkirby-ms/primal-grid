@@ -14,8 +14,7 @@ export class InputHandler {
 
   private hud: HudDOM | null = null;
   private helpScreen: HelpScreen | null = null;
-  private buildMode = false;
-  private shapeIndex = 0;
+  private selectedShapeIndex = -1;
   private shapeRotation = 0;
   private shapeKeys: string[] = [];
   private camera: Camera | null = null;
@@ -35,17 +34,19 @@ export class InputHandler {
     this.updateCursor();
   }
 
-  /** Wire up the HUD for build mode indicator. */
+  /** Wire up the HUD for shape selection. */
   public setHud(hud: HudDOM): void {
     this.hud = hud;
-    // Wire carousel click → select shape
+    // Wire carousel click → toggle shape selection
     hud.onShapeSelect = (index: number) => {
-      this.shapeIndex = index;
-      this.shapeRotation = 0;
-      if (!this.buildMode) {
-        this.buildMode = true;
+      if (this.selectedShapeIndex === index) {
+        // Click same shape = deselect
+        this.selectedShapeIndex = -1;
+      } else {
+        this.selectedShapeIndex = index;
       }
-      this.updateBuildHud();
+      this.shapeRotation = 0;
+      this.updateSelectionHud();
     };
   }
 
@@ -97,41 +98,42 @@ export class InputHandler {
         return;
       }
 
-      // Build mode toggle (shape placement)
-      if (e.key === 'b' || e.key === 'B') {
-        this.buildMode = !this.buildMode;
-        this.updateBuildHud();
-        if (!this.buildMode) {
-          this.hud?.setBuildMode(false);
-          this.gridRenderer?.clearShapePreview();
-        }
-        this.updateCursor();
+      // Escape: deselect shape
+      if (e.key === 'Escape') {
+        this.selectedShapeIndex = -1;
+        this.shapeRotation = 0;
+        this.gridRenderer?.clearShapePreview();
+        this.updateSelectionHud();
         return;
       }
 
       // Cycle shape: Q = prev, E = next
       if (e.key === 'q' || e.key === 'Q') {
-        if (this.buildMode) {
-          this.shapeIndex = (this.shapeIndex - 1 + this.shapeKeys.length) % this.shapeKeys.length;
-          this.shapeRotation = 0;
-          this.updateBuildHud();
+        if (this.selectedShapeIndex === -1) {
+          this.selectedShapeIndex = this.shapeKeys.length - 1;
+        } else {
+          this.selectedShapeIndex = (this.selectedShapeIndex - 1 + this.shapeKeys.length) % this.shapeKeys.length;
         }
+        this.shapeRotation = 0;
+        this.updateSelectionHud();
         return;
       }
       if (e.key === 'e' || e.key === 'E') {
-        if (this.buildMode) {
-          this.shapeIndex = (this.shapeIndex + 1) % this.shapeKeys.length;
-          this.shapeRotation = 0;
-          this.updateBuildHud();
+        if (this.selectedShapeIndex === -1) {
+          this.selectedShapeIndex = 0;
+        } else {
+          this.selectedShapeIndex = (this.selectedShapeIndex + 1) % this.shapeKeys.length;
         }
+        this.shapeRotation = 0;
+        this.updateSelectionHud();
         return;
       }
 
-      // Rotation (build mode)
+      // Rotation (only if shape selected)
       if (e.key === 'r' || e.key === 'R') {
-        if (this.buildMode) {
+        if (this.selectedShapeIndex >= 0) {
           this.shapeRotation = (this.shapeRotation + 1) % 4;
-          this.updateBuildHud();
+          this.updateSelectionHud();
         }
         return;
       }
@@ -143,13 +145,18 @@ export class InputHandler {
         return;
       }
 
-      // Number keys: select shape (build mode)
+      // Number keys: select/deselect shape (toggle)
       if (e.key >= '1' && e.key <= '9') {
         const num = parseInt(e.key, 10);
-        if (this.buildMode && num <= this.shapeKeys.length) {
-          this.shapeIndex = num - 1;
+        if (num <= this.shapeKeys.length) {
+          const idx = num - 1;
+          if (this.selectedShapeIndex === idx) {
+            this.selectedShapeIndex = -1;
+          } else {
+            this.selectedShapeIndex = idx;
+          }
           this.shapeRotation = 0;
-          this.updateBuildHud();
+          this.updateSelectionHud();
           return;
         }
       }
@@ -168,12 +175,23 @@ export class InputHandler {
 
       if (tileX < 0 || tileY < 0) return;
 
-      // Build mode: place shape
-      if (this.buildMode) {
-        const shapeId = this.shapeKeys[this.shapeIndex];
+      // Place shape if one is selected (stays selected for rapid building)
+      if (this.selectedShapeIndex >= 0) {
+        const shapeId = this.shapeKeys[this.selectedShapeIndex];
         this.showOptimisticClaim(shapeId, tileX, tileY, this.shapeRotation);
         this.room.send(PLACE_SHAPE, { shapeId, x: tileX, y: tileY, rotation: this.shapeRotation });
         return;
+      }
+    });
+
+    // Right-click: deselect shape
+    window.addEventListener('contextmenu', (e) => {
+      if (this.selectedShapeIndex >= 0) {
+        e.preventDefault();
+        this.selectedShapeIndex = -1;
+        this.shapeRotation = 0;
+        this.gridRenderer?.clearShapePreview();
+        this.updateSelectionHud();
       }
     });
   }
@@ -190,25 +208,24 @@ export class InputHandler {
     }
   }
 
-  /** Update HUD carousel + build indicator for current build state. */
-  private updateBuildHud(): void {
-    const shape = SHAPE_CATALOG[this.shapeKeys[this.shapeIndex]];
-    this.hud?.setBuildMode(this.buildMode, this.shapeIndex, this.shapeRotation);
+  /** Update HUD carousel for current selection state. */
+  private updateSelectionHud(): void {
+    this.hud?.setSelectedShape(this.selectedShapeIndex, this.shapeRotation);
     this.updateCursor();
   }
 
   /** Update available shape keys when the player's level changes. */
   public updateShapeKeys(level: number): void {
     this.shapeKeys = getAvailableShapes(level);
-    this.shapeIndex = Math.min(this.shapeIndex, this.shapeKeys.length - 1);
-    if (this.buildMode) {
-      this.updateBuildHud();
+    this.selectedShapeIndex = Math.min(this.selectedShapeIndex, this.shapeKeys.length - 1);
+    if (this.selectedShapeIndex >= 0) {
+      this.updateSelectionHud();
     }
   }
 
   /** Set the canvas CSS cursor based on the current input mode. */
   private updateCursor(): void {
-    if (this.buildMode) {
+    if (this.selectedShapeIndex >= 0) {
       this.canvas.style.cursor = 'cell';
     } else {
       this.canvas.style.cursor = 'crosshair';
@@ -218,11 +235,11 @@ export class InputHandler {
   /** Called each frame to update the shape ghost preview on the map. */
   public updatePreview(): void {
     if (!this.gridRenderer) return;
-    if (!this.buildMode) {
+    if (this.selectedShapeIndex < 0) {
       this.gridRenderer.clearShapePreview();
       return;
     }
-    const shapeId = this.shapeKeys[this.shapeIndex];
+    const shapeId = this.shapeKeys[this.selectedShapeIndex];
     const shapeDef = SHAPE_CATALOG[shapeId];
     if (!shapeDef) return;
     const cells = shapeDef.rotations[this.shapeRotation] ?? shapeDef.rotations[0];

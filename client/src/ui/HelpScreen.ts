@@ -7,16 +7,14 @@ const HEADER_SIZE = 16;
 const BODY_SIZE = 12;
 
 const KEYBINDINGS: [string, string][] = [
-  ['B', 'Toggle build mode (shapes)'],
   ['Q / E', 'Prev / Next shape'],
   ['R', 'Rotate shape'],
-  ['Click', 'Place shape (build mode)'],
+  ['1-9', 'Select shape / Craft (menu)'],
+  ['Click', 'Place shape (when selected)'],
+  ['Esc', 'Deselect shape'],
   ['W A S D', 'Pan camera'],
   ['Scroll', 'Zoom in / out'],
   ['Space', 'Center on castle'],
-  ['C', 'Open / close craft menu'],
-  ['1-9', 'Craft item (menu) / Select shape'],
-  ['H', 'Harvest farm (cursor tile)'],
   ['?', 'Toggle this help screen'],
 ];
 

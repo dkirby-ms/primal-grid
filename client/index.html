@@ -83,18 +83,6 @@
         color: #ddd;
         font-weight: bold;
       }
-      /* Build mode indicator */
-      #build-indicator {
-        display: none;
-        padding: 6px 10px;
-        background: #332b00;
-        color: #ffcc00;
-        font-size: 12px;
-        font-weight: bold;
-        text-align: center;
-        border-bottom: 1px solid #2a2a4a;
-      }
-      #build-indicator.active { display: block; }
       /* Creatures */
       .creature-row {
         font-size: 12px;
@@ -124,6 +112,11 @@
         margin-top: 2px;
         white-space: nowrap;
       }
+      .shape-item .shape-cost {
+        font-size: 8px;
+        color: #999;
+        margin-top: 1px;
+      }
       .shape-grid {
         display: grid;
         gap: 1px;
@@ -142,7 +135,6 @@
     <div id="game-wrapper">
       <div id="app"></div>
       <div id="hud-panel">
-        <div id="build-indicator">🔨 BUILD MODE</div>
         <div class="hud-section" id="section-level">
           <h3>Level</h3>
           <div style="font-size:14px;font-weight:bold;color:#7ecfff">⭐ Level <span id="level-val">1</span></div>
@@ -152,10 +144,6 @@
               <div class="stat-bar-fill" id="xp-bar-fill" style="width:0%;background:#7ecfff;"></div>
             </div>
           </div>
-        </div>
-        <div id="shape-carousel" class="hud-section" style="display:none;">
-          <h3>Shapes <span style="color:#666;font-size:9px">(Q/E cycle, R rotate)</span></h3>
-          <div id="shape-carousel-items" style="display:flex;flex-wrap:wrap;gap:4px;padding:2px 0;"></div>
         </div>
         <div class="hud-section" id="territory-count">
           <h3>Territory</h3>
@@ -171,6 +159,11 @@
         <div class="hud-section" id="section-creatures">
           <h3>Creatures</h3>
           <div class="creature-row" id="creature-counts">🦕 0 &nbsp; 🦖 0</div>
+        </div>
+        <div id="shape-carousel" class="hud-section">
+          <h3>Shapes <span style="color:#666;font-size:9px">(Q/E cycle, R rotate)</span></h3>
+          <div id="shape-carousel-items" style="display:flex;flex-wrap:wrap;gap:4px;padding:2px 0;"></div>
+          <div style="font-size:9px;color:#555;margin-top:4px;">Click shape · R rotate · Esc deselect</div>
         </div>
       </div>
     </div>
