@@ -110,11 +110,11 @@ export class GameRoom extends Room {
     if (!isShapeAdjacentToTerritory(this.state, player.id, absoluteCells)) return;
 
     // Validate cost
-    const cost = absoluteCells.length * SHAPE.COST_WOOD_PER_CELL;
-    if (player.wood < cost) return;
+    const { costResource, costAmount } = shapeDef;
+    if (player[costResource] < costAmount) return;
 
-    // Deduct wood
-    player.wood -= cost;
+    // Deduct resource
+    player[costResource] -= costAmount;
 
     // Apply shape — start claiming for unowned tiles, reinforce instantly for owned
     for (const cell of absoluteCells) {

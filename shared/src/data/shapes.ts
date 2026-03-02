@@ -11,6 +11,8 @@ export interface ShapeDef {
   readonly cells: readonly Cell[];
   /** Pre-computed rotations (0°, 90°, 180°, 270°). */
   readonly rotations: readonly (readonly Cell[])[];
+  readonly costResource: 'wood' | 'stone' | 'fiber' | 'berries';
+  readonly costAmount: number;
 }
 
 /** Rotate a single cell 90° clockwise. */
@@ -37,30 +39,30 @@ export function computeRotations(cells: readonly Cell[]): Cell[][] {
   return rotations;
 }
 
-function shape(id: string, name: string, cells: Cell[]): ShapeDef {
-  return { id, name, cells, rotations: computeRotations(cells) };
+function shape(id: string, name: string, cells: Cell[], costResource: ShapeDef['costResource'], costAmount: number): ShapeDef {
+  return { id, name, cells, rotations: computeRotations(cells), costResource, costAmount };
 }
 
 export const SHAPE_CATALOG: Record<string, ShapeDef> = {
-  tetra_i: shape("tetra_i", "Tetra I", [
+  tetra_i: shape("tetra_i", "Wooden Palisade", [
     { dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 }, { dx: 3, dy: 0 },
-  ]),
-  tetra_o: shape("tetra_o", "Tetra O", [
+  ], 'wood', 8),
+  tetra_o: shape("tetra_o", "Stone Pillar", [
     { dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 },
-  ]),
-  tetra_t: shape("tetra_t", "Tetra T", [
+  ], 'stone', 8),
+  tetra_t: shape("tetra_t", "Watchtower", [
     { dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 }, { dx: 1, dy: 1 },
-  ]),
-  tetra_s: shape("tetra_s", "Tetra S", [
+  ], 'wood', 8),
+  tetra_s: shape("tetra_s", "Bramble Hedge", [
     { dx: 1, dy: 0 }, { dx: 2, dy: 0 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 },
-  ]),
-  tetra_z: shape("tetra_z", "Tetra Z", [
+  ], 'fiber', 8),
+  tetra_z: shape("tetra_z", "Berry Thicket", [
     { dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 1, dy: 1 }, { dx: 2, dy: 1 },
-  ]),
-  tetra_l: shape("tetra_l", "Tetra L", [
+  ], 'berries', 8),
+  tetra_l: shape("tetra_l", "Stone Rampart", [
     { dx: 0, dy: 0 }, { dx: 0, dy: 1 }, { dx: 0, dy: 2 }, { dx: 1, dy: 2 },
-  ]),
-  tetra_j: shape("tetra_j", "Tetra J", [
+  ], 'stone', 8),
+  tetra_j: shape("tetra_j", "Timber Frame", [
     { dx: 1, dy: 0 }, { dx: 1, dy: 1 }, { dx: 1, dy: 2 }, { dx: 0, dy: 2 },
-  ]),
+  ], 'wood', 8),
 };

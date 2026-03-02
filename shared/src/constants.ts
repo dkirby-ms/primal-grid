@@ -106,9 +106,8 @@ export const ROUND = {
   DURATION_TICKS: 3600,
 } as const;
 
-/** Shape placement cost and durability constants. */
+/** Shape placement durability constants. */
 export const SHAPE = {
-  COST_WOOD_PER_CELL: 2,
   BLOCK_HP: 100,
 } as const;
 

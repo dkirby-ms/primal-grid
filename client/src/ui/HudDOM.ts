@@ -15,7 +15,6 @@ export class HudDOM {
   private invFiber: HTMLElement;
   private invBerries: HTMLElement;
   private creatureCounts: HTMLElement;
-  private buildIndicator: HTMLElement;
   private shapeCarousel: HTMLElement;
   private shapeCarouselItems: HTMLElement;
   private shapeItemEls: HTMLElement[] = [];
@@ -38,7 +37,6 @@ export class HudDOM {
     this.invFiber = document.getElementById('inv-fiber')!;
     this.invBerries = document.getElementById('inv-berries')!;
     this.creatureCounts = document.getElementById('creature-counts')!;
-    this.buildIndicator = document.getElementById('build-indicator')!;
     this.shapeCarousel = document.getElementById('shape-carousel')!;
     this.shapeCarouselItems = document.getElementById('shape-carousel-items')!;
     this.levelVal = document.getElementById('level-val')!;
@@ -48,21 +46,14 @@ export class HudDOM {
     this.buildShapeCarousel();
   }
 
-  /** Show or hide build mode indicator and shape carousel. */
-  public setBuildMode(active: boolean, selectedIndex: number = 0, rotation: number = 0): void {
-    if (active) {
-      const shape = SHAPE_CATALOG[this.shapeKeys[selectedIndex]];
-      this.buildIndicator.textContent = `🔨 BUILD MODE [${shape?.name ?? ''}]`;
-      this.buildIndicator.classList.add('active');
-    } else {
-      this.buildIndicator.classList.remove('active');
-    }
-    this.shapeCarousel.style.display = active ? 'block' : 'none';
-    if (!active) return;
+  /** Highlight the selected shape in the carousel. index=-1 clears selection. */
+  public setSelectedShape(index: number, rotation: number): void {
     for (let i = 0; i < this.shapeItemEls.length; i++) {
-      this.shapeItemEls[i].classList.toggle('selected', i === selectedIndex);
+      this.shapeItemEls[i].classList.toggle('selected', i === index);
     }
-    this.updateShapeGrid(selectedIndex, rotation);
+    if (index >= 0) {
+      this.updateShapeGrid(index, rotation);
+    }
   }
 
   /** Callback when user clicks a shape in the carousel. */
@@ -115,6 +106,12 @@ export class HudDOM {
       label.className = 'shape-label';
       label.textContent = shapeDef.name;
       item.appendChild(label);
+
+      const cost = document.createElement('div');
+      cost.className = 'shape-cost';
+      const resourceEmoji: Record<string, string> = { wood: '🪵', stone: '🪨', fiber: '🌿', berries: '🫐' };
+      cost.textContent = `${resourceEmoji[shapeDef.costResource]}${shapeDef.costAmount}`;
+      item.appendChild(cost);
 
       item.addEventListener('click', () => {
         this.onShapeSelect?.(i);
