@@ -4,6 +4,93 @@
 
 <!-- New decisions are appended below by Scribe from .squad/decisions/inbox/ -->
 
+## 2026-03-02: Core Gameplay Loop Redesign (Three Proposals)
+
+**Date:** 2026-03-02  
+**Author:** Hal (Lead)  
+**Status:** PROPOSED — awaiting dkirby-ms selection  
+**Context:** User feedback revealed core loop is hollow: "Just gathering resources and placing more tiles is not enough." Hal audited existing systems and proposes three redesign options.
+
+### The Problem
+
+Current loop: Place shape → Get resources → Place more shapes. Missing: tension, meaningful spatial decisions, creature interaction, resource scarcity, win condition. GDD describes rich loop (claim → build → command → defend → grow) but only "claim" exists.
+
+### Three Proposals
+
+#### Proposal A: "Habitat Puzzle" — Biome-Matching Spatial Optimization (RECOMMENDED)
+> Dorfromantik meets Islanders. Shape placement IS the puzzle.
+
+**Core mechanic:** WHERE you place shapes matters. Shapes on matching biome clusters score 2× bonuses. Contiguous clusters get multipliers (4+ tiles = 1.5×, scaling to 3×). Creatures attract to large clusters and generate income.
+
+**Player decisions:** Optimize placement for biome match. Build dense clusters for income or spread wide for territory. Skip shapes (cost resources) to wait for better fits. Protect herbivore clusters from carnivores.
+
+**Scope:** ~150 lines of logic, zero new schemas, zero new messages. Shape queue is optional. **Can implement in 1-2 days.**
+
+**Decisions:**
+1. Biome match scoring: 2× resource income when ≥3 of 4 shape cells match biome
+2. Cluster multiplier: 4+ same-biome tiles owned = 1.5×, 8+ = 2×, 12+ = 3×
+3. Round timer: 10 minutes. Score = territory count × average efficiency
+4. Shape queue (optional): Random 3-shape queue; skip costs 2 resources
+5. Creature attraction: Herbivores drift to large Grassland clusters (4+), graze for +1 Berries/tick
+
+#### Proposal B: "Hungry Territory" — Scarcity-Driven Expansion
+> Factorio's "I need more iron" meets RimWorld's colony pressure.
+
+**Core mechanic:** Territory has upkeep cost (1 Wood per 5 tiles). Can't pay = outer tiles revert to unclaimed. Resources deplete; you must expand to reach fresh nodes. Creatures damage exposed tiles.
+
+**Player decisions:** Expand carefully (cost) or consolidate defensively. Reach rich resource nodes before opponents. Choose shapes based on geometry (I-piece far-reaching but fragile; O-piece compact). Abandon unprofitable territory.
+
+**Scope:** ~120 lines, small-medium complexity.
+
+**Decisions:**
+1. Territory upkeep: 1 Wood per 5 owned tiles per tick
+2. Tile decay: Unpaid tiles revert from edges inward (1 tile per unpaid tick)
+3. Resource depletion: Tile resources deplete faster; shape placement must strategically reach fresh nodes
+4. Creature threat: Creatures damage tile shapeHP; walls protect interiors
+5. Rich nodes: Visible high-value resource tiles worth racing toward
+
+#### Proposal C: "The Living Grid" — Ecosystem Colony Sim
+> RimWorld's emergent stories on a Dorfromantik board.
+
+**Core mechanic:** Creatures settle on your territory (wild herbivores → settlers, generate income). Carnivores patrol/defend but kill herbivores. Shapes act as habitat walls. You architect your ecosystem via placement.
+
+**Player decisions:** Design creature corridors with walls. Encourage herbivore settlement. Allow predators for defense (at cost). Breed creatures (berries → offspring). Balance predator/prey on your territory.
+
+**Scope:** ~150 lines, 1 new schema field (settledOwnerID on CreatureState), medium complexity.
+
+**Decisions:**
+1. Creature settling: Wild creatures on player territory have chance to settle
+2. Territory residents: Settled creatures stay within borders, generate resources
+3. Predators as defense: Settled carnivores patrol and kill wild threats
+4. Habitat design: Walls direct creature movement (shape placement = ecosystem architecture)
+5. Population caps: 1 creature per 3 tiles per biome; overpopulation = creatures leave
+6. Breeding returns: Settled creatures breed for berries cost; offspring settle automatically
+7. Ecosystem scoring: Territory + (herbivores × 3) + (carnivores × 5)
+
+### Recommendation: Proposal A
+
+**Why A first:** Smallest scope (1-2 days), fixes root cause (placement must be interesting), composable with B/C, preserves all existing systems, proven pattern (Dorfromantik/Islanders).
+
+**Implementation sequence:**
+1. Biome match scoring (~40 lines)
+2. Cluster multiplier (~35 lines)
+3. Round timer + win check (~30 lines)
+4. Score display + UI (~40 lines)
+5. **Total:** ~145 lines, ~7 hours
+
+Shape queue and creature attraction are optional follow-ups (~3h + ~2h).
+
+**Composability:** A + B (biome scoring + territory scarcity) = optimization under pressure. A + C (biome clusters + creature settling) = ecosystem driven by placement. All three can be mixed.
+
+### Next Steps
+
+1. dkirby-ms selects a direction (A, B, C, or hybrid)
+2. Hal scopes selected proposal into work items
+3. Implementation begins
+4. Playtesting after first pass → tune constants → iterate
+
+---
+
 ## 2026-02-25: Phase 2.3 — HUD Rendering Architecture
 
 **Date:** 2026-02-25  

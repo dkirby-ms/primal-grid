@@ -550,3 +550,13 @@ Gately analyzed pie chart wedge as alternative resource display approach (spawne
 **Cross-agent insight:** Pemulis confirmed all rendering approaches viable with current data model. Gately and Hal both produced viable 1–1.5 day implementations. dkirby-ms final decision will determine which agent implements.
 
 **Session log:** `.squad/log/2026-03-02T20-00-16Z-resource-display-research.md`
+
+### 2026-03-02 Core Gameplay Loop Redesign (Cross-Team Impact)
+
+Hal proposed three redesign options for the hollow core gameplay loop. This affects all agents' future work:
+
+**Proposals:** (A) Habitat Puzzle (biome-matching scoring), (B) Hungry Territory (upkeep costs), (C) Living Grid (creature ecosystems)
+
+**Impact on Gately's work:** No immediate client changes needed for any proposal. All three are server-side logic additions (scoring, upkeep ticking, settling mechanics). Gately awaits dkirby-ms selection before scoping Phase A of the chosen proposal. UI components (round timer, score display, creature settling visuals) will depend on which proposal is selected.
+
+**Status:** Decision merged to `.squad/decisions.md`. Awaiting dkirby-ms selection.

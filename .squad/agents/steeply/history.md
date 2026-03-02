@@ -499,3 +499,13 @@ File: `server/src/__tests__/pawnCommands.test.ts`
 - **Pattern:** Tests follow existing conventions — `Object.create(GameRoom.prototype)`, `fakeClient()`, vitest describe/it/expect. Integration tests manipulate `player.level`/`player.xp` directly and call `room.tickClaiming()` to simulate the server loop.
 - **Status:** Tests written against design doc API. Will fail until Pemulis finishes implementing `PROGRESSION` constant, helper functions (`getLevelForXP`, `getAvailableShapes`, `xpForNextLevel`, `hasAbility`), and the `level`/`xp` fields on PlayerState.
 - **Imports expected:** `getLevelForXP`, `getAvailableShapes`, `xpForNextLevel`, `hasAbility`, `PROGRESSION` all from `@primal-grid/shared`.
+
+### 2026-03-02 Core Gameplay Loop Redesign (Cross-Team Impact)
+
+Hal proposed three redesign options for the hollow core gameplay loop. This will affect Steeply's test planning:
+
+**Proposals:** (A) Habitat Puzzle, (B) Hungry Territory, (C) Living Grid
+
+**Impact on Steeply's work:** Once dkirby-ms selects a proposal, Steeply will write test plans for the new scoring/ecosystem logic. Proposal A (smallest) will require ~12–15 tests for biome matching, cluster multipliers, and round timer. Proposals B and C have similar test counts but different coverage areas.
+
+**Status:** Decision merged to `.squad/decisions.md`. Awaiting dkirby-ms selection.

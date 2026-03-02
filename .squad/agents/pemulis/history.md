@@ -581,3 +581,15 @@ Pemulis analyzed resource data model to assess viability of display alternatives
 **Cross-agent insight:** Parallel research enabled Pemulis to confirm viability while Hal and Gately designed independently. No data work required; bottleneck is purely client-side visualization strategy.
 
 **Session log:** `.squad/log/2026-03-02T20-00-16Z-resource-display-research.md`
+
+### 2026-03-02 Core Gameplay Loop Redesign (Cross-Team Impact)
+
+Hal proposed three redesign options for the hollow core gameplay loop. This is Pemulis's highest-priority work after dkirby-ms selection:
+
+**Proposals:** (A) Habitat Puzzle (biome-matching scoring + cluster multipliers, ~150 lines), (B) Hungry Territory (territory upkeep + depletion + decay, ~120 lines), (C) Living Grid (creature settling + ecosystem income, ~150 lines)
+
+**Impact on Pemulis's work:** All three proposals are primarily server-side implementations in `GameRoom.ts` and `constants.ts`. Zero schema additions. Zero new messages. Proposal A is smallest scope (~7 hrs). All three are composable (A+B, A+C possible). Next step: dkirby-ms picks direction, Hal scopes into work items, Pemulis begins implementation.
+
+**Architecture note:** All proposals preserve existing systems. Zero deletions. Pure additions to scoring, ticking, or creature AI.
+
+**Status:** Decision merged to `.squad/decisions.md`. Awaiting dkirby-ms selection.
