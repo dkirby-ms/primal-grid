@@ -2019,3 +2019,130 @@ Resources are entirely biome-driven, deterministic by location (no scattered ano
 - **Server:** `server/src/rooms/mapGenerator.ts`, `GameRoom.ts`, `creatureAI.ts`, `GameState.ts`
 - **Client:** `client/src/renderer/GridRenderer.ts`
 
+
+---
+
+## 2026-03-02T20:30:00Z: User Directive — Multiplayer Competitive Territory Control
+
+**By:** dkirby-ms (via Copilot)  
+**Status:** DIRECTIVE — locked, architecture-driving  
+
+**What:** The game should be a multiplayer competitive territory control game. Multiple players compete for territory.
+
+**Why:** User request — captured for team memory. This is the core design direction going forward.
+
+**Impact:** All gameplay proposals (A, B, C) must be evaluated through multiplayer lens. Infrastructure exists (Colyseus, shared map, territory ownership). Focus shifts from solo optimization to PvP tension.
+
+---
+
+## 2026-03-02: Multiplayer Lens: Which Gameplay Loop Works Best with 2–4 Players?
+
+**Date:** 2026-03-02  
+**Author:** Hal (Lead)  
+**Status:** PROPOSED — awaiting dkirby-ms selection  
+**Context:** User asked whether the three gameplay proposals work with multiplayer. The answer is: yes, and the infrastructure already exists. This analysis evaluates each through a multiplayer lens.
+
+### Existing Multiplayer Infrastructure (Already Built)
+
+- **Colyseus room** with `MapSchema<PlayerState>` — 2–12 players join, each gets a color, HQ, 3×3 starting territory
+- **Territory ownership** — every `TileState` has `ownerID`; server validates placement against `tile.ownerID`
+- **Score** — `player.score` synced to all clients in real-time
+- **Shared creatures** — all creatures visible to all players, wandering the shared map
+- **Passive income** — territory tiles auto-deposit resources to owners
+- **Progression** — per-player XP and level, shape unlocks
+- **Round timer** — `roundTimer` and `roundPhase` fields exist (schema-ready but unused)
+
+**Key insight:** Colyseus state sync means ALL players see ALL tile ownership changes, ALL creature movements, ALL resource depletions in real-time. The multiplayer infrastructure is done. What's missing is multiplayer tension.
+
+### Multiplayer Grading Summary
+
+| Rank | Proposal | MP Grade | Why |
+|------|----------|----------|-----|
+| 1 | **C: Living Grid** | A | Shared creature pool is inherently multiplayer. Tragedy of the commons. Emergent stories. Recoverable snowball. |
+| 2 | **B: Hungry Territory** | A- | Strongest direct PvP pressure. Land wars feel great. But snowball risk is high without rubber-banding. |
+| 3 | **A: Habitat Puzzle** | B+ | Good spatial competition but risks parallel solitaire on large maps. |
+
+### Proposal A: "Habitat Puzzle" — Multiplayer Analysis
+
+**Tension:** Spatial competition for biome clusters (Islanders-style race). Finite clusters force contention.
+
+**Strengths:**
+- Territorial denial (blocking opponent moves is valid strategy)
+- Information asymmetry if shape queue added
+- Zero new networking overhead
+
+**Weaknesses:**
+- Players can expand in opposite directions for 5+ minutes without interaction (parallel solitaire)
+- Late-game boredom once clusters claimed
+- Map biome fairness not guaranteed by simplex noise
+
+**Grade: B+** — Good spatial competition but risks parallel solitaire on large maps without forced contention.
+
+### Proposal B: "Hungry Territory" — Multiplayer Analysis
+
+**Tension:** Resource scarcity + upkeep costs create land war. Territory decay means standing still = shrinking.
+
+**Strengths:**
+- Forced expansion creates inevitable collision
+- "Vulture play" (claiming opponent's reverted tiles) creates memorable moments
+- Creatures become weapons against exposed tiles
+- Every mechanic creates player interaction
+
+**Weaknesses:**
+- Snowball risk: falling behind = collapse → opponent vultures → fall further
+- High cognitive load (upkeep + expansion + defense simultaneously)
+- Tile revert race condition risk (needs randomized processing order)
+
+**Grade: A-** — Best natural PvP pressure. But snowball risk needs safety valve (rubber-banding mechanic).
+
+### Proposal C: "The Living Grid" — Multiplayer Analysis
+
+**Tension:** Shared creature pool. Well-designed habitat attracts wild creatures; those creatures are unavailable to opponent.
+
+**Strengths:**
+- Creature poaching (habitat quality determines settlement rate)
+- Predator weaponization (position carnivores near opponent borders)
+- Tragedy of the commons (shared pool incentivizes implicit cooperation)
+- Breeding advantage creates virtuous cycle but is slower/recoverable than B
+- Emergent stories ("their carnivore killed my best breeder")
+
+**Weaknesses:**
+- Creature settling AI needs refinement (~30 lines, no race conditions)
+- Population cap fairness (territory size gates max creatures)
+- Spectator confusion (need clear visual ownership)
+
+**Grade: A** — Best emergent stories. Shared creature pool is uniquely multiplayer.
+
+### Hybrid Recommendation: B+C ("Hungry Living Grid")
+
+**Why hybrid works:**
+
+1. **B provides expansion pressure.** Without upkeep, players turtle with perfect small habitat.
+2. **C provides ecosystem depth.** Without creatures, B is just land-grab math.
+3. **Combined story:** *"I need to expand (B) into right biomes (C) competing for shared creature pool (C) while opponent's territory decays (B)."*
+4. **Scope is additive:** B's upkeep (~50 lines) + C's settling (~80 lines) compose cleanly.
+
+**Implementation order:**
+1. C's creature settling first (~80 lines, 1 day) — immediately testable, adds placement meaning
+2. B's upkeep + decay second (~50 lines, 0.5 day) — adds expansion pressure
+3. B's resource depletion (~30 lines, 0.5 day) — forces expansion
+4. Creature attraction to habitats (~40 lines, 0.5 day) — ties settling to biome quality
+5. Score formula refinement
+
+**Estimated total: ~200 lines, 2–3 days.**
+
+### Decision
+
+**CHANGED RECOMMENDATION FROM A TO B+C HYBRID ("Hungry Living Grid").**
+
+Multiplayer isn't an add-on — it's the architecture. The infrastructure (Colyseus, shared creatures, resource sync) is already built. The question is which loop makes 2 players on the same map *care* about each other from tick 1.
+
+**B+C answer:** Shared creatures (C) + expansion pressure (B) = players interact from minute one.
+
+**Proposal A remains valid** as a solo-friendly layer to add later, but should not be the foundation when the game's entire technical stack is built for multiplayer.
+
+**Next steps (pending dkirby-ms approval):**
+1. Hal scopes B+C hybrid into work items
+2. Start with C (creature settling) — smallest standalone increment
+3. Add B (upkeep pressure) as second increment
+4. Playtest with 2 players after each increment

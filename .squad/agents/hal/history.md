@@ -156,3 +156,42 @@ Hal coordinated parallel research with Gately (Game Dev) and Pemulis (Systems De
 - **2026-03-02 Core gameplay loop redesign proposed:** User rejected resource display proposals and identified the real problem: the core loop is hollow ("Just gathering resources and placing more tiles is not enough"). Hal audited all systems and confirmed the diagnosis: the only player verb is shape placement, but placement carries no meaningful decisions (all shapes are functionally identical, all directions equally valuable, no threats, no tension). Proposed three redesigns: (A) **Habitat Puzzle** — biome-matching scoring + cluster multipliers + optional shape queue (Dorfromantik/Islanders pattern, ~150 lines, SMALL scope); (B) **Hungry Territory** — territory upkeep/maintenance cost + resource depletion + tile decay (Factorio scarcity pressure, ~120 lines, SMALL-MEDIUM scope); (C) **The Living Grid** — creatures settle on territory, generate income, ecosystem management as the game (RimWorld emergent stories, ~150 lines, MEDIUM scope). Recommended Proposal A as starting point: smallest scope, fixes root cause (shape placement isn't interesting), composable with B and C later. All three proposals require zero new schemas and zero new messages. Decision at `.squad/decisions/inbox/hal-gameplay-loop-redesign.md`. Awaiting dkirby-ms selection.
 - **Key insight (game design):** The problem wasn't missing systems (turrets, waves, pawn commands) — it was that the existing core verb (shape placement) lacked meaning. Adding systems on top of a hollow core doesn't fix the hollow core. Make the ONE thing the player does interesting before adding more things.
 - **User preference (2026-03-02):** dkirby-ms explicitly rejected UI polish (resource display improvements) in favor of deeper game design rethinking. Prefers fundamental loop fixes over surface improvements.
+- **2026-03-02 Multiplayer loop analysis complete:** Evaluated all three gameplay loop proposals (A: Habitat Puzzle, B: Hungry Territory, C: Living Grid) through a multiplayer lens. **Changed recommendation from A to B+C hybrid ("Hungry Living Grid").** Reasoning: (1) Proposal A risks parallel solitaire on 64×64 map — players can expand in opposite directions without interacting; (2) Proposal C's shared creature pool creates inherent multiplayer interaction from tick 1 (tragedy of the commons dynamic is uniquely multiplayer); (3) Proposal B's upkeep pressure forces expansion and collision, preventing turtling. B+C compose cleanly (~200 lines, 2–3 days). A can layer on top later as scoring refinement. Decision at `.squad/decisions/inbox/hal-multiplayer-loop-analysis.md`.
+- **Key insight (multiplayer design):** The game's entire stack is built for multiplayer (Colyseus, shared state, territory ownership, creature sync). When evaluating gameplay loops, the question isn't "can this work with multiplayer?" but "does this loop make multiplayer *matter*?" Shared resources (creature pool) and forced expansion (upkeep) create player interaction without explicit PvP combat. Parallel solitaire with a leaderboard is not multiplayer — you need mechanics where one player's actions directly affect another's options.
+- **Architecture confirmed:** Colyseus state sync means zero additional networking is needed for any proposal. All tile ownership, creature positions, and resource amounts already sync to all clients. The multiplayer infrastructure is done; what's missing is multiplayer *tension* in the game design.
+
+---
+
+## 2026-03-02 — Multiplayer Gameplay Loop Analysis
+
+**Status:** PROPOSED — awaiting user selection
+
+**Hal spawned:** Evaluate three gameplay proposals through multiplayer lens.
+
+**Context:** User directive (2026-03-02T20:30:00Z) locked game as multiplayer competitive territory control. Existing proposals (A: Habitat Puzzle, B: Hungry Territory, C: Living Grid) were analyzed single-player. Hal re-evaluated all three through multiplayer lens.
+
+**Analysis:**
+- **Proposal A (Habitat Puzzle):** B+ grade — good spatial competition but risks parallel solitaire on large maps; players can expand in opposite directions for 5+ minutes without interaction.
+- **Proposal B (Hungry Territory):** A- grade — strongest direct PvP pressure; upkeep costs force expansion and collision; snowball risk requires rubber-banding mechanic.
+- **Proposal C (Living Grid):** A grade — shared creature pool is inherently multiplayer; tragedy of the commons; emergent stories; slower/recoverable snowball.
+
+**Decision:** **Changed recommendation from A to B+C hybrid ("Hungry Living Grid").**
+
+**Reasoning:** Multiplayer isn't an add-on — it's the architecture. The infrastructure (Colyseus room, shared creatures, real-time sync) is already built. The question is which loop makes 2 players on the same map *care* about each other from tick 1.
+
+- **B provides expansion pressure:** Without upkeep, players turtle with perfect small habitat. Upkeep forces expansion → collision → conflict.
+- **C provides ecosystem depth:** Without creatures, B is just land-grab math. Creature settling makes tile quality matter strategically.
+- **Combined story:** *"I need to expand (B) into right biomes (C) competing for shared creature pool (C) while opponent's territory decays (B)."*
+
+**Scope:** ~200 lines, 2–3 days implementation.
+
+**Implementation order:**
+1. C's creature settling (~80 lines, 1 day) — immediately testable, adds placement meaning
+2. B's upkeep + decay (~50 lines, 0.5 day) — adds expansion pressure
+3. B's resource depletion (~30 lines, 0.5 day) — forces expansion
+4. Creature attraction to habitats (~40 lines, 0.5 day) — ties settling to biome quality
+5. Score refinement
+
+**File:** `.squad/decisions.md` (merged from inbox 2026-03-02T20:26:24Z)
+
+**Next steps:** Pending user approval to scope B+C hybrid into work items.
