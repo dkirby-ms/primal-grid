@@ -483,3 +483,18 @@ All 10 Phase A items (A1–A10) complete across all agents. Tests: 240/240 passi
 - **Gately outcome:** Client compiles clean. CraftMenu.ts and StructureRenderer.ts deleted. All craft/structure references stripped from main.ts, InputHandler.ts, HudDOM.ts, index.html. B-key shape mode preserved. No dead references remain.
 - **Steeply outcome:** 150/151 tests pass (1 pre-existing flaky). Tests cleaned of structure references.
 - **Outcome:** Shapes-only architecture complete. All systems compile clean. Shapes are the sole structure build mechanic.
+
+### Always-Active Carousel Design Proposal (2026-03-01)
+
+- **User preference:** dkirby-ms wants build mode removed. Shapes carousel should be always visible and selecting a shape + clicking grid is sufficient — no explicit mode toggle needed.
+- **Layout change:** Shapes carousel moves from between Level and Territory sections to below Creatures section (bottom of status panel).
+- **Key files affected:** `client/index.html` (DOM order + CSS), `client/src/ui/HudDOM.ts` (remove setBuildMode visibility toggle, always show carousel), `client/src/input/InputHandler.ts` (remove buildMode boolean, B key, make shape selection + ghost preview work without mode gate).
+- **Deselection:** Clicking the already-selected shape deselects. Escape key also deselects. Right-click deselects. When nothing selected, no ghost preview, cursor is crosshair, clicks do nothing.
+- **Pattern:** "selection model" replaces "mode model" — selectedShapeIndex of -1 means nothing selected, ≥0 means shape is active for placement. Ghost preview and cursor driven by this value, not a boolean flag.
+
+### Select-to-Place Design Finalized (2026-03-02)
+
+- **Gately outcome:** Authored UI layout & interaction design for always-active carousel. Status panel layout (Level/XP → Territory → Inventory → Creatures → **SHAPES**). Shape selection model: click to arm, click again to disarm (toggle), Escape/right-click to disarm, stay armed after placement for rapid building (RTS convention). Visual feedback: gold border on selected shape (existing `.selected` CSS class), ghost preview, no build-indicator banner needed. Hint bar: "R: rotate · Esc: cancel" below carousel. Space calc: carousel at 180px width, ~70px height, fits within 600px panel with room. All interaction triggers documented in table (click, number keys, Q/E, R, Escape, right-click). Design proposal at `.squad/decisions/inbox/gately-always-active-carousel.md`.
+- **Coordination:** Hal's Select-to-Place design and Gately's UI layout converged perfectly. Both designs specify same state model (`selectedShapeIndex: number | null`), same key bindings, same interaction flow, same visual feedback.
+- **Decision merged:** Both proposals merged to `.squad/decisions.md` as "Select-to-Place Build Mode Removal". Inbox files deleted. Orchestration logs written. Ready for implementation pending dkirby-ms approval.
+

@@ -52,6 +52,86 @@ Players expand territory **exclusively via polyomino shapes** (PLACE_SHAPE). No 
 
 ---
 
+---
+
+## Select-to-Place Build Mode Removal
+
+**Date:** 2026-03-02T15:15:48Z  
+**Status:** ✅ PROPOSED (awaiting dkirby-ms approval)  
+**Authors:** Hal (Lead), Gately (Game Dev)  
+**Directive:** Remove explicit build mode (B-key toggle). Shapes carousel always visible, moved below creatures in status panel.
+
+### The Decision
+
+Replace `buildMode: boolean` client state with `selectedShapeIndex: number | null`. Carousel is always rendered. Selecting a shape in carousel arms it for placement. Escape or right-click deselects. Stay armed after placement for rapid building (RTS convention).
+
+**What changed:**
+- `#build-indicator` banner removed entirely
+- B-key binding removed
+- `buildMode: boolean` → `selectedShapeIndex: number | null`
+- Shapes carousel moved below creatures in status panel (always visible, never `display:none`)
+- Escape key binding added (deselect)
+- Right-click deselect added (prevent context menu)
+- Hint bar added below carousel: "R: rotate · Esc: cancel"
+
+**What stays the same:**
+- Polyomino shape system (catalog, rotation, cost)
+- Ghost preview rendering (driven by selection state instead of mode boolean)
+- Q/E/R/number-key bindings (keys unchanged, just no mode gate)
+- PLACE_SHAPE message format (zero server changes)
+- Cursor states (`cell` when armed, `crosshair` when not)
+
+### Why This Design
+
+**Select-to-Place matches industry standard:** Factorio, RimWorld, Satisfactory all use this pattern. Players expect shapes to stay armed after placement for rapid click-click-click building.
+
+**Zero server risk:** Build mode is 100% client-side. Server validates `PLACE_SHAPE { shapeId, x, y, rotation }` independently. Any client interaction redesign producing same message is backward-compatible.
+
+**Cognitive load reduction:** Removes a mode players must remember. Carousel visibility = new players see shapes immediately (discoverability gain).
+
+**Ghost preview mitigates accidental placement:** Players see exactly where shape lands before clicking. Mis-click cost (2 wood/cell) is natural feedback.
+
+### Edge Cases
+
+| Edge Case | Resolution |
+|-----------|------------|
+| Click grid with no shape armed | No-op. Same as not in build mode. |
+| Click already-selected shape in carousel | Toggle off (deselect). Same as Escape. |
+| Player levels up while shape armed | Carousel updates. If armed shape still valid, stay armed; else clamp to new max. |
+| Rapid clicking places multiple shapes | Intended. Server validates each independently. |
+
+### Files Modified
+
+**Client only:**
+1. `client/index.html` — Move `#shape-carousel` below `#section-creatures`. Remove `display:none`.
+2. `client/src/input/InputHandler.ts` — Replace `buildMode` + `shapeIndex` with `selectedShapeIndex: number | null`. Remove B-key. Add Escape + right-click handlers.
+3. `client/src/ui/HudDOM.ts` — Remove `setBuildMode()`. Add `setSelectedShape(index, rotation)`. Carousel always rendered. Toggle-off on re-click.
+4. `client/src/ui/HelpScreen.ts` — Update help text (remove B-key, add Escape).
+
+**Server files:** No changes.
+
+**Estimated scope:** ~80 lines across 4 client files. No new dependencies. No schema changes. No message changes.
+
+### Interaction Model Reference
+
+| Action | Result |
+|--------|--------|
+| Click shape in carousel | Arm shape. Ghost preview follows cursor. Cursor → `cell`. |
+| Click same shape again | Disarm. Ghost clears. Cursor → `crosshair`. |
+| 1–9 keys | Select shape by index + arm it. |
+| Q/E | Cycle prev/next shape (no-op if disarmed). |
+| R | Rotate shape (no-op if disarmed). |
+| Click grid (armed) | Place shape. Stay armed. |
+| Click grid (disarmed) | No-op. |
+| Escape | Disarm. |
+| Right-click | Disarm. |
+
+### Recommendation
+
+Ship it. Strict improvement: removes mode friction, improves discoverability, matches UX standard, zero server risk, minimal changeset. Only breaking change is B-key removal (muscle memory), but carousel click is more intuitive — players adapt in one session.
+
+---
+
 ## Open Questions
 
-(None at this time; design complete and implemented across all layers.)
+(None at this time; Select-to-Place design complete and ready for implementation.)
