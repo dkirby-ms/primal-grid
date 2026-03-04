@@ -674,3 +674,65 @@ Pemulis delivered detailed system design in response to user territory control p
 
 **Next steps:** Await user mechanic choice, then scope Phase 1+2 into 6–8 work items for team implementation.
 
+---
+
+## Session: 2026-03-05 — Pawn & Builder System Design
+
+**Task:** Deep codebase audit + full design for pawn/builder territory expansion system per dkirby-ms directive.
+
+**Audit findings:**
+- Old pawn/worker system was 100% removed. No traces in server or shared. `pawnCommands.test.ts` deleted.
+- `CreatureState` has no `ownerID` — pawns need this. No structure system exists.
+- `CREATURE_TYPES` only has herbivore/carnivore. `creatureType` is a string, easily extensible.
+- `TERRITORY.STARTING_SIZE = 3` (3×3 HQ). No `isHQTerritory` flag. HQ tiles are indistinguishable from expanded tiles.
+- Creature AI uses priority-chain pattern with `step*()` functions dispatched on `creatureType`. Adding `stepBuilder()` is the natural extension point.
+- `tickCreatureAI()` is a pure function taking GameState — fully testable. Supports optional `skipIds` parameter.
+
+**Design delivered:** `.squad/decisions/inbox/pemulis-pawn-builder-design.md`
+- Extends `CreatureState` with 5 pawn fields (ownerID, pawnType, targetX, targetY, buildProgress, buildingType)
+- New `StructureState` schema (id, structureType, x, y, ownerID, health, maxHealth, isComplete)
+- 3 structure types: outpost (3×3 claim), wall (defensive), extractor (resource boost)
+- Builder AI state machine: idle → find_build_site → move_to_site → building → complete → idle
+- Autonomous site selection: nearest unclaimed tile adjacent to owner's territory border
+- Player can override with DIRECT_PAWN message for strategic placement
+- 9×9 immutable HQ zone with `isHQTerritory` flag on TileState
+- New SPAWN_PAWN / DIRECT_PAWN message types
+- Estimated 3-4 day implementation across 4 phases
+
+## Learnings
+
+- `CreatureState` schema fields are synced to all clients regardless of value — adding optional pawn fields costs ~32 bytes per entity. Acceptable at current scale (<100 entities) but worth watching if entity count grows past 500.
+- The priority-chain AI pattern scales well for new creature types. Each type is isolated in its own `step*()` function with no cross-type coupling. Adding `stepBuilder()` requires zero changes to herbivore/carnivore logic.
+- `claimProgress` / `claimingPlayerID` system exists for gradual claiming but structures should bypass it — instant claim on completion feels better for player-built expansion.
+- `shapeHP > 0` makes a tile non-walkable (checked in `isWalkable()`). Walls leverage this — setting shapeHP blocks creature/pawn movement through that tile.
+- Colyseus schema inheritance is not used in this codebase — all schemas are flat classes. Keep pawn fields flat on CreatureState rather than introducing schema nesting.
+
+
+## Cross-Agent Context: Hal's Concurrent Proposal
+
+**Session:** 2026-03-04T22:27  
+Hal (Lead) architected pawn-based territory expansion system per same user directive. Pemulis and Hal worked in parallel on complementary aspects:
+
+**Hal's Architecture:**
+- High-level builder system: CreatureState reuse, 3-state FSM, 1×1 structures, HQ spawning at 5W+5S cost
+- Player role shift: commander (spawn, direct, watch) vs. "Tetris player" (place shapes)
+- Direct shape placement removed entirely — single expansion mechanic
+- PawnTypeDef registry for type extensibility
+- MVP: 9 work items, 2–3 days
+- Open questions: shape removal (or keep as override?), structure size (1×1 or larger?), rally points (MVP or defer?)
+
+**Pemulis's Systems Design (delivered in parallel):**
+- Extended CreatureState: 5 pawn fields (ownerID, pawnType, targetX, targetY, buildProgress, buildingType)
+- New StructureState: id, structureType, x, y, ownerID, health, maxHealth, isComplete
+- New TileState fields: isHQTerritory, structureID
+- Constants registry: PAWN, STRUCTURE
+- 4-phase implementation roadmap
+- Estimate: 3–4 days
+
+**Alignment achieved:**
+- Both converged on CreatureState reuse (zero new schemas)
+- Both identified isHQTerritory as key immutability flag
+- Pemulis's 4-phase breakdown aligns with Hal's 9 work items
+- Design ready for user approval
+
+**Status:** Decisions merged to `.squad/decisions.md`. Orchestration logs written. **READY FOR IMPLEMENTATION** once dkirby-ms approves open questions.

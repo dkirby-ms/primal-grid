@@ -19,6 +19,8 @@
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
+- **Pawn Builder Architecture proposed (2026-03-04):** dkirby-ms rejected all conquest mechanics (Influence Flooding, Resource Pressure, Creature Siege, Shape Overlap Invasion) in favor of autonomous pawn-based expansion. Architected full builder system: pawns reuse CreatureState schema (creatureType="builder", ownerID=player.id — same pattern as removed Phase B worker), 3-state FSM (IDLE→SEEK_SITE→BUILDING), 1×1 structures claim single tiles, builders spawned at HQ for 5W+5S cost. Direct shape placement removed — player role shifts from "Tetris player" to "commander" (spawn pawns, manage economy). PawnTypeDef registry enables future pawn types (gatherer, scout, soldier). MVP: ~255 lines added, ~200 removed, 2–3 days. Key trade-off: no rally points in MVP (builders pick their own targets). Deferred: multi-tile structures, pawn upgrades, rally points, population caps. Filed to `.squad/decisions/inbox/hal-pawn-builder-architecture.md`.
+
 - **Competitive Territory Spec authored (2026-03-02):** User confirmed B+C hybrid direction. Wrote full build spec at `docs/competitive-territory-spec.md`. Key decisions: territory contesting (place on opponent tiles, 4s vs 2s claim), wood upkeep (1 per 10 tiles/60s, decay from edges), neutral creatures (herbivore bonus income, carnivore border damage), 10-min timed rounds, HQ immunity (3×3 sacred). Implementation: 4 phases, ~553 lines, phases 1/2/4 parallelizable. Scope cuts: no taming, no fog of war, no biome scoring, no matchmaking. The critical code change is removing the `tile.ownerID !== player.id` rejection in `handlePlaceShape` (line 105 of GameRoom.ts) and adding contest timing. Decision filed to inbox.
 
 - **Resource display design researched & recommended (2026-03-02):** User expressed dissatisfaction with current 5×5 dot resource indicators (top-right corner, color-coded by type, binary visibility). Analysis found four viable alternatives: (A) Quantity bar (recommended), (B) Icon+count label, (C) Border accent, (D) Hover tooltip. Recommendation: **Option A (Quantity Bar)** — shows resourceAmount 0–10 via bar fill height, integrates naturally with tile, zero friction for arcade pace, 1-day implementation. Reasoning: current system lacks quantity feedback (binary on/off), has low visual salience, and doesn't support strategic map scanning needed for commander-based gathering (new pawn system). Bar fills the gap without complexity. File: `.squad/decisions/inbox/hal-resource-display-design.md`.
@@ -240,3 +242,39 @@ Hal authored comprehensive architecture proposal for territory control pivot. **
 
 **Next steps:** Await dkirby-ms approval to scope into work items.
 
+
+### 2026-03-04 Pawn Builder Architecture (Concurrent Proposal)
+
+Hal architected pawn-based territory expansion system per user directive (dkirby-ms pivot away from conquest mechanics toward autonomous pawns). **Pemulis independently designed complementary data model and implementation roadmap.**
+
+**Hal's Architecture Proposal:**
+- Builder pawns (reuse CreatureState, creatureType="builder", ownerID=player.id)
+- Spawning: At HQ, 5W+5S cost, 50 HP, huntable
+- 3-state FSM: IDLE → SEEK_SITE → BUILDING → IDLE
+- 1×1 structures claim single tiles; no radius claiming
+- Remove direct shape placement; player role = commander (spawn pawns, manage economy, watch territory grow)
+- PawnTypeDef registry for extensibility (future: gatherer, scout, soldier)
+- Interaction matrix: creatures hunt builders, resources fund spawning, progression via XP, territory income unchanged
+- MVP scope: 9 work items, ~255 lines added/~200 removed, 2–3 days
+- Open questions: shape placement removal (or keep as override?), builder structure size (1×1 or larger?), rally points (MVP or defer?)
+- Deliverable: `.squad/decisions/inbox/hal-pawn-builder-architecture.md` (135 lines)
+
+**Pemulis's Design Complement:**
+- Extended CreatureState schema: ownerID, pawnType, targetX/targetY, buildProgress, buildingType (4 new fields)
+- New StructureState schema: id, structureType, x, y, ownerID, health, maxHealth, isComplete
+- Three structure types: outpost, wall, extractor
+- TileState additions: isHQTerritory flag, structureID reference
+- Constants registry: PAWN (MAX_PER_PLAYER, BUILD_TIME_TICKS), STRUCTURE (per-type health/buildTime)
+- 4-phase implementation: (1) Builder AI Core, (2) Structure System, (3) Economy Integration, (4) Client Rendering
+- Estimate: 3–4 days, ~600 lines
+- Codebase audit: No old pawn/worker traces remain; building fresh on CreatureState FSM pattern
+- Deliverable: `.squad/decisions/inbox/pemulis-pawn-builder-design.md` (786 lines)
+
+**Cross-Agent Alignment:**
+- **Hal → Pemulis:** Architecture inputs data model design; Pemulis expanded with StructureState schema, buildProgress tracking, isHQTerritory flag
+- **Pemulis → Hal:** Confirms CreatureState reuse pattern scales to pawns; adds 4-phase roadmap clarifying integration points
+- **Both → User:** Fully architected, ready for approval
+
+**Status:** Decisions merged to `.squad/decisions.md` (2026-03-04 Pawn-Based Territory Expansion section). Orchestration logs: `.squad/orchestration-log/2026-03-04T2227-hal.md`, `.squad/orchestration-log/2026-03-04T2227-pemulis.md`. Session log: `.squad/log/2026-03-04T2227-pawn-builder-design.md`. **READY FOR USER APPROVAL** to begin implementation.
+
+**Next steps:** Await dkirby-ms sign-off on open questions (shape placement removal, structure size, rally points) before work items assigned.

@@ -3142,3 +3142,195 @@ Three agents analyzed territory control pivot independently and delivered:
 **READY FOR USER DECISION.** All three agents have independently delivered comprehensive analysis, detailed design, and implementation roadmap. Team is aligned on data model changes, code locations, and phased approach. MVP (Option A) can start immediately upon user approval.
 
 ---
+
+---
+
+## 2026-03-04: Pawn-Based Territory Expansion — Architecture & Design
+
+**Date:** 2026-03-04T22:27:00Z  
+**Authors:** Hal (Lead, Architect), Pemulis (Systems Dev)  
+**Status:** PROPOSED — awaiting dkirby-ms approval  
+**Directive:** User decision to replace all conquest mechanics (Influence Flooding, Resource Pressure, Creature Siege, Shape Overlap) with autonomous pawn-based expansion  
+**Supersedes:** All prior conquest/expansion proposals (Phase A Options A/B/C, Shape Overlap Invasion)
+
+### The Vision (Two Sentences)
+
+Players spawn builder pawns at HQ for a resource cost. Builders autonomously walk to the frontier of the player's territory and place structures that claim tiles — this is how territory expands.
+
+### Architecture Overview (Hal)
+
+#### D1: Pawn Schema — Reuse CreatureState
+
+Builders are `CreatureState` with `creatureType = "builder"` and `ownerID = player.id`. Zero new schema classes. Add optional fields: `ownerID`, `targetX`, `targetY`, `buildProgress`, `buildingType`. Pawns appear in existing `creatures` MapSchema, render via `CreatureRenderer`, move via `moveToward()`.
+
+#### D2: Spawning — At HQ, Resource Cost
+
+- Player sends `SPAWN_PAWN` message (new type, pawnType field)
+- Builder spawns on walkable tile within HQ zone
+- Cost: **5 Wood + 5 Stone** (tunable constant in `PAWN_TYPES`)
+- No population cap MVP
+- Pawn has 50 HP; carnivores can hunt it
+
+#### D3: Builder AI — 3-State FSM
+
+```
+IDLE → SEEK_SITE → BUILDING → IDLE
+```
+
+- **IDLE:** No valid build site found. Wait N ticks, rescan.
+- **SEEK_SITE:** Pick nearest unclaimed walkable tile adjacent to player territory. Move toward it using `moveToward()`. Re-scan if tile claimed en route.
+- **BUILDING:** Spent `BUILD_TICKS` (8 ticks ≈ 2s) constructing. On completion: set `tile.shapeHP = SHAPE.BLOCK_HP`, `tile.ownerID = player.id`, award score. Return to IDLE.
+
+Site selection: tiles adjacent to most owned tiles first (fills gaps). Greedy Manhattan, no A*.
+
+#### D4: Structure → Territory — Build Tile Only
+
+When builder completes structure, it claims **only that tile**. No radius, no adjacency auto-claim. Reason: per-tile claiming proven by shape system. Radius would expand too fast. One builder = one tile at a time = growth proportional to investment.
+
+#### D5: Player Role — Spawn and Direct (Not Build)
+
+**Players no longer place shapes directly.** Role shifts from "Tetris player" to "commander":
+
+1. Spawn pawns (SPAWN_PAWN message, costs resources)
+2. Set rally point (optional, MVP+1: bias target selection toward area)
+3. Watch territory grow (builders autonomous)
+4. Manage economy (territory income funds more builders)
+
+Shape catalog and `handlePlaceShape` are **removed**. Builders place 1×1 structures, not polyominoes.
+
+#### D6: Pawn Type Extensibility
+
+```typescript
+export interface PawnTypeDef {
+  readonly name: string;
+  readonly icon: string;
+  readonly cost: { wood: number; stone: number; fiber: number; berries: number };
+  readonly health: number;
+  readonly speed: number; // ticks between moves
+}
+
+export const PAWN_TYPES: Record<string, PawnTypeDef> = {
+  builder: {
+    name: "Builder",
+    icon: "🔨",
+    cost: { wood: 5, stone: 5, fiber: 0, berries: 0 },
+    health: 50,
+    speed: 2,
+  },
+  // Future: gatherer, scout, soldier...
+};
+```
+
+#### D7: Interaction Matrix
+
+| System | Interaction |
+|--------|------------|
+| **Creatures** | Carnivores hunt builders (valid prey). Builders ignore creatures. |
+| **Resources** | Spawning costs resources. Claimed tiles → passive income funds more pawns. |
+| **Progression** | XP from tiles claimed. Level-ups unlock new pawn types. |
+| **Territory income** | Unchanged — owned tiles generate resources via `tickTerritoryIncome`. |
+| **HQ immunity** | HQ zone tiles remain immutable. Builders cannot build there. |
+
+### Implementation Roadmap (Pemulis)
+
+#### Data Model Extensions
+
+**CreatureState additions:**
+- `ownerID: string` — Player who owns pawn
+- `pawnType: string` — "builder" (future: gatherer, scout, soldier)
+- `targetX: number`, `targetY: number` — Build target (-1 = no target)
+- `buildProgress: number` — 0 to BUILD_TIME_TICKS
+- `buildingType: string` — Structure type being built
+
+**New StructureState schema:**
+```typescript
+class StructureState extends Schema {
+  id: string;
+  structureType: string; // "outpost", "wall", "extractor"
+  x: number;
+  y: number;
+  ownerID: string;
+  health: number;
+  maxHealth: number;
+  isComplete: boolean;
+}
+```
+
+**TileState additions:**
+- `isHQTerritory: boolean` — Immutable starting zone
+- `structureID: string` — Reference to structure on tile
+
+**GameState additions:**
+- `structures: MapSchema<StructureState>` — New structures collection
+
+#### Constants Registry
+
+```typescript
+export const PAWN = {
+  MAX_PER_PLAYER: 5,
+  BUILD_TIME_TICKS: 8,
+  SEEK_RETRY_TICKS: 10,
+};
+
+export const STRUCTURE = {
+  outpost: { health: 200, buildTime: 8 },
+  wall: { health: 100, buildTime: 6 },
+  extractor: { health: 150, buildTime: 10 },
+};
+```
+
+#### 4-Phase Implementation
+
+1. **Phase 1 (Builder AI Core):** FSM loop, greedy pathfinding, site selection
+2. **Phase 2 (Structure System):** Spawning, placement, health, ownership
+3. **Phase 3 (Economy Integration):** Cost/income, HQ territory handling
+4. **Phase 4 (Client Rendering):** Builder sprite, structure visuals
+
+**Estimate:** 3–4 days, ~600 lines
+
+### MVP Scope — Work Items (Hal)
+
+| # | Work Item | Lines | Depends |
+|---|-----------|-------|---------|
+| 1 | `shared/src/data/pawns.ts` — PawnTypeDef + builder | ~25 | — |
+| 2 | `shared/src/messages.ts` — SPAWN_PAWN message | ~5 | — |
+| 3 | `CreatureState` — add pawn fields | ~10 | — |
+| 4 | `GameRoom.ts` — handleSpawnPawn handler | ~30 | 1,2,3 |
+| 5 | `server/src/rooms/builderAI.ts` — FSM + tick | ~80 | 3 |
+| 6 | `GameRoom.ts` — call tickBuilderAI in loop | ~5 | 5 |
+| 7 | Remove handlePlaceShape + shape placement UI | ~-200 | 4,5,6 |
+| 8 | Client: spawn button, builder rendering | ~40 | 1,2 |
+| 9 | Tests: spawn validation, FSM, territory | ~60 | 4,5 |
+
+**Total:** ~255 lines added, ~200 removed  
+**Estimate:** 2–3 days  
+**Parallelization:** Items 1–3 in parallel; 7 after 4–6 verified; 8 as soon as 1–2 land
+
+### Deferred to MVP+1
+
+- Rally points / directional bias (~30 lines)
+- Builder cap per player (balance tuning)
+- Builder death animation / replacement
+- Gatherer pawn type
+- Multi-tile structures
+- Structure types beyond 1×1
+- Pawn upgrades / leveling
+- Builder speed upgrades
+
+### Open Questions for dkirby-ms
+
+1. **Keep or remove direct shape placement?** Proposal removes entirely. Alternative: keep as "manual override" alongside builders (adds complexity, gives immediate agency).
+2. **Builder structures: 1×1 or larger?** Proposal: 1×1. Could use existing polyomino shapes for variety.
+3. **Rally points in MVP or defer?** Without them, builders expand per AI pick. Acceptable for first playtest?
+
+### Trade-Offs
+
+| Choice | Upside | Downside |
+|--------|--------|----------|
+| Reuse CreatureState | Zero new schema; existing rendering/sync works | Builders show as "creatures" until client distinguishes |
+| Remove direct shape placement | Clean break, single mechanic | Players lose immediate agency |
+| 1×1 structures | Simpler AI, predictable growth | Less visual variety |
+| No rally points MVP | Faster ship | Builders expand in undesired directions |
+| Greedy movement | Consistent with existing creature AI | Can get stuck in corners |
+
+---
