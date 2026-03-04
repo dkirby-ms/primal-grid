@@ -746,3 +746,29 @@ Hal (Lead) architected pawn-based territory expansion system per same user direc
 - Design ready for user approval
 
 **Status:** Decisions merged to `.squad/decisions.md`. Orchestration logs written. **READY FOR IMPLEMENTATION** once dkirby-ms approves open questions.
+
+---
+
+## 2026-03-04T22:57: IMPLEMENTATION SPAWNED — Pawn Builder System (Server)
+
+**Status:** SPAWNED (agent-12, background mode)
+
+**Scope (Consolidated):**
+- User directives (2026-03-04T22:57, 22:58): Remove shapes, wood/stone only, kill builders, upkeep, 9×9 HQ, StarCraft economy
+- Implementation decisions merged into `.squad/decisions.md`
+- Builder FSM (3-state), separate upkeep tick (60), adjacency validation, carnivore targeting, isHQTerritory immutable
+
+**Objective:** Full pawn builder system server implementation
+- builderAI.ts (FSM module)
+- tickPawnUpkeep (separate from creatureAI)
+- creatureAI dispatch for builder type
+- herbivores.ts update (carnivore targeting)
+- tile.ts (isHQTerritory property)
+- gameState.ts (upkeep integration)
+
+**Expected outcome:** 207 tests passing. All 4 inbox decisions merged and archived.
+
+**Cross-agent:** Gately (client, agent-13) depends on SPAWN_PAWN message. Steeply (tests, agent-14) writes 26 test contracts including server behavior.
+
+**Session log:** `.squad/log/2026-03-04T2257-pawn-implementation.md`
+

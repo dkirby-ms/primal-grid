@@ -4,6 +4,71 @@
 
 <!-- New decisions are appended below by Scribe from .squad/decisions/inbox/ -->
 
+## 2026-03-04T22:57: User Directives — Pawn Builder System Design Decisions
+
+**By:** dkirby-ms (via Copilot)  
+**Status:** DECISION — User-confirmed core design  
+
+**Consolidated directives covering:**
+1. Remove direct shape placement (builders only way to expand)
+2. 1×1 builder structures only (no polyominoes)
+3. Enemies CAN kill builders (carnivores can target, tactical pressure)
+4. Pawns HAVE upkeep cost (ongoing resource drain)
+5. Resource simplification (wood/stone only, no fiber/berries)
+6. HQ territory rebalanced to 9×9 (immutable starting zone)
+
+**Why:** User request — core gameplay decisions for pawn builder system. These resolve open questions and define the complete builder feature scope.
+
+---
+
+## 2026-03-04T22:58: User Directive — StarCraft-Style Resource Economy
+
+**By:** dkirby-ms (via Copilot)  
+**Status:** DECISION — User-confirmed economy redesign  
+
+**What:** Replace per-tile passive resource income with structure-based income.
+- HQ (base) generates base resource income per tick
+- Farm buildings (new structure type) add more resource income
+- Replaces current model where each owned tile generates +1 per tick
+
+**Why:** User request. Simplifies income to structure-based. Creates meaningful choice: expand territory vs. build farms for income. Aligns with RTS models (StarCraft: bases vs. refineries).
+
+---
+
+## 2026-03-04: Pawn Builder System Implementation (Pemulis)
+
+**By:** Pemulis (Systems Dev)  
+**Status:** IMPLEMENTED (server in progress, agent-12 running)
+
+**Key decisions:**
+1. Builder AI FSM (3-state: idle → move_to_site → building) in separate builderAI.ts module
+2. Pawn upkeep as separate tick function (every 60 ticks, independent of AI)
+3. Adjacency validation in building state on every tick (prevents teleport exploits)
+4. Carnivore targeting via findNearestPrey() includes pawn_builder creatures
+5. isHQTerritory boolean on TileState (immutable, set at spawnHQ)
+
+**Rationale:** Separate modules/ticks decouple upkeep from AI. Adjacency checks prevent exploits. Immutable HQ guarantees safe starting zone.
+
+---
+
+## 2026-03-04: Pawn Builder System — Client Implementation (Gately)
+
+**By:** Gately (Game Dev)  
+**Status:** IMPLEMENTED (client in progress, agent-13 running)
+
+**What:**
+1. Removed all shape UI (carousel, placement input, preview rendering)
+2. Removed fiber/berries from HUD and color map
+3. Added "Spawn Builder" button (cost 10W/5S, cap 5 builders)
+4. Builder rendering: 🔨 (local) or ⬜ (opponent) with progress bar
+5. HQ territory overlay (alpha 0.15 fill, 2.5px thicker border)
+
+**Why:** User-confirmed design. Builders replace shapes. Only wood/stone. HQ needs visual distinction.
+
+**Impact:** Client drops PLACE_SHAPE. Server handles SPAWN_PAWN. InputHandler shrinks from 250→60 lines.
+
+---
+
 ## 2026-03-02: Core Gameplay Loop Redesign (Three Proposals)
 
 **Date:** 2026-03-02  

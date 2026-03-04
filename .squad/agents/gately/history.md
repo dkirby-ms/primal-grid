@@ -623,3 +623,28 @@ Gately delivered rendering layer analysis for user territory control pivot. **Ha
 
 **Next steps:** Await Pemulis's server implementation to begin rendering work. MVP can start immediately for immutable territory distinction (uses static HQ distance computation if server doesn't send flag).
 
+
+---
+
+## 2026-03-04T22:57: IMPLEMENTATION SPAWNED — Pawn Builder System (Client)
+
+**Status:** SPAWNED (agent-13, background mode)
+
+**Scope (Consolidated):**
+- User directives (2026-03-04T22:57, 22:58): Remove shape UI, spawn builder button, wood/stone only HUD, HQ overlay, builder rendering
+- Implementation decisions merged into `.squad/decisions.md`
+- Shape carousel/placement/preview removed, Spawn Builder button (10W/5S, cap 5), HQ territory overlay (0.15 alpha, 2.5px), builder progress bars
+
+**Objective:** Full pawn builder client UI implementation
+- HUD.tsx (remove shape, add spawn button, remove fiber/berries)
+- InputHandler.ts (remove PLACE_SHAPE, keep SPAWN_PAWN)
+- Renderer.tsx (builder rendering, HQ overlay)
+- resources.ts (remove fiber/berries colors)
+- gameState.ts (track builder spawn state)
+
+**Expected outcome:** Shape UI fully removed. Spawn builder button functional. HQ territory clearly distinguished. No PLACE_SHAPE sent to server.
+
+**Cross-agent:** Pemulis (server, agent-12) implements SPAWN_PAWN handling. Steeply (tests, agent-14) validates client message format.
+
+**Session log:** `.squad/log/2026-03-04T2257-pawn-implementation.md`
+

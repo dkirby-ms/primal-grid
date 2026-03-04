@@ -509,3 +509,35 @@ Hal proposed three redesign options for the hollow core gameplay loop. This will
 **Impact on Steeply's work:** Once dkirby-ms selects a proposal, Steeply will write test plans for the new scoring/ecosystem logic. Proposal A (smallest) will require ~12–15 tests for biome matching, cluster multipliers, and round timer. Proposals B and C have similar test counts but different coverage areas.
 
 **Status:** Decision merged to `.squad/decisions.md`. Awaiting dkirby-ms selection.
+
+---
+
+## 2026-03-04T22:57: TEST SUITE SPAWNED — Pawn Builder System
+
+**Status:** SPAWNED (agent-14, background mode)
+
+**Scope (Consolidated):**
+- User directives merged: 6 design decisions + StarCraft economy
+- 26 contract tests across 6 categories
+- 6 tests expected to pass initially (before impl)
+- 20 tests awaiting implementation
+
+**Test Categories:**
+1. Builder spawning (cost, cap, validation)
+2. Builder AI FSM (idle, move_to_site, building states)
+3. Adjacency validation (prevent teleport builds)
+4. Upkeep system (resource drain, frequency)
+5. Carnivore interaction (targeting, killing builders)
+6. HQ territory (immutability, visual distinction)
+
+**Objective:** pawnBuilder.test.ts with full coverage
+- Test scaffolding for all 6 categories (26 tests)
+- 6 passing tests validating spawn cost, cap, HQ setup, creature type
+- 20 pending tests (bodies await implementation)
+
+**Expected outcome:** 26 tests defined. 6 passing initially. All 26 passing once Pemulis and Gately complete implementation.
+
+**Cross-agent:** Pemulis (server, agent-12) implements behaviors. Gately (client, agent-13) validates spawn message. Steeply contracts test both.
+
+**Session log:** `.squad/log/2026-03-04T2257-pawn-implementation.md`
+
