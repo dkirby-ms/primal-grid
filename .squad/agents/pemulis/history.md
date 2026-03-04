@@ -40,7 +40,17 @@ Next: **2026-03-04 — Territory Control Redesign** (awaiting user mechanic sele
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
-### Phase C — Pawn Commands & Phase B Territory Redesign (2026-02-27)
+### Pawn Builder System & Resource Simplification (2026-03-04)
+
+- **Resource simplification:** Removed Fiber and Berries entirely. Only Wood and Stone remain. Touched types.ts, constants.ts, GameState.ts, territory.ts, mapGenerator.ts, GameRoom.ts, creatureAI.ts, and 6 test files. Grassland now yields Wood instead of Fiber/Berries. Sand yields nothing.
+- **9×9 HQ territory:** STARTING_SIZE=9 with isHQTerritory boolean on TileState. Starting resources rebalanced to 30W/15S (enough for 2-3 builders at 10W/5S each). spawnHQ marks all claimed tiles as isHQTerritory=true.
+- **Shape placement removed:** handlePlaceShape and PLACE_SHAPE handler deleted from GameRoom. Builders are now the only expansion mechanic. Shape data files kept for future structure types.
+- **Pawn schema:** CreatureState extended with ownerID, pawnType, targetX, targetY, buildProgress. ICreatureState interface updated to match. CreatureType "pawn_builder" added.
+- **Builder AI FSM:** 3-state machine in builderAI.ts: idle → move_to_site → building → idle. Key behaviors: findBuildSite scans within BUILD_SITE_SCAN_RADIUS for nearest unclaimed walkable tile adjacent to owner territory. Building state validates target each tick (ownerID check, walkability check, adjacency check). Uses moveToward from creatureAI.ts.
+- **Pawn upkeep:** tickPawnUpkeep runs every 60 ticks. Each builder costs 1 wood. Can't pay → 10 damage. Death at 0 HP removes creature. Separate from creature AI tick.
+- **Carnivore targeting:** findNearestPrey helper targets both "herbivore" and "pawn_builder" creatureTypes. Builders are valid prey.
+- **Key testing pattern:** Pre-existing pawnBuilder.test.ts used `(creature as any).ownerID` because ownerID didn't exist on schema yet. After adding ownerID to CreatureState schema, test helpers must set `creature.pawnType = "builder"` (not just creatureType) because upkeep filters on pawnType.
+- **Upkeep vs AI separation:** tickPawnUpkeep is a separate tick function from tickCreatureAI. Tests that need upkeep behavior must call tickPawnUpkeep explicitly — creature AI does not handle upkeep.
 
 - **ASSIGN_PAWN handler:** Server event loop routing. Validates command, updates pawn.command field, routes to FSM. Deterministic, no side effects.
 - **FSM design:** 6 state transitions (idle↔gather, idle↔guard, guard↔gather). Implicit via priority chains, not formal state machine class. Tested extensively (60+ tests).
