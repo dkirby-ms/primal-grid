@@ -64,7 +64,6 @@ describe("Player Lifecycle", () => {
     const player = room.state.players.get("res-check")!;
     expect(player.wood).toBe(TERRITORY.STARTING_WOOD);
     expect(player.stone).toBe(TERRITORY.STARTING_STONE);
-    expect(player.berries).toBe(TERRITORY.STARTING_BERRIES);
   });
 
   it("player gets HQ position and territory on join", () => {

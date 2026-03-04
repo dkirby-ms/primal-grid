@@ -125,17 +125,9 @@ function assignResource(biome: TileType, rng: () => number): { type: number; amo
     case TileType.Forest:
       return { type: ResourceType.Wood, amount: Math.floor(rng() * RESOURCE_REGEN.MAX_AMOUNT) + 1 };
     case TileType.Grassland:
-      return {
-        type: rng() < 0.5 ? ResourceType.Fiber : ResourceType.Berries,
-        amount: Math.floor(rng() * RESOURCE_REGEN.MAX_AMOUNT) + 1,
-      };
+      return { type: ResourceType.Wood, amount: Math.floor(rng() * RESOURCE_REGEN.MAX_AMOUNT) + 1 };
     case TileType.Highland:
       return { type: ResourceType.Stone, amount: Math.floor(rng() * RESOURCE_REGEN.MAX_AMOUNT) + 1 };
-    case TileType.Sand:
-      if (rng() < RESOURCE_REGEN.SAND_FIBER_CHANCE) {
-        return { type: ResourceType.Fiber, amount: Math.floor(rng() * 5) + 1 };
-      }
-      return { type: -1, amount: 0 };
     default:
       return { type: -1, amount: 0 };
   }

@@ -78,7 +78,6 @@ describe("Phase A — HUD State Contract", () => {
       const { player } = joinPlayer(room, "p1");
       expect(player.wood).toBe(TERRITORY.STARTING_WOOD);
       expect(player.stone).toBe(TERRITORY.STARTING_STONE);
-      expect(player.berries).toBe(TERRITORY.STARTING_BERRIES);
     });
 
     it("new player has HQ position and positive score", () => {
@@ -141,8 +140,6 @@ describe("Phase A — HUD State Contract", () => {
 
       expect(player.wood).toBeGreaterThanOrEqual(0);
       expect(player.stone).toBeGreaterThanOrEqual(0);
-      expect(player.fiber).toBeGreaterThanOrEqual(0);
-      expect(player.berries).toBeGreaterThanOrEqual(0);
       expect(player.score).toBeGreaterThan(0);
       expect(player.hqX).toBeGreaterThanOrEqual(0);
       expect(player.hqY).toBeGreaterThanOrEqual(0);

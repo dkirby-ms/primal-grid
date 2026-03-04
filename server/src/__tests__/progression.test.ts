@@ -8,7 +8,6 @@ import {
   hasAbility,
   PROGRESSION,
   TERRITORY,
-  SHAPE,
   TileType,
 } from "@primal-grid/shared";
 
@@ -182,101 +181,20 @@ describe("hasAbility", () => {
 
 // ── Integration: Shape Gating ──────────────────────────────────────
 
-describe("Shape gating integration", () => {
-  it("level 1 player tries to place tetra_t → rejected (not unlocked)", () => {
-    const room = createRoomWithMap(42);
-    const { client, player } = joinPlayer(room, "gater");
-
-    // Player starts at level 1
-    expect(player.level).toBe(1);
-
-    // Give enough wood to afford placement
-    player.wood = 1000;
-
-    // Find a valid adjacent tile for placement
-    const hx = player.hqX;
-    const hy = player.hqY;
-
-    // Record score before attempt
-    const scoreBefore = player.score;
-    const woodBefore = player.wood;
-
-    // Attempt to place tetra_t (not unlocked at level 1)
-    room.handlePlaceShape(client, {
-      shapeId: "tetra_t",
-      x: hx + 3,
-      y: hy,
-      rotation: 0,
-    });
-
-    // Wood should not have been deducted — placement was rejected
-    expect(player.wood).toBe(woodBefore);
+describe("Shape gating (data-level)", () => {
+  it("level 1 → only starter shapes available", () => {
+    const available = getAvailableShapes(1);
+    expect(available).toContain("tetra_o");
+    expect(available).toContain("tetra_i");
+    expect(available).not.toContain("tetra_t");
   });
 
-  it("level 2 player places tetra_t → accepted", () => {
-    const room = createRoomWithMap(42);
-    const { client, player } = joinPlayer(room, "unlocker");
-
-    // Set player to level 2 (tetra_t unlocked)
-    player.level = 2;
-    player.wood = 1000;
-
-    // Find a claimable adjacent tile
-    const w = room.state.mapWidth;
-    let targetX = -1;
-    let targetY = -1;
-    for (let i = 0; i < room.state.tiles.length; i++) {
-      const tile = room.state.tiles.at(i)!;
-      if (
-        tile.ownerID === player.id &&
-        tile.shapeHP === 0
-      ) {
-        // Check if this owned tile + neighbors form a valid tetra_t placement
-        // Use a simpler approach: find an adjacent unowned tile
-        continue;
-      }
-    }
-
-    // Place on an owned tile area (reinforce) to avoid adjacency issues
-    // The HQ area gives us owned tiles to work with
-    const woodBefore = player.wood;
-    room.handlePlaceShape(client, {
-      shapeId: "tetra_t",
-      x: player.hqX,
-      y: player.hqY,
-      rotation: 0,
-    });
-
-    // If placement succeeded, wood should be deducted
-    // (may still fail due to tile conditions, but NOT due to level gating)
-    // We verify by checking that tetra_t is in available shapes
-    const available = getAvailableShapes(player.level);
+  it("level 2 → tetra_t unlocked", () => {
+    const available = getAvailableShapes(2);
     expect(available).toContain("tetra_t");
   });
 
-  it("level 1 player places tetra_o → accepted (starter shape)", () => {
-    const room = createRoomWithMap(42);
-    const { client, player } = joinPlayer(room, "starter");
-
-    expect(player.level).toBe(1);
-    player.wood = 1000;
-
-    // tetra_o is available at level 1
-    const available = getAvailableShapes(player.level);
-    expect(available).toContain("tetra_o");
-
-    // The server should NOT reject based on level gating
-    // (it may still reject for other spatial reasons, but the shape itself is valid)
-    const woodBefore = player.wood;
-    room.handlePlaceShape(client, {
-      shapeId: "tetra_o",
-      x: player.hqX,
-      y: player.hqY,
-      rotation: 0,
-    });
-
-    // If all spatial conditions are met, wood gets deducted
-    // At minimum, verify the shape is available — not gated
+  it("level 1 → tetra_o available (starter shape)", () => {
     expect(getAvailableShapes(1)).toContain("tetra_o");
   });
 });

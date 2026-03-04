@@ -75,7 +75,7 @@ function findUnwalkableTile(room: any): { x: number; y: number } | null {
 describe("Territory System", () => {
 
   describe("HQ spawn", () => {
-    it("player joins → HQ position set, 3×3 territory claimed, score reflects tiles", () => {
+    it("player joins → HQ position set, 9×9 territory claimed, score reflects tiles", () => {
       const room = createRoomWithMap(42);
       const { player } = joinPlayer(room, "p1");
 
@@ -90,7 +90,7 @@ describe("Territory System", () => {
       const counts = getTerritoryCounts(room.state);
       const ownedCount = counts.get("p1") ?? 0;
       expect(ownedCount).toBeGreaterThan(0);
-      // Can be up to 9 (3×3), but may be less if water/rock tiles in area
+      // Can be up to 81 (9×9), but may be less if water/rock tiles in area
       expect(ownedCount).toBeLessThanOrEqual(TERRITORY.STARTING_SIZE * TERRITORY.STARTING_SIZE);
 
       // Score matches owned tile count
@@ -99,7 +99,6 @@ describe("Territory System", () => {
       // Starting resources set
       expect(player.wood).toBe(TERRITORY.STARTING_WOOD);
       expect(player.stone).toBe(TERRITORY.STARTING_STONE);
-      expect(player.berries).toBe(TERRITORY.STARTING_BERRIES);
     });
   });
 

@@ -34,8 +34,6 @@ export const RESOURCE_REGEN = {
   MAX_AMOUNT: 10,
   /** Amount regenerated per interval. */
   REGEN_AMOUNT: 1,
-  /** Chance (0-1) of Sand tiles having Fiber. */
-  SAND_FIBER_CHANCE: 0.3,
 } as const;
 
 /** Creature spawning constants. */
@@ -76,16 +74,12 @@ export const CREATURE_AI = {
 
 /** Territory claim constants. */
 export const TERRITORY = {
-  /** Starting territory radius in tiles. */
-  STARTING_SIZE: 3,
-  /** Starting wood for new players. */
-  STARTING_WOOD: 10,
+  /** Starting territory size in tiles (side length of square). */
+  STARTING_SIZE: 9,
+  /** Starting wood for new players (enough for 2-3 builders). */
+  STARTING_WOOD: 30,
   /** Starting stone for new players. */
-  STARTING_STONE: 5,
-  /** Starting fiber for new players. */
-  STARTING_FIBER: 0,
-  /** Starting berries for new players. */
-  STARTING_BERRIES: 5,
+  STARTING_STONE: 15,
   /** Ticks to claim a tile (8 ticks ≈ 2 seconds at 4 ticks/sec). */
   CLAIM_TICKS: 8,
 } as const;
@@ -130,4 +124,26 @@ export const PROGRESSION = {
     { level: 6, xpRequired: 100, shapes: [], abilities: ["pets"] },
     { level: 7, xpRequired: 140, shapes: [], abilities: ["pet_breeding"] },
   ],
+} as const;
+
+/** Pawn system constants. */
+export const PAWN = {
+  /** Wood cost to spawn a builder. */
+  BUILDER_COST_WOOD: 10,
+  /** Stone cost to spawn a builder. */
+  BUILDER_COST_STONE: 5,
+  /** Builder starting health. */
+  BUILDER_HEALTH: 50,
+  /** Ticks to complete a build (16 ticks = 4 seconds at 4 ticks/sec). */
+  BUILD_TIME_TICKS: 16,
+  /** Wood upkeep cost per cycle. */
+  BUILDER_UPKEEP_WOOD: 1,
+  /** Ticks between upkeep deductions (60 ticks = 15 seconds at 4 ticks/sec). */
+  UPKEEP_INTERVAL_TICKS: 60,
+  /** Damage dealt when upkeep can't be paid. */
+  UPKEEP_DAMAGE: 10,
+  /** Maximum builders per player. */
+  MAX_PER_PLAYER: 5,
+  /** Radius to scan for build sites. */
+  BUILD_SITE_SCAN_RADIUS: 8,
 } as const;

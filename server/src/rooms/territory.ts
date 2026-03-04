@@ -36,7 +36,7 @@ export function claimTile(state: GameState, playerId: string, x: number, y: numb
   if (player) player.score += 1;
 }
 
-/** Spawn HQ for a player: claim 3×3 area and set starting resources. */
+/** Spawn HQ for a player: claim 9×9 area and set starting resources. */
 export function spawnHQ(
   state: GameState,
   player: PlayerState,
@@ -47,7 +47,7 @@ export function spawnHQ(
   player.hqX = hqX;
   player.hqY = hqY;
 
-  // Claim 3×3 area around HQ
+  // Claim 9×9 area around HQ and mark as HQ territory
   const halfSize = Math.floor(TERRITORY.STARTING_SIZE / 2);
   for (let dy = -halfSize; dy <= halfSize; dy++) {
     for (let dx = -halfSize; dx <= halfSize; dx++) {
@@ -56,6 +56,7 @@ export function spawnHQ(
       const tile = state.getTile(tx, ty);
       if (tile && tile.type !== TileType.Water && tile.type !== TileType.Rock) {
         tile.ownerID = player.id;
+        tile.isHQTerritory = true;
         player.score += 1;
       }
     }
@@ -64,8 +65,6 @@ export function spawnHQ(
   // Starting resources
   player.wood = TERRITORY.STARTING_WOOD;
   player.stone = TERRITORY.STARTING_STONE;
-  player.fiber = TERRITORY.STARTING_FIBER;
-  player.berries = TERRITORY.STARTING_BERRIES;
 }
 
 /** Get count of tiles owned by each player. */

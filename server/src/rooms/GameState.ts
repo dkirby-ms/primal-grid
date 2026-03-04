@@ -34,6 +34,9 @@ export class TileState extends Schema {
 
   @type("string")
   claimingPlayerID: string = "";
+
+  @type("boolean")
+  isHQTerritory: boolean = false;
 }
 
 export class PlayerState extends Schema {
@@ -48,12 +51,6 @@ export class PlayerState extends Schema {
 
   @type("number")
   stone: number = 0;
-
-  @type("number")
-  fiber: number = 0;
-
-  @type("number")
-  berries: number = 0;
 
   @type("number")
   hqX: number = -1;
@@ -92,6 +89,21 @@ export class CreatureState extends Schema {
 
   @type("string")
   currentState: string = "idle";
+
+  @type("string")
+  ownerID: string = "";
+
+  @type("string")
+  pawnType: string = "";
+
+  @type("number")
+  targetX: number = -1;
+
+  @type("number")
+  targetY: number = -1;
+
+  @type("number")
+  buildProgress: number = 0;
 }
 
 export class GameState extends Schema {

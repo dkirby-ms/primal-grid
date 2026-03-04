@@ -1,4 +1,5 @@
 import { GameState, CreatureState } from "./GameState.js";
+import { stepBuilder } from "./builderAI.js";
 import {
   CREATURE_AI, CREATURE_TYPES,
   ResourceType, TileType,
@@ -15,12 +16,15 @@ export function tickCreatureAI(state: GameState): void {
   const toRemove: string[] = [];
 
   state.creatures.forEach((creature) => {
-    // Drain hunger
-    creature.hunger = Math.max(0, creature.hunger - CREATURE_AI.HUNGER_DRAIN);
+    // Pawns don't have hunger mechanics
+    if (creature.pawnType === "") {
+      // Drain hunger
+      creature.hunger = Math.max(0, creature.hunger - CREATURE_AI.HUNGER_DRAIN);
 
-    // Starvation damage
-    if (creature.hunger <= 0) {
-      creature.health -= CREATURE_AI.STARVATION_DAMAGE;
+      // Starvation damage
+      if (creature.hunger <= 0) {
+        creature.health -= CREATURE_AI.STARVATION_DAMAGE;
+      }
     }
 
     // Death check
@@ -30,7 +34,9 @@ export function tickCreatureAI(state: GameState): void {
     }
 
     // Run FSM based on creature type
-    if (creature.creatureType === "herbivore") {
+    if (creature.creatureType === "pawn_builder") {
+      stepBuilder(creature, state);
+    } else if (creature.creatureType === "herbivore") {
       stepHerbivore(creature, state);
     } else if (creature.creatureType === "carnivore") {
       stepCarnivore(creature, state);
@@ -85,9 +91,9 @@ function stepHerbivore(creature: CreatureState, state: GameState): void {
 function stepCarnivore(creature: CreatureState, state: GameState): void {
   const typeDef = CREATURE_TYPES["carnivore"];
 
-  // Priority 1: Hunt herbivores when hungry
+  // Priority 1: Hunt herbivores or builders when hungry
   if (creature.hunger < CREATURE_AI.HUNGRY_THRESHOLD) {
-    const prey = findNearestOfType(creature, state, "herbivore", typeDef.detectionRadius);
+    const prey = findNearestPrey(creature, state, typeDef.detectionRadius);
     if (prey) {
       const dist = manhattan(creature.x, creature.y, prey.x, prey.y);
       if (dist <= 1) {
@@ -191,6 +197,26 @@ function findNearestOfType(
 
   state.creatures.forEach((other) => {
     if (other.id === creature.id || other.creatureType !== targetType) return;
+    const dist = manhattan(creature.x, creature.y, other.x, other.y);
+    if (dist <= radius && dist < bestDist) {
+      bestDist = dist;
+      nearest = other;
+    }
+  });
+
+  return nearest;
+}
+
+/** Find nearest valid prey for carnivores: herbivores and pawn_builders. */
+function findNearestPrey(
+  creature: CreatureState, state: GameState, radius: number,
+): CreatureState | null {
+  let nearest: CreatureState | null = null;
+  let bestDist = Infinity;
+
+  state.creatures.forEach((other) => {
+    if (other.id === creature.id) return;
+    if (other.creatureType !== "herbivore" && other.creatureType !== "pawn_builder") return;
     const dist = manhattan(creature.x, creature.y, other.x, other.y);
     if (dist <= radius && dist < bestDist) {
       bestDist = dist;

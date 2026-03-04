@@ -43,11 +43,19 @@ describe("Creature Systems Integration", () => {
   it("creatures maintain population through respawning", () => {
     const room = createRoomWithEcosystem(42);
     
-    // Remove some herbivores to trigger respawn
+    // Remove herbivores down to below minimum population to trigger respawn
+    const minPop = (CREATURE_TYPES as Record<string, any>)["herbivore"].minPopulation;
     const toRemove: string[] = [];
-    let removeCount = 0;
+    let herbCount = 0;
     room.state.creatures.forEach((c: any) => {
-      if (c.creatureType === "herbivore" && removeCount < 10) {
+      if (c.creatureType === "herbivore") herbCount++;
+    });
+
+    // Remove all but (minPop - 1) herbivores to ensure respawn triggers
+    let removeCount = 0;
+    const removeTarget = herbCount - (minPop - 1);
+    room.state.creatures.forEach((c: any) => {
+      if (c.creatureType === "herbivore" && removeCount < removeTarget) {
         toRemove.push(c.id);
         removeCount++;
       }

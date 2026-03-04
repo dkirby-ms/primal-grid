@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { ResourceType } from "../types.js";
 
-describe("Phase 2.2 — Resource Type Enum", () => {
+describe("Resource Type Enum", () => {
   it("has Wood type", () => {
     expect(ResourceType.Wood).toBeDefined();
     expect(typeof ResourceType.Wood).toBe("number");
@@ -12,23 +12,11 @@ describe("Phase 2.2 — Resource Type Enum", () => {
     expect(typeof ResourceType.Stone).toBe("number");
   });
 
-  it("has Fiber type", () => {
-    expect(ResourceType.Fiber).toBeDefined();
-    expect(typeof ResourceType.Fiber).toBe("number");
-  });
-
-  it("has Berries type", () => {
-    expect(ResourceType.Berries).toBeDefined();
-    expect(typeof ResourceType.Berries).toBe("number");
-  });
-
-  it("all four resource types have distinct values", () => {
+  it("Wood and Stone have distinct values", () => {
     const values = new Set([
       ResourceType.Wood,
       ResourceType.Stone,
-      ResourceType.Fiber,
-      ResourceType.Berries,
     ]);
-    expect(values.size).toBe(4);
+    expect(values.size).toBe(2);
   });
 });

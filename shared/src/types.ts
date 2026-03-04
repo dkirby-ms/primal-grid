@@ -14,8 +14,6 @@ export enum TileType {
 export enum ResourceType {
   Wood = 0,
   Stone = 1,
-  Fiber = 2,
-  Berries = 3,
 }
 
 /** State of a single tile on the grid. */
@@ -33,6 +31,8 @@ export interface ITileState {
   shapeHP: number;
   /** Player who owns this tile (empty string = unclaimed). */
   ownerID: string;
+  /** Whether this tile is part of a player's immutable HQ zone. */
+  isHQTerritory: boolean;
 }
 
 /** Creature type identifiers. */
@@ -47,6 +47,16 @@ export interface ICreatureState {
   health: number;
   hunger: number;
   currentState: string;
+  /** Player who owns this creature (empty for wildlife). */
+  ownerID: string;
+  /** Pawn type (empty for wildlife, "builder" for builders). */
+  pawnType: string;
+  /** Target X coordinate (-1 = no target). */
+  targetX: number;
+  /** Target Y coordinate (-1 = no target). */
+  targetY: number;
+  /** Build progress (0 to BUILD_TIME_TICKS). */
+  buildProgress: number;
 }
 
 /** Placeable item types. */
@@ -60,8 +70,6 @@ export interface IPlayerState {
   color: string;
   wood: number;
   stone: number;
-  fiber: number;
-  berries: number;
   /** X coordinate of player's HQ tile. */
   hqX: number;
   /** Y coordinate of player's HQ tile. */

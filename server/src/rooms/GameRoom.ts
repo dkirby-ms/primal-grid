@@ -2,17 +2,19 @@ import { Room, Client, CloseCode } from "colyseus";
 import { GameState, PlayerState, CreatureState } from "./GameState.js";
 import { generateProceduralMap } from "./mapGenerator.js";
 import { tickCreatureAI } from "./creatureAI.js";
+import { stepBuilder } from "./builderAI.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
-  PLACE_SHAPE,
+  SPAWN_PAWN,
   ResourceType, TileType,
   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
   CREATURE_AI, CREATURE_RESPAWN, TERRITORY,
-  TERRITORY_INCOME, SHAPE, SHAPE_CATALOG,
-  PROGRESSION, getAvailableShapes, getLevelForXP,
+  TERRITORY_INCOME, SHAPE,
+  PROGRESSION, getLevelForXP,
+  PAWN,
 } from "@primal-grid/shared";
-import type { PlaceShapePayload } from "@primal-grid/shared";
-import { spawnHQ, isShapeAdjacentToTerritory } from "./territory.js";
+import type { SpawnPawnPayload } from "@primal-grid/shared";
+import { spawnHQ } from "./territory.js";
 
 const PLAYER_COLORS = [
   "#e6194b", "#3cb44b", "#4363d8", "#f58231",
@@ -36,10 +38,11 @@ export class GameRoom extends Room {
       this.tickCreatureAI();
       this.tickCreatureRespawn();
       this.tickTerritoryIncome();
+      this.tickPawnUpkeep();
     }, 1000 / TICK_RATE);
 
-    this.onMessage(PLACE_SHAPE, (client, message: PlaceShapePayload) => {
-      this.handlePlaceShape(client, message);
+    this.onMessage(SPAWN_PAWN, (client, message: SpawnPawnPayload) => {
+      this.handleSpawnPawn(client, message);
     });
 
     console.log("[GameRoom] Room created.");
@@ -75,58 +78,89 @@ export class GameRoom extends Room {
     generateProceduralMap(this.state, seed, DEFAULT_MAP_SIZE, DEFAULT_MAP_SIZE);
   }
 
-  private handlePlaceShape(client: Client, message: PlaceShapePayload) {
+  private handleSpawnPawn(client: Client, message: SpawnPawnPayload) {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    if (message.pawnType !== "builder") return;
 
-    const { shapeId, x, y, rotation } = message;
+    // Validate resources
+    if (player.wood < PAWN.BUILDER_COST_WOOD || player.stone < PAWN.BUILDER_COST_STONE) return;
 
-    // Validate shape exists
-    const shapeDef = SHAPE_CATALOG[shapeId];
-    if (!shapeDef) return;
+    // Validate pawn cap
+    let pawnCount = 0;
+    this.state.creatures.forEach((c) => {
+      if (c.ownerID === client.sessionId && c.pawnType === "builder") pawnCount++;
+    });
+    if (pawnCount >= PAWN.MAX_PER_PLAYER) return;
 
-    // Validate player has unlocked this shape
-    const available = getAvailableShapes(player.level);
-    if (!available.includes(shapeId)) return;
+    // Find walkable tile within HQ zone
+    const spawnPos = this.findHQWalkableTile(player);
+    if (!spawnPos) return;
 
-    // Validate rotation
-    if (rotation !== 0 && rotation !== 1 && rotation !== 2 && rotation !== 3) return;
+    // Deduct cost
+    player.wood -= PAWN.BUILDER_COST_WOOD;
+    player.stone -= PAWN.BUILDER_COST_STONE;
 
-    // Get rotated cells and compute absolute positions
-    const rotatedCells = shapeDef.rotations[rotation];
-    const absoluteCells = rotatedCells.map((c) => ({ x: x + c.dx, y: y + c.dy }));
+    // Spawn builder
+    if (this.nextCreatureId == null) this.nextCreatureId = 0;
+    const creature = new CreatureState();
+    creature.id = `pawn_${this.nextCreatureId++}`;
+    creature.creatureType = "pawn_builder";
+    creature.x = spawnPos.x;
+    creature.y = spawnPos.y;
+    creature.health = PAWN.BUILDER_HEALTH;
+    creature.hunger = 100;
+    creature.currentState = "idle";
+    creature.ownerID = client.sessionId;
+    creature.pawnType = "builder";
+    creature.targetX = -1;
+    creature.targetY = -1;
+    creature.buildProgress = 0;
+    this.state.creatures.set(creature.id, creature);
+  }
 
-    // Validate ALL cells
-    for (const cell of absoluteCells) {
-      const tile = this.state.getTile(cell.x, cell.y);
-      if (!tile) return;
-      if (tile.type === TileType.Water || tile.type === TileType.Rock) return;
-      if (tile.shapeHP > 0) return;
-      if (tile.ownerID !== "" && tile.ownerID !== player.id) return;
-      if (tile.claimingPlayerID !== "" && tile.claimingPlayerID !== player.id) return;
-    }
-
-    // Validate adjacency to existing territory
-    if (!isShapeAdjacentToTerritory(this.state, player.id, absoluteCells)) return;
-
-    // Validate cost
-    const { costResource, costAmount } = shapeDef;
-    if (player[costResource] < costAmount) return;
-
-    // Deduct resource
-    player[costResource] -= costAmount;
-
-    // Apply shape — start claiming for unowned tiles, reinforce instantly for owned
-    for (const cell of absoluteCells) {
-      const tile = this.state.getTile(cell.x, cell.y)!;
-      if (tile.ownerID === player.id) {
-        // Already owned — reinforce immediately
-        tile.shapeHP = SHAPE.BLOCK_HP;
-      } else {
-        // Start claiming process
-        tile.claimingPlayerID = player.id;
-        tile.claimProgress = 1;
+  /** Find a random walkable tile within the player's HQ zone. */
+  private findHQWalkableTile(player: PlayerState): { x: number; y: number } | null {
+    const halfSize = Math.floor(TERRITORY.STARTING_SIZE / 2);
+    const candidates: { x: number; y: number }[] = [];
+    for (let dy = -halfSize; dy <= halfSize; dy++) {
+      for (let dx = -halfSize; dx <= halfSize; dx++) {
+        const tx = player.hqX + dx;
+        const ty = player.hqY + dy;
+        if (this.state.isWalkable(tx, ty)) {
+          candidates.push({ x: tx, y: ty });
+        }
       }
+    }
+    if (candidates.length === 0) return null;
+    return candidates[Math.floor(Math.random() * candidates.length)];
+  }
+
+  private tickPawnUpkeep() {
+    if (this.state.tick % PAWN.UPKEEP_INTERVAL_TICKS !== 0) return;
+
+    const toRemove: string[] = [];
+
+    this.state.creatures.forEach((creature) => {
+      if (creature.pawnType !== "builder") return;
+      const owner = this.state.players.get(creature.ownerID);
+      if (!owner) {
+        toRemove.push(creature.id);
+        return;
+      }
+
+      if (owner.wood >= PAWN.BUILDER_UPKEEP_WOOD) {
+        owner.wood -= PAWN.BUILDER_UPKEEP_WOOD;
+      } else {
+        creature.health -= PAWN.UPKEEP_DAMAGE;
+        if (creature.health <= 0) {
+          toRemove.push(creature.id);
+        }
+      }
+    });
+
+    for (const id of toRemove) {
+      this.state.creatures.delete(id);
     }
   }
 
@@ -173,8 +207,6 @@ export class GameRoom extends Room {
       switch (tile.resourceType) {
         case ResourceType.Wood:    owner.wood    += amount; break;
         case ResourceType.Stone:   owner.stone   += amount; break;
-        case ResourceType.Fiber:   owner.fiber   += amount; break;
-        case ResourceType.Berries: owner.berries += amount; break;
         default: continue;
       }
       tile.resourceAmount -= amount;
@@ -193,9 +225,8 @@ export class GameRoom extends Room {
   private getDefaultResourceType(biomeType: number): number {
     switch (biomeType) {
       case TileType.Forest: return ResourceType.Wood;
-      case TileType.Grassland: return Math.random() < 0.5 ? ResourceType.Fiber : ResourceType.Berries;
+      case TileType.Grassland: return ResourceType.Wood;
       case TileType.Highland: return ResourceType.Stone;
-      case TileType.Sand: return Math.random() < RESOURCE_REGEN.SAND_FIBER_CHANCE ? ResourceType.Fiber : -1;
       default: return -1;
     }
   }
