@@ -2146,3 +2146,802 @@ Multiplayer isn't an add-on — it's the architecture. The infrastructure (Colys
 2. Start with C (creature settling) — smallest standalone increment
 3. Add B (upkeep pressure) as second increment
 4. Playtest with 2 players after each increment
+# Biome Simulation Research Brief
+
+**Author:** Hal  
+**Date:** 2026-03-02  
+**Status:** Research — No implementation yet  
+**Context:** dkirby-ms is considering a pivot from survival colony builder toward a biome simulation game. This is the research brief to inform that decision.
+
+---
+
+## Executive Summary
+
+Biome simulation games form a small but resilient genre, driven by **emergent complexity**, **sandbox creativity**, and **strategic problem-solving**. The core verb is not "build" or "gather"—it's **"influence"** (or "nudge" or "shape"). Players don't micromanage; they introduce small changes and watch cascading effects. Success comes from understanding interconnected systems, not from executing rote actions.
+
+**Key insight:** The best biome sims are *observational toys with levers*—you pull a lever (add predator, change terrain), watch what happens, adjust, repeat. Fun comes from emergent surprise and systemic mastery.
+
+**Relevance to Primal Grid:** We already have the foundation—tile-based grid, creature AI (FSM), ecosystem simulation (food chains, respawn), multiplayer infrastructure (Colyseus), real-time state sync. The missing pieces are:
+1. Meaningful **player influence** over biome development (not just placement)
+2. **Visible emergent outcomes** (cascading effects, population oscillations)
+3. **Multiplayer tension via shared ecosystem** (not just parallel play)
+
+The pivot is viable. The architecture already supports it. The question is: **What does each player control, and why does what they do matter to other players?**
+
+---
+
+## 1. Existing Games in the Genre
+
+### 1.1 The Pillars
+
+| Game | Core Loop | What Makes It Compelling |
+|------|-----------|--------------------------|
+| **Equilinox** | Plant → Evolve → Balance | Relaxing sandbox with genetic depth. Accessible yet strategic. |
+| **Ecosystem** | Design habitat → Watch evolution | True evolutionary simulation. Creatures *actually* evolve behavior/form via natural selection. |
+| **Terra Nil** | Restore wasteland → Grow biomes → Remove traces | Reverse city-builder. Environmental restoration instead of exploitation. Visually stunning. |
+| **Niche: A Genetics Survival Game** | Breed pack → Manage traits → Survive threats | Turn-based genetics puzzle. Teaches real genetics (dominant/recessive, mutation). |
+| **SimLife (classic)** | Configure ecosystem → Run simulation → Iterate | Educational. Deep complexity. Dated UI, but core loop endures. |
+
+### 1.2 What They Have in Common
+
+- **Emergent complexity from simple rules** — Small tweaks lead to big outcomes (food webs collapse, species boom/bust)
+- **Observation as gameplay** — You watch more than you act. Decisions are slow but impactful.
+- **Systemic literacy as skill** — Mastery = understanding trophic cascades, feedback loops, carrying capacity.
+- **Visual/emotional reward** — Barren → lush transformation is *satisfying*. Watching creatures thrive (or collapse) creates investment.
+- **Progression via unlocks** — New species, biomes, or tools unlock gradually to maintain engagement.
+
+### 1.3 Adjacent Titles Worth Noting
+
+- **Eco** (multiplayer focus—see section 2)
+- **Reus/Reus 2** — God-game giants that shape biomes indirectly. Teaches player the power of indirect influence.
+- **The Sapling** — Modern SimLife successor. Custom plant/animal design + evolutionary sandbox.
+- **Species: Artificial Life** — Deep evolution sim (academic-level complexity).
+- **Cloud Gardens** — Overgrowth dioramas. More aesthetic than systemic, but teaches "nature reclaims" fantasy.
+
+---
+
+## 2. Multiplayer Biome Interaction
+
+### 2.1 The Gold Standard: Eco
+
+**Eco** is the only major game where **multiple players manage a shared ecosystem with real interdependencies**.
+
+**How it works:**
+- Each player builds civilization (logging, farming, hunting, industry).
+- **Every action affects the shared biome** — Deforestation in one area impacts water/climate in neighboring zones. Pollution spreads. Animal populations are global.
+- Players must **collaborate via governance** (laws, resource quotas) or face extinction-level ecological collapse.
+- **Player-run government** — Voting on policies, trade economies, resource taxation.
+
+**Why it works:**
+- Genuine **tragedy of the commons** tension.
+- Ecosystem consequences are **server-authoritative and visible** (air quality meters, extinction alerts).
+- Multiplayer interaction is **forced by scarcity**, not optional.
+
+**Why it's rare:** Building interdependent ecosystem mechanics is hard. Most sims default to parallel play or direct PvP.
+
+### 2.2 Other Examples
+
+- **Beasts of Bermuda** — Multiplayer dinosaur survival. Players *are* creatures in a shared food web. Not biome *management*, but shows shared creature pool dynamics (poaching, migration, territory competition).
+- **Alterra** (upcoming, Ubisoft) — Social sim with multiple biomes. More Animal Crossing than ecology sim, but explores "build together in different zones" model.
+- **Biomes** (browser MMORPG) — Open-source multiplayer with distinct biomes. Lighter on simulation depth, but demonstrates browser multiplayer feasibility.
+
+### 2.3 Interaction Models
+
+| Model | Description | Example | Pros | Cons |
+|-------|-------------|---------|------|------|
+| **Shared Pool** | Players draw from same resource/creature pool | Eco, Beasts | Inherent tension, zero new code | Can feel zero-sum |
+| **Adjacency Effects** | One player's biome affects neighbors | Eco (pollution spread) | Spatial strategy, emergent diplomacy | Needs clear visual feedback |
+| **Trade/Exchange** | Players swap resources or species | (hypothetical) | Cooperative, low conflict | Needs economy layer |
+| **Competitive Scoring** | Race to best biome health/diversity | (common in sims) | Clear win condition | Can feel like parallel solitaire |
+| **Asymmetric Roles** | Different players have different powers | Reus (giants vs mortals) | Rich interaction space | Complex to balance |
+
+**Insight:** Shared pool + adjacency effects = simplest path to meaningful multiplayer interaction without adding new systems.
+
+---
+
+## 3. What Makes Biome Simulation Fun
+
+### 3.1 The Core Loop (Generic)
+
+1. **Observe** — Analyze current ecosystem state (populations, resources, problems)
+2. **Intervene** — Add species, change terrain, adjust parameters
+3. **Watch** — Ecosystem reacts (populations shift, emergent behavior)
+4. **Iterate** — Adjust based on outcomes, repeat
+
+This loop is *slow* and *contemplative*, not arcade-paced. Fun comes from:
+- **Surprise** — "I didn't expect the predators to cluster there!"
+- **Mastery** — "Now I understand why the prey went extinct—I'll fix it."
+- **Creation** — "Look at the thriving forest I grew from nothing."
+
+### 3.2 What Players Find Satisfying
+
+| Satisfaction Type | Description | Examples |
+|-------------------|-------------|----------|
+| **Creative Sandbox** | Freedom to design, experiment, personalize | Equilinox, Minecraft mods |
+| **Emergent Stories** | Unexpected outcomes ("my best breeder was killed by a rogue predator") | Ecosystem, Preylife |
+| **Problem-Solving** | Fixing imbalanced food webs, preventing collapse | Niche, SimLife |
+| **Visual Transformation** | Barren → lush, dead → alive | Terra Nil, Cloud Gardens |
+| **Learning/Discovery** | Understanding real ecology, genetics, systems | Niche, Eco, Species |
+| **Progression** | Unlocking new species, biomes, tools | Equilinox, The Sapling |
+
+### 3.3 Common Pitfalls
+
+- **Too slow** — If nothing interesting happens for 5+ minutes, players quit.
+- **Too opaque** — If players can't understand *why* something happened, they disengage.
+- **No failure state** — If ecosystems can't collapse, stakes feel low.
+- **Parallel solitaire (multiplayer)** — If players don't affect each other, why play together?
+- **Feature creep** — Trying to simulate *everything* leads to bloat and confusion. Best sims have clear boundaries.
+
+---
+
+## 4. Relevance to Primal Grid
+
+### 4.1 What We Already Have
+
+| Feature | Status | Biome Sim Relevance |
+|---------|--------|---------------------|
+| Tile-based grid | ✅ Complete | Foundation for spatial biome representation |
+| Biome types (simplex noise) | ✅ Complete | Procedural biome diversity already implemented |
+| Creature AI (FSM, wander/flee/reproduce) | ✅ Complete | Basis for food web simulation |
+| Shared creature pool (multiplayer) | ✅ Complete | Tragedy of the commons ready to exploit |
+| Real-time state sync (Colyseus) | ✅ Complete | Multiplayer ecosystem changes visible instantly |
+| Territory/ownership system | ✅ Complete | Players can claim zones (potential "habitat" mechanic) |
+| Resource spawning/depletion | ✅ Complete | Energy flow foundation exists |
+
+**Architectural verdict:** We're 60% of the way to a biome sim already. The bones are there.
+
+### 4.2 What's Missing
+
+1. **Player influence mechanics beyond placement** — Current game = "place shapes, gather resources". Biome sim needs: "introduce species, alter terrain, nudge populations".
+2. **Visible emergent outcomes** — Need population graphs, extinction alerts, bloom/bust cycles that players can *see* and *react to*.
+3. **Meaningful multiplayer tension** — Current game has shared creatures but no reason to care about them strategically. Need: habitat competition, creature poaching, resource depletion effects across biomes.
+4. **Feedback loops** — Ecosystems thrive on feedback (more prey → more predators → prey crash → predator starvation). Need tighter AI logic for population oscillations.
+5. **Progression/unlocks** — No current unlock system. Biome sims need new species/biomes/tools to unlock over time.
+
+### 4.3 Promising Pivot Directions
+
+Based on what we have + genre research, here are three viable paths:
+
+#### Option A: "The Living Grid" (Creature-Centric)
+
+**Core idea:** Biomes are habitats. Players compete to attract/sustain wild creatures via habitat quality. Shared creature pool.
+
+**Mechanics:**
+- Creatures "settle" in habitats based on biome match + resource availability.
+- Better habitat = more creatures settle in your zone.
+- Breeding advantage for owned creatures.
+- Predator positioning becomes strategic (place near opponent borders to raid their creatures).
+
+**Why it fits Primal Grid:**
+- Shared creature pool already exists.
+- Territory system becomes "habitat ownership".
+- Emergent stories from creature migration/poaching.
+- Multiplayer tension: Tragedy of the commons.
+
+**Estimated effort:** ~80 lines for settling logic. Already scoped in `.squad/decisions.md` as "Proposal C."
+
+#### Option B: "Hungry Territory" (Expansion Pressure)
+
+**Core idea:** Territories require upkeep (wood per tile). Static territory decays. Forces expansion → collision → competition.
+
+**Mechanics:**
+- Wood cost per 10 tiles every 60s.
+- Tiles without upkeep decay from edges inward.
+- Resource nodes deplete when harvested → forces territorial movement.
+- "Vulture play" — claim opponent's decayed tiles.
+
+**Why it fits Primal Grid:**
+- Territory system already exists.
+- Resource system already exists.
+- Adds urgency to current "place shapes" loop.
+- Multiplayer tension: Land war.
+
+**Estimated effort:** ~50 lines for upkeep, ~30 for depletion. Already scoped as "Proposal B."
+
+#### Option C: Hybrid B+C ("Hungry Living Grid")
+
+**Core idea:** Combine creature competition (A) with expansion pressure (B).
+
+**Why it works:**
+- B provides expansion urgency (upkeep pressure).
+- C provides ecosystem depth (creature settling).
+- Combined: "I need to expand into right biomes to attract creatures while my territory decays and opponent competes for the same creature pool."
+
+**Estimated effort:** ~200 lines total (both mechanics compose cleanly).
+
+**Already recommended in `.squad/decisions.md` as team consensus.**
+
+---
+
+## 5. The "Core Verb" Problem
+
+### 5.1 Current State (Primal Grid)
+
+**Core verb:** `Place` (place shapes to claim territory, gather resources).
+
+**Problem:** Placement is *execution*, not *decision*. Once you know where to place, the rest is mechanical. No meaningful trade-offs.
+
+**dkirby-ms feedback:** "Lacks meaningful decisions."
+
+### 5.2 Biome Sim Core Verbs
+
+In successful biome sims, the core verb is not a single action—it's a *decision posture*:
+
+| Verb | What It Means | Example Games |
+|------|---------------|---------------|
+| **Influence** | Nudge system, watch outcome | Equilinox, Terra Nil |
+| **Balance** | Maintain equilibrium between competing forces | Eco, SimLife |
+| **Shape** | Design conditions, let system self-organize | Ecosystem, The Sapling |
+| **React** | Adapt to emergent crises | Niche, Reus |
+| **Curate** | Select which species/elements to introduce | All of the above |
+
+**Insight:** Players don't *do* things directly—they *set conditions* and *respond to emergence*.
+
+### 5.3 What Drives Engagement
+
+1. **Trade-offs** — Every decision has opportunity cost. "If I add predators, prey will decrease—do I risk it?"
+2. **Uncertainty** — Outcomes aren't guaranteed. Emergence creates surprise.
+3. **Feedback** — Players see consequences quickly enough to learn, but not so fast they can't react.
+4. **Escalation** — Problems compound (trophic cascades, population crashes). Stakes rise.
+
+### 5.4 Application to Primal Grid
+
+**If we pivot to biome sim, the core verb should become:**
+
+**"Nurture"** or **"Shape"** — Players influence biome development through:
+- **Species introduction** (place creatures, not just shapes)
+- **Habitat design** (territory layout affects creature settlement)
+- **Resource management** (harvesting depletes, affecting populations)
+- **Predator positioning** (strategic placement for territorial defense/offense)
+
+**Decision space:**
+- Where to expand territory (which biome types)?
+- Which creatures to prioritize (herbivores for income vs predators for defense)?
+- How much resource to extract vs leave for ecosystem health?
+- When to "poach" opponent creatures vs protect your own?
+
+**This shifts gameplay from "mechanical execution" to "strategic ecosystem stewardship."**
+
+---
+
+## 6. Recommendations
+
+### 6.1 Strategic Recommendation
+
+**Pivot is viable and aligns with existing architecture.** We're not starting from scratch—we're reframing what we already have.
+
+**Core insight:** Primal Grid's multiplayer infrastructure is its *strength*, not a side feature. The pivot should lean into **shared ecosystem dynamics**, not parallel solitaire.
+
+**Recommended direction:** Start with **Hybrid B+C ("Hungry Living Grid")**—already scoped in team decisions. It:
+- Adds expansion pressure (upkeep) to create urgency.
+- Adds creature competition (settling) to create ecosystem depth.
+- Leverages existing multiplayer infrastructure (shared creatures, territory, resources).
+- Composes cleanly (~200 lines, 2–3 days).
+
+### 6.2 Incremental Path
+
+**Do NOT attempt a big-bang rewrite.** Iterate in testable increments:
+
+1. **Phase 1: Creature Settling (~80 lines, 1 day)**
+   - Creatures "settle" in habitats based on biome match.
+   - Owned creatures can breed faster.
+   - Test: Do players start caring about which biomes they control?
+
+2. **Phase 2: Upkeep Pressure (~50 lines, 0.5 day)**
+   - Territory costs wood per tile.
+   - Tiles decay without upkeep.
+   - Test: Does this force expansion and player collision?
+
+3. **Phase 3: Resource Depletion (~30 lines, 0.5 day)**
+   - Resource nodes deplete when harvested.
+   - Test: Does this drive territorial movement?
+
+4. **Phase 4: Visual Feedback (~40 lines, 0.5 day)**
+   - Population graphs (per player).
+   - Extinction/bloom alerts.
+   - Habitat quality indicators.
+   - Test: Can players *understand* the ecosystem dynamics?
+
+5. **Phase 5: Progression/Unlocks (~100 lines, 1 day)**
+   - Unlock new species based on score/time.
+   - Unlock new biome types (future).
+   - Test: Does this sustain long-term engagement?
+
+**Total: ~300 lines, ~3.5 days of implementation + testing.**
+
+### 6.3 Open Questions (Need User Input)
+
+1. **Time horizon** — Is this a 10-minute arcade game or a 60-minute strategy game? (Determines pacing of ecosystem changes.)
+2. **Win condition** — Score-based? Territory size? Ecosystem diversity? Time-based rounds?
+3. **Cooperative vs competitive** — Pure PvP or hybrid cooperation (shared goals + competition)?
+4. **Scope boundary** — Do we keep base-building (farms, crafting) or strip it out entirely?
+5. **Visual style** — Current art is placeholder. Biome sims benefit from *beautiful* visuals (Terra Nil style). Is that in scope?
+
+### 6.4 Risk Assessment
+
+| Risk | Likelihood | Mitigation |
+|------|------------|------------|
+| **Too slow for arcade pace** | Medium | Accelerate ecosystem tick rate, compress time scales |
+| **Too complex to understand** | High | Invest in visual feedback (graphs, alerts, tooltips) |
+| **Multiplayer still feels like parallel play** | Medium | Ensure shared creature pool has *scarcity*, not abundance |
+| **Feature creep** | High | Enforce strict scope fence. No taming, no advanced breeding, no climate systems (yet). |
+| **Loses existing players** | Low | Current game has no users. Pivot risk is zero. |
+
+---
+
+## 7. Conclusion
+
+**The biome simulation genre is small but proven.** Games like Equilinox, Ecosystem, Terra Nil, and Eco demonstrate that players *will* engage with emergent ecosystem dynamics—if:
+1. Feedback is clear (visual graphs, alerts).
+2. Decisions have visible consequences.
+3. Complexity emerges from simple rules (no feature bloat).
+4. Multiplayer creates genuine tension (shared pools, adjacency effects).
+
+**Primal Grid is architecturally ready for this pivot.** We have:
+- Tile-based biomes ✅
+- Creature AI with food webs ✅
+- Shared multiplayer state ✅
+- Territory/resource systems ✅
+
+**What we're missing is meaningful player agency in shaping ecosystem development.** The current "place shapes, gather resources" loop is mechanical. The biome sim pivot reframes that into **"nurture habitats, influence creature populations, compete for ecosystem dominance."**
+
+**The core verb shifts from "place" to "influence"—and that's what makes biome sims fun.**
+
+**Recommendation:** Proceed with Hybrid B+C ("Hungry Living Grid") as already scoped in team decisions. Start with creature settling (smallest testable increment), add upkeep pressure second, iterate based on playtest feedback.
+
+**The architecture is ready. The question now is: Does dkirby-ms want to lean into emergent ecosystem dynamics as the core experience?**
+
+If yes: we're 2–3 days of implementation away from a testable biome sim multiplayer prototype.
+
+If no: we need to revisit what the "core loop" should be, because the current shape-placement loop won't support long-term engagement.
+
+---
+
+## Appendix: Key Research Sources
+
+- **TheGamer**: "10 Best Ecosystem Management Games" (Equilinox, Niche, Cloud Gardens)
+- **Glitchwave**: "Best ecosystem simulator video games of all-time" (SimLife, The Sapling, Species)
+- **itch.io**: Tagged ecosystem simulation games (indie/experimental prototypes)
+- **Eco official site + Wikipedia**: Multiplayer ecosystem sim mechanics
+- **ERIC/MIT Sloan**: Decision-making and player agency in simulation games
+- **Mesa Predator-Prey Model**: Agent-based ecosystem simulation framework
+- **Preylife.org**: Interactive evolutionary ecosystem sandbox
+- **PhET Interactive Simulations**: Educational predator-prey dynamics
+
+---
+
+**Next Steps:**
+1. dkirby-ms reviews this brief.
+2. If pivot approved: Hal scopes Phase 1 (creature settling) into work items.
+3. If pivot rejected: Hal proposes alternative core loop mechanics to address "lack of meaningful decisions" problem.
+
+**End of Research Brief.**
+
+# Technical Research Brief: Biome Simulation Architecture
+
+**Prepared by:** Pemulis (Systems Dev)  
+**Date:** 2024  
+**Purpose:** Assess technical feasibility and architecture requirements for pivoting Primal Grid from territory-based gameplay to multi-biome ecosystem simulation.
+
+---
+
+## Executive Summary
+
+Biome simulation is technically feasible for Primal Grid but requires significant architectural changes to the core simulation loop, state management, and network synchronization. The current creature AI and tile systems provide a foundation, but the scale and complexity of emergent ecosystem behavior will push against browser performance limits. Recommend scoped MVP approach focusing on 2-3 biome types with simplified cross-biome mechanics.
+
+**Key Technical Challenges:**
+- Entity count limits (realistic: 1,000–5,000 total creatures/plants across all biomes)
+- Simulation determinism for multiplayer sync
+- Colyseus state diff performance with complex nested schemas
+- Balancing simulation depth vs. performance
+
+---
+
+## 1. Simulation Models: How to Model Ecosystems
+
+### Proven Approaches
+
+**Lotka-Volterra (Population-Level Dynamics)**
+- **What it is:** Differential equations modeling predator-prey population cycles
+- **Data structures:** Scalar population counts per species type
+- **Pros:** Computationally cheap, predictable oscillations, easy to tune
+- **Cons:** No spatial dynamics, no individual behavior, feels "spreadsheet-like"
+- **Verdict for Primal Grid:** Too abstract for a visual grid-based game. Players need to SEE creatures moving and interacting.
+
+**Agent-Based Modeling (ABM)**
+- **What it is:** Each creature/plant is an autonomous agent with local rules
+- **Data structures:** Array/Map of entity objects with position, state, and behavior rules
+- **Primal Grid already uses this:** `CreatureState` schema with FSM (idle/wander/eat/flee/hunt)
+- **Pros:** Emergent behavior, visual feedback, player-meaningful interactions
+- **Cons:** Performance scales linearly (or worse) with entity count
+- **Verdict:** This is the right model. Primal Grid's existing creature AI is already ABM.
+
+**Cellular Automata (CA)**
+- **What it is:** Grid cells update based on neighbor states (e.g., Conway's Game of Life)
+- **Data structures:** 2D grid with local update rules
+- **Application in biome sim:** Vegetation spread, fire propagation, contamination diffusion
+- **Primal Grid compatibility:** High. The existing tile grid can support CA-style rules for vegetation.
+- **Verdict:** Use CA for tile-based phenomena (plant growth, biome boundaries), ABM for creatures.
+
+### Recommended Hybrid Model
+
+**Tile-Level (Cellular Automata):**
+- Vegetation density (0-100) per tile
+- Moisture/fertility spread via CA rules
+- Biome boundary transition zones (gradual, not hard borders)
+
+**Entity-Level (Agent-Based):**
+- Creatures with needs (hunger, thirst, safety)
+- Individual movement and decision-making
+- Population dynamics emerge from agent interactions
+
+**Population-Level (Aggregated Stats):**
+- Track species counts per biome for UI display
+- Use aggregated stats to trigger events (e.g., "herbivore population collapse" warning)
+
+---
+
+## 2. Cross-Biome Interaction Mechanics
+
+### Technical Implementation Models
+
+**Species Migration**
+- **Data requirement:** Add `biomeID` field to creatures
+- **Migration trigger:** Creatures seek better conditions (more food, less predators)
+- **Implementation:** Extend existing `findNearestResource()` to search across biome borders
+- **Cost:** Minimal. Existing pathfinding logic can be adapted.
+
+**Resource Flow (Water/Nutrients)**
+- **Model:** Diffusion via CA rules on tiles
+- **Example:** Water flows from wetland biome to adjacent desert, increasing fertility
+- **Implementation:** Per-tick diffusion loop (cheap if done every N ticks, not every tick)
+- **Data:** Add `waterLevel` to `TileState` schema
+- **Cost:** Low if tick interval is 5-10 seconds.
+
+**Climate Effects**
+- **Model:** Biome-level properties (temperature, humidity) that affect adjacent tiles
+- **Example:** Forest biome reduces temperature of adjacent desert by 10%
+- **Implementation:** Store biome-level climate in a `BiomeState` schema, apply modifiers to border tiles
+- **Cost:** Negligible (run once on biome boundary changes).
+
+**Contamination/Pollution Spread**
+- **Model:** CA-based diffusion of a "pollution" value on tiles
+- **Example:** Industrial biome emits pollution that spreads to neighbors, reducing vegetation
+- **Implementation:** Tile contamination value (0-100), diffuses outward each tick
+- **Cost:** Moderate (but can be throttled to every 5-10 ticks).
+
+**Symbiotic/Parasitic Relationships**
+- **Model:** Biome-to-biome modifiers stored in a relationship matrix
+- **Example:** Biome A (forest) provides +20% herbivore spawn rate to adjacent Biome B (grassland)
+- **Implementation:** `Map<string, Map<string, BiomeRelationship>>` where keys are biome IDs
+- **Cost:** Negligible (applied on spawn/regen events, not every tick).
+
+### Recommended Priorities
+
+1. **Species migration** (MVP): Creatures can cross biome borders seeking resources.
+2. **Resource flow** (Phase 2): Water/fertility diffusion between biomes.
+3. **Climate effects** (Phase 3): Temperature/humidity modifiers.
+4. **Pollution** (Future): Only if asymmetric "evil player" design is desired.
+
+---
+
+## 3. Multiplayer Ecosystem Sync
+
+### Colyseus Architecture
+
+**Current Primal Grid Setup:**
+- Colyseus server-authoritative state (`GameState` schema)
+- Fixed tick rate (4 ticks/sec = 250ms interval)
+- Delta compression via `@colyseus/schema`
+
+### Server-Authoritative Strategy (Recommended)
+
+**What runs on server:**
+- ALL simulation logic (creature AI, tile regen, cross-biome interactions)
+- Deterministic random seed per room (reproducible behavior)
+- State mutations synchronized to clients via delta diffs
+
+**What runs on client:**
+- Rendering only
+- Optional: client-side prediction for smooth visuals (interpolate creature movement between ticks)
+- NO simulation logic (prevents cheating and desync)
+
+**Why this works:**
+- Colyseus already handles delta compression efficiently
+- Browsers can render 1,000+ entities at 60 FPS if rendering is optimized (use canvas batching, not DOM)
+- Server can simulate 5,000+ entities at 4 ticks/sec with minimal CPU
+
+### Tick Rate Strategy
+
+**Current:** 4 ticks/sec (250ms)  
+**Recommendation for biome sim:**
+- **Simulation tick:** 4 ticks/sec (keep current rate for creature AI, critical updates)
+- **Slow tick (biome-level):** 0.2 ticks/sec (5-second interval for vegetation growth, climate updates)
+- **Client render:** 60 FPS (interpolate between server ticks)
+
+**Rationale:**
+- Creature movement needs 4 Hz for responsiveness
+- Vegetation/climate changes are slow processes—5-second intervals feel natural
+- Decoupling fast/slow ticks reduces server CPU
+
+### State Synchronization
+
+**Schema Design:**
+```typescript
+class BiomeState extends Schema {
+  @type("string") id: string;
+  @type("string") ownerID: string;
+  @type("string") biomeType: string; // "forest", "desert", "wetland"
+  @type("number") temperature: number;
+  @type("number") humidity: number;
+  @type("number") herbivoreCount: number;
+  @type("number") carnivoreCount: number;
+  @type("number") vegetationDensity: number;
+}
+
+class GameState extends Schema {
+  @type([BiomeState]) biomes: ArraySchema<BiomeState>;
+  @type([CreatureState]) creatures: ArraySchema<CreatureState>;
+  @type([TileState]) tiles: ArraySchema<TileState>;
+}
+```
+
+**Performance Consideration:**
+- Colyseus diffs only changed fields. If 500 tiles change per tick, only those diffs are sent.
+- Creatures moving every tick = high diff volume. Use spatial hashing to batch updates.
+- Biome-level stats (temperature, counts) change infrequently = minimal bandwidth.
+
+### Network Bandwidth
+
+**Current Primal Grid:**
+- ~32 herbivores + 16 carnivores = 48 entities
+- At 4 ticks/sec, each moving = ~200 bytes/tick (compressed deltas)
+- Total: ~800 bytes/sec per client (negligible)
+
+**Biome Sim at Scale (5,000 entities):**
+- If ALL entities move every tick = ~20 KB/tick = 80 KB/sec per client (problematic)
+- **Solution:** Spatial interest management (only sync entities near player's viewport)
+- With interest management: ~500 visible entities = 8 KB/sec (acceptable)
+
+### Determinism Requirement
+
+**Critical:** Server simulation must be deterministic for:
+- Replay debugging
+- Potential future: client-side prediction
+
+**Ensure:**
+- Use seeded RNG (not `Math.random()`)
+- Fixed update order (iterate Maps in sorted key order, not insertion order)
+- No floating-point precision issues (use integers for positions)
+
+---
+
+## 4. Emergent Behavior Patterns
+
+### Key Principles
+
+**Positive Feedback Loops** (destabilizing, create growth/collapse)
+- Example: More herbivores → more carnivores → herbivore population crashes → carnivores starve
+- Tuning: Limit carnivore spawn rate to prevent overhunting
+
+**Negative Feedback Loops** (stabilizing, create equilibrium)
+- Example: Low vegetation → herbivores migrate → vegetation regenerates → herbivores return
+- Tuning: Ensure resource regen rate can support stable populations
+
+**Edge Cases to Avoid:**
+- Total herbivore extinction (game becomes boring)
+- Exponential carnivore growth (kills all prey instantly)
+- Stagnant equilibrium (no player-meaningful changes)
+
+### Tuning for "Interesting" Simulation
+
+**Research shows:**
+- Systems at "edge of chaos" (between order and chaos) are most engaging
+- Requires frequent small perturbations (weather events, migration, player actions)
+- Players need agency to influence outcomes (not just watch a spreadsheet)
+
+**Recommendations:**
+1. **Add stochasticity:** Random events (drought, plague, predator wave) break equilibrium
+2. **Player actions matter:** Territory expansion affects creature spawn rates, resource flow
+3. **Visible feedback:** UI shows biome health, population trends, warnings ("Herbivore population critical!")
+4. **Intervention mechanics:** Players can reintroduce species, build structures to help biomes
+
+---
+
+## 5. Primal Grid's Existing Systems: What Can Be Reused?
+
+### Assets (What Already Works)
+
+**✅ Tile Grid System (`TileState` schema)**
+- Already has `fertility`, `moisture`, `resourceType`, `resourceAmount`
+- Can extend with: `vegetationDensity`, `waterLevel`, `contamination`
+
+**✅ Creature AI (`creatureAI.ts`)**
+- FSM-based (idle/wander/eat/flee/hunt)
+- Detection radius, pathfinding (Manhattan greedy)
+- Can extend with: biome preference logic, migration triggers, thirst need
+
+**✅ Territory Ownership (`territory.ts`)**
+- Can be repurposed as "biome ownership"
+- Instead of claiming individual tiles, players manage entire biomes
+
+**✅ Colyseus State Sync**
+- `@colyseus/schema` already handles delta compression
+- Server-authoritative architecture is correct
+
+**✅ Procedural Map Generation (`mapGenerator.ts`)**
+- Simplex noise for elevation/moisture
+- Can be extended to generate distinct biome regions (not just individual tile types)
+
+### Gaps (What Needs to Be Built)
+
+**❌ Biome-Level Abstraction**
+- Currently: Individual tiles have types (Grassland, Forest, etc.)
+- Needed: Contiguous regions with biome identity (`BiomeState` schema)
+- Work: Cluster tiles into biomes during map generation
+
+**❌ Cross-Biome Interaction Logic**
+- Currently: Creatures only interact with tiles/creatures in local radius
+- Needed: Migration logic, resource flow, climate effects
+- Work: New `biomeInteraction.ts` module
+
+**❌ Vegetation Simulation**
+- Currently: Static resource nodes on tiles
+- Needed: Dynamic vegetation that grows/spreads/dies
+- Work: CA-based vegetation update loop
+
+**❌ Population Dynamics Tracking**
+- Currently: Creatures are individual entities only
+- Needed: Aggregated stats per biome (for UI and balance tuning)
+- Work: Maintain `Map<biomeID, SpeciesCount>` updated each tick
+
+**❌ Biome-Specific Spawn Logic**
+- Currently: Creatures spawn randomly on preferred tile types
+- Needed: Spawn rates depend on biome health, vegetation density
+- Work: Modify `spawnCreatures()` to check biome state
+
+### Migration Effort Estimate
+
+| System | Reuse % | New Work |
+|--------|---------|----------|
+| Tile Grid | 80% | Add biome fields |
+| Creature AI | 60% | Add migration, biome preference |
+| Territory | 40% | Refactor to biome ownership |
+| Map Generation | 50% | Cluster tiles into biomes |
+| State Sync | 90% | Add `BiomeState` schema |
+| **New Systems** | 0% | Vegetation CA, cross-biome logic, population tracking |
+
+**Total Effort:** ~4-6 weeks for 1 developer to build MVP with 2-3 biome types and basic cross-biome interactions.
+
+---
+
+## 6. Scope Assessment: Realistic Limits for Browser + Colyseus
+
+### Entity Count Limits
+
+**JavaScript/Browser Performance:**
+- **100,000+ entities (data only):** Possible if no rendering. Just arrays in memory.
+- **10,000-50,000 entities (minimal rendering):** Possible with canvas batching, spatial culling.
+- **1,000-5,000 entities (full ABM + rendering):** Realistic for smooth 60 FPS gameplay.
+
+**Recommended Target for Primal Grid:**
+- **1,000 creatures** total across all biomes (per game room)
+- **200-300 creatures per biome** (3-5 biomes per map)
+- **10,000 tiles** with dynamic vegetation state (100x100 map)
+
+**Why this is achievable:**
+- Current Primal Grid: 48 creatures on 64×64 map (4,096 tiles)
+- Proposed: 1,000 creatures on 100×100 map (10,000 tiles)
+- Entity count increase: 20x creatures, 2.4x tiles
+- Modern V8 engine can handle this at 4 ticks/sec server-side
+
+### Optimization Strategies
+
+**Spatial Partitioning (Quadtree/Grid Hash)**
+- Current: O(n²) creature interactions (findNearestOfType loops all creatures)
+- Needed: O(log n) or O(1) spatial queries
+- Implementation: Use quadtree to bucket creatures by region
+- Impact: 10-50x speedup for large entity counts
+
+**Entity Component System (ECS)**
+- Current: Object-oriented `CreatureState` schema
+- Alternative: ECS library (e.g., `bitecs`, `sim-ecs`)
+- Pros: Cache-friendly, data-oriented, faster iteration
+- Cons: More boilerplate, less intuitive
+- Verdict: Defer until profiling shows OOP is a bottleneck
+
+**Interest Management (Network Culling)**
+- Only sync entities within player's viewport
+- Colyseus doesn't have built-in interest management, needs custom impl
+- Impact: 10x bandwidth reduction for large maps
+
+**Throttled Updates (Tiered Tick Rates)**
+- Creature AI: 4 Hz (current)
+- Vegetation growth: 0.2 Hz (every 5 seconds)
+- Climate updates: 0.1 Hz (every 10 seconds)
+- Impact: 2-3x CPU reduction
+
+### Server CPU Constraints
+
+**AWS/Heroku/DigitalOcean Standard VPS:**
+- 1 vCPU, 1 GB RAM (typical low-tier instance)
+- Can simulate ~5,000 entities at 4 ticks/sec with optimizations
+- Can host ~10 concurrent game rooms (10,000 total entities across all rooms)
+
+**Scaling Strategy:**
+- Start with 1 room per server instance
+- If popular, use Colyseus Presence for horizontal scaling (Redis-based room distribution)
+
+### Browser Rendering Constraints
+
+**Canvas Rendering (Recommended):**
+- Can draw 10,000+ sprites at 60 FPS with proper batching
+- Use sprite atlases, avoid context switches
+- Current Primal Grid: Already uses Canvas API
+
+**DOM Rendering (Not Recommended):**
+- Max ~1,000 DOM elements before slowdown
+- Not relevant for Primal Grid (uses Canvas)
+
+---
+
+## Recommendations
+
+### MVP Scope (4-6 Weeks)
+
+**Core Features:**
+1. **3 Biome Types:** Forest, Desert, Wetland
+2. **Species Migration:** Creatures cross biome borders seeking food
+3. **Biome Ownership:** Each player manages 1 biome
+4. **Dynamic Vegetation:** CA-based vegetation growth/depletion
+5. **Population Tracking:** UI shows biome health (species counts, vegetation density)
+
+**Deferred Features:**
+- Climate effects (temperature, humidity)
+- Resource flow (water/nutrient diffusion)
+- Pollution/contamination
+- Weather events
+- Advanced AI (herding, pack behavior)
+
+### Architecture Changes Required
+
+1. **Add `BiomeState` schema** with biome-level properties
+2. **Cluster tiles into biomes** during map generation (connected component labeling)
+3. **Extend `CreatureState`** with `biomeID` and migration logic
+4. **Add vegetation CA** (tile-level vegetation density updates)
+5. **Implement spatial partitioning** (quadtree or grid hash for creature queries)
+6. **Add aggregated stats** (track species counts per biome for UI)
+
+### Performance Budget
+
+- **1,000 creatures** (200-300 per biome, 3-5 biomes)
+- **10,000 tiles** (100×100 map)
+- **4 ticks/sec** (creature AI, movement)
+- **0.2 ticks/sec** (vegetation, biome updates)
+- **Target:** 100ms server tick time (250ms budget, 150ms safety margin)
+
+### Risk Mitigation
+
+**Risk:** Simulation becomes chaotic/unbalanced
+- **Mitigation:** Start with conservative parameters, playtest iteratively, add player intervention tools
+
+**Risk:** Performance degrades with entity count
+- **Mitigation:** Profile early, implement spatial partitioning in MVP, use throttled ticks
+
+**Risk:** State sync bandwidth too high
+- **Mitigation:** Implement interest management for large maps, use compression
+
+**Risk:** Emergent behavior is boring (stable equilibrium, no surprises)
+- **Mitigation:** Add random events, tune for "edge of chaos," give players agency to perturb system
+
+---
+
+## Conclusion
+
+Biome simulation is feasible for Primal Grid with a scoped MVP approach. The existing tile grid, creature AI, and Colyseus architecture provide a solid foundation. Key technical work involves clustering tiles into biomes, adding cross-biome interaction logic, and implementing dynamic vegetation via cellular automata. Entity count limits (1,000 creatures, 10,000 tiles) are realistic for browser+Colyseus performance. Recommend greenlight for MVP prototyping with 3 biome types and species migration.
+
+**Next Steps:**
+1. Stakeholder review of this brief
+2. Design document for biome types and cross-biome mechanics (needs Orin, Hal)
+3. Prototype biome clustering algorithm (1-2 days)
+4. MVP implementation sprint (4-6 weeks)
