@@ -25,7 +25,18 @@
 - C8 Command visuals (arrows, zones) ✅
 - B8–B9 Shape UI & rendering ✅
 
-Next: Phase D spawns 2026-02-28.
+Next: **2026-03-04 — Territory Control Redesign** (awaiting user mechanic selection)
+
+## Core Context
+
+**Pre-2026-03 Work Summary:**
+- **Phases 0–4.4 Complete:** Canvas scaffolding (Vite bundler, HMR), grid rendering (GridRenderer with pre-allocated overlays per tile), biome colors (8 biome types with distinct fill colors), resource indicators (5×5px colored dots), claiming animation (pulsing overlay), creature visuals (emoji + position tracking, 4-state animation FSM), HQ markers (filled square + castle icon), HUD redesign (HTML DOM side panel 200px × 600px with inventory, territory score, level, shape carousel).
+- **Rendering Patterns:** Overlay Graphics per tile (pre-allocated in buildGrid), state-driven opacity/color updates (no reallocation), sprite atlas not needed yet (tile-based rendering), camera pan/zoom follows HQ, viewport clipping for efficiency.
+- **Color Conventions:** Biome colors in HexColors object (Forest=#228B22, Desert=#EDC9AF, etc.), player territory colors dynamically assigned per player ID, creature types have icon mappings (Herbivore 🦕, Carnivore 🦖), UI uses white/black text on panels.
+- **Input Handling:** Click-to-place shapes with preview (transparent overlay), keyboard shortcuts (G=select, D=deselect, Esc=cancel), shape carousel rotation via arrow keys, tame creatures by clicking with overlay validation.
+- **Test Suite:** 244 integration tests, rendering tests validate overlay creation/visibility/color, HUD tests check DOM element updates.
+- **Key Files:** GridRenderer.ts (tile rendering, overlay management, camera), InputHandler.ts (click/keyboard routing), HudDOM.ts (DOM panel elements, state binding), Camera.ts (pan/zoom logic).
+- **Performance:** 60 FPS target, 10k+ sprites drawable with canvas batching, no lags observed on 64×64 map with 1000 creatures.
 
 ## Learnings
 

@@ -6,6 +6,15 @@
 - **Design Document:** docs/design-sketch.md
 - **Created:** 2026-02-25T00:45:00Z
 
+## Core Context
+
+**Pre-2026-03 Work Summary:**
+- **Phases 0–4.5 Complete:** Full 6-week build plan executed through Phase 4.5 (HUD redesign). Phase 0 scaffolding (monorepo, Colyseus, PixiJS, Vite, Jest). Phase 1–2 core simulation (biomes, resources, creatures, player survival). Phase 3 base building (shapes, crafting, structures, farms). Phase 4 creature systems (schema, taming, pack commands, breeding). Phase 4.5 HUD redesign (canvas resize 800→600, HTML DOM side panel). All phases independently demonstrable. 239/240 tests passing.
+- **Architecture Decisions:** 8-phase plan (Phases 0–7), each with clear boundaries and work breakdown. Auth deferred to Phase 7. Aggressive scope fencing (no modding, no audio, no tactical combat until Phase 6+). User preference: smallest playable thing per phase, defer aggressively. Data-driven constants, server-authoritative state, no client prediction.
+- **User Directives:** Core loop hollow (fixed by Phases 3–4 mechanics). Resource display redesign (4 options analyzed, Quantity Bar recommended for 1-day impl). Phase A UAT checklist created (80+ test cases, ready for manual validation). Territory control & conquest game identity (user pivot 2026-03-04, supersedes prior A/B/C proposals).
+- **Key Learnings:** Colyseus @type() schema decorator pattern essential. Flat inventory fields necessary (MapSchema limitation). FSM-based creature AI scales well. Data-driven configs (CREATURES, RESOURCES, RECIPES) provide flexibility for balance tuning. Phased approach enables rapid iteration without scope creep.
+- **Key Files:** Decisions at `.squad/decisions.md` (merged from inbox regularly). Architecture plan at `docs/design-sketch.md`. Phase breakdowns in decisions history. Code patterns documented in this history.
+
 ## Learnings
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->

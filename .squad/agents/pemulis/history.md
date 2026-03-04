@@ -24,7 +24,17 @@
 - B1–B7 Phase B implementation (shapes, worker economy) ✅
 - 244/244 integration tests passing
 
-Next: Phase D (Breeding & Pack Dynamics) ready to spawn.
+Next: **2026-03-04 — Territory Control Redesign** (awaiting user mechanic selection)
+
+## Core Context
+
+**Pre-2026-03 Work Summary:**
+- **Phases 0–4.4 Complete:** Full scaffolding (monorepo, Colyseus ESM v0.17, PixiJS v8, Vite, Jest), core simulation (biome map gen, resources, creatures, player survival), base building (placement, crafting, structures, farms), creature systems (schema, taming, pack commands, breeding), HUD redesign to HTML DOM panel.
+- **Data Patterns Established:** Flat inventory (wood/stone/fiber/berries/meat), Colyseus @type() schema decorators, data-driven constants (CREATURES, RESOURCES, RECIPES, STRUCTURES), FSM-based creature AI (idle→graze→hunt→flee), message-based player actions (PLACE, CRAFT, TAME, BREED).
+- **Architecture Decisions:** All data-driven constants in shared/src/data/, server-authoritative game state, no client prediction, creature AI runs every 2nd tick (decoupled from game ticks), pack selection stored as session state Map (not synced), trust decay + proximity gain per tick.
+- **Test Suite:** 244 integration tests passing across all phases. Key patterns: guard assertions for nil fields, creature pair finding helpers, farm growth assertions, pack membership validation.
+- **Key Files:** GameRoom.ts (main event loop), territory.ts (claim/adjacency logic), creatureAI.ts (FSM tick), GameState.ts (schema), types.ts (interfaces), constants.ts (tuning parameters), handlers/ (message processors).
+- **Performance:** 1000 creatures on 64×64 map at 4 ticks/sec, O(N) creature AI tick, no spatial partitioning yet (Phase 5 optimization).
 
 ## Learnings
 
