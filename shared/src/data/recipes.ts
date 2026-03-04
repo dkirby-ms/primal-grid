@@ -1,1 +1,1 @@
-// Recipes removed — build mode is shapes-only (PLACE_SHAPE).
+// Recipes removed — build mode uses pawn builders (SPAWN_PAWN).

@@ -7,11 +7,6 @@ const HEADER_SIZE = 16;
 const BODY_SIZE = 12;
 
 const KEYBINDINGS: [string, string][] = [
-  ['Q / E', 'Prev / Next shape'],
-  ['R', 'Rotate shape'],
-  ['1-9', 'Select shape / Craft (menu)'],
-  ['Click', 'Place shape (when selected)'],
-  ['Esc', 'Deselect shape'],
   ['W A S D', 'Pan camera'],
   ['Scroll', 'Zoom in / out'],
   ['Space', 'Center on castle'],

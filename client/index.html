@@ -88,47 +88,17 @@
         font-size: 12px;
         padding: 1px 0;
       }
-      /* Shape carousel */
-      .shape-item {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: 3px;
-        border: 2px solid transparent;
-        border-radius: 4px;
-        cursor: pointer;
-        min-width: 40px;
+      /* Builder button */
+      #spawn-builder-btn:not(:disabled):hover {
+        background: #3a3a5a;
+        border-color: #7ecfff;
+        color: #ffffff;
       }
-      .shape-item.selected {
-        border-color: #ffcc00;
-        background: rgba(255,204,0,0.15);
+      #spawn-builder-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
       }
-      .shape-item:hover {
-        background: rgba(255,255,255,0.08);
-      }
-      .shape-item .shape-label {
-        font-size: 8px;
-        color: #888;
-        margin-top: 2px;
-        white-space: nowrap;
-      }
-      .shape-item .shape-cost {
-        font-size: 8px;
-        color: #999;
-        margin-top: 1px;
-      }
-      .shape-grid {
-        display: grid;
-        gap: 1px;
-      }
-      .shape-cell {
-        width: 6px;
-        height: 6px;
-        border-radius: 1px;
-      }
-      .shape-cell.filled { background: #ffcc00; }
-      .shape-cell.empty { background: transparent; }
-      /* carousel wraps — no scrollbar needed */
+
     </style>
   </head>
   <body>
@@ -153,18 +123,27 @@
           <h3>Inventory</h3>
           <div class="inv-row"><span class="inv-icon">🪵 Wood</span><span class="inv-count" id="inv-wood">0</span></div>
           <div class="inv-row"><span class="inv-icon">🪨 Stone</span><span class="inv-count" id="inv-stone">0</span></div>
-          <div class="inv-row"><span class="inv-icon">🌿 Fiber</span><span class="inv-count" id="inv-fiber">0</span></div>
-          <div class="inv-row"><span class="inv-icon">🫐 Berries</span><span class="inv-count" id="inv-berries">0</span></div>
         </div>
         <div class="hud-section" id="section-creatures">
           <h3>Creatures</h3>
           <div class="creature-row" id="creature-counts">🦕 0 &nbsp; 🦖 0</div>
         </div>
-        <div id="shape-carousel" class="hud-section">
-          <h3>Shapes <span style="color:#666;font-size:9px">(Q/E cycle, R rotate)</span></h3>
-          <div id="shape-carousel-items" style="display:flex;flex-wrap:wrap;gap:4px;padding:2px 0;"></div>
-          <div style="font-size:9px;color:#555;margin-top:4px;">Click shape · R rotate · Esc deselect</div>
+        <div class="hud-section" id="section-builders">
+          <h3>Builders</h3>
+          <div id="builder-count" style="font-size:12px;margin-bottom:6px;">Builders: 0/5</div>
+          <button id="spawn-builder-btn" disabled style="
+            width:100%;
+            padding:6px 4px;
+            font-size:11px;
+            font-family:'Courier New',monospace;
+            background:#2a2a4a;
+            color:#cccccc;
+            border:1px solid #444466;
+            border-radius:4px;
+            cursor:pointer;
+          ">🔨 Spawn Builder (10W, 5S)</button>
         </div>
+
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

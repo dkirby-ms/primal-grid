@@ -80,22 +80,11 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
     const helpScreen = new HelpScreen(WIDTH, HEIGHT);
     app.stage.addChild(helpScreen.container);
 
-    // Input handler (click + build)
+    // Input handler (camera + keybindings)
     const input = new InputHandler(room, grid.container, app.canvas);
     input.setHud(hud);
     input.setHelpScreen(helpScreen);
     input.setCamera(camera);
-    input.setGridRenderer(grid);
-
-    // Wire level changes → update input + HUD carousel
-    hud.onLevelChange = (level: number) => {
-      input.updateShapeKeys(level);
-    };
-
-    // Update shape ghost preview every frame
-    app.ticker.add(() => {
-      input.updatePreview();
-    });
   } catch (err) {
     console.error('[main] Post-connect error:', err);
   }
