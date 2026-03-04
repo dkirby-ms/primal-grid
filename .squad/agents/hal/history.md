@@ -197,3 +197,37 @@ Hal coordinated parallel research with Gately (Game Dev) and Pemulis (Systems De
 **File:** `.squad/decisions.md` (merged from inbox 2026-03-02T20:26:24Z)
 
 **Next steps:** Pending user approval to scope B+C hybrid into work items.
+
+- **Territory Control Architecture (2026-03-02):** User pivoted from biome-puzzle proposals (A/B/C from 2026-03-02 decisions.md) to **territory control and conquest** game identity: "Players start with immutable 9×9 territory (sacred HQ zone). All expansion is conquerable through game mechanics." Analyzed current territory system (TileState.ownerID, claimProgress, 8-tick claiming, shape placement validation at GameRoom.ts:105). Proposed architecture with three conquest mechanic options: (A) Influence Flooding (place shapes on enemy tiles, influence accumulation flips ownership, ~80 lines), (B) Resource Pressure + Territory Decay (Wood upkeep per 10 tiles, unpaid tiles decay from edges, ~60 lines), (C) Creature Conquest (tamed creatures raid border tiles, deferred Phase 5+). Recommended Option A first (smallest scope, direct spatial conflict, composable with B). Key changes: add `TileState.isHQTerritory` flag (protects starting 3×3), add `TileState.influenceValue` (0–100 per tile), remove `tile.ownerID !== player.id` rejection in handlePlaceShape (line 105), modify tickClaiming for influence logic. Existing systems preserved (shape placement, progression, resources, creatures, HUD, map gen). Estimated 6–8h for Option A MVP, 2–3 days full implementation. Proposal written to `.squad/decisions/inbox/hal-territory-control-redesign.md`. Open questions: HQ size (3×3 vs 9×9), influence visibility (tooltips vs always-on), win condition (timed rounds vs first-to-X), neutral tile income, A+B hybrid.
+
+- **Architecture pattern — Sacred vs. Contested Territory:** Boolean flag (`isHQTerritory`) + schema-level distinction cleanly separates immutable starting zones from conquerable expansion. All conquest logic checks flag before executing. Prevents "HQ flip" bugs without complex validation chains. Cost: 1 schema field + 1 conditional per conquest mechanic. Benefit: clear boundary enforcement, easy to reason about, composable with future mechanics (e.g., "can build X structure only in HQ zone"). Pattern applies to any game with "safe zones" (spawn points, home bases, sanctuaries). Files: `server/src/rooms/GameState.ts` (TileState schema), `server/src/rooms/territory.ts` (spawnHQ marking), `server/src/rooms/GameRoom.ts` (conquest validation).
+
+- **Key files — Territory System:**
+  - `server/src/rooms/territory.ts` — Territory claiming logic (spawnHQ, isAdjacentToTerritory, claimTile, getTerritoryCounts)
+  - `server/src/rooms/GameRoom.ts` — Shape placement handler (line 78–131), claiming tick (line 203–226), territory income (line 160–185)
+  - `server/src/rooms/GameState.ts` — TileState schema (ownerID, claimProgress, claimingPlayerID, shapeHP)
+  - `shared/src/types.ts` — ITileState interface (defines tile data contract)
+  - `shared/src/constants.ts` — TERRITORY constants (STARTING_SIZE=3, CLAIM_TICKS=8, starting resources)
+
+
+### 2026-03-04 Territory Control Architecture (Cross-Team Proposal)
+
+Hal authored comprehensive architecture proposal for territory control pivot. **Pemulis and Gately independently analyzed the same proposal and delivered complementary detailed system design + rendering design.** All three agents working in parallel on same user directive achieved alignment on data model, code locations, and implementation roadmap.
+
+**Hal's Proposal:**
+- Three conquest mechanic options: (A) Influence Flooding (RECOMMENDED, ~80 lines, 6–8h), (B) Resource Pressure + Territory Decay (~60 lines, 2–3d with A), (C) Creature Conquest (deferred Phase 5+, ~120 lines)
+- Key code change identified: Remove `tile.ownerID !== player.id` rejection in `handlePlaceShape` (line 105 GameRoom.ts)
+- Schema additions: `TileState.isHQTerritory` flag, `TileState.influenceValue` (0–100), `PlayerState.influence`
+- Existing systems preserved: shape placement, progression, resources, creatures, HUD, map gen
+- Open questions for dkirby-ms: HQ size (3×3 vs 9×9), influence visibility, win condition, neutral tile income, A+B hybrid timing
+- Deliverable: `.squad/decisions/inbox/hal-territory-control-redesign.md` (240 lines)
+
+**Team Alignment:**
+- **Pemulis confirmed feasibility:** 5 new TileState fields, 7 numbered mechanics, 5-phase roadmap (7–10 days full, 3–5 days Phase 1+2 core loop). All code locations identified.
+- **Gately confirmed rendering ready:** 4 visualization layers fit into existing overlay pattern, ~50 lines MVP, zero perf regression.
+- **Architecture pattern validated:** Schema-level `isHQTerritory` flag cleanly separates immutable from conquerable territories, prevents bugs, composable with future mechanics.
+
+**Status:** Decision merged to `.squad/decisions.md` (2026-03-04 Territory Control section). Orchestration logs written for all three agents. Session log: `.squad/log/2026-03-04T2126-territory-redesign.md`. **READY FOR USER DECISION** on mechanic choice + design confirmation.
+
+**Next steps:** Await dkirby-ms approval to scope into work items.
+

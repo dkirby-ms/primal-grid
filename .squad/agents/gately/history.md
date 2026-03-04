@@ -31,6 +31,19 @@ Next: Phase D spawns 2026-02-28.
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
+### Territory Control Pivot — Rendering Analysis (2026-02-28)
+
+Analyzed rendering/UI needs for the new territory control + influence game pivot. Key findings:
+
+- **Immutable vs. Conquered Territory:** GridRenderer can distinguish these via overlay color/opacity without new render objects. If immutable territory is always 9×9 from HQ, compute client-side; otherwise, server sends `isImmutable` flag. Solid low-alpha fill for immutable, dashed border for conquered.
+- **Contested Territory:** Track `influencingPlayerIds[]` on tile state (server-side). Render with stripe/hatch pattern or color blend when 2+ players have influence. No new Graphics objects needed — use existing overlay with different stroke pattern.
+- **Influence Strength (Phase 2):** Can extend overlay alpha based on distance to HQ or active unit presence. Already have `shapeHP` tracking for territory health — can reuse this metric.
+- **Minimap (defer):** Skip for MVP. HudDOM already shows territory scores. Add player color legend to HelpScreen if needed.
+- **Zero breaking changes:** All proposals fit into existing GridRenderer.updateTerritoryOverlay() pattern. Pre-allocated overlay Graphics per tile, no dynamic allocation. Rendering still O(N) per sync, O(1) per tile per frame.
+- **Blockers:** Need server confirmation on whether `isImmutable` and `influencingPlayerIds[]` will be sent on tile state. Once confirmed, implementation is ~50 lines of code across GridRenderer and HudDOM.
+
+Full analysis written to `.squad/decisions/inbox/gately-territory-rendering.md`. Ready to implement Phase 1 (immutable territory visual) immediately after server sends metadata.
+
 ### Progression UI (2026-02-28)
 
 - **Level/XP HUD section:** Added to index.html above shapes carousel. Uses existing stat-bar-wrap/stat-bar CSS classes for XP progress bar. Cyan (#7ecfff) color scheme to distinguish from gold territory display.
@@ -560,3 +573,42 @@ Hal proposed three redesign options for the hollow core gameplay loop. This affe
 **Impact on Gately's work:** No immediate client changes needed for any proposal. All three are server-side logic additions (scoring, upkeep ticking, settling mechanics). Gately awaits dkirby-ms selection before scoping Phase A of the chosen proposal. UI components (round timer, score display, creature settling visuals) will depend on which proposal is selected.
 
 **Status:** Decision merged to `.squad/decisions.md`. Awaiting dkirby-ms selection.
+
+### 2026-03-04 Territory Control Rendering Design (Cross-Team Alignment)
+
+Gately delivered rendering layer analysis for user territory control pivot. **Hal (architecture lead) and Pemulis (system design) worked independently on same directive and converged on compatible data model + implementation roadmap.** All three agents achieved alignment on what client must display and how existing renderer supports all proposed changes.
+
+**Gately's Rendering Analysis:**
+- Current GridRenderer assessment: Solid foundation, pre-allocated overlay Graphics per tile, Colyseus state binding. Production-ready for territory visualization.
+- 4 rendering layers identified:
+  1. **Immutable vs. Conquered Territory** (~15 lines) — Solid fill (low alpha) for HQ, dashed border for expansion
+  2. **Contested Territory** (~30 lines) — Stripe/hatch pattern when multiple influences overlap
+  3. **Influence Visualization** (~15 lines Phase 2) — Optional gradient/heat map, can defer
+  4. **Territory Health** (~10 lines) — Border thickness + saturation based on shapeHP
+- Performance analysis: Zero new render objects, uses existing overlay system, O(N) per state change, O(1) per tile per frame, no degradation
+- Implementation checklist: MVP (immutable/conquered distinction) can start immediately once server sends `isImmutable` flag. Phase 2 (contested zones) waits for `influencingPlayerIds[]` field.
+- Code locations identified: GridRenderer.ts lines 127–193 (updateTerritoryOverlay), HudDOM.ts lines 166–168 (territory score display)
+- Optional Phase 3: Minimap (deferred to Phase 2+, or use HUD legend instead)
+- Deliverable: `.squad/decisions/inbox/gately-territory-rendering.md` (272 lines)
+
+**Team Alignment:**
+- **Hal's architecture proposal** specifies what server sends (isHQTerritory flag, influenceValue, influencingPlayerIds); Gately designs how client visualizes it
+- **Pemulis's data model** (5 TileState fields) determines rendering inputs; Gately confirms all fields have visual representation
+- **Cross-team validation:** All three agents identified immutable territory as core visual distinction, influence as numeric property needing visual encoding, contested zones needing special rendering
+- **Zero breaking changes:** All rendering additions fit into existing overlay pattern, no new APIs, no performance impact
+
+**Status:** Decision merged to `.squad/decisions.md` (2026-03-04 Territory Control section). Orchestration log: `.squad/orchestration-log/2026-03-04T2126-gately.md`. **READY FOR IMPLEMENTATION** once Pemulis confirms server data fields.
+
+**Rendering patterns:**
+- Overlay-based distinction (reuses existing territory overlay system)
+- Contest visualization (adapts claiming pulsing animation pattern)
+- Multi-player color blending (future enhancement, not MVP)
+- Health state encoding (adapts existing shapeHP tracking)
+
+**Dependencies on Pemulis:**
+- Server sends `isImmutable` flag on each tile (MVP blocker for immutable territory visual)
+- Server sends `influencingPlayerIds[]` list (Phase 2 blocker for contested visualization)
+- Server sends `influenceStrength: number` (Phase 2 enhancement, optional)
+
+**Next steps:** Await Pemulis's server implementation to begin rendering work. MVP can start immediately for immutable territory distinction (uses static HQ distance computation if server doesn't send flag).
+

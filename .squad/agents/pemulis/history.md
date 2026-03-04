@@ -593,3 +593,74 @@ Hal proposed three redesign options for the hollow core gameplay loop. This is P
 **Architecture note:** All proposals preserve existing systems. Zero deletions. Pure additions to scoring, ticking, or creature AI.
 
 **Status:** Decision merged to `.squad/decisions.md`. Awaiting dkirby-ms selection.
+
+### 2026-03-02 Territory Conquest Mechanics Design (Gameplay Pivot)
+
+**Context:** dkirby-ms pivoted game identity to territory control — starting 3×3 territory immutable, expansion territory conquerable through various mechanics.
+
+**Analysis completed:**
+- **Current territory system:** Examined TileState schema (ownerID, shapeHP, claimProgress, claimingPlayerID), PlayerState (HQ coords, score), shape placement mechanics, claiming process (8-tick duration), territory income, progression system.
+- **Key files:** `server/src/rooms/territory.ts` (claim/adjacency logic), `server/src/rooms/GameRoom.ts` (PLACE_SHAPE handler, tickClaiming, HQ spawn), `shared/src/types.ts` (schemas), `shared/src/data/shapes.ts` (7 polyomino catalog), `shared/src/constants.ts` (TERRITORY, SHAPE constants).
+- **Current mechanics:** HQ spawns 3×3 starting territory with 10 wood/5 stone/5 berries. Shape placement (7 unlockable polyominos, 8 resource cost) claims adjacent tiles via 8-tick claiming process. Tiles permanently owned once claimed. No conquest, no damage, no defense mechanics exist yet.
+
+**Proposed mechanics:**
+1. **Immutable vs Conquerable:** Add `isStartingTerritory: boolean` field to TileState. Mark HQ tiles during spawn. Conquest mechanics skip these tiles.
+2. **Influence System:** Add `influenceScore` (0-100) and `influenceOwner` fields. Calculate from adjacent shapes (+20 each), territory depth (+5 per hop from enemy), structures (+10), base (+10). Tiles <40 influence are vulnerable. Recalculate every 20 ticks.
+3. **Shape Overlap Conquest:** Allow placing shapes on enemy tiles with influenceScore <40. Costs 2× resources. Starts contest mode (`contestingPlayerID`, `contestProgress` fields). Contest resolves via influence differential — high influence tiles resist capture.
+4. **Creature Siege:** Tamed creatures (Level 6+) can attack enemy tiles, dealing 5 damage/tick to shapeHP. Weakened tiles (shapeHP=0) drop influenceScore by 50%, easier to contest. Integrates pet system.
+5. **Economic Pressure:** Tiles adjacent to higher-influence enemy territory drain influence over time (differential/20 per 40 ticks). Creates "influence fronts" and border pressure.
+6. **Defense Mechanics:** Reinforce via shape placement (restores shapeHP), emergency repair message (4 resources, instant), guard creatures intercept sieging enemies.
+
+**Data model changes:**
+- TileState: +5 fields (isStartingTerritory, influenceScore, influenceOwner, contestingPlayerID, contestProgress)
+- CreatureState: +2 fields (command, commandTarget) — reuses Phase C pawn command pattern
+- New message: REPAIR_TILE with RepairTilePayload
+- New constants: CONQUEST object with 11 tuning parameters
+
+**Implementation roadmap:** 5 phases, 7-10 days total. Phase 1+2 (influence + shape overlap) recommended first (~3-5 days) for core conquest gameplay. Phases 3-5 (drain, siege, guard defense) add complexity, can follow based on playtesting.
+
+**Alternative considered:** Simpler "Flag Capture" mechanic (1-2 days) for faster prototyping — place flag on undefended enemy tile, 40 ticks to capture. Less depth but clearer gameplay.
+
+**Open questions for dkirby-ms:** Win/loss conditions, creature integration timing (Level 6+ or earlier?), resource balance philosophy (constant spending vs one-time investment?), multiplayer spawn density.
+
+**Deliverable:** `.squad/decisions/inbox/pemulis-territory-conquest-mechanics.md` — 18KB design doc with code examples, data model specs, implementation phases, tactical scenarios.
+
+**Architecture patterns:**
+- Influence calculation tick function (same pattern as resource regen, creature respawn)
+- Contest progress system (similar to claim progress but bidirectional)
+- Creature command routing (extends Phase C pawn FSM)
+- Tile property flags (isStartingTerritory follows walkability pattern)
+- Message-based player actions (REPAIR_TILE follows PLACE_SHAPE/CRAFT pattern)
+
+**Key insight:** Conquest mechanics compose cleanly with existing systems. Shape placement already has adjacency validation, resource costs, tile targeting. Creature AI already has command FSM from Phase C. shapeHP field exists but unused — perfect for damage system. Zero deletions, pure extensions. Estimated 300-400 lines total across all phases.
+
+### 2026-03-04 Territory Conquest Mechanics (Cross-Team Alignment)
+
+Pemulis delivered detailed system design in response to user territory control pivot. **Hal (architecture proposal) and Gately (rendering design) worked independently on same directive and converged on same data model + implementation roadmap.** All three agents aligned on phased approach, code locations, and feasibility.
+
+**Pemulis's System Design:**
+- Deep codebase analysis: Current TileState schema audit, PlayerState schema, existing claiming logic, current limitations (no conquest, no defense, no influence system, no multiplayer pressure)
+- 7 proposed mechanics: (1) Immutable Territory flag, (2) Influence System (0–100 per tile from shapes, depth, structures), (3A) Shape Overlap Invasion, (3B) Creature Siege, (3C) Economic Pressure, (4) Defense/Reinforcement, (5) Guard Creatures
+- Data model: 5 TileState fields + CreatureState extensions + 1 message type + 11-constant CONQUEST object
+- Implementation roadmap: 5 phases, 7–10 days total. Phase 1+2 (influence + conquest) recommended first (~3–5 days). Phases 3–5 add complexity, defer based on playtesting.
+- Alternative simpler "Flag Capture" mechanic included for comparison (~1–2 days)
+- Open questions for dkirby-ms: Win/loss conditions, creature integration timing, resource balance, multiplayer density
+- Deliverable: `.squad/decisions/inbox/pemulis-territory-conquest-mechanics.md` (395 lines, comprehensive)
+
+**Team Alignment:**
+- **Hal's architecture proposal** feeds into Pemulis's mechanic design; Pemulis confirms feasibility, provides detailed scope estimates
+- **Gately's rendering design** specifies what client must display; Pemulis's data model (influenceScore, contestingPlayerID, etc.) determines what server exposes
+- **Cross-team validation:** All three agents identified same code locations (GameRoom.ts:105, territory.ts, creatureAI.ts) and same schema fields without coordination
+- **Parallelization confirmed:** Phases 2–4 can run independently once Phase 1 (foundation) complete
+
+**Status:** Decision merged to `.squad/decisions.md` (2026-03-04 Territory Control section). Orchestration log: `.squad/orchestration-log/2026-03-04T2126-pemulis.md`. **READY FOR WORK ITEM SCOPING** once dkirby-ms confirms mechanic choice.
+
+**Architecture patterns discovered:**
+- Influence calculation tick function (reuses resource regen pattern)
+- Contest progress system (similar to claim progress but bidirectional)
+- Creature command routing (extends Phase C FSM)
+- Tile property flags (`isStartingTerritory` follows walkability pattern)
+- Message-based player actions (REPAIR_TILE follows PLACE_SHAPE pattern)
+
+**Next steps:** Await user mechanic choice, then scope Phase 1+2 into 6–8 work items for team implementation.
+

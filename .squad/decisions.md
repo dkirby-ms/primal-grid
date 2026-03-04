@@ -2945,3 +2945,200 @@ Biome simulation is feasible for Primal Grid with a scoped MVP approach. The exi
 2. Design document for biome types and cross-biome mechanics (needs Orin, Hal)
 3. Prototype biome clustering algorithm (1-2 days)
 4. MVP implementation sprint (4-6 weeks)
+
+---
+
+## 2026-03-04: Territory Control Core Identity (SUPERSEDES Proposals A/B/C)
+
+**Date:** 2026-03-04T21:26:00Z  
+**Author:** dkirby-ms (User Directive captured by Scribe)  
+**Status:** PROPOSED — awaiting approval on specific mechanics  
+**Context:** User pivot from biome-puzzle proposals (A/B/C from 2026-03-02) to **territory control and conquest game identity**.
+
+### Core Identity
+
+> The game is a game about territory control and influence. Players start with a small immutable 9×9 territory (sacred HQ zone, already implemented as 3×3). This starting territory is immutable and will never change hands. However, any territory subsequently gained by a player can be conquered by other players through various game mechanics (to be decided).
+
+**This supersedes Proposals A/B/C.** The core loop is now explicitly competitive, with territorial conflict as the primary interaction.
+
+### Key Design Decisions (Awaiting User Confirmation)
+
+1. **HQ Immunity:** Starting territory (3×3 currently, user specified "9×9" but likely conceptual not literal) is sacred and can NEVER be conquered via any mechanic
+2. **Expansion Territory:** All tiles beyond HQ are conquerable through game mechanics TBD
+3. **Mechanic Choice:** Three options proposed (Hal lead) with scoring and roadmap:
+   - **Option A: Influence Flooding** (RECOMMENDED) — Place shapes on neutral/enemy tiles, influence accumulates, tiles flip when attacker influence > defender's. ~80 lines, 6–8h MVP.
+   - **Option B: Resource Pressure + Territory Decay** — Territory upkeep cost (1 Wood per 10 tiles). Unpaid tiles decay from edges inward. ~60 lines, composable with A. Can add Phase 2.
+   - **Option C: Creature Conquest** (Deferred Phase 5+) — Tamed creatures raid enemy border tiles. ~120 lines, depends on Phase 4 creature ownership.
+
+### Architecture (Hal's Proposal)
+
+**Data Model Changes:**
+- Add `TileState.isHQTerritory: boolean` — marks starting 3×3 as sacred (prevents conquest logic)
+- Add `TileState.influenceValue: number` (0–100 scale) — numeric influence per tile
+- Add `PlayerState.influence: number` — player's total influence resource pool
+
+**Key Code Change:**
+- `GameRoom.ts` line 105: Remove `tile.ownerID !== player.id` rejection (allows shape placement on enemy tiles)
+- Add HQ protection check to prevent conquest on `isHQTerritory = true` tiles
+
+**Existing Systems Preserved:**
+- ✅ Shape placement (tetris-style, rotation, cost, adjacency validation)
+- ✅ Progression (7 levels, XP, shape unlocks)
+- ✅ Resource system (Wood/Stone/Fiber/Berries, passive income)
+- ✅ Creature AI (herbivore/carnivore FSM, grazing, hunting)
+- ✅ HUD (DOM panel, player stats, inventory)
+- ✅ Map generation (Simplex noise, 64×64, 8 biomes)
+
+**Total scope (Option A + B):** ~210 lines core logic, ~50 lines client rendering. Estimated 2–3 days (A), 4–5 days (A+B).
+
+### System Design (Pemulis' Proposal)
+
+**Proposed 5-Phase Implementation Roadmap:**
+1. **Phase 1: Foundation** (1–2 days) — Add isStartingTerritory flag, influence calculation from adjacency/depth/structures
+2. **Phase 2: Basic Conquest** (2–3 days) — Shape overlap invasion, contest logic, tile flip mechanics
+3. **Phase 3: Economic Pressure** (1 day) — Border tiles lose influence adjacent to stronger enemy influence
+4. **Phase 4: Creature Siege** (2–3 days) — Creatures deal damage to enemy tiles, tile health system
+5. **Phase 5: Defense Mechanics** (1 day) — Guard creatures intercept, emergency repair, reinforcement
+
+**Data Model (5 new TileState fields):**
+```typescript
+isStartingTerritory: boolean    // Immutable HQ zone
+influenceScore: number          // 0–100, ownership strength
+influenceOwner: string          // Player contributing influence
+contestingPlayerID: string      // Player contesting ownership
+contestProgress: number         // 0–100, contest progress
+```
+
+**Mechanics Details:**
+- **Mechanic 1: Shape Overlap Invasion** — Place shapes on vulnerable enemy tiles (influence < 40), tiles contested, flip when attacker influence > defender's for 8 ticks. Cost 2× resources on enemy territory.
+- **Mechanic 2: Creature Siege** — Tamed creatures attack enemy border tiles, deal 5 damage/tick, weaken territory. Damaged tiles easier to contest.
+- **Mechanic 3: Economic Pressure** — Border tiles adjacent to stronger enemy lose 2 influence per tick. Vulnerable at <30 influence.
+- **Mechanic 4: Reinforcement** — Place shapes to boost influence (+20 per block), or emergency repair (4 resources, instant, no shape).
+- **Mechanic 5: Guard Creatures** — Guard creatures with "guard" command intercept sieging pets, prevent territory loss.
+
+**Recommendation:** Implement Phase 1 + Phase 2 first (influence + conquest). Phases 3–5 follow based on playtesting. Can parallelize phases 2–4.
+
+### Rendering Design (Gately's Proposal)
+
+**Four Rendering Layers Identified (Production-Ready):**
+
+1. **Immutable vs. Conquered Territory** (~15 lines)
+   - Immutable: Solid fill, low alpha (0.15), no border
+   - Conquered: Dashed border, higher alpha (0.6)
+   - Uses existing overlay API, no new objects
+
+2. **Contested Territory** (~30 lines Phase 1–2)
+   - When multiple influences overlap: Render stripe/hatch pattern
+   - Approach 1 (MVP): Dashed border pattern when `influencingPlayerIds.length > 1`
+   - Can upgrade to color blend Phase 2
+
+3. **Influence Visualization** (~15 lines Phase 2)
+   - Optional: Gradient/heat map showing control strength
+   - Phase 1 MVP: Skip (show contested tiles with higher alpha)
+   - Phase 2: Render overlay alpha based on influenceStrength metric
+
+4. **Territory Health** (~10 lines)
+   - Border thickness + saturation based on shapeHP
+   - 100% → thick bright, 50% → mixed dashed, 1% → thin faded
+   - Uses existing shapeHP tracking
+
+**Performance:** No regressions (uses existing overlay system, O(N) per state change, pre-allocated graphics).
+
+### Open Questions for dkirby-ms
+
+**Critical (block implementation):**
+1. Which conquest mechanic(s)? Option A (Influence Flooding), A+B hybrid, or alternative?
+2. HQ size: Keep 3×3 current or expand to 9×9?
+3. Win condition: Timed rounds (10 min) + highest territory score, or first-to-X tiles?
+
+**Important (design detail):**
+4. Influence visibility: Show numeric values always, or just color gradients + hover tooltip?
+5. Neutral tile behavior: Do unclaimed tiles generate resources? (Recommendation: no, only incentivizes claiming)
+6. Upkeep cost per tile: 1 Wood per 10 tiles (from Option B), or different?
+7. Stalemate mitigation: A+B hybrid for scarcity + influence decay, or rely on A alone + playtesting?
+
+**Lower priority:**
+8. Creature spawn proximity: Current MIN_HQ_DISTANCE = 10 tiles. Close more for early conflict?
+9. Shape queue: Keep optional, or remove from scope?
+10. Creature taming timing: Is Level 6+ creature ownership ready for Phase 4 implementation, or defer?
+
+### Success Metrics
+
+**Definition of Done:**
+- Players can place shapes on neutral AND enemy tiles (except HQ)
+- Tiles flip ownership when influence threshold crossed
+- HQ (3×3 or 9×9) immune to conquest
+- Influence decays on uncontested tiles
+- Multiplayer tested (2 players contesting same border tiles)
+- 304+ tests passing (no regressions)
+- Playable 10-minute round with clear winner (highest territory score)
+
+**Key Risk Mitigations:**
+1. **Influence tuning:** Plan 2–3 balance passes (flip speed, decay rate, cost adjustments)
+2. **Visual clarity:** Color gradients essential; contested zones must be obvious
+3. **Stalemate potential:** Option B (upkeep decay) essential if players spam shapes; recommend A+B hybrid
+
+### Implementation Timeline
+
+**Option A only (MVP, Influence Flooding):**
+1. Add isHQTerritory flag to schema (~20 lines, 30 min)
+2. Remove ownerID rejection, add HQ protection (~10 lines, 15 min)
+3. Add influenceValue field (~10 lines, 15 min)
+4. Modify tickClaiming for influence accumulation (~40 lines, 2h)
+5. Add tickInfluenceDecay (~40 lines, 1h)
+6. Client rendering: influence color overlay (~50 lines, 2h)
+7. Playtesting + tuning (~4h)
+**Total: 6–8 hours critical path.**
+
+**Option A + B (hybrid, resource scarcity + influence):**
+- Adds Phase 2 (upkeep, decay, resource depletion): ~3–4 additional hours
+**Total: 2–3 days critical path.**
+
+### Next Steps
+
+1. dkirby-ms confirms mechanic choice + HQ size + win condition
+2. Hal scopes approved option into work items
+3. Pemulis implements server logic (schema, placement, influence, conquest ticks)
+4. Gately implements client rendering (immutable territory overlay, contested visualization)
+5. Steeply writes conquest scenario tests + multiplayer validation
+6. Playtesting → tune constants → deliver MVP
+
+**Estimated delivery:** 2–3 days (Option A), 4–5 days (A+B hybrid).
+
+**Deferral candidates:** Creature conquest (Option C), biome scoring (Proposal A), creature taming integration, fog of war, matchmaking, shape queues.
+
+---
+
+## Decision: Three Territory Conquest Mechanics Analyzed (Hal, Pemulis, Gately)
+
+**Date:** 2026-03-04T21:26:00Z  
+**Authors:** Hal (Lead), Pemulis (Systems), Gately (Rendering)  
+**Status:** PROPOSAL — Three mechanics analyzed with detailed scope, roadmap, and rendering design  
+**Linked:** `.squad/orchestration-log/2026-03-04T2126-*.md`
+
+### Summary
+
+Three agents analyzed territory control pivot independently and delivered:
+- **Hal (Lead):** Architecture proposal with 3 conquest mechanics, line-count estimates, phased roadmap, open questions
+- **Pemulis (Systems Dev):** Deep codebase analysis, 5-phase implementation breakdown, data model design, constants table
+- **Gately (Game Dev):** 4 rendering layers with performance analysis, confirmed GridRenderer production-ready
+
+### Key Findings
+
+1. **Current System Ready:** Existing TileState schema, claiming logic, shape placement can be extended minimally
+2. **Schema Scope:** Only 5 new fields required (isStartingTerritory, influenceScore, influenceOwner, contestingPlayerID, contestProgress)
+3. **Code Locations:** Primary changes in GameRoom.ts (line 105, shape placement handler), territory.ts (HQ spawn marking), creatureAI.ts (siege commands)
+4. **Rendering Impact:** Zero breaking changes; all additions fit into existing overlay pattern (~50 lines MVP)
+5. **Parallelization:** Phases 2–4 can run in parallel once Phase 1 (foundation) complete
+
+### Cross-Agent Alignment
+
+- **Hal → Pemulis:** Architecture proposal inputs system design; Pemulis confirms feasibility
+- **Pemulis → Gately:** Data fields (isStartingTerritory, influencingPlayerIds) define what client renders; Gately designs visualization layers
+- **All three → User:** Waiting for mechanic selection + design confirmation to scope into work items
+
+### Outcome
+
+**READY FOR USER DECISION.** All three agents have independently delivered comprehensive analysis, detailed design, and implementation roadmap. Team is aligned on data model changes, code locations, and phased approach. MVP (Option A) can start immediately upon user approval.
+
+---
