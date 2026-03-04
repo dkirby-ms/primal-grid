@@ -9,7 +9,7 @@ import {
   ResourceType, TileType,
   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
   CREATURE_AI, CREATURE_RESPAWN, TERRITORY,
-  TERRITORY_INCOME, SHAPE,
+  STRUCTURE_INCOME, SHAPE,
   PROGRESSION, getLevelForXP,
   PAWN,
 } from "@primal-grid/shared";
@@ -37,7 +37,7 @@ export class GameRoom extends Room {
       this.tickResourceRegen();
       this.tickCreatureAI();
       this.tickCreatureRespawn();
-      this.tickTerritoryIncome();
+      this.tickStructureIncome();
       this.tickPawnUpkeep();
     }, 1000 / TICK_RATE);
 
@@ -113,6 +113,7 @@ export class GameRoom extends Room {
     creature.currentState = "idle";
     creature.ownerID = client.sessionId;
     creature.pawnType = "builder";
+    creature.buildMode = message.buildMode === "farm" ? "farm" : "outpost";
     creature.targetX = -1;
     creature.targetY = -1;
     creature.buildProgress = 0;
@@ -191,29 +192,31 @@ export class GameRoom extends Room {
     return this.findRandomWalkableTile();
   }
 
-  private tickTerritoryIncome() {
-    if (this.state.tick % TERRITORY_INCOME.INTERVAL_TICKS !== 0) return;
+  private tickStructureIncome() {
+    if (this.state.tick % STRUCTURE_INCOME.INTERVAL_TICKS !== 0) return;
 
+    // Count farms per player
+    const farmCounts = new Map<string, number>();
     const len = this.state.tiles.length;
     for (let i = 0; i < len; i++) {
       const tile = this.state.tiles.at(i);
-      if (!tile) continue;
-      if (tile.ownerID === "" || tile.resourceAmount <= 0) continue;
-      if (tile.shapeHP > 0) continue;
-      const owner = this.state.players.get(tile.ownerID);
-      if (!owner) continue;
-
-      const amount = TERRITORY_INCOME.AMOUNT;
-      switch (tile.resourceType) {
-        case ResourceType.Wood:    owner.wood    += amount; break;
-        case ResourceType.Stone:   owner.stone   += amount; break;
-        default: continue;
-      }
-      tile.resourceAmount -= amount;
-      if (tile.resourceAmount <= 0) {
-        tile.resourceType = -1;
-      }
+      if (!tile || tile.ownerID === "" || tile.structureType !== "farm") continue;
+      farmCounts.set(tile.ownerID, (farmCounts.get(tile.ownerID) || 0) + 1);
     }
+
+    // Grant income per player: HQ base income + farm income
+    this.state.players.forEach((player, playerId) => {
+      if (player.hqX < 0 || player.hqY < 0) return;
+
+      // HQ base income
+      player.wood += STRUCTURE_INCOME.HQ_WOOD;
+      player.stone += STRUCTURE_INCOME.HQ_STONE;
+
+      // Farm income
+      const farms = farmCounts.get(playerId) || 0;
+      player.wood += farms * STRUCTURE_INCOME.FARM_WOOD;
+      player.stone += farms * STRUCTURE_INCOME.FARM_STONE;
+    });
   }
 
   private tickCreatureAI() {

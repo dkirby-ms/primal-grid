@@ -76,8 +76,8 @@ export const CREATURE_AI = {
 export const TERRITORY = {
   /** Starting territory size in tiles (side length of square). */
   STARTING_SIZE: 9,
-  /** Starting wood for new players (enough for 2-3 builders). */
-  STARTING_WOOD: 30,
+  /** Starting wood for new players (enough for 1-2 builders). */
+  STARTING_WOOD: 25,
   /** Starting stone for new players. */
   STARTING_STONE: 15,
   /** Ticks to claim a tile (8 ticks ≈ 2 seconds at 4 ticks/sec). */
@@ -105,10 +105,18 @@ export const SHAPE = {
   BLOCK_HP: 100,
 } as const;
 
-/** Passive territory income constants. */
-export const TERRITORY_INCOME = {
+/** Structure-based income constants (StarCraft-style). */
+export const STRUCTURE_INCOME = {
+  /** Ticks between income ticks (40 ticks = 10 seconds at 4 ticks/sec). */
   INTERVAL_TICKS: 40,
-  AMOUNT: 1,
+  /** Wood income from HQ per tick. */
+  HQ_WOOD: 2,
+  /** Stone income from HQ per tick. */
+  HQ_STONE: 2,
+  /** Wood income per farm per tick. */
+  FARM_WOOD: 1,
+  /** Stone income per farm per tick. */
+  FARM_STONE: 1,
 } as const;
 
 /** Progression level definitions. */
@@ -146,4 +154,8 @@ export const PAWN = {
   MAX_PER_PLAYER: 5,
   /** Radius to scan for build sites. */
   BUILD_SITE_SCAN_RADIUS: 8,
+  /** Wood cost to build a farm structure. */
+  FARM_COST_WOOD: 8,
+  /** Stone cost to build a farm structure. */
+  FARM_COST_STONE: 3,
 } as const;

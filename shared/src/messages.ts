@@ -14,4 +14,6 @@ export interface PlaceShapePayload {
 
 export interface SpawnPawnPayload {
   pawnType: "builder";
+  /** What the builder should build: "outpost" (default) or "farm". */
+  buildMode?: "outpost" | "farm";
 }

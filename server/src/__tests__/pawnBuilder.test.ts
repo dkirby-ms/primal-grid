@@ -853,35 +853,66 @@ describe("Pawn Builder — Resource Simplification", () => {
     expect(player.berries).toBeUndefined();
   });
 
-  it("territory income only generates wood and stone", () => {
+  it("structure income generates wood and stone from HQ", () => {
     const room = createRoomWithMap(42);
     const { player } = joinPlayer(room, "p1");
 
     // Reset resources
     player.wood = 0;
     player.stone = 0;
-    if ("fiber" in player) (player as any).fiber = 0;
-    if ("berries" in player) (player as any).berries = 0;
 
-    // Ensure player has owned tiles with resources
-    // Tick territory income
-    const tickFn = typeof room.tickTerritoryIncome === "function"
-      ? () => room.tickTerritoryIncome()
+    // Tick structure income
+    const tickFn = typeof room.tickStructureIncome === "function"
+      ? () => room.tickStructureIncome()
       : null;
 
     if (tickFn) {
-      // Set tick to territory income interval
-      room.state.tick = 40; // TERRITORY_INCOME.INTERVAL_TICKS
+      room.state.tick = 40; // STRUCTURE_INCOME.INTERVAL_TICKS
       tickFn();
     }
 
-    // Wood and/or stone may have increased
-    const totalWoodStone = player.wood + player.stone;
+    // HQ base income: +2 wood, +2 stone
+    expect(player.wood).toBe(2);
+    expect(player.stone).toBe(2);
 
     // Fiber and berries should NOT have been generated
     const fiberVal = "fiber" in player ? (player as any).fiber : 0;
     const berriesVal = "berries" in player ? (player as any).berries : 0;
     expect(fiberVal).toBe(0);
     expect(berriesVal).toBe(0);
+  });
+
+  it("farm structures add income on top of HQ base income", () => {
+    const room = createRoomWithMap(42);
+    const { player } = joinPlayer(room, "p1");
+
+    // Place a farm on an owned tile
+    const ownedTile = room.state.tiles.toArray().find(
+      (t: any) => t.ownerID === "p1" && t.structureType === "hq",
+    );
+    expect(ownedTile).toBeDefined();
+    // Add a separate farm tile: find an adjacent unclaimed tile and make it a farm
+    const farmTile = room.state.tiles.toArray().find(
+      (t: any) => t.ownerID === "p1" && t.structureType !== "farm",
+    );
+    if (farmTile) {
+      farmTile.structureType = "farm";
+    }
+
+    player.wood = 0;
+    player.stone = 0;
+
+    const tickFn = typeof room.tickStructureIncome === "function"
+      ? () => room.tickStructureIncome()
+      : null;
+
+    if (tickFn) {
+      room.state.tick = 40;
+      tickFn();
+    }
+
+    // HQ base (+2W/+2S) + 1 farm (+1W/+1S) = 3W/3S
+    expect(player.wood).toBe(3);
+    expect(player.stone).toBe(3);
   });
 });

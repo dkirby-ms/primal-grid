@@ -37,6 +37,9 @@ export class TileState extends Schema {
 
   @type("boolean")
   isHQTerritory: boolean = false;
+
+  @type("string")
+  structureType: string = "";
 }
 
 export class PlayerState extends Schema {
@@ -104,6 +107,9 @@ export class CreatureState extends Schema {
 
   @type("number")
   buildProgress: number = 0;
+
+  @type("string")
+  buildMode: string = "outpost";
 }
 
 export class GameState extends Schema {

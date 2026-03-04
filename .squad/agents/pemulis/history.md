@@ -40,6 +40,15 @@ Next: **2026-03-04 — Territory Control Redesign** (awaiting user mechanic sele
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
+### StarCraft-Style Structure Economy (2026-03-04)
+
+- **TERRITORY_INCOME replaced with STRUCTURE_INCOME:** Income no longer comes from per-tile resource depletion. HQ provides +2W/+2S base income per tick (every 40 ticks). Farm structures provide +1W/+1S each. tickStructureIncome counts farm tiles per player and grants lump income.
+- **structureType field on TileState:** New schema string field ("", "hq", "outpost", "farm"). HQ tiles set on spawn, outpost/farm set by builder on build completion. This is the authoritative structure identity — not shapeHP or isHQTerritory.
+- **buildMode field on CreatureState:** Builders default to "outpost" (territory expansion). Set to "farm" via SpawnPawnPayload.buildMode. Farm builds deduct PAWN.FARM_COST_WOOD/STONE from player on completion; abort if insufficient.
+- **Starting resources rebalanced:** 25W/15S (from 30W/15S). Enough for 2 builders or 1 builder + 1 farm.
+- **Tile resourceAmount/resourceType preserved:** Still used for creature grazing (herbivore AI) and resource regen ticks. Only the income system changed from tile-based to structure-based.
+- **Shared package rebuild gotcha:** After editing shared/src, must delete tsconfig.tsbuildinfo before `npx tsc` or incremental build may skip emitting to dist/. Server reads compiled dist/ output, not source.
+
 ### Pawn Builder System & Resource Simplification (2026-03-04)
 
 - **Resource simplification:** Removed Fiber and Berries entirely. Only Wood and Stone remain. Touched types.ts, constants.ts, GameState.ts, territory.ts, mapGenerator.ts, GameRoom.ts, creatureAI.ts, and 6 test files. Grassland now yields Wood instead of Fiber/Berries. Sand yields nothing.

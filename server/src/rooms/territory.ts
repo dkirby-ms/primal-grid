@@ -57,6 +57,7 @@ export function spawnHQ(
       if (tile && tile.type !== TileType.Water && tile.type !== TileType.Rock) {
         tile.ownerID = player.id;
         tile.isHQTerritory = true;
+        tile.structureType = "hq";
         player.score += 1;
       }
     }

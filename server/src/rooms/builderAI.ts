@@ -63,9 +63,24 @@ export function stepBuilder(creature: CreatureState, state: GameState): void {
 
       creature.buildProgress += 1;
       if (creature.buildProgress >= PAWN.BUILD_TIME_TICKS) {
+        // Farm builds cost resources; abort if owner can't afford
+        if (creature.buildMode === "farm") {
+          const farmOwner = state.players.get(creature.ownerID);
+          if (!farmOwner || farmOwner.wood < PAWN.FARM_COST_WOOD || farmOwner.stone < PAWN.FARM_COST_STONE) {
+            creature.targetX = -1;
+            creature.targetY = -1;
+            creature.buildProgress = 0;
+            creature.currentState = "idle";
+            break;
+          }
+          farmOwner.wood -= PAWN.FARM_COST_WOOD;
+          farmOwner.stone -= PAWN.FARM_COST_STONE;
+        }
+
         // Build complete — claim the tile
         buildTile.ownerID = creature.ownerID;
         buildTile.shapeHP = SHAPE.BLOCK_HP;
+        buildTile.structureType = creature.buildMode === "farm" ? "farm" : "outpost";
 
         const player = state.players.get(creature.ownerID);
         if (player) {

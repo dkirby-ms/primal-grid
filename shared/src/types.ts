@@ -33,6 +33,8 @@ export interface ITileState {
   ownerID: string;
   /** Whether this tile is part of a player's immutable HQ zone. */
   isHQTerritory: boolean;
+  /** Structure type on this tile ("" = none, "hq", "outpost", "farm"). */
+  structureType: string;
 }
 
 /** Creature type identifiers. */
@@ -57,6 +59,8 @@ export interface ICreatureState {
   targetY: number;
   /** Build progress (0 to BUILD_TIME_TICKS). */
   buildProgress: number;
+  /** What the builder builds: "outpost" (default) or "farm". */
+  buildMode: string;
 }
 
 /** Placeable item types. */
