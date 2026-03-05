@@ -8,7 +8,7 @@ param appName string = 'primal-grid'
 param acrName string = 'primalgridacr'
 
 @description('Full container image reference (e.g. primalgridacr.azurecr.io/primal-grid:latest).')
-param containerImage string = '${acrName}.azurecr.io/${appName}:latest'
+param containerImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
 
 // ---------- Azure Container Registry ----------
 
