@@ -19,7 +19,7 @@ jobs:
           node-version: 20
           cache: npm
 
-      - run: npm ci --workspaces
+      - run: npm ci
       - run: npm test
 
   deploy:

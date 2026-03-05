@@ -29,6 +29,8 @@ interface CreatureEntry {
   lastBuildProgress: number;
   tileX: number;
   tileY: number;
+  displayX: number;
+  displayY: number;
 }
 
 export class CreatureRenderer {
@@ -84,7 +86,7 @@ export class CreatureRenderer {
           this.container.addChild(entry.container);
         }
 
-        // Store latest position
+        // Update target tile (display position interpolated in tick())
         entry.tileX = x;
         entry.tileY = y;
 
@@ -107,11 +109,12 @@ export class CreatureRenderer {
           entry.lastBuildProgress = 0;
         }
 
-        // Snap to tile center
-        entry.container.position.set(
-          x * TILE_SIZE + TILE_SIZE / 2,
-          y * TILE_SIZE + TILE_SIZE / 2,
-        );
+        // Position is now interpolated in tick(); only snap on first spawn
+        if (entry.displayX === 0 && entry.displayY === 0) {
+          entry.displayX = x * TILE_SIZE + TILE_SIZE / 2;
+          entry.displayY = y * TILE_SIZE + TILE_SIZE / 2;
+          entry.container.position.set(entry.displayX, entry.displayY);
+        }
       });
 
       this.herbivoreCount = herbs;
@@ -168,6 +171,8 @@ export class CreatureRenderer {
       lastBuildProgress: 0,
       tileX: 0,
       tileY: 0,
+      displayX: 0,
+      displayY: 0,
     };
   }
 
@@ -257,5 +262,17 @@ export class CreatureRenderer {
       entry.progressBar.fill({ color: 0x4caf50, alpha: 0.9 });
     }
     entry.progressBar.visible = true;
+  }
+
+  /** Smoothly interpolate creature display positions toward their target tiles. */
+  public tick(_dt: number): void {
+    const speed = 0.15;
+    for (const entry of this.entries.values()) {
+      const targetX = entry.tileX * TILE_SIZE + TILE_SIZE / 2;
+      const targetY = entry.tileY * TILE_SIZE + TILE_SIZE / 2;
+      entry.displayX += (targetX - entry.displayX) * speed;
+      entry.displayY += (targetY - entry.displayY) * speed;
+      entry.container.position.set(entry.displayX, entry.displayY);
+    }
   }
 }

@@ -20,8 +20,15 @@ const RESOURCE_COLORS: Record<number, number> = {
   [ResourceType.Stone]: 0x999999,
 };
 
-const RESOURCE_DOT_SIZE = 5;
-const RESOURCE_DOT_OFFSET = 4;
+/** Linearly interpolate between two packed RGB colors. t=0 returns a, t=1 returns b. */
+function lerpColor(a: number, b: number, t: number): number {
+  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
+  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return (r << 16) | (g << 8) | bl;
+}
 
 /** Parse a CSS hex color string (e.g. "#FF0000") to a numeric color. */
 function parseColor(color: string): number {
@@ -32,7 +39,6 @@ function parseColor(color: string): number {
 export class GridRenderer {
   public readonly container: Container;
   private tiles: Graphics[][] = [];
-  private resourceDots: Graphics[][] = [];
   private territoryOverlays: Graphics[][] = [];
   private territoryContainer: Container;
   private hqContainer: Container;
@@ -59,7 +65,6 @@ export class GridRenderer {
   private buildGrid(): void {
     for (let y = 0; y < this.mapSize; y++) {
       this.tiles[y] = [];
-      this.resourceDots[y] = [];
       this.territoryOverlays[y] = [];
       this.lastOwnerIDs[y] = [];
       this.lastShapeHPs[y] = [];
@@ -83,40 +88,33 @@ export class GridRenderer {
         this.lastShapeHPs[y][x] = 0;
         this.lastClaiming[y][x] = false;
         this.lastIsHQTerritory[y][x] = false;
-
-        // Resource indicator (hidden by default)
-        const dot = new Graphics();
-        dot.position.set(
-          x * TILE_SIZE + TILE_SIZE - RESOURCE_DOT_OFFSET - RESOURCE_DOT_SIZE,
-          y * TILE_SIZE + RESOURCE_DOT_OFFSET,
-        );
-        dot.visible = false;
-        this.container.addChild(dot);
-        this.resourceDots[y][x] = dot;
       }
     }
   }
 
-  /** Repaint a single tile to a new type. */
-  public updateTile(x: number, y: number, type: TileType): void {
+  /** Repaint a single tile, optionally tinting it to indicate a resource. */
+  public updateTile(
+    x: number, y: number, type: TileType,
+    resourceType?: number, resourceAmount?: number,
+  ): void {
     if (y < 0 || y >= this.mapSize || x < 0 || x >= this.mapSize) return;
     const g = this.tiles[y][x];
     g.clear();
-    g.rect(0, 0, TILE_SIZE, TILE_SIZE);
-    g.fill(TILE_COLORS[type] ?? TILE_COLORS[TileType.Grassland]);
-  }
 
-  /** Update the resource indicator on a tile. */
-  public updateResource(x: number, y: number, resourceType: number, resourceAmount: number): void {
-    if (y < 0 || y >= this.mapSize || x < 0 || x >= this.mapSize) return;
-    const dot = this.resourceDots[y][x];
-    if (resourceAmount > 0 && resourceType in RESOURCE_COLORS) {
-      dot.clear();
-      dot.rect(0, 0, RESOURCE_DOT_SIZE, RESOURCE_DOT_SIZE);
-      dot.fill(RESOURCE_COLORS[resourceType]);
-      dot.visible = true;
+    const baseColor = TILE_COLORS[type] ?? TILE_COLORS[TileType.Grassland];
+
+    if (resourceAmount && resourceAmount > 0 && resourceType !== undefined && resourceType in RESOURCE_COLORS) {
+      // Blend biome color toward resource color (~25%) so the biome stays recognizable
+      const tinted = lerpColor(baseColor, RESOURCE_COLORS[resourceType], 0.25);
+      g.rect(0, 0, TILE_SIZE, TILE_SIZE);
+      g.fill(tinted);
+      // Thin inner border in the resource color for extra contrast
+      const inset = 2;
+      g.rect(inset, inset, TILE_SIZE - inset * 2, TILE_SIZE - inset * 2);
+      g.stroke({ width: 1, color: RESOURCE_COLORS[resourceType], alpha: 0.4 });
     } else {
-      dot.visible = false;
+      g.rect(0, 0, TILE_SIZE, TILE_SIZE);
+      g.fill(baseColor);
     }
   }
 
@@ -274,7 +272,10 @@ export class GridRenderer {
         const tx = (tile['x'] as number) ?? idx % this.mapSize;
         const ty = (tile['y'] as number) ?? Math.floor(idx / this.mapSize);
         const type = (tile['type'] as TileType) ?? TileType.Grassland;
-        this.updateTile(tx, ty, type);
+        // Resource info passed to updateTile for background tinting
+        const resType = tile['resourceType'] as number | undefined;
+        const resAmount = tile['resourceAmount'] as number | undefined;
+        this.updateTile(tx, ty, type, resType, resAmount);
 
         // Territory overlay
         const ownerID = (tile['ownerID'] as string) ?? '';
@@ -290,13 +291,6 @@ export class GridRenderer {
         }
 
         this.updateTerritoryOverlay(tx, ty, ownerID, shapeHP, claimingPlayerID, claimProgress, isHQTerritory);
-
-        // Resource indicator
-        const resType = tile['resourceType'] as number | undefined;
-        const resAmount = tile['resourceAmount'] as number | undefined;
-        if (resType !== undefined && resAmount !== undefined) {
-          this.updateResource(tx, ty, resType, resAmount);
-        }
       });
 
       // Refresh neighbor borders for tiles whose ownership changed

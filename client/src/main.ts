@@ -64,6 +64,11 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
     grid.container.addChild(creatures.container);
     creatures.bindToRoom(room);
 
+    // Drive smooth creature movement from the app ticker
+    app.ticker.add((ticker) => {
+      creatures.tick(ticker.deltaTime);
+    });
+
     // Center camera on local player's HQ once state has synced
     room.onStateChange.once(() => {
       const localPlayer = room.state.players?.get(room.sessionId);

@@ -676,3 +676,21 @@ Previous pass removed some shape UI but missed significant remnants that were st
 - `GridRenderer.ts` shape preview was already removed in the first pass (confirmed clean)
 
 **Verification:** shared tsc ✓, server tsc --noEmit ✓, client tsc --noEmit ✓, 205/205 tests pass.
+
+---
+
+## Learnings
+
+### Resource Tile Tinting (2026-03-05)
+- Replaced per-tile `Graphics` resource dots with background color tinting via `lerpColor()` at 25% blend
+- Resource tiles now show a subtle inner border (1px, 40% alpha) in the resource color for extra contrast
+- `updateTile()` signature extended: `(x, y, type, resourceType?, resourceAmount?)` — callers pass resource info directly
+- Removed: `resourceDots[][]` array, `RESOURCE_DOT_SIZE/OFFSET` constants, `updateResource()` method
+- `lerpColor()` is a standalone helper in GridRenderer.ts — reusable for future visual blending
+
+### Smooth Creature Movement (2026-03-05)
+- `CreatureEntry` now has `displayX`/`displayY` (pixel coords) that lerp toward target tile position each frame
+- Lerp factor: 0.15 per frame — feels smooth without lagging behind
+- `tick(dt)` method on CreatureRenderer drives interpolation; wired into app.ticker in `connectToServer()`
+- First spawn snaps to position (avoids lerp from 0,0); subsequent moves interpolate
+- Pattern: ticker wiring inside `connectToServer()` since creatures instance is scoped there
