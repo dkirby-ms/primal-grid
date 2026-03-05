@@ -781,3 +781,10 @@ Hal (Lead) architected pawn-based territory expansion system per same user direc
 
 **Session log:** `.squad/log/2026-03-04T2257-pawn-implementation.md`
 
+
+### Game Log Event Broadcasting (2026-03-05)
+
+- **Server-side game log events added:** Five event types broadcast via Colyseus: spawn, death, combat, upkeep, info. Uses `this.broadcast("game_log", payload)` for game-wide events and `client.send("game_log", payload)` for player-specific welcome messages.
+- **Files modified:** GameRoom.ts (onJoin welcome, handleSpawnPawn spawn event, tickPawnUpkeep damage/death events), creatureAI.ts (tickCreatureAI now receives room parameter, stepCarnivore broadcasts pawn_builder combat deaths).
+- **Test mock pattern:** Room mocks created via `Object.create(GameRoom.prototype)` need `room.broadcast = () => {}` stub since Room's real broadcast accesses private `#_roomId`. Similarly, `fakeClient` needs `send: () => {}` or `send: vi.fn()`.
+- **Optional chaining for safety:** Used `room.broadcast?.()` and `room.clients?.find()` in creatureAI.ts to gracefully handle test mocks missing those properties.

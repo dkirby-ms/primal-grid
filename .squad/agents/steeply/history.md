@@ -541,3 +541,15 @@ Hal proposed three redesign options for the hollow core gameplay loop. This will
 
 **Session log:** `.squad/log/2026-03-04T2257-pawn-implementation.md`
 
+
+### Game Log Feature — Proactive Test Writing
+
+- **5 tests written** in `server/src/__tests__/gameLog.test.ts` ahead of implementation:
+  1. Builder spawn → "spawn" game_log event (broadcast)
+  2. Builder killed by carnivore → "death" game_log event (broadcast)
+  3. Builder upkeep damage → "upkeep" game_log event (broadcast)
+  4. Builder death from upkeep → "death" game_log event (broadcast)
+  5. Player join → "info" game_log event (client.send to joining client only)
+- **All 5 fail** because `game_log` broadcasting isn't implemented yet — expected. State preconditions (spawn, death, damage) all verified correctly.
+- **Test approach:** Mocked `room.broadcast` and `client.send` with `vi.fn()` spies. Helper functions `getLogBroadcasts()` and `getClientLogs()` extract game_log calls by type. Reuses established test patterns (createRoomWithMap, fakeClient, joinPlayer, addBuilder, addCreature, tickAI, tickUpkeep).
+- **When implementation lands:** Tests should pass with no changes if Pemulis uses `this.broadcast("game_log", { message: string, type: string })` for room-wide events and `client.send("game_log", ...)` for player-specific events. May need minor payload adjustments depending on exact message format.

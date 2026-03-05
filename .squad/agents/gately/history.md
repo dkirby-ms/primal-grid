@@ -694,3 +694,14 @@ Previous pass removed some shape UI but missed significant remnants that were st
 - `tick(dt)` method on CreatureRenderer drives interpolation; wired into app.ticker in `connectToServer()`
 - First spawn snaps to position (avoids lerp from 0,0); subsequent moves interpolate
 - Pattern: ticker wiring inside `connectToServer()` since creatures instance is scoped there
+
+### Game Log Panel (2026-03-05)
+
+Added a scrolling game log panel below the main game area:
+- New `GameLog` class in `client/src/ui/GameLog.ts` — `init(container)` + `addEntry(message, type)` API
+- HTML: wrapped `#game-wrapper` + `#game-log` in `#game-outer` flex column for centering
+- CSS: 800px × 120px dark panel, monospace 11px, auto-scroll, type-colored emoji prefixes
+- Wired `room.onMessage('game_log', ...)` in `main.ts` after HUD init
+- Server sends `{ message: string, type: string }` where type is spawn/death/combat/upkeep/info
+- Capped at 50 entries (oldest evicted); auto-scrolls to bottom on new entries
+- Pattern: standalone class with DOM container injection, same as HudDOM approach

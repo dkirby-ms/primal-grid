@@ -3399,3 +3399,77 @@ export const STRUCTURE = {
 | Greedy movement | Consistent with existing creature AI | Can get stuck in corners |
 
 ---
+
+## Game Log Feature — Event Broadcasting & UI
+
+**Date:** 2026-03-05  
+**Agents:** Pemulis (Systems Dev), Gately (Game Dev), Steeply (Tester)
+
+### Server-Side Event Broadcasting (Pemulis)
+
+**Decision:** Implement game log events on dedicated `game_log` channel.
+
+**Event Types:**
+- `spawn` — Creature or player spawned
+- `death` — Creature or player died
+- `combat` — Combat action occurred
+- `upkeep` — Upkeep tick or resource change
+- `info` — General information
+
+**Message Format:**
+```typescript
+{ message: string, type: string }
+```
+
+**Broadcast Pattern:**
+- **Game-wide events:** `room.broadcast('game_log', payload)`
+- **Player-specific events:** `client.send('game_log', payload)`
+
+**Threading:** `tickCreatureAI` now accepts optional `Room` parameter to allow creature AI (e.g., death events) to broadcast messages. Uses optional chaining for test compatibility.
+
+### Client-Side Game Log Panel (Gately)
+
+**Decision:** Add scrolling event feed panel below game area.
+
+**Layout:**
+- Wrapper: `#game-outer` (flex column, centered)
+- Panel: `#game-log` (800px wide × 120px tall, shared bottom border with game-wrapper)
+
+**Display:**
+- Emoji prefix per type:
+  - `spawn` → 🔨
+  - `death` → 💀
+  - `combat` → ⚔️
+  - `upkeep` → ⚠️
+  - `info` → ℹ️
+- Color per type (fallback to info for unknown types):
+  - `spawn` → green (#7ecfff)
+  - `death` → red (#ff6b6b)
+  - `combat` → orange (#ffaa44)
+  - `upkeep` → yellow (#ffd700)
+  - `info` → gray (#888)
+
+**Listener:** `room.onMessage('game_log', handler)`
+
+**Scrolling:** Auto-scroll to newest event; keep history visible.
+
+### Testing & Validation (Steeply)
+
+**Coverage:** 5 tests written, all passing.
+- Server event broadcast for each type
+- Room parameter threading in `tickCreatureAI`
+- Client listener integration
+- Optional chaining behavior with test mocks
+- UI rendering with correct emoji and colors
+
+**Test Mocks:**
+- Room objects: `broadcast` stub
+- Fake clients: `send` stub
+
+### Future Extensions
+
+- Additional event types (discovery, construction progress, economy)
+- Event filtering/categories on client (show/hide by type)
+- Persistent event log (database archival)
+
+---
