@@ -648,3 +648,31 @@ Gately delivered rendering layer analysis for user territory control pivot. **Ha
 
 **Session log:** `.squad/log/2026-03-04T2257-pawn-implementation.md`
 
+
+---
+
+## Learnings
+
+### 2025-07-25: Complete shape placement UI removal (second pass)
+Previous pass removed some shape UI but missed significant remnants that were still visible in the UX. This second pass was exhaustive:
+
+**What was missed in the first pass and removed now:**
+- `InputHandler.ts`: Still had full shape selection (Q/E cycle, R rotate, 1-9 number keys, Esc deselect), click-to-place with PLACE_SHAPE message, shape preview ghost overlay, mouse tracking for hover preview, right-click deselect, and optimistic claim rendering via SHAPE_CATALOG. **Gutted entirely** — now only handles help toggle and camera center.
+- `HudDOM.ts`: Still had full shape carousel (buildShapeCarousel, renderShapeGrid, updateShapeGrid, setSelectedShape, onShapeSelect callback, updateCarouselForLevel). **Removed all carousel code** — kept level/XP, territory, inventory, creatures.
+- `HelpScreen.ts`: Still listed Q/E, R, 1-9, Click, Esc shape keybindings. **Removed all five entries.**
+- `main.ts`: Still wired `hud.onLevelChange → input.updateShapeKeys()` and ran `input.updatePreview()` every frame. **Removed both.**
+- `index.html`: Still had `#shape-carousel` section with shape grid HTML + 40 lines of `.shape-*` CSS. **Removed entirely.**
+- `shared/messages.ts`: Still exported `PLACE_SHAPE` and `PlaceShapePayload`. **Removed both.**
+- `shared/__tests__/messages.test.ts`: Had two PLACE_SHAPE test cases. **Removed.**
+- `shared/data/recipes.ts`: Comment still referenced PLACE_SHAPE. **Updated.**
+
+**Key lesson:** When removing a feature, grep for ALL related terms (not just the obvious ones). The first pass likely searched for "shape" but missed terms like "carousel", "rotation", "PLACE_SHAPE", "selectedShape", etc. Always grep the full vocabulary of a feature across client + shared + server.
+
+**What was intentionally kept:**
+- `shapeHP` field in types.ts and GameState.ts — actively used by pawn builder territory system for border thickness
+- `SHAPE.BLOCK_HP` constant — used by server claiming/builder logic
+- `data/shapes.ts` (SHAPE_CATALOG) — still exported from shared; may be used internally by progression
+- `getAvailableShapes` — used by server progression tests
+- `GridRenderer.ts` shape preview was already removed in the first pass (confirmed clean)
+
+**Verification:** shared tsc ✓, server tsc --noEmit ✓, client tsc --noEmit ✓, 205/205 tests pass.
