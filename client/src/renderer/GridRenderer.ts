@@ -18,8 +18,6 @@ const TILE_COLORS: Record<number, number> = {
 const RESOURCE_COLORS: Record<number, number> = {
   [ResourceType.Wood]: 0x8b4513,
   [ResourceType.Stone]: 0x999999,
-  [ResourceType.Fiber]: 0x90ee90,
-  [ResourceType.Berries]: 0xda70d6,
 };
 
 const RESOURCE_DOT_SIZE = 5;
@@ -38,26 +36,23 @@ export class GridRenderer {
   private territoryOverlays: Graphics[][] = [];
   private territoryContainer: Container;
   private hqContainer: Container;
-  private shapePreviewContainer: Container;
-  private shapePreviewGraphics: Graphics[] = [];
   private hqMarkers: Map<string, Container> = new Map();
   private mapSize: number;
   private playerColors: Map<string, string> = new Map();
   private lastOwnerIDs: string[][] = [];
   private lastShapeHPs: number[][] = [];
   private lastClaiming: boolean[][] = [];
+  private lastIsHQTerritory: boolean[][] = [];
   private claimingTiles: Map<string, { x: number; y: number }> = new Map();
 
   constructor(mapSize: number = DEFAULT_MAP_SIZE) {
     this.container = new Container();
     this.territoryContainer = new Container();
     this.hqContainer = new Container();
-    this.shapePreviewContainer = new Container();
     this.mapSize = mapSize;
     this.buildGrid();
     this.container.addChild(this.territoryContainer);
     this.container.addChild(this.hqContainer);
-    this.container.addChild(this.shapePreviewContainer);
   }
 
   /** Create the initial grid with all-grassland tiles. */
@@ -69,6 +64,7 @@ export class GridRenderer {
       this.lastOwnerIDs[y] = [];
       this.lastShapeHPs[y] = [];
       this.lastClaiming[y] = [];
+      this.lastIsHQTerritory[y] = [];
       for (let x = 0; x < this.mapSize; x++) {
         const g = new Graphics();
         g.rect(0, 0, TILE_SIZE, TILE_SIZE);
@@ -86,6 +82,7 @@ export class GridRenderer {
         this.lastOwnerIDs[y][x] = '';
         this.lastShapeHPs[y][x] = 0;
         this.lastClaiming[y][x] = false;
+        this.lastIsHQTerritory[y][x] = false;
 
         // Resource indicator (hidden by default)
         const dot = new Graphics();
@@ -127,6 +124,7 @@ export class GridRenderer {
   private updateTerritoryOverlay(
     x: number, y: number, ownerID: string, shapeHP: number,
     claimingPlayerID: string, claimProgress: number,
+    isHQTerritory: boolean = false,
   ): void {
     if (y < 0 || y >= this.mapSize || x < 0 || x >= this.mapSize) return;
 
@@ -134,11 +132,13 @@ export class GridRenderer {
     if (
       this.lastOwnerIDs[y][x] === ownerID &&
       this.lastShapeHPs[y][x] === shapeHP &&
-      this.lastClaiming[y][x] === isClaiming
+      this.lastClaiming[y][x] === isClaiming &&
+      this.lastIsHQTerritory[y][x] === isHQTerritory
     ) return;
     this.lastOwnerIDs[y][x] = ownerID;
     this.lastShapeHPs[y][x] = shapeHP;
     this.lastClaiming[y][x] = isClaiming;
+    this.lastIsHQTerritory[y][x] = isHQTerritory;
 
     const overlay = this.territoryOverlays[y][x];
     overlay.clear();
@@ -158,8 +158,14 @@ export class GridRenderer {
       const colorStr = this.playerColors.get(ownerID) ?? '#ffffff';
       const color = parseColor(colorStr);
 
+      // HQ territory gets a subtle fill to visually distinguish from expansion territory
+      if (isHQTerritory) {
+        overlay.rect(0, 0, TILE_SIZE, TILE_SIZE);
+        overlay.fill({ color, alpha: 0.15 });
+      }
+
       // Draw border edges only where neighbor is not same owner
-      const borderW = shapeHP > 0 ? 2 : 1.5;
+      const borderW = isHQTerritory ? 2.5 : (shapeHP > 0 ? 2 : 1.5);
       const dirs: [number, number, number, number, number, number, number, number][] = [
         // [nx, ny, lineX1, lineY1, lineX2, lineY2, ... unused]
       ];
@@ -275,6 +281,7 @@ export class GridRenderer {
         const shapeHP = (tile['shapeHP'] as number) ?? 0;
         const claimingPlayerID = (tile['claimingPlayerID'] as string) ?? '';
         const claimProgress = (tile['claimProgress'] as number) ?? 0;
+        const isHQTerritory = (tile['isHQTerritory'] as boolean) ?? false;
 
         // Track if ownership changed so we can refresh neighbor borders
         const prevOwner = this.lastOwnerIDs[ty]?.[tx] ?? '';
@@ -282,7 +289,7 @@ export class GridRenderer {
           changedTiles.push({ x: tx, y: ty });
         }
 
-        this.updateTerritoryOverlay(tx, ty, ownerID, shapeHP, claimingPlayerID, claimProgress);
+        this.updateTerritoryOverlay(tx, ty, ownerID, shapeHP, claimingPlayerID, claimProgress, isHQTerritory);
 
         // Resource indicator
         const resType = tile['resourceType'] as number | undefined;
@@ -323,45 +330,6 @@ export class GridRenderer {
     const pulse = 0.3 + 0.7 * Math.abs(Math.sin(Date.now() * 0.006));
     for (const { x, y } of this.claimingTiles.values()) {
       this.territoryOverlays[y][x].alpha = pulse;
-    }
-  }
-
-  /** Get the color assigned to a player (for preview rendering). */
-  public getPlayerColor(playerId: string): string {
-    return this.playerColors.get(playerId) ?? '#ffffff';
-  }
-
-  /** Render a translucent ghost preview of a shape at the given tile position. */
-  public updateShapePreview(cells: { dx: number; dy: number }[], tileX: number, tileY: number, color: string): void {
-    const numColor = parseColor(color);
-
-    // Reuse or create Graphics objects as needed
-    while (this.shapePreviewGraphics.length < cells.length) {
-      const g = new Graphics();
-      this.shapePreviewContainer.addChild(g);
-      this.shapePreviewGraphics.push(g);
-    }
-    // Hide excess graphics from previous frame
-    for (let i = cells.length; i < this.shapePreviewGraphics.length; i++) {
-      this.shapePreviewGraphics[i].visible = false;
-    }
-
-    for (let i = 0; i < cells.length; i++) {
-      const g = this.shapePreviewGraphics[i];
-      g.clear();
-      g.rect(0, 0, TILE_SIZE, TILE_SIZE);
-      g.fill({ color: numColor, alpha: 0.35 });
-      g.rect(0, 0, TILE_SIZE, TILE_SIZE);
-      g.stroke({ width: 1.5, color: numColor, alpha: 0.7 });
-      g.position.set((tileX + cells[i].dx) * TILE_SIZE, (tileY + cells[i].dy) * TILE_SIZE);
-      g.visible = true;
-    }
-  }
-
-  /** Clear the shape ghost preview. */
-  public clearShapePreview(): void {
-    for (const g of this.shapePreviewGraphics) {
-      g.visible = false;
     }
   }
 

@@ -8,6 +8,7 @@ const CREATURE_RADIUS = 6;
 // Base colors per creature type
 const HERBIVORE_COLOR = 0x4caf50;
 const CARNIVORE_COLOR = 0xf44336;
+const BUILDER_COLOR = 0x42a5f5;
 
 // Brighter variants for Eat state
 const HERBIVORE_EAT_COLOR = 0x81c784;
@@ -21,9 +22,11 @@ interface CreatureEntry {
   graphic: Graphics;
   emojiText: Text;
   indicator: Text;
+  progressBar: Graphics | null;
   lastType: string;
   lastState: string;
   lastHealthLow: boolean;
+  lastBuildProgress: number;
   tileX: number;
   tileY: number;
 }
@@ -31,6 +34,7 @@ interface CreatureEntry {
 export class CreatureRenderer {
   public readonly container: Container;
   private entries: Map<string, CreatureEntry> = new Map();
+  private localSessionId = '';
 
   /** Latest creature counts, readable by HUD. */
   public herbivoreCount = 0;
@@ -42,6 +46,8 @@ export class CreatureRenderer {
 
   /** Listen to Colyseus state and render/update creature markers. */
   public bindToRoom(room: Room): void {
+    this.localSessionId = room.sessionId;
+
     room.onStateChange((state: Record<string, unknown>) => {
       const creatures = state['creatures'] as
         | { forEach: (cb: (creature: Record<string, unknown>, key: string) => void) => void }
@@ -62,13 +68,18 @@ export class CreatureRenderer {
         const currentState = (creature['currentState'] as string) ?? 'idle';
         const health = (creature['health'] as number) ?? 100;
         const healthLow = health < 50;
+        const ownerID = (creature['ownerID'] as string) ?? '';
+        const buildProgress = (creature['buildProgress'] as number) ?? 0;
 
         if (creatureType === 'carnivore') carns++;
-        else herbs++;
+        else if (creatureType === 'herbivore') herbs++;
+
+        const isBuilder = creatureType === 'pawn_builder';
+        const isLocalBuilder = isBuilder && ownerID === this.localSessionId;
 
         let entry = this.entries.get(id);
         if (!entry) {
-          entry = this.createCreatureEntry(creatureType, currentState);
+          entry = this.createCreatureEntry(creatureType, currentState, isLocalBuilder);
           this.entries.set(id, entry);
           this.container.addChild(entry.container);
         }
@@ -79,13 +90,21 @@ export class CreatureRenderer {
 
         // Rebuild graphic if state or type changed
         if (entry.lastType !== creatureType || entry.lastState !== currentState) {
-          this.rebuildGraphic(entry, creatureType, currentState);
+          this.rebuildGraphic(entry, creatureType, currentState, isLocalBuilder);
         }
 
         // Health-based opacity
         if (entry.lastHealthLow !== healthLow) {
           entry.container.alpha = healthLow ? 0.6 : 1.0;
           entry.lastHealthLow = healthLow;
+        }
+
+        // Build progress indicator for builders
+        if (isBuilder && buildProgress > 0) {
+          this.updateBuildProgress(entry, buildProgress);
+        } else if (entry.progressBar) {
+          entry.progressBar.visible = false;
+          entry.lastBuildProgress = 0;
         }
 
         // Snap to tile center
@@ -109,16 +128,16 @@ export class CreatureRenderer {
     });
   }
 
-  private createCreatureEntry(creatureType: string, currentState: string): CreatureEntry {
+  private createCreatureEntry(creatureType: string, currentState: string, isLocalBuilder: boolean): CreatureEntry {
     const container = new Container();
 
     // State-colored background circle (subtle indicator behind emoji)
     const graphic = new Graphics();
-    this.drawStateBackground(graphic, creatureType, currentState);
+    this.drawStateBackground(graphic, creatureType, currentState, isLocalBuilder);
     container.addChild(graphic);
 
     // Emoji icon as primary visual
-    const icon = CREATURE_TYPES[creatureType]?.icon ?? '🦕';
+    const icon = this.getIcon(creatureType, isLocalBuilder);
     const fontSize = CREATURE_RADIUS * 2.5;
     const emojiText = new Text({
       text: icon,
@@ -135,35 +154,49 @@ export class CreatureRenderer {
     indicator.position.set(0, -CREATURE_RADIUS - 2);
     container.addChild(indicator);
 
-    this.updateIndicator(indicator, currentState);
+    this.updateIndicator(indicator, currentState, creatureType === 'pawn_builder');
 
     return {
       container,
       graphic,
       emojiText,
       indicator,
+      progressBar: null,
       lastType: creatureType,
       lastState: currentState,
       lastHealthLow: false,
+      lastBuildProgress: 0,
       tileX: 0,
       tileY: 0,
     };
   }
 
-  private rebuildGraphic(entry: CreatureEntry, creatureType: string, currentState: string): void {
+  private rebuildGraphic(entry: CreatureEntry, creatureType: string, currentState: string, isLocalBuilder: boolean): void {
     entry.graphic.clear();
-    this.drawStateBackground(entry.graphic, creatureType, currentState);
-    // Update emoji if creature type changed
-    const icon = CREATURE_TYPES[creatureType]?.icon ?? '🦕';
+    this.drawStateBackground(entry.graphic, creatureType, currentState, isLocalBuilder);
+    const icon = this.getIcon(creatureType, isLocalBuilder);
     if (entry.emojiText.text !== icon) {
       entry.emojiText.text = icon;
     }
-    this.updateIndicator(entry.indicator, currentState);
+    this.updateIndicator(entry.indicator, currentState, creatureType === 'pawn_builder');
     entry.lastType = creatureType;
     entry.lastState = currentState;
   }
 
-  private drawStateBackground(g: Graphics, creatureType: string, currentState: string): void {
+  private getIcon(creatureType: string, isLocalBuilder: boolean): string {
+    if (creatureType === 'pawn_builder') {
+      return isLocalBuilder ? '🔨' : '⬜';
+    }
+    return CREATURE_TYPES[creatureType]?.icon ?? '🦕';
+  }
+
+  private drawStateBackground(g: Graphics, creatureType: string, currentState: string, isLocalBuilder: boolean): void {
+    if (creatureType === 'pawn_builder') {
+      const color = isLocalBuilder ? BUILDER_COLOR : 0x888888;
+      g.rect(-CREATURE_RADIUS, -CREATURE_RADIUS, CREATURE_RADIUS * 2, CREATURE_RADIUS * 2);
+      g.fill({ color, alpha: 0.4 });
+      return;
+    }
     if (currentState === 'idle' || currentState === 'wander') return;
     const color = this.getCreatureColor(creatureType, currentState);
     g.circle(0, 0, CREATURE_RADIUS + 1);
@@ -180,7 +213,12 @@ export class CreatureRenderer {
     return HERBIVORE_COLOR;
   }
 
-  private updateIndicator(indicator: Text, currentState: string): void {
+  private updateIndicator(indicator: Text, currentState: string, isBuilder: boolean): void {
+    if (isBuilder) {
+      indicator.text = '';
+      indicator.visible = false;
+      return;
+    }
     if (currentState === 'flee') {
       indicator.text = '!';
       indicator.visible = true;
@@ -191,5 +229,33 @@ export class CreatureRenderer {
       indicator.text = '';
       indicator.visible = false;
     }
+  }
+
+  /** Show/update a small progress bar below a builder when building. */
+  private updateBuildProgress(entry: CreatureEntry, progress: number): void {
+    if (progress === entry.lastBuildProgress) return;
+    entry.lastBuildProgress = progress;
+
+    if (!entry.progressBar) {
+      entry.progressBar = new Graphics();
+      entry.container.addChild(entry.progressBar);
+    }
+
+    const barWidth = TILE_SIZE * 0.7;
+    const barHeight = 3;
+    const barX = -barWidth / 2;
+    const barY = CREATURE_RADIUS + 3;
+    const pct = Math.min(1, Math.max(0, progress / 100));
+
+    entry.progressBar.clear();
+    // Background
+    entry.progressBar.rect(barX, barY, barWidth, barHeight);
+    entry.progressBar.fill({ color: 0x333333, alpha: 0.8 });
+    // Fill
+    if (pct > 0) {
+      entry.progressBar.rect(barX, barY, barWidth * pct, barHeight);
+      entry.progressBar.fill({ color: 0x4caf50, alpha: 0.9 });
+    }
+    entry.progressBar.visible = true;
   }
 }
