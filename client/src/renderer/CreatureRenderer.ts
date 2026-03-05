@@ -1,6 +1,6 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { TILE_SIZE } from './GridRenderer.js';
-import { CREATURE_TYPES } from '@primal-grid/shared';
+import { CREATURE_TYPES, PAWN } from '@primal-grid/shared';
 import type { Room } from '@colyseus/sdk';
 
 const CREATURE_RADIUS = 6;
@@ -250,7 +250,7 @@ export class CreatureRenderer {
     const barHeight = 3;
     const barX = -barWidth / 2;
     const barY = CREATURE_RADIUS + 3;
-    const pct = Math.min(1, Math.max(0, progress / 100));
+    const pct = Math.min(1, Math.max(0, progress / PAWN.BUILD_TIME_TICKS));
 
     entry.progressBar.clear();
     // Background
