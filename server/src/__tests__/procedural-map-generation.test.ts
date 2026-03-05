@@ -15,7 +15,7 @@ function createRoomWithMap(seed?: number): any {
 }
 
 function fakeClient(sessionId: string): any {
-  return { sessionId };
+  return { sessionId, send: () => {} };
 }
 
 /** Collect all unique TileType values from the map. */

@@ -98,10 +98,46 @@
         opacity: 0.4;
         cursor: not-allowed;
       }
+      /* Outer container for centering game-wrapper + log together */
+      #game-outer {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      /* Game log panel */
+      #game-log {
+        width: 800px;
+        height: 120px;
+        overflow-y: auto;
+        background: #1a1a2e;
+        border: 1px solid #2a2a4a;
+        border-top: none;
+        border-radius: 0 0 4px 4px;
+        padding: 6px 10px;
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+        color: #cccccc;
+      }
+      #game-log .log-entry {
+        line-height: 1.5;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      /* Help hint */
+      #help-hint {
+        align-self: flex-end;
+        font-size: 11px;
+        color: #888888;
+        font-family: 'Courier New', monospace;
+        pointer-events: none;
+        padding: 4px 4px 0 0;
+      }
 
     </style>
   </head>
   <body>
+    <div id="game-outer">
     <div id="game-wrapper">
       <div id="app"></div>
       <div id="hud-panel">
@@ -145,6 +181,9 @@
         </div>
 
       </div>
+    </div>
+    <div id="game-log"></div>
+    <div id="help-hint">Press ? for help</div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

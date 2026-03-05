@@ -60,6 +60,7 @@ export class GameRoom extends Room {
     spawnHQ(this.state, player, hqPos.x, hqPos.y);
 
     console.log(`[GameRoom] Client joined: ${client.sessionId}, HQ at (${hqPos.x}, ${hqPos.y})`);
+    client.send("game_log", { message: "Welcome to Primal Grid!", type: "info" });
   }
 
   override onLeave(client: Client, code: number) {
@@ -118,6 +119,7 @@ export class GameRoom extends Room {
     creature.targetY = -1;
     creature.buildProgress = 0;
     this.state.creatures.set(creature.id, creature);
+    this.broadcast("game_log", { message: "Builder spawned", type: "spawn" });
   }
 
   /** Find a random walkable tile within the player's HQ zone. */
@@ -156,6 +158,9 @@ export class GameRoom extends Room {
         creature.health -= PAWN.UPKEEP_DAMAGE;
         if (creature.health <= 0) {
           toRemove.push(creature.id);
+          this.broadcast("game_log", { message: "Builder starved (no wood for upkeep)", type: "death" });
+        } else {
+          this.broadcast("game_log", { message: "Builder taking damage — need wood!", type: "upkeep" });
         }
       }
     });
@@ -165,11 +170,33 @@ export class GameRoom extends Room {
     }
   }
 
-  /** Find a walkable tile at least 10 tiles from any existing HQ. */
+  /** Count Water/Rock tiles in the NxN starting zone around (cx, cy). */
+  private countNonWalkableInZone(cx: number, cy: number): number {
+    const half = Math.floor(TERRITORY.STARTING_SIZE / 2);
+    let count = 0;
+    for (let dy = -half; dy <= half; dy++) {
+      for (let dx = -half; dx <= half; dx++) {
+        const tile = this.state.getTile(cx + dx, cy + dy);
+        if (!tile || tile.type === TileType.Water || tile.type === TileType.Rock) {
+          count++;
+        }
+      }
+    }
+    return count;
+  }
+
+  /** Find a walkable tile at least 10 tiles from any existing HQ.
+   *  Prefers locations where the 5×5 zone has zero Water/Rock tiles. */
   private findHQSpawnLocation(): { x: number; y: number } {
     const MIN_HQ_DISTANCE = 10;
     const w = this.state.mapWidth;
     const h = this.state.mapHeight;
+
+    // Ensure the full NxN starting territory fits within the map
+    const half = Math.floor(TERRITORY.STARTING_SIZE / 2);
+    const minCoord = half;
+    const maxX = w - half;
+    const maxY = h - half;
 
     // Collect existing HQ positions
     const hqs: { x: number; y: number }[] = [];
@@ -177,19 +204,39 @@ export class GameRoom extends Room {
       if (p.hqX >= 0 && p.hqY >= 0) hqs.push({ x: p.hqX, y: p.hqY });
     });
 
-    // Try random walkable tiles far from other HQs
+    // Try random walkable tiles far from other HQs, preferring zones with no Water/Rock
+    let bestCandidate: { x: number; y: number } | null = null;
+    let bestNonWalkable = Infinity;
+
     for (let attempts = 0; attempts < 200; attempts++) {
-      const x = Math.floor(Math.random() * w);
-      const y = Math.floor(Math.random() * h);
+      const x = minCoord + Math.floor(Math.random() * (maxX - minCoord));
+      const y = minCoord + Math.floor(Math.random() * (maxY - minCoord));
       if (!this.state.isWalkable(x, y)) continue;
       const tooClose = hqs.some(
         (hq) => Math.abs(hq.x - x) + Math.abs(hq.y - y) < MIN_HQ_DISTANCE,
       );
-      if (!tooClose) return { x, y };
+      if (tooClose) continue;
+
+      const nonWalkable = this.countNonWalkableInZone(x, y);
+      if (nonWalkable === 0) return { x, y };
+      if (nonWalkable < bestNonWalkable) {
+        bestNonWalkable = nonWalkable;
+        bestCandidate = { x, y };
+      }
     }
 
-    // Fallback: any walkable tile
-    return this.findRandomWalkableTile();
+    // Accept best candidate found (spawnHQ will force-convert remaining tiles)
+    if (bestCandidate) return bestCandidate;
+
+    // Fallback: any walkable tile within safe margin
+    for (let y = minCoord; y < maxY; y++) {
+      for (let x = minCoord; x < maxX; x++) {
+        if (this.state.isWalkable(x, y)) {
+          return { x, y };
+        }
+      }
+    }
+    return { x: minCoord, y: minCoord };
   }
 
   private tickStructureIncome() {
@@ -221,7 +268,7 @@ export class GameRoom extends Room {
 
   private tickCreatureAI() {
     if (this.state.tick % CREATURE_AI.TICK_INTERVAL !== 0) return;
-    tickCreatureAI(this.state);
+    tickCreatureAI(this.state, this);
   }
 
   /** Biome-to-resource mapping for regeneration. */
@@ -339,7 +386,7 @@ export class GameRoom extends Room {
       const x = Math.floor(Math.random() * w);
       const y = Math.floor(Math.random() * h);
       const tile = this.state.getTile(x, y);
-      if (tile && this.state.isWalkable(x, y) && preferredBiomes.has(tile.type)) {
+      if (tile && this.state.isWalkable(x, y) && preferredBiomes.has(tile.type) && tile.ownerID === "") {
         return { x, y };
       }
     }
@@ -354,13 +401,15 @@ export class GameRoom extends Room {
     for (let attempts = 0; attempts < 100; attempts++) {
       const x = Math.floor(Math.random() * w);
       const y = Math.floor(Math.random() * h);
-      if (this.state.isWalkable(x, y)) {
+      const tile = this.state.getTile(x, y);
+      if (tile && this.state.isWalkable(x, y) && tile.ownerID === "") {
         return { x, y };
       }
     }
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
-        if (this.state.isWalkable(x, y)) {
+        const tile = this.state.getTile(x, y);
+        if (tile && this.state.isWalkable(x, y) && tile.ownerID === "") {
           return { x, y };
         }
       }

@@ -15,11 +15,12 @@ function createRoomWithMap(seed?: number): any {
   const room = Object.create(GameRoom.prototype) as any;
   room.state = new GameState();
   room.generateMap(seed);
+  room.broadcast = () => {};
   return room;
 }
 
 function fakeClient(sessionId: string): any {
-  return { sessionId };
+  return { sessionId, send: () => {} };
 }
 
 function joinPlayer(room: any, sessionId: string) {
@@ -448,7 +449,7 @@ describe("Adjacency validation (prevent teleport builds)", () => {
     }
   });
 
-  it("starting territory is 9×9 (up to 81 tiles) around HQ", () => {
+  it("starting territory is 5×5 (up to 25 tiles) around HQ", () => {
     const room = createRoomWithMap(42);
     const { player } = joinPlayer(room, "p1");
 
@@ -466,8 +467,8 @@ describe("Adjacency validation (prevent teleport builds)", () => {
     const totalOwned = counts.get("p1") ?? 0;
 
     expect(ownedInZone).toBe(totalOwned);
-    expect(totalOwned).toBeGreaterThanOrEqual(40);
-    expect(totalOwned).toBeLessThanOrEqual(81);
+    expect(totalOwned).toBeGreaterThanOrEqual(10);
+    expect(totalOwned).toBeLessThanOrEqual(TERRITORY.STARTING_SIZE * TERRITORY.STARTING_SIZE);
   });
 
   it("builder re-evaluates when target tile is claimed by another player", () => {
@@ -556,17 +557,21 @@ describe("Carnivore interaction (targeting, killing builders)", () => {
 
   it("carnivores can target and damage builders", () => {
     const room = createRoomWithMap(42);
-    const { player } = joinPlayer(room, "p1");
+    joinPlayer(room, "p1");
 
-    const hqPos = findWalkableTileInHQ(room, player);
-    expect(hqPos).not.toBeNull();
-
-    const builder = addBuilder(room, "b-prey", "p1", hqPos!.x, hqPos!.y, {
+    // Place builder on unowned tile so carnivore can reach it
+    const pos = findWalkableTile(room);
+    const builder = addBuilder(room, "b-prey", "p1", pos.x, pos.y, {
       health: PAWN.BUILDER_HEALTH,
     });
+    // Ensure the tile is unowned for the test
+    const builderTile = room.state.getTile(pos.x, pos.y);
+    if (builderTile) builderTile.ownerID = "";
 
-    const cx = hqPos!.x + 1 < DEFAULT_MAP_SIZE ? hqPos!.x + 1 : hqPos!.x - 1;
-    addCreature(room, "c-hunt", "carnivore", cx, hqPos!.y, {
+    const cx = pos.x + 1 < DEFAULT_MAP_SIZE ? pos.x + 1 : pos.x - 1;
+    const carnTile = room.state.getTile(cx, pos.y);
+    if (carnTile) carnTile.ownerID = "";
+    addCreature(room, "c-hunt", "carnivore", cx, pos.y, {
       hunger: 10,
       currentState: "hunt",
     });

@@ -50,6 +50,7 @@ export class GridRenderer {
   private lastClaiming: boolean[][] = [];
   private lastIsHQTerritory: boolean[][] = [];
   private claimingTiles: Map<string, { x: number; y: number }> = new Map();
+  private localPlayerId: string = '';
 
   constructor(mapSize: number = DEFAULT_MAP_SIZE) {
     this.container = new Container();
@@ -153,8 +154,8 @@ export class GridRenderer {
     } else if (ownerID !== '') {
       this.claimingTiles.delete(key);
       overlay.alpha = 1.0;
-      const colorStr = this.playerColors.get(ownerID) ?? '#ffffff';
-      const color = parseColor(colorStr);
+      const isLocal = ownerID === this.localPlayerId;
+      const color = isLocal ? 0xffd700 : 0xe6194b;
 
       // HQ territory gets a subtle fill to visually distinguish from expansion territory
       if (isHQTerritory) {
@@ -225,6 +226,11 @@ export class GridRenderer {
     }
   }
 
+  /** Set the local player's session ID so territory can be color-coded. */
+  public setLocalPlayerId(id: string): void {
+    this.localPlayerId = id;
+  }
+
   /** Listen to Colyseus state and update tiles when they change. */
   public bindToRoom(room: Room): void {
     room.onStateChange((state: unknown) => {
@@ -246,7 +252,7 @@ export class GridRenderer {
 
           // Render HQ marker if player has an HQ
           if (hqX >= 0 && hqY >= 0) {
-            this.updateHQMarker(id, hqX, hqY, color);
+            this.updateHQMarker(id, hqX, hqY);
           } else {
             this.removeHQMarker(id);
           }
@@ -308,8 +314,7 @@ export class GridRenderer {
 
     const overlay = this.territoryOverlays[y][x];
     overlay.clear();
-    const colorStr = this.playerColors.get(playerId) ?? '#ffffff';
-    const color = parseColor(colorStr);
+    const color = 0xffd700;
     overlay.rect(1, 1, TILE_SIZE - 2, TILE_SIZE - 2);
     overlay.stroke({ width: 2, color, alpha: 0.8 });
     overlay.visible = true;
@@ -332,20 +337,12 @@ export class GridRenderer {
   }
 
   /** Update or create an HQ marker for a player at the given tile coordinates. */
-  private updateHQMarker(playerId: string, hqX: number, hqY: number, color: string): void {
+  private updateHQMarker(playerId: string, hqX: number, hqY: number): void {
     let marker = this.hqMarkers.get(playerId);
     if (!marker) {
       marker = new Container();
       this.hqContainer.addChild(marker);
       this.hqMarkers.set(playerId, marker);
-
-      const g = new Graphics();
-      const colorNum = parseColor(color);
-      g.rect(2, 2, TILE_SIZE - 4, TILE_SIZE - 4);
-      g.fill(colorNum);
-      g.rect(1, 1, TILE_SIZE - 2, TILE_SIZE - 2);
-      g.stroke({ width: 2, color: 0xffd700 });
-      marker.addChild(g);
 
       const label = new Text({
         text: '🏰',

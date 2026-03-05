@@ -75,7 +75,7 @@ export const CREATURE_AI = {
 /** Territory claim constants. */
 export const TERRITORY = {
   /** Starting territory size in tiles (side length of square). */
-  STARTING_SIZE: 9,
+  STARTING_SIZE: 5,
   /** Starting wood for new players (enough for 1-2 builders). */
   STARTING_WOOD: 25,
   /** Starting stone for new players. */

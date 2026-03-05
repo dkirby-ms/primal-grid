@@ -1,10 +1,11 @@
-import { Application, Text } from 'pixi.js';
+import { Application } from 'pixi.js';
 import { GridRenderer } from './renderer/GridRenderer.js';
 import { CreatureRenderer } from './renderer/CreatureRenderer.js';
 import { Camera } from './renderer/Camera.js';
 import { InputHandler } from './input/InputHandler.js';
 import { ConnectionStatusUI } from './ui/ConnectionStatus.js';
 import { HudDOM } from './ui/HudDOM.js';
+import { GameLog } from './ui/GameLog.js';
 import { HelpScreen } from './ui/HelpScreen.js';
 import { connect, disconnect, onConnectionStatus } from './network.js';
 
@@ -41,14 +42,6 @@ async function bootstrap(): Promise<void> {
     grid.tick();
   });
 
-  // --- Help hint (bottom-right corner) ---
-  const helpHint = new Text({
-    text: 'Press ? for help',
-    style: { fontSize: 11, fill: '#888888', fontFamily: 'monospace' },
-  });
-  helpHint.position.set(WIDTH - helpHint.width - 12, HEIGHT - 24);
-  app.stage.addChild(helpHint);
-
   // --- Connect to Colyseus (non-blocking) ---
   connectToServer(app, grid, camera);
 }
@@ -58,6 +51,7 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
     const room = await connect();
 
     // Bind renderers to server state
+    grid.setLocalPlayerId(room.sessionId);
     grid.bindToRoom(room);
 
     const creatures = new CreatureRenderer();
@@ -80,6 +74,16 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
     // HUD (DOM-based side panel)
     const hud = new HudDOM(room.sessionId);
     hud.bindToRoom(room);
+
+    // Game log panel
+    const gameLog = new GameLog();
+    const logEl = document.getElementById('game-log');
+    if (logEl) {
+      gameLog.init(logEl);
+      room.onMessage('game_log', (data: { message: string; type: string }) => {
+        gameLog.addEntry(data.message, data.type);
+      });
+    }
 
     // Help screen overlay (screen-fixed, on top)
     const helpScreen = new HelpScreen(WIDTH, HEIGHT);

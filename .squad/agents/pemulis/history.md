@@ -816,3 +816,20 @@ Hal (Lead) architected pawn-based territory expansion system per same user direc
 - **Decisions merged:** Both inbox decisions archived to decisions.md. No duplicates.
 - **Status:** COMPLETE. Ready for next phase.
 
+
+### Territory Barrier for Wild Creatures (2026-03-05)
+
+- **isTileOpenForCreature() helper added** to `creatureAI.ts`: Wraps `isWalkable()` with territory ownership check. Herbivores and carnivores cannot enter tiles with `ownerID` set. Pawn builders can enter tiles owned by their matching player.
+- **Three movement functions updated:** `wanderRandom()`, `moveToward()`, `moveAwayFrom()` now call `isTileOpenForCreature()` instead of raw `state.isWalkable()`.
+- **findNearestPrey() filters territory:** Carnivores skip prey standing on owned tiles, preventing futile pathfinding toward unreachable targets inside player bases.
+- **findNearestResource() filters territory:** Herbivores skip resource tiles inside player territory for the same reason.
+- **Edge case — trapped creatures:** If territory expands around a wild creature, it stays put (all adjacent owned tiles blocked). Acceptable — starvation mechanics handle cleanup.
+- **Test fixes:** Two tests (pawnBuilder, gameLog) placed builders inside HQ territory and expected carnivore attacks. Updated to place both creatures on unowned tiles, reflecting the new territory protection semantics.
+- **All 226 tests passing.**
+
+### Creature Spawn Ownership Guard (2026-03-05)
+
+- **Problem:** Herbivores and carnivores could still spawn on player-owned tiles even though territory barriers prevented them from walking into owned tiles afterward.
+- **Fix:** Added `tile.ownerID === ""` check to both `findWalkableTileInBiomes()` and `findRandomWalkableTile()` in `GameRoom.ts`. This covers all spawn paths: `spawnCreatures()` (initial) and `tickCreatureRespawn()` (ongoing) both funnel through `spawnOneCreature()` → these two finder methods.
+- **Scope:** Three code paths patched — biome-preferred random sampling (line 389), fallback random sampling (line 404), and exhaustive fallback scan (line 411).
+- **All 237 tests passing.**

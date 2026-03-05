@@ -4,6 +4,7 @@ import {
   CREATURE_AI, CREATURE_TYPES,
   ResourceType, TileType,
 } from "@primal-grid/shared";
+import type { Room } from "colyseus";
 
 /** FSM states for creature AI. */
 export type AIState = "idle" | "wander" | "eat" | "flee" | "hunt";
@@ -12,7 +13,7 @@ export type AIState = "idle" | "wander" | "eat" | "flee" | "hunt";
  * Run one AI step for all creatures. Called every CREATURE_AI.TICK_INTERVAL ticks.
  * Modifies creature states in-place. Removes dead creatures from state.
  */
-export function tickCreatureAI(state: GameState): void {
+export function tickCreatureAI(state: GameState, room: Room): void {
   const toRemove: string[] = [];
 
   state.creatures.forEach((creature) => {
@@ -29,6 +30,9 @@ export function tickCreatureAI(state: GameState): void {
 
     // Death check
     if (creature.health <= 0) {
+      if (creature.creatureType === "pawn_builder" && creature.ownerID) {
+        room.broadcast?.("game_log", { message: "Builder killed by carnivore", type: "death" });
+      }
       toRemove.push(creature.id);
       return;
     }
@@ -39,7 +43,7 @@ export function tickCreatureAI(state: GameState): void {
     } else if (creature.creatureType === "herbivore") {
       stepHerbivore(creature, state);
     } else if (creature.creatureType === "carnivore") {
-      stepCarnivore(creature, state);
+      stepCarnivore(creature, state, room);
     }
   });
 
@@ -88,7 +92,7 @@ function stepHerbivore(creature: CreatureState, state: GameState): void {
   idleOrWander(creature, state);
 }
 
-function stepCarnivore(creature: CreatureState, state: GameState): void {
+function stepCarnivore(creature: CreatureState, state: GameState, room: Room): void {
   const typeDef = CREATURE_TYPES["carnivore"];
 
   // Priority 1: Hunt herbivores or builders when hungry
@@ -103,6 +107,9 @@ function stepCarnivore(creature: CreatureState, state: GameState): void {
         creature.hunger = Math.min(creature.hunger + CREATURE_AI.EAT_RESTORE,
           typeDef.hunger);
         if (prey.health <= 0) {
+          if (prey.creatureType === "pawn_builder" && prey.ownerID) {
+            room.broadcast?.("game_log", { message: "Builder killed by carnivore", type: "death" });
+          }
           state.creatures.delete(prey.id);
         }
         return;
@@ -135,7 +142,7 @@ function wanderRandom(creature: CreatureState, state: GameState): void {
   for (const [dx, dy] of dirs) {
     const nx = creature.x + dx;
     const ny = creature.y + dy;
-    if (state.isWalkable(nx, ny)) {
+    if (isTileOpenForCreature(state, creature, nx, ny)) {
       creature.x = nx;
       creature.y = ny;
       return;
@@ -153,7 +160,7 @@ export function moveToward(creature: CreatureState, tx: number, ty: number, stat
   for (const [mx, my] of candidates) {
     const nx = creature.x + mx;
     const ny = creature.y + my;
-    if (state.isWalkable(nx, ny)) {
+    if (isTileOpenForCreature(state, creature, nx, ny)) {
       creature.x = nx;
       creature.y = ny;
       return;
@@ -170,7 +177,7 @@ function moveAwayFrom(creature: CreatureState, tx: number, ty: number, state: Ga
   for (const [mx, my] of candidates) {
     const nx = creature.x + mx;
     const ny = creature.y + my;
-    if (state.isWalkable(nx, ny)) {
+    if (isTileOpenForCreature(state, creature, nx, ny)) {
       creature.x = nx;
       creature.y = ny;
       return;
@@ -217,6 +224,9 @@ function findNearestPrey(
   state.creatures.forEach((other) => {
     if (other.id === creature.id) return;
     if (other.creatureType !== "herbivore" && other.creatureType !== "pawn_builder") return;
+    // Skip prey standing inside player territory (carnivore can't reach them)
+    const preyTile = state.getTile(other.x, other.y);
+    if (preyTile && preyTile.ownerID !== "") return;
     const dist = manhattan(creature.x, creature.y, other.x, other.y);
     if (dist <= radius && dist < bestDist) {
       bestDist = dist;
@@ -243,6 +253,8 @@ function findNearestResource(
       const tile = state.getTile(tx, ty);
       if (!tile || tile.resourceType < 0 || tile.resourceAmount <= 0) continue;
       if (!state.isWalkable(tx, ty)) continue;
+      // Skip resource tiles inside player territory (herbivore can't enter)
+      if (tile.ownerID !== "") continue;
       const dist = Math.abs(dx) + Math.abs(dy);
       if (dist > 0 && dist <= radius && dist < bestDist) {
         bestDist = dist;
@@ -252,6 +264,25 @@ function findNearestResource(
   }
 
   return nearest;
+}
+
+/**
+ * Check if a tile is open for a given creature to enter.
+ * Walkability + territory ownership check:
+ * - Non-pawn creatures (herbivores, carnivores) cannot enter tiles with an ownerID.
+ * - Pawn builders can enter tiles owned by their own player.
+ */
+export function isTileOpenForCreature(state: GameState, creature: CreatureState, x: number, y: number): boolean {
+  if (!state.isWalkable(x, y)) return false;
+  const tile = state.getTile(x, y);
+  if (!tile) return false;
+  if (tile.ownerID !== "") {
+    if (creature.creatureType === "pawn_builder" && creature.ownerID === tile.ownerID) {
+      return true;
+    }
+    return false;
+  }
+  return true;
 }
 
 function manhattan(x1: number, y1: number, x2: number, y2: number): number {

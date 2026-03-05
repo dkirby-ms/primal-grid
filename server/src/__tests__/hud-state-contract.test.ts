@@ -22,11 +22,12 @@ function createRoomWithMap(seed?: number): any {
   const room = Object.create(GameRoom.prototype) as any;
   room.state = new GameState();
   room.generateMap(seed);
+  room.broadcast = () => {};
   return room;
 }
 
 function fakeClient(sessionId: string): any {
-  return { sessionId };
+  return { sessionId, send: () => {} };
 }
 
 /** Join a player and return client + player. */
@@ -123,7 +124,7 @@ describe("Phase A — HUD State Contract", () => {
       room.spawnCreatures();
       for (let t = 0; t < 100; t++) {
         room.state.tick = t;
-        tickCreatureAI(room.state);
+        tickCreatureAI(room.state, room as any);
       }
       room.state.creatures.forEach((c: any) => {
         expect(c.health).toBeGreaterThanOrEqual(0);

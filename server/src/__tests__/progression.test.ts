@@ -17,11 +17,12 @@ function createRoomWithMap(seed?: number): any {
   const room = Object.create(GameRoom.prototype) as any;
   room.state = new GameState();
   room.generateMap(seed);
+  room.broadcast = () => {};
   return room;
 }
 
 function fakeClient(sessionId: string): any {
-  return { sessionId };
+  return { sessionId, send: () => {} };
 }
 
 function joinPlayer(room: any, sessionId: string) {

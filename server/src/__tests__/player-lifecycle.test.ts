@@ -13,7 +13,7 @@ function createRoom(): any {
 
 /** Create a fake Client with a given sessionId. */
 function fakeClient(sessionId: string): any {
-  return { sessionId };
+  return { sessionId, send: () => {} };
 }
 
 describe("Player Lifecycle", () => {

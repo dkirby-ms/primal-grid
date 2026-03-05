@@ -705,3 +705,11 @@ Added a scrolling game log panel below the main game area:
 - Server sends `{ message: string, type: string }` where type is spawn/death/combat/upkeep/info
 - Capped at 50 entries (oldest evicted); auto-scrolls to bottom on new entries
 - Pattern: standalone class with DOM container injection, same as HudDOM approach
+
+### Territory Perimeter Color Differentiation + HQ Border Removal (2026-03-05)
+
+- **Territory perimeter colors:** Own territory border edges now render yellow (`0xffd700`), other players' territory renders red (`0xe6194b`). Added `localPlayerId` field to GridRenderer, set via `setLocalPlayerId(id)` called from `main.ts` with `room.sessionId` before `bindToRoom`.
+- **HQ territory fill tint:** Also uses the same yellow/red logic, so HQ fill matches the border color.
+- **Optimistic claim overlay:** Hardcoded to yellow since it's always the local player's action.
+- **HQ marker border removed:** Removed the gold `Graphics` border from `updateHQMarker`. The 🏰 emoji text remains as the sole visual.
+- **No new dependencies or render objects** — reused existing overlay pattern, just changed color source from `playerColors` map to a local/remote check.

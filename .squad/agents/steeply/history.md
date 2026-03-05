@@ -589,3 +589,20 @@ Hal proposed three redesign options for the hollow core gameplay loop. This will
 - **Suite status:** 226 tests, all passing. No regressions.
 - **Status:** COMPLETE. Pemulis's implementation validated. Ready for next phase.
 
+
+### Territory Barrier — Creature AI Movement Restriction Tests (2026-03-05)
+
+- **11 new tests** in `server/src/__tests__/territoryBarrier.test.ts`. Total suite: **237 tests, all passing.**
+- **Pemulis already landed** the barrier via `isTileOpenForCreature()` in `creatureAI.ts`. All movement functions (`wanderRandom`, `moveToward`, `moveAwayFrom`) use it. Targeting functions (`findNearestPrey`, `findNearestResource`) also skip territory-protected targets.
+- **Tests cover 7 behaviors:** (1) herbivore blocked by territory (wandering, food-seeking, fleeing), (2) carnivore blocked (wandering, hunting), (3) pawn_builder moves freely in own territory, (4) pawn_builder blocked from other player's territory, (5) carnivore skips prey inside territory, (6) herbivore skips resources inside territory, (7) creature trapped when territory expands around it.
+- **Test pattern:** `findWalkableBlock()` helper finds contiguous walkable terrain, `claimTile()` sets ownerID, then verifies creatures respect territory via `tickCreatureAI` module function or `moveToward` export. Room mock uses `broadcast`/`send` stubs.
+- **Key edge case:** Trapped creature test — territory expands around existing creature, creature stays put because all adjacent tiles are owned.
+- **Status:** COMPLETE. All 11 tests pass. No regressions to existing 226 tests.
+
+### Territory Exclusion — Creature Spawn Tests (2026-03-06)
+
+- **10 new tests** in `server/src/__tests__/creatureSpawnTerritory.test.ts`. Total suite: **247 tests, all passing.**
+- **Pemulis already landed the fix** — `findWalkableTileInBiomes()` and `findRandomWalkableTile()` both check `tile.ownerID === ""` before returning a position. All three code paths (preferred biome search, random fallback, linear scan fallback) respect territory exclusion.
+- **Tests cover 4 required behaviors:** (1) No creature spawns on owned tiles (initial spawn, single spawn, multi-seed), (2) creatures still spawn successfully when some tiles are owned, (3) `tickCreatureRespawn` newly spawned creatures avoid owned territory, (4) edge cases — sole remaining unowned tile, all tiles owned graceful fallback, multi-player territory.
+- **Key test pattern:** `claimTiles()` helper sets `tile.ownerID` on a rectangular region. For respawn tests, must track pre-existing creature IDs to avoid false positives from creatures placed before territory was claimed.
+- **Graceful fallback:** When ALL tiles are owned, `findRandomWalkableTile()` falls back to `{x:0, y:0}` — creature is still created (no crash), but lands on an owned tile. Test verifies the system doesn't throw.
