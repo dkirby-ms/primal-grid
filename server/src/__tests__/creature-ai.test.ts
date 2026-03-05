@@ -109,23 +109,21 @@ describe("Phase 2.5 — Creature AI: FSM States", () => {
 describe("Phase 2.5 — Creature AI: Herbivore Transitions", () => {
   it("herbivore in idle transitions to wander after idle duration", () => {
     const room = createRoomWithCreatures(42);
+    // Clear default creatures so no carnivores interfere
+    room.state.creatures.clear();
 
-    // Find a herbivore
-    let herbivore: any = null;
-    room.state.creatures.forEach((c: any) => {
-      if (c.creatureType === "herbivore" && !herbivore) herbivore = c;
+    const pos = findWalkableTile(room);
+    const herbivore = addCreature(room, "herb-idle", "herbivore", pos.x, pos.y, {
+      currentState: "idle",
     });
-    expect(herbivore).not.toBeNull();
+
     expect(herbivore.currentState).toBe("idle");
 
-    // Tick past idle duration
-    for (let i = 0; i < CREATURE_AI.IDLE_DURATION + 2; i++) {
-      room.state.tick += CREATURE_AI.TICK_INTERVAL;
-      room.tickCreatureAI();
-    }
+    // Single tick should toggle idle → wander
+    room.state.tick += CREATURE_AI.TICK_INTERVAL;
+    room.tickCreatureAI();
 
-    // Should have transitioned out of idle (likely to wander)
-    expect(herbivore.currentState).not.toBe("idle");
+    expect(herbivore.currentState).toBe("wander");
   });
 
   it("hungry herbivore near food transitions to eat", () => {
