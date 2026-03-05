@@ -69,3 +69,52 @@ All 4 inbox files deduplicated and merged into canonical decisions.md.
 3. Verify 207 tests passing (Pemulis), 26 tests complete (Steeply)
 4. Manual QA on client UI (Gately)
 5. Merge to main branch
+
+---
+
+## Final Status (Completed)
+
+**All three agents completed successfully:**
+
+✅ **Pemulis (agent-12)** — Server implementation  
+- Duration: 114s  
+- Outcome: All 207 tests passing
+- Delivered: builderAI.ts FSM, separate upkeep tick (60), adjacency validation, carnivore targeting (findNearestPrey), isHQTerritory immutable flag
+- Bonus: Extended to StarCraft-style structure economy (HQ base income + farm buildings)
+- Commits: "Replace per-tile income with StarCraft-style structure economy" (20af78f)
+
+✅ **Steeply (agent-14)** — Test suite  
+- Duration: 700s  
+- Outcome: 26 contract tests, 6 categories, 26/26 passing
+- Delivered: pawnBuilder.test.ts with spawning, FSM, adjacency, upkeep, carnivore, HQ territory tests
+- 6 contract tests (★) validate constants/types without runtime: spawn cost, cap, creature type, HQ setup, message format, isHQTerritory flag
+- Commits: "test: restructure pawnBuilder tests into 6 contract categories (26 tests)" (43bc422)
+
+✅ **Gately (agent-13)** — Client UI  
+- Duration: 2867s  
+- Outcome: Shape UI removed, builder spawn button added, HQ overlay rendering, all builds passing
+- Delivered: HudDOM (remove shapes/fibers/berries, add spawn button), CreatureRenderer (builder 🔨/⬜ + progress bars), GridRenderer (HQ overlay 0.15 alpha, 2.5px border)
+- Commits:  
+  - "Remove all shape/tile placement UI remnants from client" (d802a6a)  
+  - "Update Gately history with shape UI removal learnings" (3757a15)  
+  - "feat: pawn builder client UI — spawn button, builder rendering, HQ overlay" (4cc7c1d)
+
+**Test Results:**
+- Full suite: 205 tests passing (19 test files)
+- pawnBuilder.test.ts: 26/26 passing
+- No failures
+
+**Decisions Archived:**
+- 4 inbox files merged → decisions.md (copilot-directive-2026-03-04T2257/2258, pemulis-pawn-builder-impl, gately-pawn-builder-client)
+- 2 additional directives merged: User directives (6 decisions), StarCraft economy
+
+**Orchestration Complete:**
+- 3 orchestration logs written
+- Session log written
+- Cross-agent history updated with spawn notes and dependencies
+- All .squad/ changes committed (commit ff9f6eb)
+
+**Next Steps:**
+- All MVP complete
+- Ready for user gameplay testing
+- Future work: Farm economy balance, advanced pawn types (gatherer, scout, soldier)
