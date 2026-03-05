@@ -3473,3 +3473,58 @@ export const STRUCTURE = {
 - Persistent event log (database archival)
 
 ---
+
+## 2026-03-05: HQ Edge-Spawn Clipping Fix (Pemulis)
+
+**By:** Pemulis (Systems Dev)  
+**Date:** 2026-03-05  
+**Status:** IMPLEMENTED
+
+## Problem
+
+`findHQSpawnLocation` generated random HQ positions across the full map (0 to mapWidth/mapHeight). When the position fell near an edge, `spawnHQ` would attempt to claim a 5×5 area that extended beyond map bounds. `getTile` returns `undefined` for out-of-bounds coordinates, so those tiles were silently skipped — giving the player fewer than 25 starting tiles.
+
+## Decision
+
+Constrain HQ spawn coordinates to `[half, mapSize - half)` where `half = Math.floor(TERRITORY.STARTING_SIZE / 2)`. This guarantees the full NxN starting territory square always fits within the map, regardless of STARTING_SIZE.
+
+The deterministic fallback scan was also changed to respect this margin (previously it delegated to `findRandomWalkableTile` which uses full map bounds).
+
+## Impact
+
+- **GameRoom.ts:** `findHQSpawnLocation` method updated with edge margin
+- **No API or schema changes**
+- **All 210 existing tests pass**
+- **Walkability/water/rock avoidance still works** — checked within the constrained range
+
+---
+
+## 2026-03-05: Starting Zone Always Fully Claimed (Pemulis)
+
+**By:** Pemulis (Systems Dev)  
+**Date:** 2026-03-05  
+**Status:** IMPLEMENTED
+
+## Context
+
+Players' 5×5 starting territory could contain Water or Rock tiles, which were skipped during `spawnHQ`. This left holes in the starting zone — fewer than 25 claimed tiles, potential walkability gaps, and inconsistent starting conditions.
+
+## Decision
+
+1. **Force-convert non-walkable tiles in starting zone.** `spawnHQ` now converts any Water/Rock tile within the 5×5 zone to Grassland before claiming. All 25 tiles are always claimed.
+2. **Prefer clean spawn locations.** `findHQSpawnLocation` now scores candidates by counting non-walkable tiles in the zone and prefers locations with zero. Falls back to best-available if no perfect spot exists within 200 attempts.
+
+## Rationale
+
+- Fair starts: every player gets exactly 25 usable tiles regardless of map seed.
+- The force-conversion is cosmetically minor (a few tiles change biome) but gameplay-significant (no unclaimed gaps in HQ zone).
+- The spawn location preference minimizes force-conversions, preserving map aesthetics in most cases.
+
+## Impact
+
+- `territory.ts`: `spawnHQ` — all 25 tiles always claimed
+- `GameRoom.ts`: `findHQSpawnLocation` + new `countNonWalkableInZone` helper
+- `territory.test.ts`: Updated to assert exactly 25 tiles, no Water/Rock in zone
+- All 226 tests pass
+
+---

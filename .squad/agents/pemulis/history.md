@@ -788,3 +788,31 @@ Hal (Lead) architected pawn-based territory expansion system per same user direc
 - **Files modified:** GameRoom.ts (onJoin welcome, handleSpawnPawn spawn event, tickPawnUpkeep damage/death events), creatureAI.ts (tickCreatureAI now receives room parameter, stepCarnivore broadcasts pawn_builder combat deaths).
 - **Test mock pattern:** Room mocks created via `Object.create(GameRoom.prototype)` need `room.broadcast = () => {}` stub since Room's real broadcast accesses private `#_roomId`. Similarly, `fakeClient` needs `send: () => {}` or `send: vi.fn()`.
 - **Optional chaining for safety:** Used `room.broadcast?.()` and `room.clients?.find()` in creatureAI.ts to gracefully handle test mocks missing those properties.
+
+### HQ Edge-Spawn Clipping Fix (2026-03-05)
+
+- **Bug:** `findHQSpawnLocation` used full map dimensions (0 to mapWidth/mapHeight) for random HQ placement. If HQ landed within `half` tiles of any edge, the 5×5 starting territory would clip off the map, giving fewer tiles than expected.
+- **Fix:** Constrained random spawn range to `[half, mapSize - half)` where `half = Math.floor(TERRITORY.STARTING_SIZE / 2)`. Both the random search loop and the deterministic fallback scan now respect this margin. The fallback no longer delegates to `findRandomWalkableTile` (which has no margin) — it scans only the safe interior.
+- **Files modified:** `server/src/rooms/GameRoom.ts` — `findHQSpawnLocation` method only. No changes to `territory.ts` (spawnHQ itself was fine, just received bad coordinates).
+
+### Starting Zone Force-Conversion (2026-03-06)
+
+- **Problem:** `spawnHQ` skipped Water/Rock tiles in the 5×5 starting zone, so players could end up with fewer than 25 claimed tiles — holes in their starting territory.
+- **Fix (territory.ts):** Removed the conditional skip. Now any Water/Rock tile in the 5×5 zone is force-converted to `TileType.Grassland` before being claimed. All 25 tiles are always claimed, owned, and walkable.
+- **Fix (GameRoom.ts):** Added `countNonWalkableInZone` helper. `findHQSpawnLocation` now prefers candidates where the 5×5 zone has zero Water/Rock tiles (returns immediately on perfect spot). Tracks best-so-far candidate (fewest non-walkable) as fallback — `spawnHQ` force-conversion handles any remaining tiles.
+- **Tests updated:** `territory.test.ts` — HQ spawn test now expects exactly 25 tiles claimed (not "up to 25"). Zone ownership test asserts no Water/Rock remains. Count test removed the `nonWalkableInZone` subtraction.
+- **Files modified:** `server/src/rooms/territory.ts`, `server/src/rooms/GameRoom.ts`, `server/src/__tests__/territory.test.ts`
+
+---
+
+## 2026-03-06: Starting Zone Force-Conversion & Spawn Location Scoring (Completed)
+
+- **Problem:** Players' 5×5 HQ zones could contain Water or Rock tiles that were skipped in `spawnHQ()`, leaving holes and inconsistent starting conditions.
+- **Solution:** Two-part approach:
+  1. `spawnHQ()` now force-converts any Water/Rock tile to Grassland before claiming. All 25 tiles always claimed and walkable.
+  2. `findHQSpawnLocation()` scores candidates by non-walkable tile count, preferring zero. Minimizes aesthetic impact while ensuring completeness.
+- **Key change:** Removed skip logic in `spawnHQ()` (lines 50-55 in territory.ts). Added `countNonWalkableInZone()` helper in GameRoom.ts.
+- **Testing:** Steeply wrote 7 new tests covering edge margins and conversion logic. All 226 tests passing.
+- **Decisions merged:** Both inbox decisions archived to decisions.md. No duplicates.
+- **Status:** COMPLETE. Ready for next phase.
+

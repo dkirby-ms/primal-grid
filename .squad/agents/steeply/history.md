@@ -553,3 +553,39 @@ Hal proposed three redesign options for the hollow core gameplay loop. This will
 - **All 5 fail** because `game_log` broadcasting isn't implemented yet — expected. State preconditions (spawn, death, damage) all verified correctly.
 - **Test approach:** Mocked `room.broadcast` and `client.send` with `vi.fn()` spies. Helper functions `getLogBroadcasts()` and `getClientLogs()` extract game_log calls by type. Reuses established test patterns (createRoomWithMap, fakeClient, joinPlayer, addBuilder, addCreature, tickAI, tickUpkeep).
 - **When implementation lands:** Tests should pass with no changes if Pemulis uses `this.broadcast("game_log", { message: string, type: string })` for room-wide events and `client.send("game_log", ...)` for player-specific events. May need minor payload adjustments depending on exact message format.
+
+### HQ Edge Margin & Full Territory Tests (2026-03-05)
+
+- **8 new tests** added to `server/src/__tests__/territory.test.ts`. Total suite: **219 tests, all passing.**
+- **"HQ never spawns within edge margin"** — 6 tests: 5 per-seed checks (seeds 1, 42, 100, 777, 9999) verify hqX/hqY ∈ [half, mapSize-half), plus 1 multi-player (4 players) test. All use `TERRITORY.STARTING_SIZE` and `DEFAULT_MAP_SIZE` dynamically.
+- **"player always gets full starting territory"** — 3 tests: (1) every walkable tile in the NxN zone around HQ is owned, (2) owned count equals STARTING_SIZE² minus water/rock in zone (no edge clipping), (3) multi-seed (4 seeds) verification that no tile in the zone is undefined.
+- **Pemulis already landed the fix** — `findHQSpawnLocation()` constrains random coords to `[half, w-half)` with both random and fallback paths respecting the margin. Tests confirm the fix works correctly.
+- **Key insight:** `spawnHQ()` skips tiles where `getTile()` returns undefined (out-of-bounds). The edge margin in `findHQSpawnLocation()` guarantees every tile in the NxN zone is valid, so no territory is lost to clipping.
+
+### HQ Zone Water/Rock Conversion Tests (2026-03-05)
+
+- **7 new tests** added to `server/src/__tests__/territory.test.ts` under "HQ zone — no water or rock (all 25 tiles claimed)". Total suite: **226 tests, all passing.**
+- **Unit tests (6):** Use a controlled 10×10 grid with manual tile types to directly test `spawnHQ()`:
+  1. All 25 tiles claimed with no gaps (baseline Grassland grid)
+  2. Water tiles force-converted to Grassland and owned
+  3. Rock tiles force-converted to Grassland and owned
+  4. Mixed terrain: Water/Rock→Grassland, Forest/Sand/Highland/etc preserved, all 25 owned
+  5. Player score is exactly 25 with Water/Rock present
+  6. All 25 tiles have `isHQTerritory === true` and `structureType === "hq"`
+- **Integration test (1):** Full `createRoomWithMap`/`joinPlayer` flow across 5 seeds verifying no Water/Rock remains in HQ zone, all 25 tiles owned with correct flags.
+- **Pemulis already landed the fix** — `spawnHQ()` now force-converts Water/Rock tiles to Grassland before claiming (line 59-61 in territory.ts). All tests pass green.
+- **Test helper pattern:** `buildState(tileTypeFn)` creates a minimal GameState with a controlled 10×10 grid, avoiding the full map generation pipeline. This isolates `spawnHQ` behavior from `findHQSpawnLocation` logic.
+
+---
+
+## 2026-03-06: Starting Zone Tile Guarantees — Tests Written & Passed (Completed)
+
+- **Scope:** Validate 5×5 HQ zone always fully claimed and walkable, regardless of map seed or spawn location.
+- **Tests added:** 7 new tests to `territory.test.ts` under two suites:
+  1. "HQ never spawns within edge margin" (6 tests) — Verifies `findHQSpawnLocation()` respects edge constraints across 5 seeds + multi-player.
+  2. "HQ zone — no water or rock" (1 integration test) — Full flow validation that force-conversion works correctly.
+- **Coverage:** Edge margins, Water→Grassland conversion, Rock→Grassland conversion, mixed terrain preservation, score correctness, isHQTerritory flags, multi-seed integration.
+- **Test patterns:** Controlled grids, dynamic TERRITORY constants, multi-seed integration flows.
+- **Suite status:** 226 tests, all passing. No regressions.
+- **Status:** COMPLETE. Pemulis's implementation validated. Ready for next phase.
+
