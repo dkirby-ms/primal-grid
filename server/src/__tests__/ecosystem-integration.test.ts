@@ -63,13 +63,17 @@ function findResourceTile(room: GameRoom): TileState | null {
   return null;
 }
 
-/** Find a walkable tile WITHOUT resources. */
+/** Find a walkable tile WITHOUT resources that has at least one walkable neighbor. */
 function findBarrenWalkableTile(room: GameRoom): { x: number; y: number } | null {
   for (let i = 0; i < room.state.tiles.length; i++) {
     const tile = room.state.tiles.at(i)!;
-    if (room.state.isWalkable(tile.x, tile.y) && tile.resourceAmount <= 0) {
-      return { x: tile.x, y: tile.y };
-    }
+    if (!room.state.isWalkable(tile.x, tile.y) || tile.resourceAmount > 0) continue;
+    const hasNeighbor =
+      room.state.isWalkable(tile.x - 1, tile.y) ||
+      room.state.isWalkable(tile.x + 1, tile.y) ||
+      room.state.isWalkable(tile.x, tile.y - 1) ||
+      room.state.isWalkable(tile.x, tile.y + 1);
+    if (hasNeighbor) return { x: tile.x, y: tile.y };
   }
   return null;
 }
