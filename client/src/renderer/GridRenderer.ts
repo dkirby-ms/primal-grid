@@ -1,6 +1,7 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { TileType, ResourceType, DEFAULT_MAP_SIZE } from '@primal-grid/shared';
 import type { Room } from '@colyseus/sdk';
+import { DayNightOverlay } from './ParticleSystem.js';
 
 export const TILE_SIZE = 32;
 
@@ -51,15 +52,18 @@ export class GridRenderer {
   private lastIsHQTerritory: boolean[][] = [];
   private claimingTiles: Map<string, { x: number; y: number }> = new Map();
   private localPlayerId: string = '';
+  private dayNightOverlay: DayNightOverlay;
 
   constructor(mapSize: number = DEFAULT_MAP_SIZE) {
     this.container = new Container();
     this.territoryContainer = new Container();
     this.hqContainer = new Container();
     this.mapSize = mapSize;
+    this.dayNightOverlay = new DayNightOverlay(mapSize);
     this.buildGrid();
     this.container.addChild(this.territoryContainer);
     this.container.addChild(this.hqContainer);
+    this.container.addChild(this.dayNightOverlay.container);
   }
 
   /** Create the initial grid with all-grassland tiles. */
@@ -331,6 +335,11 @@ export class GridRenderer {
 
   public getMapSize(): number {
     return this.mapSize;
+  }
+
+  /** Update day/night overlay tint when phase changes. */
+  public setDayPhase(phase: string): void {
+    this.dayNightOverlay.setPhase(phase);
   }
 
   /** Update or create an HQ marker for a player at the given tile coordinates. */
