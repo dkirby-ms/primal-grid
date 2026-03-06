@@ -2,7 +2,6 @@ import { GameState, CreatureState } from "./GameState.js";
 import { stepBuilder } from "./builderAI.js";
 import {
   CREATURE_AI, CREATURE_TYPES, PAWN,
-  ResourceType, TileType,
 } from "@primal-grid/shared";
 import type { CreatureTypeDef } from "@primal-grid/shared";
 import type { Room } from "colyseus";
@@ -370,7 +369,7 @@ function manhattan(x1: number, y1: number, x2: number, y2: number): number {
 // Currently uses greedy Manhattan movement. Replace moveToward/moveAwayFrom
 // calls with pathfindAStar when implemented.
 export function pathfindAStar(
-  state: any, fromX: number, fromY: number, toX: number, toY: number
+  _state: GameState, _fromX: number, _fromY: number, _toX: number, _toY: number
 ): { x: number; y: number } | null {
   // TODO Phase 5: Implement A* pathfinding
   return null; // Falls through to greedy movement

@@ -2,7 +2,6 @@ import { Room, Client, CloseCode } from "colyseus";
 import { GameState, PlayerState, CreatureState } from "./GameState.js";
 import { generateProceduralMap } from "./mapGenerator.js";
 import { tickCreatureAI } from "./creatureAI.js";
-import { stepBuilder } from "./builderAI.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
   SPAWN_PAWN,

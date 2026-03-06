@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { GameState, PlayerState } from "../rooms/GameState.js";
+import { GameState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import {
   getLevelForXP,
@@ -13,19 +13,19 @@ import {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function createRoomWithMap(seed?: number): any {
-  const room = Object.create(GameRoom.prototype) as any;
+function createRoomWithMap(seed?: number): GameRoom {
+  const room = Object.create(GameRoom.prototype) as GameRoom;
   room.state = new GameState();
   room.generateMap(seed);
   room.broadcast = () => {};
   return room;
 }
 
-function fakeClient(sessionId: string): any {
+function fakeClient(sessionId: string): { sessionId: string; send: () => void } {
   return { sessionId, send: () => {} };
 }
 
-function joinPlayer(room: any, sessionId: string) {
+function joinPlayer(room: GameRoom, sessionId: string) {
   const client = fakeClient(sessionId);
   room.onJoin(client);
   const player = room.state.players.get(sessionId)!;
@@ -208,7 +208,7 @@ describe("XP and level-up integration", () => {
     const { player } = joinPlayer(room, "xp-earner");
 
     // Set up a tile mid-claim that's about to finish
-    const w = room.state.mapWidth;
+    const _w = room.state.mapWidth;
     for (let i = 0; i < room.state.tiles.length; i++) {
       const tile = room.state.tiles.at(i)!;
       if (

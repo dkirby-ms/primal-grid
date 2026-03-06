@@ -4,7 +4,6 @@ import { fileURLToPath } from "url";
 import express from "express";
 import { Server } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
-import { monitor } from "@colyseus/monitor";
 import { Encoder } from "@colyseus/schema";
 import { SERVER_PORT } from "@primal-grid/shared";
 import { GameRoom } from "./rooms/GameRoom.js";

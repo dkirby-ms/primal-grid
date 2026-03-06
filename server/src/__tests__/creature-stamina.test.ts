@@ -4,12 +4,13 @@ import { GameRoom } from "../rooms/GameRoom.js";
 import { tickCreatureAI } from "../rooms/creatureAI.js";
 import {
   CREATURE_TYPES, CREATURE_AI, PAWN,
+  type CreatureTypeDef,
 } from "@primal-grid/shared";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function createRoomWithMap(seed?: number): any {
-  const room = Object.create(GameRoom.prototype) as any;
+function createRoomWithMap(seed?: number): GameRoom {
+  const room = Object.create(GameRoom.prototype) as GameRoom;
   room.state = new GameState();
   room.generateMap(seed);
   room.broadcast = vi.fn();
@@ -18,7 +19,7 @@ function createRoomWithMap(seed?: number): any {
 
 /** Place a creature manually at a specific position. */
 function addCreature(
-  room: any,
+  room: GameRoom,
   id: string,
   type: string,
   x: number,
@@ -32,14 +33,14 @@ function addCreature(
     ownerID: string;
     pawnType: string;
   }> = {},
-): any {
+): CreatureState {
   const creature = new CreatureState();
   creature.id = id;
   creature.creatureType = type;
   creature.x = x;
   creature.y = y;
 
-  const typeDef = (CREATURE_TYPES as Record<string, any>)[type];
+  const typeDef = CREATURE_TYPES[type] as CreatureTypeDef | undefined;
   if (typeDef) {
     creature.health = overrides.health ?? typeDef.health;
     creature.hunger = overrides.hunger ?? typeDef.hunger;
@@ -50,14 +51,14 @@ function addCreature(
     }
   } else {
     // pawn_builder — no typeDef in CREATURE_TYPES
-    creature.health = overrides.health ?? (PAWN as any).BUILDER_HEALTH;
+    creature.health = overrides.health ?? PAWN.BUILDER_HEALTH;
     creature.hunger = overrides.hunger ?? 100;
     creature.ownerID = overrides.ownerID ?? "player-1";
     creature.pawnType = overrides.pawnType ?? "builder";
     if (overrides.stamina !== undefined) {
       creature.stamina = overrides.stamina;
     } else {
-      creature.stamina = (PAWN as any).BUILDER_MAX_STAMINA;
+      creature.stamina = PAWN.BUILDER_MAX_STAMINA;
     }
   }
 
@@ -68,7 +69,7 @@ function addCreature(
 }
 
 /** Find a walkable tile with walkable neighbors (creature can move). */
-function findWalkableTile(room: any): { x: number; y: number } {
+function findWalkableTile(room: GameRoom): { x: number; y: number } {
   const w = room.state.mapWidth;
   for (let y = 2; y < w - 2; y++) {
     for (let x = 2; x < w - 2; x++) {
@@ -91,7 +92,7 @@ function findWalkableTile(room: any): { x: number; y: number } {
  * Ensures no detection-radius interactions between creatures.
  */
 function findSpacedWalkableTiles(
-  room: any, count: number, minSeparation: number = 12,
+  room: GameRoom, count: number, minSeparation: number = 12,
 ): { x: number; y: number }[] {
   const tiles: { x: number; y: number }[] = [];
   const w = room.state.mapWidth;
@@ -118,7 +119,7 @@ function findSpacedWalkableTiles(
  * (creature cannot move anywhere from this tile).
  * Falls back to artificially blocking neighbors if none found.
  */
-function findBlockedTile(room: any): { x: number; y: number } | null {
+function findBlockedTile(room: GameRoom): { x: number; y: number } | null {
   const w = room.state.mapWidth;
   for (let y = 1; y < w - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
@@ -137,13 +138,13 @@ function findBlockedTile(room: any): { x: number; y: number } | null {
 }
 
 /** Run a single game tick: increment tick and call tickCreatureAI. */
-function aiTick(room: any): void {
+function aiTick(room: GameRoom): void {
   room.state.tick += 1;
   tickCreatureAI(room.state, room);
 }
 
 /** Run N AI ticks. */
-function aiTickN(room: any, n: number): void {
+function aiTickN(room: GameRoom, n: number): void {
   for (let i = 0; i < n; i++) aiTick(room);
 }
 
@@ -163,10 +164,10 @@ const CARNIVORE_STAMINA = {
 };
 
 const BUILDER_STAMINA = {
-  maxStamina: (PAWN as any).BUILDER_MAX_STAMINA ?? 20,
-  costPerMove: (PAWN as any).BUILDER_STAMINA_COST ?? 1,
-  regenPerTick: (PAWN as any).BUILDER_STAMINA_REGEN ?? 2,
-  exhaustedThreshold: (PAWN as any).BUILDER_EXHAUSTED_THRESHOLD ?? 5,
+  maxStamina: PAWN.BUILDER_MAX_STAMINA,
+  costPerMove: PAWN.BUILDER_STAMINA_COST_PER_MOVE,
+  regenPerTick: PAWN.BUILDER_STAMINA_REGEN_PER_TICK,
+  exhaustedThreshold: PAWN.BUILDER_EXHAUSTED_THRESHOLD,
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -703,7 +704,7 @@ describe("Creature Stamina System", () => {
       room.state.creatures.clear();
       const pos = findWalkableTile(room);
 
-      const herb = addCreature(room, "herb-starve-exhaust", "herbivore", pos.x, pos.y, {
+      addCreature(room, "herb-starve-exhaust", "herbivore", pos.x, pos.y, {
         hunger: 0, // Already starving
         health: CREATURE_AI.STARVATION_DAMAGE * 2, // Will die in ~2 ticks
         currentState: "exhausted",
@@ -798,10 +799,10 @@ describe("Creature Stamina System", () => {
         stamina: 0,
       });
 
-      let ticksToRecover = 0;
+      let _ticksToRecover = 0;
       for (let t = 0; t < 30; t++) {
         aiTick(room);
-        ticksToRecover++;
+        _ticksToRecover++;
         if (herb.currentState !== "exhausted") break;
       }
 

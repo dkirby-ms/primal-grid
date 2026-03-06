@@ -1,16 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { GameState, CreatureState } from "../rooms/GameState.js";
+import { GameState, CreatureState, TileState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import {
-  TileType, ResourceType,
-  CREATURE_TYPES, CREATURE_AI, CREATURE_SPAWN,
+  TileType,
+  CREATURE_TYPES, CREATURE_AI,
   DEFAULT_MAP_SIZE,
 } from "@primal-grid/shared";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function createRoomWithCreatures(seed?: number): any {
-  const room = Object.create(GameRoom.prototype) as any;
+function createRoomWithCreatures(seed?: number): GameRoom {
+  const room = Object.create(GameRoom.prototype) as GameRoom;
   room.state = new GameState();
   room.generateMap(seed);
   room.spawnCreatures();
@@ -19,19 +19,19 @@ function createRoomWithCreatures(seed?: number): any {
 
 /** Place a creature manually at a specific position with given state. */
 function addCreature(
-  room: any,
+  room: GameRoom,
   id: string,
   type: string,
   x: number,
   y: number,
   overrides: Partial<{ health: number; hunger: number; currentState: string }> = {},
-): any {
+): CreatureState {
   const creature = new CreatureState();
   creature.id = id;
   creature.creatureType = type;
   creature.x = x;
   creature.y = y;
-  const typeDef = (CREATURE_TYPES as Record<string, any>)[type];
+  const typeDef = CREATURE_TYPES[type];
   creature.health = overrides.health ?? typeDef.health;
   creature.hunger = overrides.hunger ?? typeDef.hunger;
   creature.currentState = overrides.currentState ?? "idle";
@@ -41,7 +41,7 @@ function addCreature(
 }
 
 /** Find a walkable tile of the given type. */
-function findWalkableTile(room: any, tileType?: number): { x: number; y: number } {
+function findWalkableTile(room: GameRoom, tileType?: number): { x: number; y: number } {
   for (let i = 0; i < room.state.tiles.length; i++) {
     const tile = room.state.tiles.at(i)!;
     if (room.state.isWalkable(tile.x, tile.y)) {
@@ -56,7 +56,7 @@ function findWalkableTile(room: any, tileType?: number): { x: number; y: number 
 
 /** Find two walkable tiles separated by exactly `dist` Manhattan distance. */
 function findTilesAtDistance(
-  room: any, dist: number, tileType?: number,
+  room: GameRoom, dist: number, tileType?: number,
 ): { a: { x: number; y: number }; b: { x: number; y: number } } | null {
   const w = room.state.mapWidth;
   for (let y1 = 0; y1 < w; y1++) {
@@ -84,10 +84,9 @@ function manhattan(x1: number, y1: number, x2: number, y2: number): number {
 describe("Phase 2.5 — Creature AI: FSM States", () => {
   it("all creatures start in idle state", () => {
     const room = createRoomWithCreatures(42);
-    room.state.creatures.forEach((creature: any) => {
+    room.state.creatures.forEach((creature: CreatureState) => {
       expect(creature.currentState).toBe("idle");
-    });
-  });
+    });  });
 
   it("valid FSM states are idle, wander, eat, flee, hunt, exhausted", () => {
     const validStates = ["idle", "wander", "eat", "flee", "hunt", "exhausted"];
@@ -99,7 +98,7 @@ describe("Phase 2.5 — Creature AI: FSM States", () => {
       room.tickCreatureAI();
     }
 
-    room.state.creatures.forEach((creature: any) => {
+    room.state.creatures.forEach((creature: CreatureState) => {
       expect(validStates).toContain(creature.currentState);
     });
   });
@@ -133,7 +132,7 @@ describe("Phase 2.5 — Creature AI: Herbivore Transitions", () => {
     room.state.creatures.clear();
 
     // Find a tile with berries or fiber (food for herbivore)
-    let foodTile: any = null;
+    let foodTile: TileState | null = null;
     for (let i = 0; i < room.state.tiles.length; i++) {
       const tile = room.state.tiles.at(i)!;
       if (tile.resourceAmount > 0 && room.state.isWalkable(tile.x, tile.y)) {
@@ -163,7 +162,7 @@ describe("Phase 2.5 — Creature AI: Herbivore Transitions", () => {
     const room = createRoomWithCreatures(42);
     room.state.creatures.clear();
 
-    const herbDetection = (CREATURE_TYPES as Record<string, any>).herbivore.detectionRadius;
+    const herbDetection = CREATURE_TYPES.herbivore.detectionRadius;
 
     // Find two walkable tiles close together
     const pos = findTilesAtDistance(room, 2);
@@ -189,7 +188,7 @@ describe("Phase 2.5 — Creature AI: Herbivore Transitions", () => {
     // Herbivore should be fleeing (or have fled and returned to wander)
     expect(["flee", "wander", "idle", "exhausted"]).toContain(herb.currentState);
     // At minimum, it should have moved away
-    const newDist = manhattan(herb.x, herb.y, pos.b.x, pos.b.y);
+    manhattan(herb.x, herb.y, pos.b.x, pos.b.y);
     // Should not have stayed on same spot if it noticed the carnivore
     expect(herb.x !== pos.a.x || herb.y !== pos.a.y || herb.currentState === "flee").toBe(true);
   });
@@ -202,7 +201,7 @@ describe("Phase 2.5 — Creature AI: Carnivore Transitions", () => {
     const room = createRoomWithCreatures(42);
     room.state.creatures.clear();
 
-    const carnDetection = (CREATURE_TYPES as Record<string, any>).carnivore.detectionRadius;
+    const carnDetection = CREATURE_TYPES.carnivore.detectionRadius;
 
     const pos = findTilesAtDistance(room, 3);
     if (!pos) return;
@@ -238,7 +237,7 @@ describe("Phase 2.5 — Creature AI: Carnivore Transitions", () => {
     const carn = addCreature(room, "chase-carn", "carnivore", pos.a.x, pos.a.y, {
       currentState: "hunt",
     });
-    const herb = addCreature(room, "target-herb", "herbivore", pos.b.x, pos.b.y, {
+    addCreature(room, "target-herb", "herbivore", pos.b.x, pos.b.y, {
       currentState: "idle",
     });
 
@@ -247,8 +246,6 @@ describe("Phase 2.5 — Creature AI: Carnivore Transitions", () => {
     // Tick AI once
     room.state.tick += CREATURE_AI.TICK_INTERVAL;
     room.tickCreatureAI();
-
-    const newDist = manhattan(carn.x, carn.y, herb.x, herb.y);
 
     // Carnivore should have moved closer to the herbivore (or at least not farther)
     // Note: herbivore might also move, so we check against original target position
@@ -283,7 +280,7 @@ describe("Phase 2.5 — Creature AI: Hunger Depletion", () => {
     room.state.creatures.clear();
 
     const pos = findWalkableTile(room);
-    const creature = addCreature(room, "hunger-floor", "herbivore", pos.x, pos.y, {
+    addCreature(room, "hunger-floor", "herbivore", pos.x, pos.y, {
       hunger: 1,
     });
 
@@ -377,7 +374,7 @@ describe("Phase 2.5 — Creature AI: Movement", () => {
 
     // Record initial positions
     const initialPos = new Map<string, { x: number; y: number }>();
-    room.state.creatures.forEach((c: any) => {
+    room.state.creatures.forEach((c: CreatureState) => {
       initialPos.set(c.id, { x: c.x, y: c.y });
     });
 
@@ -386,7 +383,7 @@ describe("Phase 2.5 — Creature AI: Movement", () => {
     room.tickCreatureAI();
 
     // Check each creature moved at most 1 tile
-    room.state.creatures.forEach((c: any) => {
+    room.state.creatures.forEach((c: CreatureState) => {
       const prev = initialPos.get(c.id);
       if (!prev) return; // new creature or died
       const dx = Math.abs(c.x - prev.x);
@@ -406,7 +403,7 @@ describe("Phase 2.5 — Creature AI: Movement", () => {
     }
 
     // All surviving creatures must be on walkable tiles
-    room.state.creatures.forEach((c: any) => {
+    room.state.creatures.forEach((c: CreatureState) => {
       const tile = room.state.getTile(c.x, c.y);
       expect(tile).toBeDefined();
       expect(tile!.type).not.toBe(TileType.Water);
@@ -423,7 +420,7 @@ describe("Phase 2.5 — Creature AI: Movement", () => {
       room.tickCreatureAI();
     }
 
-    room.state.creatures.forEach((c: any) => {
+    room.state.creatures.forEach((c: CreatureState) => {
       expect(c.x).toBeGreaterThanOrEqual(0);
       expect(c.x).toBeLessThan(DEFAULT_MAP_SIZE);
       expect(c.y).toBeGreaterThanOrEqual(0);
@@ -467,8 +464,8 @@ describe("Phase 2.5 — Creature AI: Wander", () => {
 
 describe("Phase 2.5 — Creature AI: Detection Radius", () => {
   it("detection radius is configurable per creature type", () => {
-    const herbDef = (CREATURE_TYPES as Record<string, any>).herbivore;
-    const carnDef = (CREATURE_TYPES as Record<string, any>).carnivore;
+    const herbDef = CREATURE_TYPES.herbivore;
+    const carnDef = CREATURE_TYPES.carnivore;
 
     expect(herbDef.detectionRadius).toBeGreaterThan(0);
     expect(carnDef.detectionRadius).toBeGreaterThan(0);
@@ -480,7 +477,7 @@ describe("Phase 2.5 — Creature AI: Detection Radius", () => {
     const room = createRoomWithCreatures(42);
     room.state.creatures.clear();
 
-    const carnDef = (CREATURE_TYPES as Record<string, any>).carnivore;
+    const carnDef = CREATURE_TYPES.carnivore;
     const farDist = carnDef.detectionRadius + 5;
 
     // Place carnivore and herbivore far apart
@@ -518,7 +515,7 @@ describe("Phase 2.5 — Creature AI: Greedy Manhattan", () => {
       hunger: CREATURE_AI.HUNGRY_THRESHOLD - 10, // must be hungry to hunt
     });
     // Target — well-fed so it mostly idles
-    const herb = addCreature(room, "greedy-target", "herbivore", pos.b.x, pos.b.y, {
+    addCreature(room, "greedy-target", "herbivore", pos.b.x, pos.b.y, {
       currentState: "idle",
       health: 200, // high health so it survives
       hunger: 100, // well-fed, won't seek food
@@ -549,7 +546,7 @@ describe("Phase 2.5 — Creature AI: Tick Interval", () => {
 
     if (CREATURE_AI.TICK_INTERVAL > 1) {
       const nextMoveValues = new Set<number>();
-      room.state.creatures.forEach((c: any) => {
+      room.state.creatures.forEach((c: CreatureState) => {
         nextMoveValues.add(c.nextMoveTick);
       });
       // With TICK_INTERVAL=2, there should be 2 distinct values (0 and 1)
@@ -558,7 +555,7 @@ describe("Phase 2.5 — Creature AI: Tick Interval", () => {
   });
 
   it("creature does not step before its nextMoveTick", () => {
-    const room = Object.create(GameRoom.prototype) as any;
+    const room = Object.create(GameRoom.prototype) as GameRoom;
     room.state = new GameState();
     room.generateMap(42);
 
@@ -577,7 +574,7 @@ describe("Phase 2.5 — Creature AI: Tick Interval", () => {
   });
 
   it("creature steps when tick reaches its nextMoveTick", () => {
-    const room = Object.create(GameRoom.prototype) as any;
+    const room = Object.create(GameRoom.prototype) as GameRoom;
     room.state = new GameState();
     room.generateMap(42);
 

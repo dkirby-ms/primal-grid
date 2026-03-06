@@ -7,8 +7,8 @@ import { TileType, DEFAULT_MAP_SIZE } from "@primal-grid/shared";
  * Create a room-like object that can call GameRoom's private methods
  * without requiring full Colyseus server infrastructure.
  */
-function createRoomWithMap(): { state: GameState } {
-  const room = Object.create(GameRoom.prototype) as any;
+function createRoomWithMap(): GameRoom {
+  const room = Object.create(GameRoom.prototype) as GameRoom;
   room.state = new GameState();
   room.generateMap();
   return room;
@@ -97,11 +97,11 @@ describe("Grid Generation", () => {
   });
 
   it("same seed produces identical maps", () => {
-    const room1 = Object.create(GameRoom.prototype) as any;
+    const room1 = Object.create(GameRoom.prototype) as GameRoom;
     room1.state = new GameState();
     room1.generateMap(42);
 
-    const room2 = Object.create(GameRoom.prototype) as any;
+    const room2 = Object.create(GameRoom.prototype) as GameRoom;
     room2.state = new GameState();
     room2.generateMap(42);
 
@@ -115,11 +115,11 @@ describe("Grid Generation", () => {
   });
 
   it("different seeds produce different maps", () => {
-    const room1 = Object.create(GameRoom.prototype) as any;
+    const room1 = Object.create(GameRoom.prototype) as GameRoom;
     room1.state = new GameState();
     room1.generateMap(1);
 
-    const room2 = Object.create(GameRoom.prototype) as any;
+    const room2 = Object.create(GameRoom.prototype) as GameRoom;
     room2.state = new GameState();
     room2.generateMap(99999);
 

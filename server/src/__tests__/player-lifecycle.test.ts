@@ -3,16 +3,21 @@ import { GameState, PlayerState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import { TileType, DEFAULT_MAP_SIZE, TERRITORY } from "@primal-grid/shared";
 
+interface MockClient {
+  sessionId: string;
+  send: () => void;
+}
+
 /** Create a room-like object with generated map for lifecycle testing. */
-function createRoom(): any {
-  const room = Object.create(GameRoom.prototype) as any;
+function createRoom(): GameRoom {
+  const room = Object.create(GameRoom.prototype) as GameRoom;
   room.state = new GameState();
   room.generateMap();
   return room;
 }
 
 /** Create a fake Client with a given sessionId. */
-function fakeClient(sessionId: string): any {
+function fakeClient(sessionId: string): MockClient {
   return { sessionId, send: () => {} };
 }
 

@@ -165,9 +165,6 @@ export class GridRenderer {
 
       // Draw border edges only where neighbor is not same owner
       const borderW = isHQTerritory ? 2.5 : (shapeHP > 0 ? 2 : 1.5);
-      const dirs: [number, number, number, number, number, number, number, number][] = [
-        // [nx, ny, lineX1, lineY1, lineX2, lineY2, ... unused]
-      ];
       // Top edge
       if (!this.isSameOwner(x, y - 1, ownerID)) {
         overlay.moveTo(0, 0); overlay.lineTo(TILE_SIZE, 0);
@@ -307,7 +304,7 @@ export class GridRenderer {
   }
 
   /** Show an optimistic claiming overlay immediately (before server confirms). */
-  public showOptimisticClaim(x: number, y: number, playerId: string): void {
+  public showOptimisticClaim(x: number, y: number, _playerId: string): void {
     if (y < 0 || y >= this.mapSize || x < 0 || x >= this.mapSize) return;
     const key = `${x},${y}`;
     if (this.claimingTiles.has(key)) return;

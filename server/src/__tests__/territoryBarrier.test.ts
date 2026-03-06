@@ -1,18 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { GameState, CreatureState, TileState } from "../rooms/GameState.js";
+import { GameState, CreatureState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import { tickCreatureAI, moveToward } from "../rooms/creatureAI.js";
 import {
-  TileType, ResourceType,
+  ResourceType,
   CREATURE_TYPES, CREATURE_AI,
-  DEFAULT_MAP_SIZE,
 } from "@primal-grid/shared";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
 /** Create a room with map + creature spawning. Uses Object.create pattern. */
-function createRoom(seed?: number): any {
-  const room = Object.create(GameRoom.prototype) as any;
+function createRoom(seed?: number): GameRoom {
+  const room = Object.create(GameRoom.prototype) as GameRoom;
   room.state = new GameState();
   room.generateMap(seed);
   // Stub broadcast/send so tickCreatureAI doesn't throw
@@ -23,7 +22,7 @@ function createRoom(seed?: number): any {
 
 /** Place a creature at a position. */
 function addCreature(
-  room: any,
+  room: GameRoom,
   id: string,
   type: string,
   x: number,
@@ -41,7 +40,7 @@ function addCreature(
   creature.creatureType = type;
   creature.x = x;
   creature.y = y;
-  const typeDef = (CREATURE_TYPES as Record<string, any>)[type];
+  const typeDef = (CREATURE_TYPES as Record<string, { health: number; hunger: number; maxStamina: number }>)[type];
   if (typeDef) {
     creature.health = overrides.health ?? typeDef.health;
     creature.hunger = overrides.hunger ?? typeDef.hunger;
@@ -58,7 +57,7 @@ function addCreature(
 }
 
 /** Mark a tile as owned by a player. */
-function claimTile(room: any, x: number, y: number, ownerID: string): void {
+function claimTile(room: GameRoom, x: number, y: number, ownerID: string): void {
   const tile = room.state.getTile(x, y);
   if (tile) {
     tile.ownerID = ownerID;
@@ -66,7 +65,7 @@ function claimTile(room: any, x: number, y: number, ownerID: string): void {
 }
 
 /** Find a contiguous block of walkable tiles. Returns the top-left corner. */
-function findWalkableBlock(room: any, width: number, height: number): { x: number; y: number } | null {
+function findWalkableBlock(room: GameRoom, width: number, height: number): { x: number; y: number } | null {
   const mapW = room.state.mapWidth;
   const mapH = room.state.mapHeight;
   for (let y = 1; y < mapH - height - 1; y++) {
@@ -89,7 +88,7 @@ function manhattan(x1: number, y1: number, x2: number, y2: number): number {
 }
 
 /** Tick the creature AI via the exported module function. */
-function tickAI(room: any): void {
+function tickAI(room: GameRoom): void {
   room.state.tick += CREATURE_AI.TICK_INTERVAL;
   tickCreatureAI(room.state, room);
 }
@@ -107,7 +106,7 @@ describe("Territory Barrier — Herbivore blocked", () => {
     const { x: bx, y: by } = block!;
 
     // Place herbivore in the middle
-    const herb = addCreature(room, "herb-wander", "herbivore", bx + 2, by + 2, {
+    addCreature(room, "herb-wander", "herbivore", bx + 2, by + 2, {
       currentState: "idle",
       hunger: 100, // well-fed, no food-seeking urgency
     });
@@ -148,7 +147,7 @@ describe("Territory Barrier — Herbivore blocked", () => {
     }
 
     // Place hungry herbivore on the left side
-    const herb = addCreature(room, "herb-food", "herbivore", bx, by + 1, {
+    addCreature(room, "herb-food", "herbivore", bx, by + 1, {
       currentState: "wander",
       hunger: CREATURE_AI.HUNGRY_THRESHOLD - 10,
     });
@@ -177,7 +176,7 @@ describe("Territory Barrier — Herbivore blocked", () => {
     }
 
     // Herbivore at (bx+2, by+1), carnivore chasing from (bx, by+1)
-    const herb = addCreature(room, "herb-flee", "herbivore", bx + 2, by + 1, {
+    addCreature(room, "herb-flee", "herbivore", bx + 2, by + 1, {
       currentState: "idle",
     });
     addCreature(room, "carn-chase", "carnivore", bx, by + 1, {
@@ -206,7 +205,7 @@ describe("Territory Barrier — Carnivore blocked", () => {
     expect(block).not.toBeNull();
     const { x: bx, y: by } = block!;
 
-    const carn = addCreature(room, "carn-wander", "carnivore", bx + 2, by + 2, {
+    addCreature(room, "carn-wander", "carnivore", bx + 2, by + 2, {
       currentState: "idle",
       hunger: 100,
     });
@@ -241,7 +240,7 @@ describe("Territory Barrier — Carnivore blocked", () => {
     }
 
     // Carnivore on left, prey on right
-    const carn = addCreature(room, "carn-hunt", "carnivore", bx + 1, by + 1, {
+    addCreature(room, "carn-hunt", "carnivore", bx + 1, by + 1, {
       currentState: "hunt",
       hunger: CREATURE_AI.HUNGRY_THRESHOLD - 10,
     });
@@ -356,15 +355,12 @@ describe("Territory Barrier — Carnivore target filtering", () => {
     });
 
     // Carnivore OUTSIDE territory, hungry
-    const carn = addCreature(room, "carn-skip", "carnivore", bx + 1, by + 2, {
+    addCreature(room, "carn-skip", "carnivore", bx + 1, by + 2, {
       currentState: "idle",
       hunger: CREATURE_AI.HUNGRY_THRESHOLD - 10,
     });
 
     // Tick several times — carnivore should NOT move toward the herbivore
-    const startX = carn.x;
-    const startY = carn.y;
-
     for (let i = 0; i < 10; i++) {
       tickAI(room);
     }
@@ -408,7 +404,7 @@ describe("Territory Barrier — Carnivore target filtering", () => {
     });
 
     // Carnivore outside, hungry
-    const carn = addCreature(room, "carn-skip-builder", "carnivore", bx + 1, by + 2, {
+    addCreature(room, "carn-skip-builder", "carnivore", bx + 1, by + 2, {
       currentState: "idle",
       hunger: CREATURE_AI.HUNGRY_THRESHOLD - 10,
     });
@@ -455,7 +451,7 @@ describe("Territory Barrier — Herbivore resource filtering", () => {
     foodInside!.resourceAmount = 50;
 
     // Hungry herbivore outside territory — only food is inside territory
-    const herb = addCreature(room, "herb-no-food", "herbivore", bx + 1, by + 2, {
+    addCreature(room, "herb-no-food", "herbivore", bx + 1, by + 2, {
       currentState: "idle",
       hunger: CREATURE_AI.HUNGRY_THRESHOLD - 10,
     });

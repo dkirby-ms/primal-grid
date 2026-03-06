@@ -1,12 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { GameState, PlayerState, CreatureState } from "../rooms/GameState.js";
+import { GameState, CreatureState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import { tickCreatureAI } from "../rooms/creatureAI.js";
+import type { Client, Room } from "colyseus";
 import {
   CREATURE_TYPES,
-  CREATURE_SPAWN, RESOURCE_REGEN, DEFAULT_MAP_SIZE,
+  CREATURE_SPAWN,
   TERRITORY,
 } from "@primal-grid/shared";
+import type { CreatureTypeDef } from "@primal-grid/shared";
 
 /**
  * Phase A — HUD State Contract Tests
@@ -18,20 +20,20 @@ import {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function createRoomWithMap(seed?: number): any {
-  const room = Object.create(GameRoom.prototype) as any;
+function createRoomWithMap(seed?: number): GameRoom {
+  const room = Object.create(GameRoom.prototype) as GameRoom;
   room.state = new GameState();
   room.generateMap(seed);
   room.broadcast = () => {};
   return room;
 }
 
-function fakeClient(sessionId: string): any {
+function fakeClient(sessionId: string): Client {
   return { sessionId, send: () => {} };
 }
 
 /** Join a player and return client + player. */
-function joinPlayer(room: any, sessionId: string) {
+function joinPlayer(room: GameRoom, sessionId: string) {
   const client = fakeClient(sessionId);
   room.onJoin(client);
   const player = room.state.players.get(sessionId)!;
@@ -39,19 +41,19 @@ function joinPlayer(room: any, sessionId: string) {
 }
 
 function addCreature(
-  room: any, id: string, type: string,
+  room: GameRoom, id: string, type: string,
   x: number, y: number,
   overrides: Partial<{
     health: number; hunger: number;
     currentState: string;
   }> = {},
-): any {
+): CreatureState {
   const creature = new CreatureState();
   creature.id = id;
   creature.creatureType = type;
   creature.x = x;
   creature.y = y;
-  const typeDef = (CREATURE_TYPES as Record<string, any>)[type];
+  const typeDef = (CREATURE_TYPES as Record<string, CreatureTypeDef>)[type];
   creature.health = overrides.health ?? typeDef.health;
   creature.hunger = overrides.hunger ?? typeDef.hunger;
   creature.currentState = overrides.currentState ?? "idle";
@@ -60,7 +62,7 @@ function addCreature(
   return creature;
 }
 
-function findOwnedWalkableTile(room: any, playerId: string): { x: number; y: number } | null {
+function findOwnedWalkableTile(room: GameRoom, playerId: string): { x: number; y: number } | null {
   for (let i = 0; i < room.state.tiles.length; i++) {
     const tile = room.state.tiles.at(i)!;
     if (tile.ownerID === playerId && room.state.isWalkable(tile.x, tile.y)) {
@@ -97,7 +99,7 @@ describe("Phase A — HUD State Contract", () => {
       room.spawnCreatures();
       let herbCount = 0;
       let carnCount = 0;
-      room.state.creatures.forEach((c: any) => {
+      room.state.creatures.forEach((c: CreatureState) => {
         expect(["herbivore", "carnivore"]).toContain(c.creatureType);
         if (c.creatureType === "herbivore") herbCount++;
         else carnCount++;
@@ -125,9 +127,9 @@ describe("Phase A — HUD State Contract", () => {
       room.spawnCreatures();
       for (let t = 0; t < 100; t++) {
         room.state.tick = t;
-        tickCreatureAI(room.state, room as any);
+        tickCreatureAI(room.state, room as Room);
       }
-      room.state.creatures.forEach((c: any) => {
+      room.state.creatures.forEach((c: CreatureState) => {
         expect(c.health).toBeGreaterThanOrEqual(0);
         expect(c.hunger).toBeGreaterThanOrEqual(0);
         expect(typeof c.creatureType).toBe("string");
