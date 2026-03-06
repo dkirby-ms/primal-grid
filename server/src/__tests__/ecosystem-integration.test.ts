@@ -194,14 +194,20 @@ describe("Phase 2.6 — Herbivore Grazing Depletes Tile Resources", () => {
     const startX = herb.x;
     const startY = herb.y;
 
-    // Tick multiple times — creature should wander seeking food
+    // Tick multiple times — creature should move at some point seeking food.
+    // Check "ever moved" rather than final position to avoid flakes from
+    // random walks that return to the origin.
+    let movedAtSomePoint = false;
     for (let i = 0; i < 20; i++) {
       room.state.tick += CREATURE_AI.TICK_INTERVAL;
       room.tickCreatureAI();
+      if (herb.x !== startX || herb.y !== startY) {
+        movedAtSomePoint = true;
+        break;
+      }
     }
 
-    // Should have moved from starting position
-    expect(herb.x !== startX || herb.y !== startY).toBe(true);
+    expect(movedAtSomePoint).toBe(true);
   });
 });
 
