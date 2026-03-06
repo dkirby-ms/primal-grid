@@ -38,7 +38,7 @@ describe("Grid Generation", () => {
 
   it("all tiles have valid TileType values", () => {
     const room = createRoomWithMap();
-    const validTypes = new Set([TileType.Grassland, TileType.Forest, TileType.Swamp, TileType.Desert, TileType.Highland, TileType.Water, TileType.Rock, TileType.Sand]);
+    const validTypes = new Set([TileType.Grassland, TileType.Forest, TileType.Swamp, TileType.Desert, TileType.Highland, TileType.ShallowWater, TileType.DeepWater, TileType.Rock, TileType.Sand]);
     for (let i = 0; i < room.state.tiles.length; i++) {
       const tile = room.state.tiles.at(i)!;
       expect(validTypes.has(tile.type)).toBe(true);
@@ -81,7 +81,7 @@ describe("Grid Generation", () => {
 
   it("water and rock tiles are not walkable", () => {
     const room = createRoomWithMap();
-    const waterTile = findTileOfType(room.state, TileType.Water);
+    const waterTile = findTileOfType(room.state, TileType.ShallowWater) ?? findTileOfType(room.state, TileType.DeepWater);
     const rockTile = findTileOfType(room.state, TileType.Rock);
     if (waterTile) expect(room.state.isWalkable(waterTile.x, waterTile.y)).toBe(false);
     if (rockTile) expect(room.state.isWalkable(rockTile.x, rockTile.y)).toBe(false);

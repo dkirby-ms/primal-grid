@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { GameState, PlayerState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
-import { TileType, DEFAULT_MAP_SIZE, TERRITORY } from "@primal-grid/shared";
+import { TileType, DEFAULT_MAP_SIZE, TERRITORY, isWaterTile } from "@primal-grid/shared";
 
 interface MockClient {
   sessionId: string;
@@ -47,7 +47,7 @@ describe("Player Lifecycle", () => {
 
     const tile = room.state.getTile(player!.hqX, player!.hqY);
     expect(tile).toBeDefined();
-    expect(tile!.type).not.toBe(TileType.Water);
+    expect(isWaterTile(tile!.type)).toBe(false);
     expect(tile!.type).not.toBe(TileType.Rock);
   });
 

@@ -1,5 +1,5 @@
 import { Schema, type, ArraySchema, MapSchema } from "@colyseus/schema";
-import { TileType, DayPhase, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED } from "@primal-grid/shared";
+import { TileType, DayPhase, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED, isWaterTile } from "@primal-grid/shared";
 
 export class TileState extends Schema {
   @type("number")
@@ -166,7 +166,7 @@ export class GameState extends Schema {
   isWalkable(x: number, y: number): boolean {
     const tile = this.getTile(x, y);
     if (!tile) return false;
-    if (tile.type === TileType.Water || tile.type === TileType.Rock) return false;
+    if (isWaterTile(tile.type) || tile.type === TileType.Rock) return false;
     if (tile.shapeHP > 0) return false;
     return true;
   }

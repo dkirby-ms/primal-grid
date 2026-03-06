@@ -1,5 +1,5 @@
 import { TileState, GameState } from "./GameState.js";
-import { TileType, ResourceType, NOISE_PARAMS, RESOURCE_REGEN } from "@primal-grid/shared";
+import { TileType, ResourceType, NOISE_PARAMS, RESOURCE_REGEN, WATER_GENERATION, isWaterTile } from "@primal-grid/shared";
 
 // --- Simplex noise implementation (inline, no deps) ---
 
@@ -86,7 +86,7 @@ function fbm(perm: Uint8Array, x: number, y: number, octaves: number, scale: num
 /** Determine biome from elevation and moisture values. */
 function determineBiome(elevation: number, moisture: number): TileType {
   const p = NOISE_PARAMS;
-  if (elevation < p.WATER_LEVEL) return TileType.Water;
+  if (elevation < p.WATER_LEVEL) return TileType.ShallowWater;
   if (elevation > p.ROCK_LEVEL) return TileType.Rock;
   if (elevation > p.HIGHLAND_LEVEL) return TileType.Highland;
   if (moisture > p.SWAMP_MOISTURE && elevation < p.SWAMP_ELEVATION) return TileType.Swamp;
@@ -99,7 +99,8 @@ function determineBiome(elevation: number, moisture: number): TileType {
 /** Calculate tile fertility based on biome and moisture. */
 function calculateFertility(type: TileType, moisture: number): number {
   switch (type) {
-    case TileType.Water:
+    case TileType.ShallowWater:
+    case TileType.DeepWater:
     case TileType.Rock:
       return 0;
     case TileType.Highland:
@@ -181,6 +182,9 @@ export function generateProceduralMap(
 
   // Cellular automata smoothing — eliminate isolated single-tile biome patches
   smoothBiomes(state, width, height, rng);
+
+  // Second pass: classify water tiles as shallow or deep based on distance to land
+  classifyWaterDepth(state, width, height);
 }
 
 /** Run cellular automata smoothing passes to create contiguous biome regions. */
@@ -193,7 +197,7 @@ function smoothBiomes(
   const PASSES = 2;
   const MAJORITY_THRESHOLD = 5;
   // Water and Rock are terrain barriers — never smoothed
-  const PROTECTED = new Set<TileType>([TileType.Water, TileType.Rock]);
+  const PROTECTED = new Set<TileType>([TileType.ShallowWater, TileType.DeepWater, TileType.Rock]);
 
   for (let pass = 0; pass < PASSES; pass++) {
     // Snapshot current biome types so reads don't see writes from this pass
@@ -244,5 +248,60 @@ function smoothBiomes(
         }
       }
     }
+  }
+}
+
+/**
+ * Classify water tiles as ShallowWater or DeepWater based on distance to
+ * the nearest non-water tile. Runs as a second pass after generation and
+ * smoothing. Uses BFS from all land-edge tiles inward.
+ */
+function classifyWaterDepth(
+  state: GameState,
+  width: number,
+  height: number,
+): void {
+  const radius = WATER_GENERATION.SHALLOW_RADIUS;
+  const total = width * height;
+
+  // Distance grid: Infinity for water, 0 for non-water
+  const dist = new Float32Array(total);
+  dist.fill(Infinity);
+
+  const queue: number[] = [];
+
+  // Seed BFS from all non-water tiles
+  for (let i = 0; i < total; i++) {
+    if (!isWaterTile(state.tiles[i].type)) {
+      dist[i] = 0;
+      queue.push(i);
+    }
+  }
+
+  // BFS outward — only expand into water tiles up to radius distance
+  let head = 0;
+  while (head < queue.length) {
+    const idx = queue[head++];
+    const x = idx % width;
+    const y = (idx - x) / width;
+    const nextDist = dist[idx] + 1;
+    if (nextDist > radius) continue;
+
+    const neighbors: [number, number][] = [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]];
+    for (const [nx, ny] of neighbors) {
+      if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+      const ni = ny * width + nx;
+      if (nextDist < dist[ni]) {
+        dist[ni] = nextDist;
+        queue.push(ni);
+      }
+    }
+  }
+
+  // Classify: ≤ radius → ShallowWater, > radius → DeepWater
+  for (let i = 0; i < total; i++) {
+    const tile = state.tiles[i];
+    if (!isWaterTile(tile.type)) continue;
+    tile.type = dist[i] <= radius ? TileType.ShallowWater : TileType.DeepWater;
   }
 }

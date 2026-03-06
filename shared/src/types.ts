@@ -5,9 +5,15 @@ export enum TileType {
   Swamp,
   Desert,
   Highland,
-  Water,
+  ShallowWater,
+  DeepWater,
   Rock,
   Sand,
+}
+
+/** Check if a tile type is any water variant (shallow or deep). */
+export function isWaterTile(tileType: TileType): boolean {
+  return tileType === TileType.ShallowWater || tileType === TileType.DeepWater;
 }
 
 /** Resource types available on tiles. */

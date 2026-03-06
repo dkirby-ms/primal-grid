@@ -1,5 +1,5 @@
 import { GameState, PlayerState } from "./GameState.js";
-import { TERRITORY, TileType } from "@primal-grid/shared";
+import { TERRITORY, TileType, isWaterTile } from "@primal-grid/shared";
 
 /** Check if (x,y) is adjacent (cardinal) to any tile owned or being claimed by playerId. */
 export function isAdjacentToTerritory(state: GameState, playerId: string, x: number, y: number): boolean {
@@ -56,7 +56,7 @@ export function spawnHQ(
       const ty = hqY + dy;
       const tile = state.getTile(tx, ty);
       if (!tile) continue;
-      if (tile.type === TileType.Water || tile.type === TileType.Rock) {
+      if (isWaterTile(tile.type) || tile.type === TileType.Rock) {
         tile.type = TileType.Grassland;
       }
       tile.ownerID = player.id;

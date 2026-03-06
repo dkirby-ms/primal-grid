@@ -3,7 +3,7 @@ import { GameState, PlayerState, CreatureState, TileState } from "../rooms/GameS
 import { GameRoom } from "../rooms/GameRoom.js";
 import { isAdjacentToTerritory, getTerritoryCounts } from "../rooms/territory.js";
 import {
-  TileType, DEFAULT_MAP_SIZE,
+  TileType, isWaterTile, DEFAULT_MAP_SIZE,
   CREATURE_AI, CREATURE_TYPES, TERRITORY, SHAPE, PAWN,
   SPAWN_PAWN,
 } from "@primal-grid/shared";
@@ -117,7 +117,7 @@ function findClaimableAdjacentTile(room: GameRoom, playerId: string): { x: numbe
     const tile = room.state.tiles.at(i)!;
     if (
       tile.ownerID === "" &&
-      tile.type !== TileType.Water &&
+      !isWaterTile(tile.type) &&
       tile.type !== TileType.Rock &&
       isAdjacentToTerritory(room.state, playerId, tile.x, tile.y)
     ) {
@@ -408,7 +408,7 @@ describe("Adjacency validation (prevent teleport builds)", () => {
       const tile = room.state.tiles.at(i)!;
       if (
         tile.ownerID === "" &&
-        tile.type !== TileType.Water &&
+        !isWaterTile(tile.type) &&
         tile.type !== TileType.Rock &&
         !isAdjacentToTerritory(room.state, "p1", tile.x, tile.y) &&
         manhattan(tile.x, tile.y, player.hqX, player.hqY) > 10
@@ -653,7 +653,7 @@ describe("HQ territory (immutability, visual distinction)", () => {
     for (let dy = -half; dy <= half; dy++) {
       for (let dx = -half; dx <= half; dx++) {
         const tile = room.state.getTile(player.hqX + dx, player.hqY + dy);
-        if (tile && tile.type !== TileType.Water && tile.type !== TileType.Rock) {
+        if (tile && !isWaterTile(tile.type) && tile.type !== TileType.Rock) {
           expect(tile.isHQTerritory).toBe(true);
           hqTileCount++;
         }

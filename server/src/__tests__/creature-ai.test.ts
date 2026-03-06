@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { GameState, CreatureState, TileState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import {
-  TileType,
+  TileType, isWaterTile,
   CREATURE_TYPES, CREATURE_AI,
   DEFAULT_MAP_SIZE,
 } from "@primal-grid/shared";
@@ -406,7 +406,7 @@ describe("Phase 2.5 — Creature AI: Movement", () => {
     room.state.creatures.forEach((c: CreatureState) => {
       const tile = room.state.getTile(c.x, c.y);
       expect(tile).toBeDefined();
-      expect(tile!.type).not.toBe(TileType.Water);
+      expect(isWaterTile(tile!.type)).toBe(false);
       expect(tile!.type).not.toBe(TileType.Rock);
       expect(room.state.isWalkable(c.x, c.y)).toBe(true);
     });
