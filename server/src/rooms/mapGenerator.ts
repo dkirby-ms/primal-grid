@@ -178,4 +178,71 @@ export function generateProceduralMap(
       state.tiles.push(tile);
     }
   }
+
+  // Cellular automata smoothing — eliminate isolated single-tile biome patches
+  smoothBiomes(state, width, height, rng);
+}
+
+/** Run cellular automata smoothing passes to create contiguous biome regions. */
+function smoothBiomes(
+  state: GameState,
+  width: number,
+  height: number,
+  rng: () => number,
+): void {
+  const PASSES = 2;
+  const MAJORITY_THRESHOLD = 5;
+  // Water and Rock are terrain barriers — never smoothed
+  const PROTECTED = new Set<TileType>([TileType.Water, TileType.Rock]);
+
+  for (let pass = 0; pass < PASSES; pass++) {
+    // Snapshot current biome types so reads don't see writes from this pass
+    const snapshot = new Array<TileType>(width * height);
+    for (let i = 0; i < width * height; i++) {
+      snapshot[i] = state.tiles[i].type;
+    }
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = y * width + x;
+        const current = snapshot[idx];
+        if (PROTECTED.has(current)) continue;
+
+        // Count biome types in Moore neighborhood (8 neighbors)
+        const counts = new Map<TileType, number>();
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+            const nType = snapshot[ny * width + nx];
+            counts.set(nType, (counts.get(nType) || 0) + 1);
+          }
+        }
+
+        // Find the majority biome among neighbors
+        let majorityType = current;
+        let majorityCount = 0;
+        for (const [type, count] of counts) {
+          if (count > majorityCount) {
+            majorityCount = count;
+            majorityType = type;
+          }
+        }
+
+        // Flip if majority is different and meets threshold
+        if (majorityType !== current && majorityCount >= MAJORITY_THRESHOLD) {
+          const tile = state.tiles[idx];
+          tile.type = majorityType;
+
+          // Recalculate fertility and resources for new biome
+          tile.fertility = Math.round(calculateFertility(majorityType, tile.moisture) * 100) / 100;
+          const resource = assignResource(majorityType, rng);
+          tile.resourceType = resource.type;
+          tile.resourceAmount = resource.amount;
+        }
+      }
+    }
+  }
 }
