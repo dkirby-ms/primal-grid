@@ -719,3 +719,11 @@ Added a scrolling game log panel below the main game area:
 - **💤 indicator for exhausted creatures:** Added `exhausted` state handling to `updateIndicator()`. Shows 💤 emoji above any creature (herbivore, carnivore, or pawn builder) when `currentState === 'exhausted'`. Exhausted check runs before the builder early-return so builders also get the indicator.
 - **Gray background for exhausted state:** `drawStateBackground()` now renders a muted gray (`0x9e9e9e`) circle at alpha 0.3 for exhausted non-builders, and a gray square at alpha 0.3 for exhausted builders. Added `EXHAUSTED_COLOR` constant alongside existing color constants.
 - **Pattern:** State-specific visuals follow the same indicator + background pattern as flee/hunt/eat. No new render objects or dependencies.
+
+### Exhaustion Visual Indicator (2026-03-07)
+
+- **💤 indicator for exhausted creatures:** Added `exhausted` state handling to `updateIndicator()`. Shows 💤 emoji above any creature (herbivore, carnivore, or pawn builder) when `currentState === 'exhausted'`. Exhausted check runs before the builder early-return so builders also get the indicator.
+- **Gray background for exhausted state:** `drawStateBackground()` now renders a muted gray (`0x9e9e9e`) circle at alpha 0.3 for exhausted non-builders, and a gray square at alpha 0.3 for exhausted builders. Added `EXHAUSTED_COLOR` constant alongside existing color constants.
+- **Pattern:** State-specific visuals follow the same indicator + background pattern as flee/hunt/eat. No new render objects or dependencies.
+- **Integration:** Integrates seamlessly with Pemulis stamina system — exhausted state is set by server via CreatureState sync. No client-side logic changes.
+- **Test results:** Typecheck clean, 257 integration tests pass.

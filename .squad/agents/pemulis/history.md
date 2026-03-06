@@ -852,3 +852,25 @@ Hal (Lead) architected pawn-based territory expansion system per same user direc
 - **Implementation Handoff:** Pemulis identified and documented the fix; Steeply implemented with comprehensive test coverage (386 lines, 257 tests passing).
 - **Schema Change:** Added `nextMoveTick: number` field to `CreatureState`. Client receives it via Colyseus sync but can ignore it.
 - **PR:** #5 on `test/creature-independent-movement` branch. Awaiting merge decision post-directive review (branch protection + PR review protocol now active).
+
+### Creature Stamina System (2026-03-07)
+
+- **Feature:** Added stamina as a core creature resource alongside health and hunger. All creature types (herbivore, carnivore, pawn_builder) have independent stamina profiles.
+- **Design:** Stamina depletes per tile moved, regens per AI tick when idle/eating/building. When stamina hits 0, creature enters "exhausted" FSM state and must rest until stamina exceeds a per-type hysteresis threshold. Prevents rapid state flickering.
+- **Stamina profiles:** Herbivore (max=10, cost=2, regen=1, threshold=5), Carnivore (max=14, cost=2, regen=1, threshold=6), Builder (max=20, cost=1, regen=2, threshold=5). Different creature types have distinct movement rhythms.
+- **Architecture:** `CreatureTypeDef` interface extended with 4 stamina fields. Builders use `PAWN.*` constants since they're not in `CREATURE_TYPES`. New `getStaminaConfig()` resolver handles both paths cleanly.
+- **Movement return values:** `wanderRandom`, `moveToward`, `moveAwayFrom` now return `boolean` indicating actual movement. Stamina only deducted on actual moves, not blocked attempts. Builder movement detected via position diff (since `stepBuilder` is in a separate module).
+- **Key files:** `shared/src/data/creatures.ts`, `shared/src/types.ts`, `shared/src/constants.ts`, `server/src/rooms/GameState.ts`, `server/src/rooms/creatureAI.ts`, `server/src/rooms/GameRoom.ts`
+- **Test impact:** Updated all `addCreature` helpers across 7 test files to initialize stamina. Added "exhausted" to valid FSM state lists. Pre-existing stamina test suite (creature-stamina.test.ts) passes.
+- **All 287 tests passing.**
+
+### Creature Stamina System (2026-03-07)
+
+- **Feature:** Added stamina as a core creature resource alongside health and hunger. All creature types (herbivore, carnivore, pawn_builder) have independent stamina profiles.
+- **Design:** Stamina depletes per tile moved, regens per AI tick when idle/eating/building. When stamina hits 0, creature enters "exhausted" FSM state and must rest until stamina exceeds a per-type hysteresis threshold. Prevents rapid state flickering.
+- **Stamina profiles:** Herbivore (max=10, cost=2, regen=1, threshold=5), Carnivore (max=14, cost=2, regen=1, threshold=6), Builder (max=20, cost=1, regen=2, threshold=5). Different creature types have distinct movement rhythms.
+- **Architecture:** `CreatureTypeDef` interface extended with 4 stamina fields. Builders use `PAWN.*` constants since they're not in `CREATURE_TYPES`. New `getStaminaConfig()` resolver handles both paths cleanly.
+- **Movement return values:** `wanderRandom`, `moveToward`, `moveAwayFrom` now return `boolean` indicating actual movement. Stamina only deducted on actual moves, not blocked attempts. Builder movement detected via position diff (since `stepBuilder` is in a separate module).
+- **Key files:** `shared/src/data/creatures.ts`, `shared/src/types.ts`, `shared/src/constants.ts`, `server/src/rooms/GameState.ts`, `server/src/rooms/creatureAI.ts`, `server/src/rooms/GameRoom.ts`
+- **Test impact:** Updated all `addCreature` helpers across 7 test files to initialize stamina. Added "exhausted" to valid FSM state lists. Pre-existing stamina test suite (creature-stamina.test.ts) passes.
+- **All 287 tests passing.**

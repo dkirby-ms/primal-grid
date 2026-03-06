@@ -3570,3 +3570,63 @@ Players' 5×5 starting territory could contain Water or Rock tiles, which were s
 - No breaking API changes; backward compatible with existing game state
 - PR #5 on `test/creature-independent-movement` branch; ready for review
 
+
+---
+
+## 2026-03-06T01:40Z: Creature Stamina System
+
+**By:** Pemulis (Systems Dev), Gately (Game Dev), Steeply (QA & Testing)  
+**Status:** IMPLEMENTED (287 tests passing)  
+
+**Decision:** Added stamina as a core creature resource alongside health and hunger. All creature types have independent stamina profiles with hysteresis-based exhaustion states.
+
+**Stamina Profiles:**
+
+| Creature Type | Max Stamina | Cost Per Move | Regen Per Tick | Exhaustion Threshold |
+|---------------|-------------|---------------|----------------|----------------------|
+| Herbivore     | 10          | 2             | 1              | 5                    |
+| Carnivore     | 14          | 2             | 1              | 6                    |
+| Pawn Builder  | 20          | 1             | 2              | 5                    |
+
+**Key Design Choices:**
+
+1. **Hysteresis Exhaustion:** When stamina ≤ 0, creature enters "exhausted" FSM state and remains there until stamina ≥ threshold. Prevents rapid idle↔move flickering. Threshold gap (e.g., 0→5 for herbivores) creates visible rest periods.
+
+2. **Movement-Only Deduction:** Stamina only deducted when movement actually occurs (functions return boolean). A creature blocked by terrain/walls doesn't lose stamina, preventing unfair drain at map edges.
+
+3. **Builder Stamina Namespace:** Since pawn_builder is not in CREATURE_TYPES, builder stamina constants live in `PAWN` namespace in `constants.ts`. Unified lookup via `getStaminaConfig()` resolver in `creatureAI.ts`.
+
+4. **Regen on Non-Movement:** Stamina regenerates during idle, eating, building, and exhausted states. Eating doesn't cost stamina (creature stopped to eat). Building doesn't drain movement stamina.
+
+5. **Exhausted Skips FSM:** Exhausted creatures don't run normal FSM behavior — they just rest and regen. Exhausted herbivore won't flee from carnivore, creating predator hunting windows.
+
+**Consequences:**
+
+- Creatures have natural rest cycles (herbivore: ~5 moves then ~5 ticks rest)
+- Predators sustain longer chases than prey can sustain fleeing
+- Builders rarely exhaust due to low cost and high regen
+- Exhausted creatures are vulnerable — tactical depth for carnivore hunting
+- Creatures no longer move indefinitely, creating natural activity rhythm
+
+**Client Rendering:**
+
+- Exhausted creatures display 💤 emoji indicator above them (all creature types)
+- Gray background color (0x9e9e9e) for exhausted state — gray circle (non-builders), gray square (builders)
+
+**Files Changed:**
+
+- `shared/src/data/creatures.ts` — CreatureTypeDef interface extended with stamina fields
+- `shared/src/types.ts` — ICreatureState.stamina field
+- `shared/src/constants.ts` — PAWN builder stamina constants
+- `server/src/rooms/GameState.ts` — CreatureState schema field
+- `server/src/rooms/creatureAI.ts` — Stamina logic, exhausted FSM state, movement return values
+- `server/src/rooms/GameRoom.ts` — Stamina initialization on creature/builder spawn
+- `client/src/renderer/CreatureRenderer.ts` — Exhaustion indicator and gray background rendering
+
+**Test Coverage:**
+
+- 30 new stamina-specific tests covering: initialization, depletion, regeneration, exhaustion state, hysteresis recovery, AI integration, type variation
+- All 257 existing tests updated to initialize stamina without breaking changes
+- 287 total tests passing
+
+**Impact:** Ecosystem now has resource scarcity and natural behavioral rhythms. Creatures are no longer always-moving, reducing world "busyness" and creating tactical depth for predator-prey dynamics.
