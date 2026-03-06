@@ -1,10 +1,11 @@
 module.exports = {
   root: true,
   parser: '@typescript-eslint/parser',
-  plugins: ['@typescript-eslint'],
+  plugins: ['@typescript-eslint', 'security'],
   extends: [
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
+    'plugin:security/recommended-legacy',
   ],
   env: {
     node: true,
@@ -16,4 +17,8 @@ module.exports = {
     sourceType: 'module',
   },
   ignorePatterns: ['dist', 'node_modules', '*.js', '!.eslintrc.cjs'],
+  rules: {
+    // Too noisy for game code with frequent array/map bracket access
+    'security/detect-object-injection': 'off',
+  },
 };
