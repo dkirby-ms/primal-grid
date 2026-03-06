@@ -3,6 +3,13 @@ name: Deploy Primal Grid
 on:
   push:
     branches: [master]
+    paths-ignore:
+      - 'docs/**'
+      - 'infra/**'
+      - '.squad/**'
+      - '.github/**'
+      - '*.md'
+      - 'LICENSE'
   workflow_dispatch:
 
 permissions:

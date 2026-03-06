@@ -43,10 +43,10 @@ const NON_WALKABLE = new Set([TileType.Water, TileType.Rock]);
 describe("Phase 2.1 — Procedural Map Generation", () => {
   // ── Map size ──────────────────────────────────────────────────────
   describe("map size", () => {
-    it("generated map is correct size (64×64 = 4096 tiles)", () => {
+    it("generated map is correct size (128×128 = 16384 tiles)", () => {
       const room = createRoomWithMap(42);
       expect(room.state.tiles.length).toBe(DEFAULT_MAP_SIZE * DEFAULT_MAP_SIZE);
-      expect(room.state.tiles.length).toBe(4096);
+      expect(room.state.tiles.length).toBe(16384);
     });
 
     it("map dimensions match DEFAULT_MAP_SIZE", () => {

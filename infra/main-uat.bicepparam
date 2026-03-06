@@ -1,7 +1,6 @@
 using 'main.bicep'
 
-param location = 'eastus'
 param appName = 'primal-grid'
 param acrName = 'primalgridacr'
 param environment = 'uat'
-param containerImage = '${acrName}.azurecr.io/${appName}:latest'
+param containerImage = 'mcr.microsoft.com/k8se/quickstart:latest'

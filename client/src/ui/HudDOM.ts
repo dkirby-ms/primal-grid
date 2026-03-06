@@ -21,6 +21,7 @@ export class HudDOM {
   private levelVal: HTMLElement;
   private xpText: HTMLElement;
   private xpBarFill: HTMLElement;
+  private dayPhaseDisplay: HTMLElement;
   private currentLevel = 1;
 
   // Builder panel
@@ -49,6 +50,7 @@ export class HudDOM {
     this.levelVal = document.getElementById('level-val')!;
     this.xpText = document.getElementById('xp-text')!;
     this.xpBarFill = document.getElementById('xp-bar-fill')!;
+    this.dayPhaseDisplay = document.getElementById('day-phase-display')!;
 
     // Builder panel elements
     this.builderCountEl = document.getElementById('builder-count')!;
@@ -89,11 +91,39 @@ export class HudDOM {
     this.spawnBuilderBtn.disabled = !canAfford || !underCap;
   }
 
+  private static readonly PHASE_EMOJI: Record<string, string> = {
+    Dawn: '🌅',
+    Day: '☀️',
+    Dusk: '🌆',
+    Night: '🌙',
+  };
+
+  private static readonly PHASE_COLOR: Record<string, string> = {
+    Dawn: '#ffa726',
+    Day: '#ffd54f',
+    Dusk: '#ff7043',
+    Night: '#90caf9',
+  };
+
+  /** Update the day/night phase indicator. */
+  public updateDayPhase(phase: string): void {
+    const emoji = HudDOM.PHASE_EMOJI[phase] ?? '☀️';
+    const color = HudDOM.PHASE_COLOR[phase] ?? '#ffa726';
+    this.dayPhaseDisplay.textContent = `${emoji} ${phase}`;
+    this.dayPhaseDisplay.style.color = color;
+  }
+
   /** Listen to Colyseus state and update DOM elements for the local player. */
   public bindToRoom(room: Room): void {
     this.room = room;
 
     room.onStateChange((state: Record<string, unknown>) => {
+      // Day/night phase (global state)
+      const dayPhase = state['dayPhase'] as string | undefined;
+      if (dayPhase) {
+        this.updateDayPhase(dayPhase);
+      }
+
       const players = state['players'] as
         | { forEach: (cb: (player: Record<string, unknown>, key: string) => void) => void }
         | undefined;
