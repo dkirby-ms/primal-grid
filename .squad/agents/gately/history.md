@@ -749,3 +749,8 @@ Added a scrolling game log panel below the main game area:
 - **main.ts wiring:** New `onStateChange` listener reads `state['dayPhase']`, calls `particles.setPhase()` and `grid.setDayPhase()`. Particle tick runs each frame alongside creature tick with camera position/scale forwarded
 - **Rendering constants stay in client:** Particle counts, colors, speeds defined at top of `ParticleSystem.ts` — these are visual tuning, not game mechanics
 - **Pattern:** Same layered Container approach as CreatureRenderer. Particle system is a peer renderer, not embedded inside GridRenderer
+
+### Issue #15 — Shallow/Deep Water Colors (2026-03-07)
+- **Water split rendering:** Replaced single `TileType.Water` color (0x3498db) with two entries: `ShallowWater` → 0x87CEEB (light sky blue), `DeepWater` → 0x1a3a5c (dark navy). Colors are visually distinct from each other and from all other biomes.
+- **Shared dependency:** Pemulis split `Water` into `ShallowWater`/`DeepWater` in `shared/src/types.ts` and added `isWaterTile()` helper. Rebuilt shared before client build.
+- **No other client references:** `TileType.Water` only appeared in the `TILE_COLORS` map — single-point change, no cascade.
