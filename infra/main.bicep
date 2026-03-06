@@ -10,6 +10,9 @@ param acrName string = 'primalgridacr'
 @description('Full container image reference (e.g. primalgridacr.azurecr.io/primal-grid:latest).')
 param containerImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
 
+@description('Deployment environment (prod or uat)')
+param environment string = 'prod'
+
 // ---------- Azure Container Registry ----------
 
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
@@ -53,7 +56,7 @@ resource containerEnv 'Microsoft.App/managedEnvironments@2023-05-01' = {
 // ---------- Container App ----------
 
 resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
-  name: appName
+  name: environment == 'uat' ? '${appName}-uat' : appName
   location: location
   properties: {
     managedEnvironmentId: containerEnv.id
@@ -96,8 +99,8 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
         }
       ]
       scale: {
-        minReplicas: 1
-        maxReplicas: 1
+        minReplicas: environment == 'uat' ? 0 : 1
+        maxReplicas: environment == 'uat' ? 3 : 1
       }
     }
   }

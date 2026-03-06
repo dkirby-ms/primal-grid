@@ -1,0 +1,76 @@
+name: Deploy to UAT
+
+on:
+  push:
+    branches: [uat]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy to UAT (emergency override)'
+        required: true
+        default: 'uat'
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build -w shared
+      - run: npm test
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch || github.ref }}
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push image to ACR
+        run: |
+          az acr login --name ${{ secrets.ACR_NAME }}
+          BRANCH_NAME=$(echo "${{ inputs.branch || github.ref_name }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          TAG="uat-${BRANCH_NAME}-${{ github.sha }}"
+          docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/primal-grid:$TAG .
+          docker push ${{ secrets.ACR_NAME }}.azurecr.io/primal-grid:$TAG
+
+      - name: Deploy to UAT Container App
+        run: |
+          BRANCH_NAME=$(echo "${{ inputs.branch || github.ref_name }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          TAG="uat-${BRANCH_NAME}-${{ github.sha }}"
+          az containerapp update \
+            --name primal-grid-uat \
+            --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            --image ${{ secrets.ACR_NAME }}.azurecr.io/primal-grid:$TAG
+
+      - name: Output UAT URL
+        run: |
+          FQDN=$(az containerapp show \
+            --name primal-grid-uat \
+            --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            --query "properties.configuration.ingress.fqdn" \
+            --output tsv)
+          BRANCH_NAME="${{ inputs.branch || github.ref_name }}"
+          echo "### 🧪 UAT deployed: https://$FQDN" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Branch:** $BRANCH_NAME" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Commit:** ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
