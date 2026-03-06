@@ -2,9 +2,13 @@ import { Container } from 'pixi.js';
 import { TILE_SIZE } from './GridRenderer.js';
 
 const PAN_SPEED = 8;
-const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 3;
-const ZOOM_STEP = 0.1;
+// Zoom levels chosen so that scale * TILE_SIZE produces an integer tile pixel size,
+// eliminating sub-pixel seams between tiles for the current TILE_SIZE.
+const ZOOM_LEVELS = [
+  0.5, 0.625, 0.75, 0.875,
+  1.0, 1.125, 1.25, 1.5, 1.75,
+  2.0, 2.25, 2.5, 2.75, 3.0,
+];
 
 export class Camera {
   private target: Container;
@@ -41,9 +45,18 @@ export class Camera {
 
   private onWheel(e: WheelEvent): void {
     e.preventDefault();
+    const cur = this.target.scale.x;
+    // Find the current index (nearest level)
+    let idx = 0;
+    let minDist = Math.abs(ZOOM_LEVELS[0] - cur);
+    for (let i = 1; i < ZOOM_LEVELS.length; i++) {
+      const dist = Math.abs(ZOOM_LEVELS[i] - cur);
+      if (dist < minDist) { minDist = dist; idx = i; }
+    }
+    // Step to next/previous level
     const dir = e.deltaY < 0 ? 1 : -1;
-    const newScale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, this.target.scale.x + dir * ZOOM_STEP));
-    this.target.scale.set(newScale, newScale);
+    const nextIdx = Math.min(ZOOM_LEVELS.length - 1, Math.max(0, idx + dir));
+    this.target.scale.set(ZOOM_LEVELS[nextIdx], ZOOM_LEVELS[nextIdx]);
     this.clamp();
   }
 
