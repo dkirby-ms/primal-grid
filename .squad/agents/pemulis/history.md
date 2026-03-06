@@ -959,3 +959,34 @@ Hal (Lead) architected pawn-based territory expansion system per same user direc
 - Splitting `TileType.Water` into `ShallowWater` and `DeepWater` shifts enum ordinals for Rock (6→7) and Sand (7→8). Every `TileType.Water` reference across server, shared, client, and all tests must be updated — grep the entire codebase before committing.
 - BFS-based water depth classification runs as a second pass after map generation and cellular automata smoothing. Uses `WATER_GENERATION.SHALLOW_RADIUS` (2 tiles) to separate shallow from deep water.
 - `isWaterTile()` helper in shared/types.ts is the canonical way to check for any water variant — use it instead of comparing against both `ShallowWater` and `DeepWater` individually.
+
+---
+
+## Session 2025-01-21 — UAT Auto-Reset Workflow
+
+**Status:** Complete  
+**Output:** `.github/workflows/reset-uat.yml` + decision document  
+**Testing:** None required (GitHub Actions workflow)
+
+### What was done
+- Created `.github/workflows/reset-uat.yml` to automatically reset UAT branch to master after any push to master
+- Triggers on all master pushes (no paths-ignore) to maintain strict UAT/master sync
+- Uses `contents: write` permission with `--force-with-lease` for safe force-push
+- Configured git user as github-actions bot for proper attribution
+- Added step summary showing master commit and noting UAT will redeploy
+
+### Workflow sequence
+1. Master push triggers `deploy.yml` (prod deploy) and `reset-uat.yml` (reset UAT)
+2. UAT reset triggers `deploy-uat.yml` (UAT redeploy)
+3. No infinite loop: reset-uat only triggers on master, not on uat pushes
+
+### Files created
+- `.github/workflows/reset-uat.yml` — Auto-reset workflow
+- `.squad/decisions/inbox/pemulis-reset-uat-workflow.md` — Decision rationale
+
+## Learnings
+- GitHub Actions workflows can safely trigger each other in a controlled sequence (master → reset uat → deploy uat) without creating infinite loops by carefully choosing trigger branches
+- `--force-with-lease` is safer than `--force` for automated branch resets — fails if someone else pushed in the meantime
+- No `paths-ignore` is appropriate when the goal is strict synchronization rather than conditional deployment
+- `fetch-depth: 0` is needed for workflows that manipulate multiple branches
+- `${{ secrets.GITHUB_TOKEN }}` automatically provides appropriate permissions when `contents: write` is declared
