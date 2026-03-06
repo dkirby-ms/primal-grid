@@ -10,7 +10,8 @@ const TILE_COLORS: Record<number, number> = {
   [TileType.Swamp]: 0x556b2f,
   [TileType.Desert]: 0xd2b48c,
   [TileType.Highland]: 0x8b7d6b,
-  [TileType.Water]: 0x3498db,
+  [TileType.ShallowWater]: 0x87ceeb,
+  [TileType.DeepWater]: 0x1a3a5c,
   [TileType.Rock]: 0x7f8c8d,
   [TileType.Sand]: 0xf0d9a0,
 };
