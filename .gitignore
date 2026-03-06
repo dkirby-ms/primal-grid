@@ -5,8 +5,14 @@ dist/
 *.tsbuildinfo
 coverage/
 
-# Compiled JS artifacts emitted from TypeScript sources under src/
+# Compiled JS artifacts emitted from TypeScript sources
 **/src/**/*.js
 **/src/**/*.js.map
 **/src/**/*.d.ts
 **/src/**/*.d.ts.map
+
+# Compiled config file outputs (vitest.config, vite.config, etc.)
+*.config.js
+*.config.js.map
+*.config.d.ts
+*.config.d.ts.map
