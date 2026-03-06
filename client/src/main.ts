@@ -1,7 +1,6 @@
 import { Application } from 'pixi.js';
 import { GridRenderer } from './renderer/GridRenderer.js';
 import { CreatureRenderer } from './renderer/CreatureRenderer.js';
-import { ParticleSystem } from './renderer/ParticleSystem.js';
 import { Camera } from './renderer/Camera.js';
 import { InputHandler } from './input/InputHandler.js';
 import { ConnectionStatusUI } from './ui/ConnectionStatus.js';
@@ -59,30 +58,9 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
     grid.container.addChild(creatures.container);
     creatures.bindToRoom(room);
 
-    // Particle effects (world-space container in grid, screen-space stars on stage)
-    const particles = new ParticleSystem(grid.getMapSize(), WIDTH, HEIGHT);
-    grid.container.addChild(particles.worldContainer);
-    app.stage.addChild(particles.screenContainer);
-
-    // Track current dayPhase from server state
-    let lastDayPhase = '';
-    room.onStateChange((state: Record<string, unknown>) => {
-      const phase = state['dayPhase'] as string | undefined;
-      if (phase && phase !== lastDayPhase) {
-        lastDayPhase = phase;
-        particles.setPhase(phase);
-        grid.setDayPhase(phase);
-      }
-    });
-
-    // Drive smooth creature movement + particle updates from the app ticker
+    // Drive smooth creature movement from the app ticker
     app.ticker.add((ticker) => {
       creatures.tick(ticker.deltaTime);
-      const dt = ticker.deltaTime / 60;
-      const camX = grid.container.position.x;
-      const camY = grid.container.position.y;
-      const camScale = grid.container.scale.x;
-      particles.tick(dt, camX, camY, camScale);
     });
 
     // Center camera on local player's HQ once state has synced
