@@ -55,6 +55,7 @@ function addCreature(
   creature.health = overrides.health ?? typeDef.health;
   creature.hunger = overrides.hunger ?? typeDef.hunger;
   creature.currentState = overrides.currentState ?? "idle";
+  creature.stamina = typeDef.maxStamina;
   room.state.creatures.set(id, creature);
   return creature;
 }

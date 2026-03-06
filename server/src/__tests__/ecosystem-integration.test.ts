@@ -35,6 +35,7 @@ function addCreature(
   creature.health = overrides.health ?? typeDef.health;
   creature.hunger = overrides.hunger ?? typeDef.hunger;
   creature.currentState = overrides.currentState ?? "idle";
+  creature.stamina = typeDef.maxStamina;
   room.state.creatures.set(id, creature);
   return creature;
 }
@@ -509,7 +510,7 @@ describe("Phase 2.6 — Ecosystem Stability", () => {
 
   it("creature states are valid FSM states after 200 ticks", () => {
     const room = createRoomWithEcosystem(42);
-    const validStates = ["idle", "wander", "eat", "flee", "hunt"];
+    const validStates = ["idle", "wander", "eat", "flee", "hunt", "exhausted"];
 
     for (let i = 0; i < 200; i++) {
       simulateTick(room);

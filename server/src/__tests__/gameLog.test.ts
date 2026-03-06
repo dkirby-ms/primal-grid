@@ -54,6 +54,7 @@ function addBuilder(
   creature.targetX = -1;
   creature.targetY = -1;
   creature.buildProgress = 0;
+  creature.stamina = PAWN.BUILDER_MAX_STAMINA;
   room.state.creatures.set(id, creature);
   return creature;
 }
@@ -76,6 +77,7 @@ function addCreature(
   creature.health = overrides.health ?? typeDef.health;
   creature.hunger = overrides.hunger ?? typeDef.hunger;
   creature.currentState = overrides.currentState ?? "idle";
+  creature.stamina = typeDef.maxStamina;
   room.state.creatures.set(id, creature);
   return creature;
 }

@@ -54,6 +54,7 @@ function addBuilder(
   creature.currentState = overrides.currentState ?? "idle";
   creature.ownerID = ownerID;
   creature.pawnType = "builder";
+  creature.stamina = PAWN.BUILDER_MAX_STAMINA;
   if (overrides.buildProgress !== undefined) {
     creature.buildProgress = overrides.buildProgress;
   }
@@ -85,6 +86,7 @@ function addCreature(
   creature.health = overrides.health ?? typeDef.health;
   creature.hunger = overrides.hunger ?? typeDef.hunger;
   creature.currentState = overrides.currentState ?? "idle";
+  creature.stamina = typeDef.maxStamina;
   room.state.creatures.set(id, creature);
   return creature;
 }

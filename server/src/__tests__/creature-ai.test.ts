@@ -35,6 +35,7 @@ function addCreature(
   creature.health = overrides.health ?? typeDef.health;
   creature.hunger = overrides.hunger ?? typeDef.hunger;
   creature.currentState = overrides.currentState ?? "idle";
+  creature.stamina = typeDef.maxStamina;
   room.state.creatures.set(id, creature);
   return creature;
 }
@@ -88,8 +89,8 @@ describe("Phase 2.5 — Creature AI: FSM States", () => {
     });
   });
 
-  it("valid FSM states are idle, wander, eat, flee, hunt", () => {
-    const validStates = ["idle", "wander", "eat", "flee", "hunt"];
+  it("valid FSM states are idle, wander, eat, flee, hunt, exhausted", () => {
+    const validStates = ["idle", "wander", "eat", "flee", "hunt", "exhausted"];
     const room = createRoomWithCreatures(42);
 
     // Tick enough times to see state transitions
@@ -155,7 +156,7 @@ describe("Phase 2.5 — Creature AI: Herbivore Transitions", () => {
 
     // Should transition to eat (or have eaten and moved on)
     // The creature was hungry and on a food tile — at some point it should eat
-    expect(["eat", "idle", "wander"]).toContain(herb.currentState);
+    expect(["eat", "idle", "wander", "exhausted"]).toContain(herb.currentState);
   });
 
   it("herbivore flees when carnivore is within detection radius", () => {
@@ -186,7 +187,7 @@ describe("Phase 2.5 — Creature AI: Herbivore Transitions", () => {
     }
 
     // Herbivore should be fleeing (or have fled and returned to wander)
-    expect(["flee", "wander", "idle"]).toContain(herb.currentState);
+    expect(["flee", "wander", "idle", "exhausted"]).toContain(herb.currentState);
     // At minimum, it should have moved away
     const newDist = manhattan(herb.x, herb.y, pos.b.x, pos.b.y);
     // Should not have stayed on same spot if it noticed the carnivore
@@ -223,7 +224,7 @@ describe("Phase 2.5 — Creature AI: Carnivore Transitions", () => {
     }
 
     // Carnivore should be hunting (or have killed and moved on)
-    expect(["hunt", "eat", "wander", "idle"]).toContain(carn.currentState);
+    expect(["hunt", "eat", "wander", "idle", "exhausted"]).toContain(carn.currentState);
   });
 
   it("carnivore in hunt moves toward herbivore target (greedy Manhattan)", () => {

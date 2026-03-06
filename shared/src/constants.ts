@@ -160,4 +160,12 @@ export const PAWN = {
   FARM_COST_WOOD: 8,
   /** Stone cost to build a farm structure. */
   FARM_COST_STONE: 3,
+  /** Builder maximum stamina pool. */
+  BUILDER_MAX_STAMINA: 20,
+  /** Builder stamina cost per tile moved. */
+  BUILDER_STAMINA_COST_PER_MOVE: 1,
+  /** Builder stamina recovered per AI tick when not moving. */
+  BUILDER_STAMINA_REGEN_PER_TICK: 2,
+  /** Builder stamina threshold to exit exhaustion. */
+  BUILDER_EXHAUSTED_THRESHOLD: 5,
 } as const;

@@ -1,13 +1,14 @@
 import { GameState, CreatureState } from "./GameState.js";
 import { stepBuilder } from "./builderAI.js";
 import {
-  CREATURE_AI, CREATURE_TYPES,
+  CREATURE_AI, CREATURE_TYPES, PAWN,
   ResourceType, TileType,
 } from "@primal-grid/shared";
+import type { CreatureTypeDef } from "@primal-grid/shared";
 import type { Room } from "colyseus";
 
 /** FSM states for creature AI. */
-export type AIState = "idle" | "wander" | "eat" | "flee" | "hunt";
+export type AIState = "idle" | "wander" | "eat" | "flee" | "hunt" | "exhausted";
 
 /**
  * Run one AI step for creatures whose individual timer has expired.
@@ -45,13 +46,49 @@ export function tickCreatureAI(state: GameState, room: Room): void {
       return;
     }
 
+    // Resolve stamina config for this creature
+    const staminaConfig = getStaminaConfig(creature);
+
+    // Handle exhausted state: skip normal FSM, just regen
+    if (creature.currentState === "exhausted") {
+      creature.stamina = Math.min(
+        creature.stamina + staminaConfig.regenPerTick,
+        staminaConfig.maxStamina,
+      );
+      if (creature.stamina >= staminaConfig.exhaustedThreshold) {
+        creature.currentState = "idle";
+      }
+      return;
+    }
+
     // Run FSM based on creature type
+    let moved = false;
     if (creature.creatureType === "pawn_builder") {
+      const prevX = creature.x;
+      const prevY = creature.y;
       stepBuilder(creature, state);
+      moved = creature.x !== prevX || creature.y !== prevY;
     } else if (creature.creatureType === "herbivore") {
-      stepHerbivore(creature, state);
+      moved = stepHerbivore(creature, state);
     } else if (creature.creatureType === "carnivore") {
-      stepCarnivore(creature, state, room);
+      moved = stepCarnivore(creature, state, room);
+    }
+
+    // Stamina bookkeeping
+    if (moved) {
+      creature.stamina = Math.max(0, creature.stamina - staminaConfig.costPerMove);
+    } else {
+      // Idle/eating/building — regen stamina
+      creature.stamina = Math.min(
+        creature.stamina + staminaConfig.regenPerTick,
+        staminaConfig.maxStamina,
+      );
+    }
+
+    // Exhaustion check (post-move)
+    if (creature.stamina <= 0) {
+      creature.stamina = 0;
+      creature.currentState = "exhausted";
     }
   });
 
@@ -61,15 +98,42 @@ export function tickCreatureAI(state: GameState, room: Room): void {
   }
 }
 
-function stepHerbivore(creature: CreatureState, state: GameState): void {
+/** Resolve stamina parameters for any creature type. */
+function getStaminaConfig(creature: CreatureState): {
+  maxStamina: number;
+  costPerMove: number;
+  regenPerTick: number;
+  exhaustedThreshold: number;
+} {
+  if (creature.creatureType === "pawn_builder") {
+    return {
+      maxStamina: PAWN.BUILDER_MAX_STAMINA,
+      costPerMove: PAWN.BUILDER_STAMINA_COST_PER_MOVE,
+      regenPerTick: PAWN.BUILDER_STAMINA_REGEN_PER_TICK,
+      exhaustedThreshold: PAWN.BUILDER_EXHAUSTED_THRESHOLD,
+    };
+  }
+  const typeDef = CREATURE_TYPES[creature.creatureType] as CreatureTypeDef | undefined;
+  if (typeDef) {
+    return {
+      maxStamina: typeDef.maxStamina,
+      costPerMove: typeDef.staminaCostPerMove,
+      regenPerTick: typeDef.staminaRegenPerTick,
+      exhaustedThreshold: typeDef.exhaustedThreshold,
+    };
+  }
+  // Fallback — should never happen
+  return { maxStamina: 10, costPerMove: 2, regenPerTick: 1, exhaustedThreshold: 5 };
+}
+
+function stepHerbivore(creature: CreatureState, state: GameState): boolean {
   const typeDef = CREATURE_TYPES["herbivore"];
 
   const nearestCarnivore = findNearestOfType(creature, state, "carnivore", typeDef.detectionRadius);
   // Priority 1: Flee from carnivores
   if (nearestCarnivore) {
     creature.currentState = "flee";
-    moveAwayFrom(creature, nearestCarnivore.x, nearestCarnivore.y, state);
-    return;
+    return moveAwayFrom(creature, nearestCarnivore.x, nearestCarnivore.y, state);
   }
 
   // Priority 2: Eat when hungry and on a resource tile
@@ -84,23 +148,22 @@ function stepHerbivore(creature: CreatureState, state: GameState): void {
         currentTile.resourceAmount = 0;
         currentTile.resourceType = -1;
       }
-      return;
+      return false;
     }
 
     // Move toward nearest resource tile
     const resourceTile = findNearestResource(creature, state, typeDef.detectionRadius);
     if (resourceTile) {
       creature.currentState = "wander";
-      moveToward(creature, resourceTile.x, resourceTile.y, state);
-      return;
+      return moveToward(creature, resourceTile.x, resourceTile.y, state);
     }
   }
 
   // Default: Idle briefly, then wander
-  idleOrWander(creature, state);
+  return idleOrWander(creature, state);
 }
 
-function stepCarnivore(creature: CreatureState, state: GameState, room: Room): void {
+function stepCarnivore(creature: CreatureState, state: GameState, room: Room): boolean {
   const typeDef = CREATURE_TYPES["carnivore"];
 
   // Priority 1: Hunt herbivores or builders when hungry
@@ -120,35 +183,35 @@ function stepCarnivore(creature: CreatureState, state: GameState, room: Room): v
           }
           state.creatures.delete(prey.id);
         }
-        return;
+        return false;
       }
       // Move toward prey
       creature.currentState = "hunt";
-      moveToward(creature, prey.x, prey.y, state);
-      return;
+      return moveToward(creature, prey.x, prey.y, state);
     }
   }
 
   // Default: Idle briefly, then wander
-  idleOrWander(creature, state);
+  return idleOrWander(creature, state);
 }
 
-/** Switch between idle and wander. Uses a simple tick-count heuristic. */
-function idleOrWander(creature: CreatureState, state: GameState): void {
+/** Switch between idle and wander. Uses a simple tick-count heuristic. Returns true if creature moved. */
+function idleOrWander(creature: CreatureState, state: GameState): boolean {
   if (creature.currentState === "idle") {
     creature.currentState = "wander";
-    wanderRandom(creature, state);
+    return wanderRandom(creature, state);
   } else {
     creature.currentState = "idle";
     // Stay idle for 0-2 extra AI ticks so movement feels less busy
     creature.nextMoveTick +=
       Math.floor(Math.random() * CREATURE_AI.IDLE_EXTRA_TICKS_MAX) *
       CREATURE_AI.TICK_INTERVAL;
+    return false;
   }
 }
 
-/** Move one tile in a random walkable direction. */
-function wanderRandom(creature: CreatureState, state: GameState): void {
+/** Move one tile in a random walkable direction. Returns true if creature moved. */
+function wanderRandom(creature: CreatureState, state: GameState): boolean {
   const dirs = shuffleDirections();
   for (const [dx, dy] of dirs) {
     const nx = creature.x + dx;
@@ -156,13 +219,14 @@ function wanderRandom(creature: CreatureState, state: GameState): void {
     if (isTileOpenForCreature(state, creature, nx, ny)) {
       creature.x = nx;
       creature.y = ny;
-      return;
+      return true;
     }
   }
+  return false;
 }
 
-/** Greedy Manhattan movement toward target. */
-export function moveToward(creature: CreatureState, tx: number, ty: number, state: GameState): void {
+/** Greedy Manhattan movement toward target. Returns true if creature moved. */
+export function moveToward(creature: CreatureState, tx: number, ty: number, state: GameState): boolean {
   const dx = Math.sign(tx - creature.x);
   const dy = Math.sign(ty - creature.y);
 
@@ -174,13 +238,14 @@ export function moveToward(creature: CreatureState, tx: number, ty: number, stat
     if (isTileOpenForCreature(state, creature, nx, ny)) {
       creature.x = nx;
       creature.y = ny;
-      return;
+      return true;
     }
   }
+  return false;
 }
 
-/** Greedy Manhattan movement away from threat. */
-function moveAwayFrom(creature: CreatureState, tx: number, ty: number, state: GameState): void {
+/** Greedy Manhattan movement away from threat. Returns true if creature moved. */
+function moveAwayFrom(creature: CreatureState, tx: number, ty: number, state: GameState): boolean {
   const dx = -Math.sign(tx - creature.x);
   const dy = -Math.sign(ty - creature.y);
 
@@ -191,9 +256,10 @@ function moveAwayFrom(creature: CreatureState, tx: number, ty: number, state: Ga
     if (isTileOpenForCreature(state, creature, nx, ny)) {
       creature.x = nx;
       creature.y = ny;
-      return;
+      return true;
     }
   }
+  return false;
 }
 
 /** Get ordered candidate moves for greedy Manhattan movement. */

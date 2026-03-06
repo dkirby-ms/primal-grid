@@ -113,6 +113,9 @@ export class CreatureState extends Schema {
 
   @type("number")
   nextMoveTick: number = 0;
+
+  @type("number")
+  stamina: number = 0;
 }
 
 export class GameState extends Schema {

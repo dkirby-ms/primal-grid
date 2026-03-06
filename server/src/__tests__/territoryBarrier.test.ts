@@ -45,6 +45,7 @@ function addCreature(
   if (typeDef) {
     creature.health = overrides.health ?? typeDef.health;
     creature.hunger = overrides.hunger ?? typeDef.hunger;
+    creature.stamina = typeDef.maxStamina;
   } else {
     creature.health = overrides.health ?? 100;
     creature.hunger = overrides.hunger ?? 100;
