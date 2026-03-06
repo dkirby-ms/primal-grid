@@ -3630,3 +3630,78 @@ Players' 5×5 starting territory could contain Water or Rock tiles, which were s
 - 287 total tests passing
 
 **Impact:** Ecosystem now has resource scarcity and natural behavioral rhythms. Creatures are no longer always-moving, reducing world "busyness" and creating tactical depth for predator-prey dynamics.
+
+---
+
+## 2026-03-06: Merge Duplicate ESLint `rules` Blocks
+
+**By:** Pemulis (Systems Dev)  
+**Date:** 2026-03-06  
+**Status:** RESOLVED  
+**Requested by:** dkirby-ms
+
+**Problem:** `.eslintrc.cjs` had two `rules:` properties in the same object literal. JavaScript silently resolves duplicate keys to the last value — so the second block (`security/detect-object-injection: 'off'`) overwrote the first block containing critical `@typescript-eslint/no-unused-vars` config with underscore ignore patterns. Result: 19 false-positive lint errors.
+
+**Solution:** Merged both `rules` entries into a single property containing all rules. No other config changes.
+
+**Outcome:** Lint passes clean with 0 errors. Config bug documented.
+
+---
+
+## 2026-03-08: Copilot Coding Agent Instructions Document
+
+**By:** Pemulis (Systems Dev)  
+**Date:** 2026-03-08  
+**Status:** IMPLEMENTED  
+**Files:** `.github/copilot-instructions.md`
+
+**What:** Created comprehensive guidance document for GitHub Copilot coding agent when autonomous on issues. Covers:
+- Project architecture (client/server/shared monorepo)
+- Build system + shared/ incremental build gotcha (tsconfig.tsbuildinfo deletion)
+- Colyseus schema patterns & state management
+- All game systems (creature AI FSM, stamina, territory, resources, map gen, builders)
+- Testing patterns (mock room creation, tick helpers)
+- Coding conventions (strict TS, underscore prefix, no `any`)
+- Explicit "do not" list (no Fiber/Berries, don't remove shapeHP, per-creature timers, etc.)
+
+**Why:** Copilot agent works autonomously. Without context, it lacks critical knowledge about build gotchas, design decisions, patterns that caused bugs before. Document prevents regressions.
+
+**Impact:** Documentation-only. 287 tests pass. Enables confident autonomous agent work.
+
+---
+
+## 2026-03-05: Biome Contiguity via Noise Tuning + Cellular Automata
+
+**By:** Pemulis (Systems Dev)  
+**Date:** 2026-03-05  
+**Status:** IMPLEMENTED  
+**Commit:** feat(mapgen): smoother biome regions via noise tuning + cellular automata
+
+**Context:** Biomes appeared pixelated — many isolated single-tile patches, noisy transitions. Root cause: noise parameters generated too much high-frequency detail; no post-processing smoothing.
+
+**Decision:**
+
+1. **Noise Parameter Tuning** (`shared/src/constants.ts`):
+   - `ELEVATION_SCALE`: 0.08 → 0.045 (larger elevation zones)
+   - `MOISTURE_SCALE`: 0.06 → 0.035 (larger moisture zones)
+   - `ELEVATION_OCTAVES`: 4 → 3 (less fine detail)
+   - `MOISTURE_OCTAVES`: 3 → 2 (less fine detail)
+
+2. **Cellular Automata Smoothing** (`server/src/rooms/mapGenerator.ts`):
+   - `smoothBiomes()` function, called post-generation
+   - 2 passes, Moore neighborhood (8 neighbors), majority threshold 5
+   - Water and Rock protected (never flipped) — gameplay barriers
+   - Fertility and resources recalculated for changed tiles
+
+**Alternatives Considered:**
+- Gaussian blur on noise pre-biome assignment: Would smooth elevation/moisture but not directly address biome boundary noise from aliasing. Extra buffer pass needed.
+- Larger scale values only: Reduces high-freq noise but doesn't eliminate isolated patches at biome boundaries.
+- Voronoi-based biome assignment: More natural regions but requires rewriting entire biome system. Overkill.
+
+**Consequences:**
+- Biome regions visibly larger, more contiguous
+- 287 existing tests pass unchanged — smoothing is deterministic, seeded
+- Slight increase in map generation time (2 extra O(W×H) passes) — negligible on 64×64
+- New biome types auto-participate in smoothing unless explicitly protected
+
+**Impact:** Maps are more visually cohesive. Biomes feel like connected ecosystems vs. scattered noise.
