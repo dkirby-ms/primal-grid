@@ -3705,3 +3705,59 @@ Players' 5×5 starting territory could contain Water or Rock tiles, which were s
 - New biome types auto-participate in smoothing unless explicitly protected
 
 **Impact:** Maps are more visually cohesive. Biomes feel like connected ecosystems vs. scattered noise.
+
+---
+
+## 2026-03-06T14:40Z: User Directive — Single Persistent UAT with Manual Deployment
+
+**By:** dkirby-ms (via Copilot)  
+**Status:** DECISION — User-confirmed UAT architecture  
+
+**What:** 
+- Single persistent UAT Container App (always exists, like prod)
+- No per-PR containers or ephemeral infra
+- Manual deployment: code pushed to UAT only when public testing is needed
+- Feature branch testing happens locally via `npm run dev`
+
+**Why:** User request — simplifies infra, reduces cost, keeps explicit control over what gets publicly tested. Per-PR containers add complexity and ongoing cleanup burden.
+
+---
+
+## 2026-03-06T14:42Z: User Directive — Protected Branch Gating for UAT Deployment
+
+**By:** dkirby-ms (via Copilot)  
+**Status:** DECISION — User-confirmed deployment gate  
+
+**What:**
+- Dedicated pre-prod branch (e.g., `uat` or `pre-prod`) with branch protections enabled
+- Can only be merged into via PR, not direct push
+- UAT deployment triggers on merge to this branch
+- Mirrors master→prod pattern for consistency
+
+**Why:** User request — adds a governance gate before code hits UAT. PR requirement ensures code review and CI checks pass. Mirrors prod deployment model (protected master branch → auto-deploy on merge).
+
+---
+
+## 2026-03-06T15:05: UAT Deployment Plan — Protected Branch + Auto-Deploy Implementation
+
+**By:** Hal (Lead) + Pemulis (Systems Dev)  
+**Status:** ACCEPTED  
+
+**Architecture:**
+- Shared ACR + Container Apps Environment (prod and UAT coexist)
+- UAT Container App: `primal-grid-uat`, scale-to-zero (minReplicas: 0, maxReplicas: 3)
+- Prod Container App: `primal-grid`, always-on (minReplicas: 1)
+- Same log analytics workspace (shared)
+
+**Implementation:**
+1. **Bicep changes:** infra/main.bicep parameterized with `environment` param; new infra/main-uat.bicepparam
+2. **Workflow:** .github/workflows/deploy-uat.yml with push trigger (primary) + workflow_dispatch (fallback)
+3. **Branch protection:** `uat` branch requires PR, CI checks pass before merge
+4. **Deployment flow:** feature/* → PR to uat → merge → auto-deploy to UAT → PR to master → merge → auto-deploy to prod
+
+**Cost:** +~$1-2/month for UAT (scale-to-zero acceptable; cold starts ~10-20s)
+
+**Success criteria:** UAT deployable via PR merge, scales to zero, manual fallback available for emergency overrides.
+
+**Next steps:** One-time Azure deployment (az deployment group create), branch creation, protection rules, test PR.
+

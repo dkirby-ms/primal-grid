@@ -53,6 +53,9 @@
 - **Breeding logic (Phase 4):** Two creatures same type, trust≥70, same owner, adjacent, 50% chance/tick → offspring with averaged parent traits + mutation (±1d2). Offspring inherits owner, starts trust=50. Costs 10 berries. Cooldown 100 ticks between breeding same pair.
 - **2026-02-26 Phase 4.5 (HUD Redesign) scoped:** User (dkirby-ms) requested HUD redesign before Phase 5 (World Events) to improve readability and reduce visual clutter. Current HUD (PixiJS overlay on canvas, top-left) blends into game world; lacks background/separation. Solution: Move HUD to dedicated HTML side panel (right side, 200px × 600px), resize canvas from 800×600 to 600×600. Four sub-phases: 4.5.1 (Canvas resize + panel shell, Gately ~1d), 4.5.2 (State binding to DOM, Pemulis+Gately ~1d), 4.5.3 (Polish/styling, Gately ~0.5d), 4.5.4 (Integration testing, Steeply ~0.5d). Linear path, ~3d critical. 5 architecture decisions (D1–D5). Key constraint: HTML DOM-based, not PixiJS-based; parallel implementation with `HudDOM.ts`, then remove `HudRenderer.ts`. No gameplay changes; pure UI refactor. Full proposal at `.squad/decisions/inbox/hal-hud-redesign-phase.md`.
 
+- **2026-03-06 Feature branch deployment plan (Issue #22):** Evaluated 3 approaches for test environment deployments: (A) separate Container App per branch in shared Environment, (B) revision labels on single Container App, (C) separate resource group per branch. Recommended **Option A** — separate Container Apps. Key reasons: full isolation, WebSocket/Colyseus compatibility (revision label routing is fragile for WS), simple lifecycle (create on PR open, delete on PR close), scale-to-zero for near-zero cost. New artifacts: `infra/test-app.bicep` (parameterized test app referencing existing ACR + Environment), `.github/workflows/deploy-test.yml` (PR-triggered deploy + cleanup). No changes to existing prod infra (`main.bicep`, `deploy.yml`). Branch name sanitization needed (Azure 32-char limit, lowercase, no special chars). Estimated cost: <$5/month for 3–5 active branches. Plan filed to `.squad/decisions/inbox/hal-feature-branch-deploy-plan.md`.
+- **Infra key files:** `infra/main.bicep` (prod ACR + Environment + Container App), `infra/main.bicepparam` (eastus/primal-grid/primalgridacr), `.github/workflows/deploy.yml` (master push → ACR → Container App update), `.github/workflows/ci.yml` (main push/PR → lint/typecheck/build/test). Azure auth via OIDC (3 secrets: client-id, tenant-id, subscription-id). ACR uses admin credentials (Basic SKU). Container App runs 0.25 vCPU / 0.5Gi, port 2567.
+
 ---
 
 ## Phase 4 Kickoff (2026-02-25T22:48:00Z)
@@ -278,3 +281,100 @@ Hal architected pawn-based territory expansion system per user directive (dkirby
 **Status:** Decisions merged to `.squad/decisions.md` (2026-03-04 Pawn-Based Territory Expansion section). Orchestration logs: `.squad/orchestration-log/2026-03-04T2227-hal.md`, `.squad/orchestration-log/2026-03-04T2227-pemulis.md`. Session log: `.squad/log/2026-03-04T2227-pawn-builder-design.md`. **READY FOR USER APPROVAL** to begin implementation.
 
 **Next steps:** Await dkirby-ms sign-off on open questions (shape placement removal, structure size, rally points) before work items assigned.
+
+
+### 2026-03-06 Feature Branch Deployment — UAT Single Site
+
+**User directive:** Rewrite feature branch deployment plan to simpler approach: NO per-PR containers, ONE persistent UAT Container App, manual deployment trigger (workflow_dispatch), feature branch testing in local dev only.
+
+**Context:** Previous plan (`.squad/decisions/inbox/hal-feature-branch-deploy-plan.md`, 16KB) proposed ephemeral per-PR container apps with GitHub Actions orchestration for create/destroy lifecycle. User rejected approach as overcomplicated and costly.
+
+**New Architecture:**
+- **One persistent UAT Container App** (`primal-grid-uat`) that always exists, like prod
+- **Manual deployment** via `workflow_dispatch` with branch input selector
+- **Shared infrastructure** with prod: same ACR (`primalgridacr.azurecr.io`), same Container Apps Environment (`primal-grid-env`), same Log Analytics
+- **Scale-to-zero** for UAT (minReplicas: 0) to minimize cost (~$1/month vs ~$10/month always-on)
+- **Docker image tagging:** `{branch}-{sha}` for traceability (UAT) vs `{sha}` only (prod)
+
+**Key Changes:**
+1. **Bicep parameterization:** Add `environment` param to `infra/main.bicep` (default: 'prod', accepts: 'uat')
+   - Container App name: `environment == 'uat' ? '${appName}-uat' : appName`
+   - Scale config: UAT gets minReplicas=0, maxReplicas=3; prod keeps minReplicas=1, maxReplicas=1
+2. **New param file:** `infra/main-uat.bicepparam` with `environment = 'uat'`
+3. **New workflow:** `.github/workflows/deploy-uat.yml` with workflow_dispatch trigger, branch input, same test→build→deploy pipeline as prod
+4. **One-time setup:** `az deployment group create` to create UAT Container App in existing environment
+
+**Cost Impact:** +$1/month (UAT scale-to-zero) vs +$10/month (always-on). Cold start trade-off: 10-20 seconds on first request after idle. Acceptable for pre-release testing.
+
+**Scope (v1):**
+- Parameterize main.bicep (environment param, conditional name/scale)
+- Create main-uat.bicepparam
+- Create deploy-uat.yml workflow
+- One-time UAT deployment
+- Documentation (README usage instructions)
+- Testing (manual deploy, scale-to-zero verification, cold start recovery)
+
+**Deferred:**
+- Slack/Discord notifications for UAT deploys
+- Branch pattern restrictions (allow any branch initially)
+- UAT auto-cleanup/reset jobs
+- Blue-green UAT (multiple UAT slots)
+- Custom domains (UAT uses default ACA FQDN)
+
+**Architecture Pattern — Shared Environment Multi-Tenant:**
+- One Container Apps Environment hosts multiple Container Apps (prod + UAT)
+- Shared ACR (tags namespace isolate images: `{sha}` for prod, `{branch}-{sha}` for UAT)
+- Shared Log Analytics (query partitioned by container app name)
+- Cost benefit: Environment overhead (~$5/month) amortized across apps
+- Zero isolation cost: Same VNET, same ingress controller, no cross-tenant security needed
+- Pattern scales to N environments (staging, demo, etc.) without N×environment cost
+
+**User Preference — Manual > Automatic:**
+- Explicit over implicit: workflow_dispatch requires conscious decision to deploy
+- Cost control: No accidental deploys on every push
+- Feature branch testing: Local dev (`npm run dev`) for rapid iteration; UAT for team validation
+- No PR comment noise: UAT URL is stable, documented once
+
+**Key Files:**
+- `infra/main.bicep` — Current Bicep template (ACR + Container Apps Environment + single prod Container App)
+- `infra/main.bicepparam` — Prod params (location=eastus, appName=primal-grid, acrName=primalgridacr)
+- `.github/workflows/deploy.yml` — Current prod deploy (master push → test → build → ACR push → update container app)
+- `.github/workflows/ci.yml` — PR validation (no deployment)
+- `Dockerfile` — Multi-stage Node 22 build, server on port 2567
+- Azure auth: OIDC (secrets: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID, ACR_NAME, RESOURCE_GROUP, CONTAINER_APP_NAME)
+
+**Deliverable:** `.squad/decisions/inbox/hal-feature-branch-deploy-plan.md` (fully rewritten, 12.8KB)
+
+**Next Steps:** Await user approval to begin implementation (Bicep changes → workflow creation → one-time UAT deployment → testing → documentation).
+
+## Learnings
+
+**2026-03-06 — UAT Deployment Model: Protected Branch Gating**
+
+User preference learned: Deploy to UAT via protected branch (PR merge to `uat` branch) rather than manual `workflow_dispatch` triggers. This mirrors the production deployment pattern (PR merge to `master`) and provides better governance:
+
+- `uat` branch protected with same rules as `master` (require PR, require CI, no direct push)
+- Merging PR into `uat` → auto-triggers UAT deployment (push event)
+- Merging PR from `uat` into `master` → auto-triggers prod deployment
+- workflow_dispatch kept as emergency fallback only
+
+**Rationale:** Git-based deployment gating is more auditable, enforceable, and consistent with existing prod workflow. Manual triggers are kept as escape hatch but not the primary path.
+
+**Applied to:** UAT deployment plan (`.squad/decisions/inbox/hal-feature-branch-deploy-plan.md`)
+
+
+## Session 2026-03-06T15:05 — UAT Deployment Planning
+
+**Status:** Complete  
+**Output:** UAT deployment plan (457 lines, draft)  
+**Decisions merged to:** .squad/decisions.md
+
+**Session delivered:**
+- Comprehensive plan covering architecture, cost analysis, risk mitigation
+- Clear v1/deferred scope separation
+- Implementation order documented
+- Success criteria defined
+- Usage flows for 4 scenarios (primary, hotfix, emergency, dev)
+
+**Team update:** Plan accepted. Pemulis implemented Bicep + workflow. Next: manual Azure setup, branch creation, test PR.
+

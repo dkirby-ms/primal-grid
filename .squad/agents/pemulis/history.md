@@ -899,3 +899,29 @@ Hal (Lead) architected pawn-based territory expansion system per same user direc
 - **Key files:** `shared/src/data/creatures.ts`, `shared/src/types.ts`, `shared/src/constants.ts`, `server/src/rooms/GameState.ts`, `server/src/rooms/creatureAI.ts`, `server/src/rooms/GameRoom.ts`
 - **Test impact:** Updated all `addCreature` helpers across 7 test files to initialize stamina. Added "exhausted" to valid FSM state lists. Pre-existing stamina test suite (creature-stamina.test.ts) passes.
 - **All 287 tests passing.**
+
+### UAT Deployment Infrastructure (2026-03-10)
+
+- **Parameterized `infra/main.bicep`:** Added `environment` param (default `'prod'`). Container App name conditionally appends `-uat`. Scale rules: UAT gets `minReplicas: 0` / `maxReplicas: 3` (scale-to-zero), prod keeps `minReplicas: 1` / `maxReplicas: 1`.
+- **Created `infra/main-uat.bicepparam`:** UAT-specific parameter file setting `environment = 'uat'`. Used for one-time `az deployment group create` to provision the UAT Container App.
+- **Created `.github/workflows/deploy-uat.yml`:** Primary trigger is `push` to `uat` branch (mirrors prod's push-to-master pattern). Fallback `workflow_dispatch` with branch input for emergency overrides. Image tag format: `uat-{branch}-{sha}`. Deploys to hardcoded `primal-grid-uat` container app name. Step summary shows UAT URL + branch + commit.
+- **Pattern:** UAT workflow mirrors prod workflow structure (test → deploy jobs, same Azure login pattern, same secrets). Key differences: checkout uses `ref: ${{ inputs.branch || github.ref }}`, image tag includes `uat-` prefix, scale-to-zero on container app.
+- **Files:** `infra/main.bicep`, `infra/main-uat.bicepparam`, `.github/workflows/deploy-uat.yml`
+- **Lint passes clean** — no regressions.
+
+## Session 2026-03-06T15:05 — UAT Bicep & Workflow Implementation
+
+**Status:** Complete  
+**Output:** Bicep parameterization + deploy-uat.yml workflow  
+**Testing:** Lint passes
+
+**Session delivered:**
+- infra/main.bicep: Added `@param environment string = 'prod'`; conditional Container App naming + scaling
+- infra/main-uat.bicepparam: New UAT parameter file with environment = 'uat'
+- .github/workflows/deploy-uat.yml: Push trigger (primary) + workflow_dispatch (fallback); tests gate deployment
+- Image tagging: uat-{branch}-{sha} for traceability; proper Azure OIDC integration
+
+**Ready for:** Manual one-time Azure deployment (az deployment group create with main-uat.bicepparam)
+
+**Next:** Branch creation, protection rules, test PR merge trigger verification.
+
