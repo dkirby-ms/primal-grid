@@ -3528,3 +3528,45 @@ Players' 5×5 starting territory could contain Water or Rock tiles, which were s
 - All 226 tests pass
 
 ---
+
+---
+
+## 2026-03-06T00:56Z: User Directive — Feature Branches & PR Review Gating
+
+**By:** dkirby-ms (via Copilot)  
+**Status:** DECISION — Team protocol change  
+
+**What:** From 2026-03-06 onward, all new changes must be on feature branches. Merge to master only through PR review. No direct commits to master.
+
+**Why:** User request. Enforces quality gates and provides audit trail for all changes. Aligns with standard team practices.
+
+**Impact:** All agents must use branching workflow. Ralph work monitor tracks branch compliance. Master branch protection enforced.
+
+---
+
+## 2026-03-06T00:59Z: Per-Creature Independent Movement Timers
+
+**By:** Pemulis (Systems Dev) & Steeply (QA & Testing)  
+**Status:** IMPLEMENTED (PR #5)  
+
+**Decision:** Replaced the shared global tick gate (`tick % TICK_INTERVAL === 0`) with per-creature `nextMoveTick` timers on `CreatureState`.
+
+**What Changed:**
+1. **`nextMoveTick` field added to CreatureState schema** — each creature independently tracks when it next moves
+2. **Global gate removed from GameRoom.tickCreatureAI()** — per-creature check inside tickCreatureAI() handles gating
+3. **Staggered spawn timers** — creatures get offset values: `state.tick + 1 + (creatureIndex % TICK_INTERVAL)`
+
+**Why:** Bug fix. All creatures were moving on the same tick because of the shared global gate. Per-creature timers ensure independent, staggered movement while preserving average step frequency (one step per TICK_INTERVAL).
+
+**Implementation Details:**
+- Inside `tickCreatureAI()`: skip if `state.tick < creature.nextMoveTick`, then set `nextMoveTick = currentTick + TICK_INTERVAL` after stepping
+- Tests that manually create creatures default `nextMoveTick` to 0 (fires immediately on next AI call)
+- Tests verifying stagger must explicitly set per-creature values
+- 386 lines of comprehensive test coverage added (257 tests passing)
+
+**Impact:**
+- `ICreatureState` interface has new `nextMoveTick: number` field
+- Client receives `nextMoveTick` via Colyseus schema sync (can be ignored client-side)
+- No breaking API changes; backward compatible with existing game state
+- PR #5 on `test/creature-independent-movement` branch; ready for review
+

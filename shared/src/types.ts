@@ -61,6 +61,8 @@ export interface ICreatureState {
   buildProgress: number;
   /** What the builder builds: "outpost" (default) or "farm". */
   buildMode: string;
+  /** Tick at which this creature next takes an AI step. */
+  nextMoveTick: number;
 }
 
 /** Placeable item types. */

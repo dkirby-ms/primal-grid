@@ -40,6 +40,15 @@ Next: **2026-03-04 — Territory Control Redesign** (awaiting user mechanic sele
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
+### Per-Creature Movement Timers (2026-03-06)
+
+- **Bug:** All creatures moved simultaneously because `tickCreatureAI` was gated by a shared `tick % TICK_INTERVAL === 0` check in `GameRoom.tickCreatureAI()`. Every creature stepped on the exact same tick.
+- **Fix:** Added `nextMoveTick` field to `CreatureState` schema. Each creature checks its own timer inside `tickCreatureAI()` — skips if `state.tick < creature.nextMoveTick`, then sets `nextMoveTick = currentTick + TICK_INTERVAL` after stepping.
+- **Stagger formula:** On spawn: `nextMoveTick = state.tick + 1 + (creatureIndex % TICK_INTERVAL)`. The `+1` is critical — without it, both stagger offsets (0 and 1 for TICK_INTERVAL=2) expire on the first game tick.
+- **GameRoom change:** Removed the global `tick % TICK_INTERVAL !== 0` gate. `tickCreatureAI` is now called every game tick; per-creature timers handle the gating.
+- **Test pattern:** Tests that manually create creatures with `addCreature` default to `nextMoveTick = state.tick` (fires on next AI call). Tests verifying stagger must explicitly set `nextMoveTick` per creature. The `aiTick` helper should advance by 1 tick (not TICK_INTERVAL) to see per-creature timing.
+- **PR:** #5 on `test/creature-independent-movement` branch.
+
 ### StarCraft-Style Structure Economy (2026-03-04)
 
 - **TERRITORY_INCOME replaced with STRUCTURE_INCOME:** Income no longer comes from per-tile resource depletion. HQ provides +2W/+2S base income per tick (every 40 ticks). Farm structures provide +1W/+1S each. tickStructureIncome counts farm tiles per player and grants lump income.
@@ -833,3 +842,13 @@ Hal (Lead) architected pawn-based territory expansion system per same user direc
 - **Fix:** Added `tile.ownerID === ""` check to both `findWalkableTileInBiomes()` and `findRandomWalkableTile()` in `GameRoom.ts`. This covers all spawn paths: `spawnCreatures()` (initial) and `tickCreatureRespawn()` (ongoing) both funnel through `spawnOneCreature()` → these two finder methods.
 - **Scope:** Three code paths patched — biome-preferred random sampling (line 389), fallback random sampling (line 404), and exhaustive fallback scan (line 411).
 - **All 237 tests passing.**
+
+### Creature Movement Independence Fix (2026-03-06)
+
+- **Bug:** Shared global tick gate (`tick % TICK_INTERVAL === 0`) in `GameRoom.tickCreatureAI()` caused all creatures to move simultaneously. Every creature stepped on the exact same tick, destroying the appearance of natural/independent behavior.
+- **Root Cause:** The gating check was centralized in GameRoom before the per-creature AI loop. All creatures saw the same gate condition every frame.
+- **Solution:** Moved gating to per-creature level. Each `CreatureState` now has `nextMoveTick: number`. Inside `tickCreatureAI()`, skip the creature if `state.tick < creature.nextMoveTick`, then after stepping set `nextMoveTick = currentTick + TICK_INTERVAL`.
+- **Stagger on Spawn:** Distribute initial movement across ticks: `nextMoveTick = state.tick + 1 + (creatureIndex % TICK_INTERVAL)`. The `+1` is critical — without it both offset values (0 and 1 for TICK_INTERVAL=2) expire on the first tick.
+- **Implementation Handoff:** Pemulis identified and documented the fix; Steeply implemented with comprehensive test coverage (386 lines, 257 tests passing).
+- **Schema Change:** Added `nextMoveTick: number` field to `CreatureState`. Client receives it via Colyseus sync but can ignore it.
+- **PR:** #5 on `test/creature-independent-movement` branch. Awaiting merge decision post-directive review (branch protection + PR review protocol now active).

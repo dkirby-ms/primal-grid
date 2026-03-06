@@ -606,3 +606,20 @@ Hal proposed three redesign options for the hollow core gameplay loop. This will
 - **Tests cover 4 required behaviors:** (1) No creature spawns on owned tiles (initial spawn, single spawn, multi-seed), (2) creatures still spawn successfully when some tiles are owned, (3) `tickCreatureRespawn` newly spawned creatures avoid owned territory, (4) edge cases — sole remaining unowned tile, all tiles owned graceful fallback, multi-player territory.
 - **Key test pattern:** `claimTiles()` helper sets `tile.ownerID` on a rectangular region. For respawn tests, must track pre-existing creature IDs to avoid false positives from creatures placed before territory was claimed.
 - **Graceful fallback:** When ALL tiles are owned, `findRandomWalkableTile()` falls back to `{x:0, y:0}` — creature is still created (no crash), but lands on an owned tile. Test verifies the system doesn't throw.
+
+### Creature Movement Independence Tests & Implementation (2026-03-06)
+
+- **Context:** Pemulis identified that all creatures were moving synchronously due to a shared global tick gate. Handed off fix implementation + tests to Steeply.
+- **Schema Update:** Added `nextMoveTick: number` to `CreatureState` — each creature's independent movement timer.
+- **Implementation:** 
+  - Inside `tickCreatureAI()`: check `if (state.tick < creature.nextMoveTick) return;` to skip creatures not ready to move yet.
+  - After AI step: set `nextMoveTick = currentTick + TICK_INTERVAL`.
+  - Removed the global `tick % TICK_INTERVAL === 0` gate from `GameRoom.tickCreatureAI()`.
+- **Spawn Stagger Formula:** Offset initial movement times to spread across ticks: `nextMoveTick = state.tick + 1 + (creatureIndex % TICK_INTERVAL)`.
+- **Test Pattern:** 
+  - Manually-created creatures default `nextMoveTick = state.tick` (fires on next AI call).
+  - Stagger tests must explicitly set `nextMoveTick` per creature.
+  - Advance by individual ticks (not TICK_INTERVAL steps) to observe per-creature timing differences.
+  - Added 386 lines of test coverage validating independence, stagger offset, movement frequency, and synchronization failure modes.
+- **Results:** 257 tests passing (baseline + new creature movement tests). All existing tests still pass.
+- **PR:** #5 opened on `test/creature-independent-movement` branch, linked to issue #4. Ready for review under new branch protection + PR gating protocol.

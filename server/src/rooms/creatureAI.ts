@@ -10,13 +10,21 @@ import type { Room } from "colyseus";
 export type AIState = "idle" | "wander" | "eat" | "flee" | "hunt";
 
 /**
- * Run one AI step for all creatures. Called every CREATURE_AI.TICK_INTERVAL ticks.
+ * Run one AI step for creatures whose individual timer has expired.
+ * Each creature has its own `nextMoveTick` so they move independently.
  * Modifies creature states in-place. Removes dead creatures from state.
  */
 export function tickCreatureAI(state: GameState, room: Room): void {
   const toRemove: string[] = [];
+  const currentTick = state.tick;
 
   state.creatures.forEach((creature) => {
+    // Per-creature movement timer — skip if not ready
+    if (currentTick < creature.nextMoveTick) return;
+
+    // Schedule next AI step
+    creature.nextMoveTick = currentTick + CREATURE_AI.TICK_INTERVAL;
+
     // Pawns don't have hunger mechanics
     if (creature.pawnType === "") {
       // Drain hunger
@@ -128,11 +136,14 @@ function stepCarnivore(creature: CreatureState, state: GameState, room: Room): v
 /** Switch between idle and wander. Uses a simple tick-count heuristic. */
 function idleOrWander(creature: CreatureState, state: GameState): void {
   if (creature.currentState === "idle") {
-    // After being idle, start wandering
     creature.currentState = "wander";
     wanderRandom(creature, state);
   } else {
     creature.currentState = "idle";
+    // Stay idle for 0-2 extra AI ticks so movement feels less busy
+    creature.nextMoveTick +=
+      Math.floor(Math.random() * CREATURE_AI.IDLE_EXTRA_TICKS_MAX) *
+      CREATURE_AI.TICK_INTERVAL;
   }
 }
 
