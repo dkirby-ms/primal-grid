@@ -736,3 +736,16 @@ Added a scrolling game log panel below the main game area:
 - **State wiring:** Reads `state['dayPhase']` inside existing `onStateChange` callback in `bindToRoom()` — no extra listener or `main.ts` changes needed since it's global state alongside creatures
 - **Parallel work with Pemulis:** Server-side `dayPhase` and `dayTick` fields being added in parallel; client code is ready to consume them once committed
 - **Pattern:** Same duck-typed state access as other fields (bracket notation + type assertion), consistent with existing HUD approach
+
+### Day/Night Particle Effects & Color Overlay (2026-03-07)
+
+- **New file:** `client/src/renderer/ParticleSystem.ts` — contains `ParticleSystem` class (pooled particles) and `DayNightOverlay` class (tinted map overlay)
+- **Pool architecture:** `ParticlePool` pre-allocates 150 `Particle` objects; `acquire()` returns inactive slots. Zero GC pressure — no allocations during gameplay
+- **Phase-specific particles:** Dawn = gold pollen drifting up; Day = sparse faint dust; Dusk = amber settling motes; Night = fixed twinkling stars (screen-space) + wandering firefly dots (world-space)
+- **Dual containers:** `worldContainer` moves with the grid camera (motes/fireflies); `screenContainer` is stage-fixed (stars stay in place regardless of pan/zoom)
+- **Viewport culling:** World-space particles outside the camera viewport are skipped during draw (still alive, just not rendered)
+- **Color overlay:** `DayNightOverlay` draws a full-map semi-transparent rectangle per phase: dawn gold 0.08α, day near-invisible 0.02α, dusk amber 0.10α, night indigo 0.15α
+- **GridRenderer integration:** Added `dayNightOverlay` container layered on top of HQ markers; `setDayPhase()` public method delegates to overlay
+- **main.ts wiring:** New `onStateChange` listener reads `state['dayPhase']`, calls `particles.setPhase()` and `grid.setDayPhase()`. Particle tick runs each frame alongside creature tick with camera position/scale forwarded
+- **Rendering constants stay in client:** Particle counts, colors, speeds defined at top of `ParticleSystem.ts` — these are visual tuning, not game mechanics
+- **Pattern:** Same layered Container approach as CreatureRenderer. Particle system is a peer renderer, not embedded inside GridRenderer
