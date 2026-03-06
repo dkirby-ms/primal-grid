@@ -21,10 +21,8 @@ module.exports = {
       argsIgnorePattern: '^_',
       varsIgnorePattern: '^_',
     }],
-  },
-  ignorePatterns: ['dist', 'node_modules', '*.js', '!.eslintrc.cjs'],
-  rules: {
     // Too noisy for game code with frequent array/map bracket access
     'security/detect-object-injection': 'off',
   },
+  ignorePatterns: ['dist', 'node_modules', '*.js', '!.eslintrc.cjs'],
 };
