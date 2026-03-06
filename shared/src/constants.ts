@@ -64,6 +64,8 @@ export const CREATURE_AI = {
   HUNGRY_THRESHOLD: 60,
   /** Max ticks a creature stays idle before wandering. */
   IDLE_DURATION: 3,
+  /** Max extra AI ticks a creature may stay idle before wandering. */
+  IDLE_EXTRA_TICKS_MAX: 3,
   /** Resource amount consumed when herbivore grazes. */
   GRAZE_AMOUNT: 1,
   /** Health damage dealt by carnivore per hunt attack. */

@@ -136,11 +136,14 @@ function stepCarnivore(creature: CreatureState, state: GameState, room: Room): v
 /** Switch between idle and wander. Uses a simple tick-count heuristic. */
 function idleOrWander(creature: CreatureState, state: GameState): void {
   if (creature.currentState === "idle") {
-    // After being idle, start wandering
     creature.currentState = "wander";
     wanderRandom(creature, state);
   } else {
     creature.currentState = "idle";
+    // Stay idle for 0-2 extra AI ticks so movement feels less busy
+    creature.nextMoveTick +=
+      Math.floor(Math.random() * CREATURE_AI.IDLE_EXTRA_TICKS_MAX) *
+      CREATURE_AI.TICK_INTERVAL;
   }
 }
 
