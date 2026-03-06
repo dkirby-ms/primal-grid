@@ -48,6 +48,13 @@ Next: **2026-03-04 — Territory Control Redesign** (awaiting user mechanic sele
 - Includes the shared/ `tsconfig.tsbuildinfo` rebuild gotcha.
 - No LICENSE file exists yet — noted as "not yet specified."
 
+### Deployment & CI/CD Documentation (2026-03-11)
+
+- Added "🚀 Deployment & Environments" section to README, inserted between 🛠 Development and 🏗 Architecture sections.
+- Documents full CI/CD pipeline: feature → UAT → master branch strategy, environment table (prod vs UAT), infrastructure sharing (ACR, Log Analytics), and deployment workflows (ci.yml, deploy.yml, deploy-uat.yml).
+- Includes branch protection rules for UAT, emergency UAT override workflow, and initial UAT provisioning steps.
+- Clarifies scaling differences: UAT idle (~$1/month), prod always has ≥1 replica.
+
 ### Copilot Coding Agent Instructions File (2026-03-08)
 
 - Created `.github/copilot-instructions.md` — comprehensive guidance document for the GitHub Copilot coding agent.
