@@ -643,3 +643,11 @@ Hal proposed three redesign options for the hollow core gameplay loop. This will
 - **Integration tests:** Verified stamina drains during flee/hunt, exhausted creatures still starve, mid-flee exhaustion stops movement, hunger continues draining during exhaustion.
 - **Existing test fix:** Updated `creature-ai.test.ts` FSM valid states to include `"exhausted"` alongside idle/wander/eat/flee/hunt.
 - **Move count bounds:** Relaxed upper bounds on "exhausts after ~N moves" tests because idle-regen ticks between wander moves allow creatures to make more total moves than pure maxStamina/cost.
+
+### Map Visibility Enhancements — Pre-implementation Tests (2026-03-05)
+
+- **Wrote tests ahead of implementation** for #11 (Map Size) and #10 (Day/Night Cycle). Pemulis implementing in parallel — tests written from requirements so they'll compile once feature code lands.
+- **map-size.test.ts (12 tests):** Map dimensions match DEFAULT_MAP_SIZE, tile count = w×h, boundary getTile at (0,0) and (max,max), out-of-bounds returns undefined, tile x/y ↔ index consistency, creature spawn counts match CREATURE_SPAWN constants, all creatures on walkable tiles, generation perf <500ms/<1000ms.
+- **day-night-cycle.test.ts (14 tests):** Initial dayTick=0, initial phase=dawn, tick advancement, wrapping at CYCLE_LENGTH_TICKS, phase transitions through dawn→day→dusk→night, full cycle returns to start, two-cycle determinism, phase always valid/non-empty.
+- **Anticipated imports:** Tests import `DAY_NIGHT` constants (CYCLE_LENGTH_TICKS) from `@primal-grid/shared` and call `room.tickDayNightCycle()` — names may need minor adjustment when Pemulis commits.
+- **Pattern alignment:** Followed existing createRoomWithMap/createRoomWithCreatures helpers, Object.create(GameRoom.prototype) pattern, `room.broadcast = () => {}` stub.

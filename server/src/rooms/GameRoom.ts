@@ -10,7 +10,7 @@ import {
   CREATURE_AI, CREATURE_RESPAWN, TERRITORY,
   STRUCTURE_INCOME, SHAPE,
   PROGRESSION, getLevelForXP,
-  PAWN,
+  PAWN, DAY_NIGHT,
 } from "@primal-grid/shared";
 import type { SpawnPawnPayload } from "@primal-grid/shared";
 import { spawnHQ } from "./territory.js";
@@ -32,6 +32,7 @@ export class GameRoom extends Room {
 
     this.setSimulationInterval((_deltaTime) => {
       this.state.tick += 1;
+      this.tickDayNightCycle();
       this.tickClaiming();
       this.tickResourceRegen();
       this.tickCreatureAI();
@@ -266,6 +267,19 @@ export class GameRoom extends Room {
       player.wood += farms * STRUCTURE_INCOME.FARM_WOOD;
       player.stone += farms * STRUCTURE_INCOME.FARM_STONE;
     });
+  }
+
+  tickDayNightCycle() {
+    this.state.dayTick = (this.state.dayTick + 1) % DAY_NIGHT.CYCLE_LENGTH_TICKS;
+    const pct = (this.state.dayTick / DAY_NIGHT.CYCLE_LENGTH_TICKS) * 100;
+    for (const phase of DAY_NIGHT.PHASES) {
+      if (pct >= phase.startPercent && pct < phase.endPercent) {
+        if (this.state.dayPhase !== phase.name) {
+          this.state.dayPhase = phase.name;
+        }
+        break;
+      }
+    }
   }
 
   private tickCreatureAI() {

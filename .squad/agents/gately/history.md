@@ -727,3 +727,25 @@ Added a scrolling game log panel below the main game area:
 - **Pattern:** State-specific visuals follow the same indicator + background pattern as flee/hunt/eat. No new render objects or dependencies.
 - **Integration:** Integrates seamlessly with Pemulis stamina system — exhausted state is set by server via CreatureState sync. No client-side logic changes.
 - **Test results:** Typecheck clean, 257 integration tests pass.
+
+### Day/Night Phase HUD Display (2026-03-07)
+
+- **"Time of Day" section** added to top of HUD panel in `client/index.html` — new `#section-day-phase` div with `#day-phase-display` element, default showing "☀️ Day"
+- **Phase-to-emoji mapping** via static `PHASE_EMOJI` and `PHASE_COLOR` records on `HudDOM`: Dawn→🌅 orange, Day→☀️ yellow, Dusk→🌆 deep orange, Night→🌙 light blue
+- **`updateDayPhase(phase)`** public method updates text content and color dynamically
+- **State wiring:** Reads `state['dayPhase']` inside existing `onStateChange` callback in `bindToRoom()` — no extra listener or `main.ts` changes needed since it's global state alongside creatures
+- **Parallel work with Pemulis:** Server-side `dayPhase` and `dayTick` fields being added in parallel; client code is ready to consume them once committed
+- **Pattern:** Same duck-typed state access as other fields (bracket notation + type assertion), consistent with existing HUD approach
+
+### Day/Night Particle Effects & Color Overlay (2026-03-07)
+
+- **New file:** `client/src/renderer/ParticleSystem.ts` — contains `ParticleSystem` class (pooled particles) and `DayNightOverlay` class (tinted map overlay)
+- **Pool architecture:** `ParticlePool` pre-allocates 150 `Particle` objects; `acquire()` returns inactive slots. Zero GC pressure — no allocations during gameplay
+- **Phase-specific particles:** Dawn = gold pollen drifting up; Day = sparse faint dust; Dusk = amber settling motes; Night = fixed twinkling stars (screen-space) + wandering firefly dots (world-space)
+- **Dual containers:** `worldContainer` moves with the grid camera (motes/fireflies); `screenContainer` is stage-fixed (stars stay in place regardless of pan/zoom)
+- **Viewport culling:** World-space particles outside the camera viewport are skipped during draw (still alive, just not rendered)
+- **Color overlay:** `DayNightOverlay` draws a full-map semi-transparent rectangle per phase: dawn gold 0.08α, day near-invisible 0.02α, dusk amber 0.10α, night indigo 0.15α
+- **GridRenderer integration:** Added `dayNightOverlay` container layered on top of HQ markers; `setDayPhase()` public method delegates to overlay
+- **main.ts wiring:** New `onStateChange` listener reads `state['dayPhase']`, calls `particles.setPhase()` and `grid.setDayPhase()`. Particle tick runs each frame alongside creature tick with camera position/scale forwarded
+- **Rendering constants stay in client:** Particle counts, colors, speeds defined at top of `ParticleSystem.ts` — these are visual tuning, not game mechanics
+- **Pattern:** Same layered Container approach as CreatureRenderer. Particle system is a peer renderer, not embedded inside GridRenderer

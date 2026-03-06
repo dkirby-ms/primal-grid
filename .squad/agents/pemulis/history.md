@@ -932,3 +932,27 @@ Hal (Lead) architected pawn-based territory expansion system per same user direc
 
 **Next:** Branch creation, protection rules, test PR merge trigger verification.
 
+---
+
+## Session: #11 Map Size Increase + #10 Day/Night Cycle (Server Phase 1)
+**Date:** 2026-03-10
+**Branch:** feature/map-visibility-enhancements
+
+### What was done
+- **#11 — Map Size 64→128:** Changed `DEFAULT_MAP_SIZE` to 128, scaled creature spawns to 2× (64 herbivores, 32 carnivores) for density balance on 4× area.
+- **#10 — Day/Night Cycle (visual-only server side):** Added `DAY_NIGHT` constants (480-tick cycle, dawn/day/dusk/night phases), `DayPhase` enum, `dayTick`+`dayPhase` schema fields on `GameState`, and `tickDayNightCycle()` in `GameRoom` tick loop.
+- Updated 5 test files for new map size expectations; fixed `findBarrenWalkableTile` test helper to require a walkable neighbor (prevents false negatives on larger maps).
+- 312/312 tests passing, lint clean.
+
+### Files modified
+- `shared/src/constants.ts` — DEFAULT_MAP_SIZE, CREATURE_SPAWN counts, DAY_NIGHT constant group
+- `shared/src/types.ts` — DayPhase enum
+- `server/src/rooms/GameState.ts` — dayTick, dayPhase schema fields
+- `server/src/rooms/GameRoom.ts` — tickDayNightCycle(), import DAY_NIGHT
+- Test files: constants, grid-generation, procedural-map, creature-spawning, ecosystem-integration
+
+## Learnings
+- Pre-existing day/night cycle tests existed (`day-night-cycle.test.ts`) expecting lowercase phase names and `dawn` as initial phase — always check for existing tests before implementing.
+- `tickDayNightCycle()` needs to be public (not private) for test access via `Object.create(GameRoom.prototype)` pattern.
+- On larger maps, test helpers that find tiles by linear scan may land on edge tiles with no walkable neighbors — always verify movement preconditions in movement tests.
+

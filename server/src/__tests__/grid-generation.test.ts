@@ -24,10 +24,10 @@ function findTileOfType(state: GameState, type: TileType): TileState | undefined
 }
 
 describe("Grid Generation", () => {
-  it("generates exactly 64×64 tiles (4096 total)", () => {
+  it("generates exactly 128×128 tiles (16384 total)", () => {
     const room = createRoomWithMap();
     expect(room.state.tiles.length).toBe(DEFAULT_MAP_SIZE * DEFAULT_MAP_SIZE);
-    expect(room.state.tiles.length).toBe(4096);
+    expect(room.state.tiles.length).toBe(16384);
   });
 
   it("sets map dimensions to DEFAULT_MAP_SIZE", () => {

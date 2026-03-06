@@ -67,6 +67,14 @@ export interface ICreatureState {
   stamina: number;
 }
 
+/** Day/night cycle phase identifiers. */
+export enum DayPhase {
+  Dawn = "dawn",
+  Day = "day",
+  Dusk = "dusk",
+  Night = "night",
+}
+
 /** Placeable item types. */
 export enum ItemType {
   HQ = 7,

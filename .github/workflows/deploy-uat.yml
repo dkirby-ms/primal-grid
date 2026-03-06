@@ -3,6 +3,13 @@ name: Deploy to UAT
 on:
   push:
     branches: [uat]
+    paths-ignore:
+      - 'docs/**'
+      - 'infra/**'
+      - '.squad/**'
+      - '.github/**'
+      - '*.md'
+      - 'LICENSE'
   workflow_dispatch:
     inputs:
       branch:
