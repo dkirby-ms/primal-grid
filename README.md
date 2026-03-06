@@ -4,7 +4,7 @@
 
 ## Overview
 
-Primal Grid is a real-time strategy game where players build colonies on a procedurally generated world, manage resources, train pawn builders, and survive alongside (and against) AI-driven dinosaurs. Creatures have their own behavioral AI — herbivores graze and flee, carnivores hunt — and the world evolves every tick.
+[Primal Grid](https://gridwar.kirbytoso.xyz) is a real-time strategy game where players build colonies on a procedurally generated world, manage resources, train pawn builders, and survive alongside (and against) AI-driven dinosaurs. Creatures have their own behavioral AI — herbivores graze and flee, carnivores hunt — and the world evolves every tick.
 
 The game is fully server-authoritative with multiplayer powered by [Colyseus](https://colyseus.io/). No client-side prediction; the server is the single source of truth.
 
