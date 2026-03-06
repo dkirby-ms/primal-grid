@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { GameState, CreatureState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
-import { DEFAULT_MAP_SIZE, CREATURE_AI, CREATURE_TYPES, TERRITORY, PAWN, } from "@primal-grid/shared";
+import { DEFAULT_MAP_SIZE, CREATURE_AI, CREATURE_TYPES, PAWN, } from "@primal-grid/shared";
 // ── Helpers ─────────────────────────────────────────────────────────
 function createRoomWithMap(seed) {
     const room = Object.create(GameRoom.prototype);
@@ -62,20 +62,6 @@ function findWalkableTile(room) {
         }
     }
     return { x: 1, y: 1 };
-}
-/** Find a walkable tile within the player's HQ zone. */
-function findWalkableTileInHQ(room, player) {
-    const half = Math.floor(TERRITORY.STARTING_SIZE / 2);
-    for (let dy = -half; dy <= half; dy++) {
-        for (let dx = -half; dx <= half; dx++) {
-            const tx = player.hqX + dx;
-            const ty = player.hqY + dy;
-            if (room.state.isWalkable(tx, ty)) {
-                return { x: tx, y: ty };
-            }
-        }
-    }
-    return null;
 }
 /** Tick creature AI once. */
 function tickAI(room) {

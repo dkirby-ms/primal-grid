@@ -129,10 +129,10 @@ const CARNIVORE_STAMINA = {
     exhaustedThreshold: 6,
 };
 const BUILDER_STAMINA = {
-    maxStamina: PAWN.BUILDER_MAX_STAMINA ?? 20,
-    costPerMove: PAWN.BUILDER_STAMINA_COST ?? 1,
-    regenPerTick: PAWN.BUILDER_STAMINA_REGEN ?? 2,
-    exhaustedThreshold: PAWN.BUILDER_EXHAUSTED_THRESHOLD ?? 5,
+    maxStamina: PAWN.BUILDER_MAX_STAMINA,
+    costPerMove: PAWN.BUILDER_STAMINA_COST_PER_MOVE,
+    regenPerTick: PAWN.BUILDER_STAMINA_REGEN_PER_TICK,
+    exhaustedThreshold: PAWN.BUILDER_EXHAUSTED_THRESHOLD,
 };
 // ═══════════════════════════════════════════════════════════════════
 // CREATURE STAMINA SYSTEM
@@ -590,7 +590,7 @@ describe("Creature Stamina System", () => {
             const room = createRoomWithMap(SEED);
             room.state.creatures.clear();
             const pos = findWalkableTile(room);
-            const herb = addCreature(room, "herb-starve-exhaust", "herbivore", pos.x, pos.y, {
+            addCreature(room, "herb-starve-exhaust", "herbivore", pos.x, pos.y, {
                 hunger: 0, // Already starving
                 health: CREATURE_AI.STARVATION_DAMAGE * 2, // Will die in ~2 ticks
                 currentState: "exhausted",
@@ -674,10 +674,10 @@ describe("Creature Stamina System", () => {
                 nextMoveTick: 0,
                 stamina: 0,
             });
-            let ticksToRecover = 0;
+            let _ticksToRecover = 0;
             for (let t = 0; t < 30; t++) {
                 aiTick(room);
-                ticksToRecover++;
+                _ticksToRecover++;
                 if (herb.currentState !== "exhausted")
                     break;
             }

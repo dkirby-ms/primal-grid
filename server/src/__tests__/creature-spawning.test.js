@@ -43,9 +43,8 @@ describe("Phase 2.4 — Creature Spawning", () => {
     });
     it("creatures spawn in their preferred biomes", () => {
         const room = createRoomWithCreatures(42);
-        const typeMap = CREATURE_TYPES;
         room.state.creatures.forEach((creature) => {
-            const typeInfo = typeMap[creature.creatureType];
+            const typeInfo = CREATURE_TYPES[creature.creatureType];
             expect(typeInfo).toBeDefined();
             const tile = room.state.getTile(creature.x, creature.y);
             expect(tile).toBeDefined();
@@ -54,17 +53,15 @@ describe("Phase 2.4 — Creature Spawning", () => {
     });
     it("all creatures start at full health", () => {
         const room = createRoomWithCreatures(42);
-        const typeMap = CREATURE_TYPES;
         room.state.creatures.forEach((creature) => {
-            const typeInfo = typeMap[creature.creatureType];
+            const typeInfo = CREATURE_TYPES[creature.creatureType];
             expect(creature.health).toBe(typeInfo.health);
         });
     });
     it("all creatures start at full hunger", () => {
         const room = createRoomWithCreatures(42);
-        const typeMap = CREATURE_TYPES;
         room.state.creatures.forEach((creature) => {
-            const typeInfo = typeMap[creature.creatureType];
+            const typeInfo = CREATURE_TYPES[creature.creatureType];
             expect(creature.hunger).toBe(typeInfo.hunger);
         });
     });

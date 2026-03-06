@@ -122,7 +122,7 @@ describe("BUG — Creature Independent Movement", () => {
             const hasMoved = new Set();
             // Over 20 AI ticks, every creature should move at least once
             for (let t = 0; t < 20; t++) {
-                const before = snapshotPositions(room);
+                const _before = snapshotPositions(room);
                 aiTick(room);
                 room.state.creatures.forEach((c) => {
                     const prev = initial.get(c.id);
@@ -177,7 +177,7 @@ describe("BUG — Creature Independent Movement", () => {
             const initial = snapshotPositions(room);
             const firstMoveTick = new Map();
             for (let t = 1; t <= 20; t++) {
-                const before = snapshotPositions(room);
+                const _before = snapshotPositions(room);
                 aiTick(room);
                 room.state.creatures.forEach((c) => {
                     if (firstMoveTick.has(c.id))
@@ -254,7 +254,7 @@ describe("BUG — Creature Independent Movement", () => {
             expect(moveTicks.a.length).toBeGreaterThan(0);
             expect(moveTicks.b.length).toBeGreaterThan(0);
             // Their movement tick sets should NOT be identical (different cooldown phases)
-            const aSet = new Set(moveTicks.a);
+            const _aSet = new Set(moveTicks.a);
             const bSet = new Set(moveTicks.b);
             const identical = moveTicks.a.length === moveTicks.b.length &&
                 moveTicks.a.every((t) => bSet.has(t));
@@ -267,7 +267,7 @@ describe("BUG — Creature Independent Movement", () => {
             const room = createRoomWithMap(SEED);
             const positions = findSpacedWalkableTiles(room, 3, 12);
             expect(positions.length).toBe(3);
-            const creatures = positions.map((pos, i) => addCreature(room, `uncorr-${i}`, "herbivore", pos.x, pos.y, {
+            const _creatures = positions.map((pos, i) => addCreature(room, `uncorr-${i}`, "herbivore", pos.x, pos.y, {
                 hunger: 100,
                 currentState: "idle",
                 nextMoveTick: room.state.tick + 1 + (i % CREATURE_AI.TICK_INTERVAL),

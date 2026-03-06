@@ -3,7 +3,6 @@ import { GameState, CreatureState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import { isAdjacentToTerritory, getTerritoryCounts } from "../rooms/territory.js";
 import { TileType, DEFAULT_MAP_SIZE, CREATURE_AI, CREATURE_TYPES, TERRITORY, SHAPE, PAWN, SPAWN_PAWN, } from "@primal-grid/shared";
-// ── Helpers ─────────────────────────────────────────────────────────
 function createRoomWithMap(seed) {
     const room = Object.create(GameRoom.prototype);
     room.state = new GameState();

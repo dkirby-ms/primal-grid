@@ -282,7 +282,6 @@ For per-creature timing tests, advance by 1 tick at a time.
 
 ## What NOT To Do
 
-- **Do NOT add Fiber or Berries resources** — they were intentionally removed. Only Wood and Stone exist.
 - **Do NOT remove `shapeHP` from server schema** — it's used by the client for territory border rendering.
 - **Do NOT use `any` type** — strict TypeScript is enforced. Use proper types or `unknown` with type guards.
 - **Do NOT hardcode game tuning values** — use constants from `@primal-grid/shared`.

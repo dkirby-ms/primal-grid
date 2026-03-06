@@ -151,7 +151,7 @@ describe("Phase 2.5 — Creature AI: Herbivore Transitions", () => {
         // Herbivore should be fleeing (or have fled and returned to wander)
         expect(["flee", "wander", "idle", "exhausted"]).toContain(herb.currentState);
         // At minimum, it should have moved away
-        const newDist = manhattan(herb.x, herb.y, pos.b.x, pos.b.y);
+        manhattan(herb.x, herb.y, pos.b.x, pos.b.y);
         // Should not have stayed on same spot if it noticed the carnivore
         expect(herb.x !== pos.a.x || herb.y !== pos.a.y || herb.currentState === "flee").toBe(true);
     });
@@ -191,14 +191,13 @@ describe("Phase 2.5 — Creature AI: Carnivore Transitions", () => {
         const carn = addCreature(room, "chase-carn", "carnivore", pos.a.x, pos.a.y, {
             currentState: "hunt",
         });
-        const herb = addCreature(room, "target-herb", "herbivore", pos.b.x, pos.b.y, {
+        addCreature(room, "target-herb", "herbivore", pos.b.x, pos.b.y, {
             currentState: "idle",
         });
         const startDist = manhattan(carn.x, carn.y, pos.b.x, pos.b.y);
         // Tick AI once
         room.state.tick += CREATURE_AI.TICK_INTERVAL;
         room.tickCreatureAI();
-        const newDist = manhattan(carn.x, carn.y, herb.x, herb.y);
         // Carnivore should have moved closer to the herbivore (or at least not farther)
         // Note: herbivore might also move, so we check against original target position
         const distToOrigTarget = manhattan(carn.x, carn.y, pos.b.x, pos.b.y);
@@ -224,7 +223,7 @@ describe("Phase 2.5 — Creature AI: Hunger Depletion", () => {
         const room = createRoomWithCreatures(42);
         room.state.creatures.clear();
         const pos = findWalkableTile(room);
-        const creature = addCreature(room, "hunger-floor", "herbivore", pos.x, pos.y, {
+        addCreature(room, "hunger-floor", "herbivore", pos.x, pos.y, {
             hunger: 1,
         });
         for (let i = 0; i < 10; i++) {
@@ -417,7 +416,7 @@ describe("Phase 2.5 — Creature AI: Greedy Manhattan", () => {
             hunger: CREATURE_AI.HUNGRY_THRESHOLD - 10, // must be hungry to hunt
         });
         // Target — well-fed so it mostly idles
-        const herb = addCreature(room, "greedy-target", "herbivore", pos.b.x, pos.b.y, {
+        addCreature(room, "greedy-target", "herbivore", pos.b.x, pos.b.y, {
             currentState: "idle",
             health: 200, // high health so it survives
             hunger: 100, // well-fed, won't seek food

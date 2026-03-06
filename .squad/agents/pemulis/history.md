@@ -40,6 +40,14 @@ Next: **2026-03-04 — Territory Control Redesign** (awaiting user mechanic sele
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
+### Project README (2026-03-09)
+
+- Created root `README.md` — public-facing project documentation.
+- Covers: overview, tech stack, features, getting started, project structure, development workflow, architecture, contributing, license status.
+- Scripts documented from actual `package.json`: `npm run dev`, `npm run build`, `npm run lint`, `npm run typecheck`, `npx vitest run`.
+- Includes the shared/ `tsconfig.tsbuildinfo` rebuild gotcha.
+- No LICENSE file exists yet — noted as "not yet specified."
+
 ### Copilot Coding Agent Instructions File (2026-03-08)
 
 - Created `.github/copilot-instructions.md` — comprehensive guidance document for the GitHub Copilot coding agent.

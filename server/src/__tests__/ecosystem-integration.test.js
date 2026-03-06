@@ -26,7 +26,7 @@ function addCreature(room, id, type, x, y, overrides = {}) {
     return creature;
 }
 /** Find a walkable tile optionally matching a biome type. */
-function findWalkableTile(room, tileType) {
+function _findWalkableTile(room, tileType) {
     for (let i = 0; i < room.state.tiles.length; i++) {
         const tile = room.state.tiles.at(i);
         if (room.state.isWalkable(tile.x, tile.y)) {
@@ -90,7 +90,7 @@ function totalResources(room) {
     return sum;
 }
 /** Manhattan distance. */
-function manhattan(x1, y1, x2, y2) {
+function _manhattan(x1, y1, x2, y2) {
     return Math.abs(x1 - x2) + Math.abs(y1 - y2);
 }
 /** Find two adjacent walkable tiles. */
@@ -307,7 +307,6 @@ describe("Phase 2.6 — Resource Regeneration Alongside Consumption", () => {
         const tile = findResourceTile(room);
         if (!tile)
             return;
-        const origType = tile.resourceType;
         // Deplete via simulated grazing
         tile.resourceAmount = 0;
         tile.resourceType = -1;
@@ -341,7 +340,7 @@ describe("Phase 2.6 — Resource Regeneration Alongside Consumption", () => {
     });
     it("system reaches equilibrium — resources do not permanently deplete", () => {
         const room = createRoomWithEcosystem(42);
-        const initialTotal = totalResources(room);
+        totalResources(room);
         // Run the full simulation for many ticks
         for (let i = 0; i < 500; i++) {
             simulateTick(room);

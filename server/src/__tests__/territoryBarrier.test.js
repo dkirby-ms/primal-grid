@@ -82,7 +82,7 @@ describe("Territory Barrier — Herbivore blocked", () => {
         expect(block).not.toBeNull();
         const { x: bx, y: by } = block;
         // Place herbivore in the middle
-        const herb = addCreature(room, "herb-wander", "herbivore", bx + 2, by + 2, {
+        addCreature(room, "herb-wander", "herbivore", bx + 2, by + 2, {
             currentState: "idle",
             hunger: 100, // well-fed, no food-seeking urgency
         });
@@ -117,7 +117,7 @@ describe("Territory Barrier — Herbivore blocked", () => {
             claimTile(room, bx + 2, by + dy, "player-1");
         }
         // Place hungry herbivore on the left side
-        const herb = addCreature(room, "herb-food", "herbivore", bx, by + 1, {
+        addCreature(room, "herb-food", "herbivore", bx, by + 1, {
             currentState: "wander",
             hunger: CREATURE_AI.HUNGRY_THRESHOLD - 10,
         });
@@ -142,7 +142,7 @@ describe("Territory Barrier — Herbivore blocked", () => {
             claimTile(room, bx + 4, by + dy, "player-1");
         }
         // Herbivore at (bx+2, by+1), carnivore chasing from (bx, by+1)
-        const herb = addCreature(room, "herb-flee", "herbivore", bx + 2, by + 1, {
+        addCreature(room, "herb-flee", "herbivore", bx + 2, by + 1, {
             currentState: "idle",
         });
         addCreature(room, "carn-chase", "carnivore", bx, by + 1, {
@@ -167,7 +167,7 @@ describe("Territory Barrier — Carnivore blocked", () => {
         const block = findWalkableBlock(room, 5, 5);
         expect(block).not.toBeNull();
         const { x: bx, y: by } = block;
-        const carn = addCreature(room, "carn-wander", "carnivore", bx + 2, by + 2, {
+        addCreature(room, "carn-wander", "carnivore", bx + 2, by + 2, {
             currentState: "idle",
             hunger: 100,
         });
@@ -197,7 +197,7 @@ describe("Territory Barrier — Carnivore blocked", () => {
             claimTile(room, bx + 3, by + dy, "player-1");
         }
         // Carnivore on left, prey on right
-        const carn = addCreature(room, "carn-hunt", "carnivore", bx + 1, by + 1, {
+        addCreature(room, "carn-hunt", "carnivore", bx + 1, by + 1, {
             currentState: "hunt",
             hunger: CREATURE_AI.HUNGRY_THRESHOLD - 10,
         });
@@ -291,13 +291,11 @@ describe("Territory Barrier — Carnivore target filtering", () => {
             currentState: "idle",
         });
         // Carnivore OUTSIDE territory, hungry
-        const carn = addCreature(room, "carn-skip", "carnivore", bx + 1, by + 2, {
+        addCreature(room, "carn-skip", "carnivore", bx + 1, by + 2, {
             currentState: "idle",
             hunger: CREATURE_AI.HUNGRY_THRESHOLD - 10,
         });
         // Tick several times — carnivore should NOT move toward the herbivore
-        const startX = carn.x;
-        const startY = carn.y;
         for (let i = 0; i < 10; i++) {
             tickAI(room);
         }
@@ -335,7 +333,7 @@ describe("Territory Barrier — Carnivore target filtering", () => {
             pawnType: "builder",
         });
         // Carnivore outside, hungry
-        const carn = addCreature(room, "carn-skip-builder", "carnivore", bx + 1, by + 2, {
+        addCreature(room, "carn-skip-builder", "carnivore", bx + 1, by + 2, {
             currentState: "idle",
             hunger: CREATURE_AI.HUNGRY_THRESHOLD - 10,
         });
@@ -377,7 +375,7 @@ describe("Territory Barrier — Herbivore resource filtering", () => {
         foodInside.resourceType = ResourceType.Wood;
         foodInside.resourceAmount = 50;
         // Hungry herbivore outside territory — only food is inside territory
-        const herb = addCreature(room, "herb-no-food", "herbivore", bx + 1, by + 2, {
+        addCreature(room, "herb-no-food", "herbivore", bx + 1, by + 2, {
             currentState: "idle",
             hunger: CREATURE_AI.HUNGRY_THRESHOLD - 10,
         });

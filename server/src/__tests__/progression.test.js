@@ -161,7 +161,7 @@ describe("XP and level-up integration", () => {
         const room = createRoomWithMap(42);
         const { player } = joinPlayer(room, "xp-earner");
         // Set up a tile mid-claim that's about to finish
-        const w = room.state.mapWidth;
+        const _w = room.state.mapWidth;
         for (let i = 0; i < room.state.tiles.length; i++) {
             const tile = room.state.tiles.at(i);
             if (tile.ownerID === "" &&
