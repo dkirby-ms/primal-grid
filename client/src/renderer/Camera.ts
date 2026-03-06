@@ -2,8 +2,8 @@ import { Container } from 'pixi.js';
 import { TILE_SIZE } from './GridRenderer.js';
 
 const PAN_SPEED = 8;
-// Zoom levels where scale * TILE_SIZE (32) yields an integer pixel size,
-// eliminating sub-pixel seams between tiles.
+// Zoom levels chosen so that scale * TILE_SIZE produces an integer tile pixel size,
+// eliminating sub-pixel seams between tiles for the current TILE_SIZE.
 const ZOOM_LEVELS = [
   0.5, 0.625, 0.75, 0.875,
   1.0, 1.125, 1.25, 1.5, 1.75,
