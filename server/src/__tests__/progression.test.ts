@@ -8,7 +8,7 @@ import {
   hasAbility,
   PROGRESSION,
   TERRITORY,
-  TileType,
+  TileType, isWaterTile,
 } from "@primal-grid/shared";
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -213,7 +213,7 @@ describe("XP and level-up integration", () => {
       const tile = room.state.tiles.at(i)!;
       if (
         tile.ownerID === "" &&
-        tile.type !== TileType.Water &&
+        !isWaterTile(tile.type) &&
         tile.type !== TileType.Rock
       ) {
         // Simulate a tile almost done claiming
@@ -244,7 +244,7 @@ describe("XP and level-up integration", () => {
       const tile = room.state.tiles.at(i)!;
       if (
         tile.ownerID === "" &&
-        tile.type !== TileType.Water &&
+        !isWaterTile(tile.type) &&
         tile.type !== TileType.Rock
       ) {
         tile.claimingPlayerID = "leveler";
@@ -273,7 +273,7 @@ describe("XP and level-up integration", () => {
       const tile = room.state.tiles.at(i)!;
       if (
         tile.ownerID === "" &&
-        tile.type !== TileType.Water &&
+        !isWaterTile(tile.type) &&
         tile.type !== TileType.Rock
       ) {
         tile.claimingPlayerID = "maxed";

@@ -5,7 +5,7 @@ import { tickCreatureAI } from "./creatureAI.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
   SPAWN_PAWN,
-  ResourceType, TileType,
+  ResourceType, TileType, isWaterTile,
   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
   CREATURE_AI, CREATURE_RESPAWN, TERRITORY,
   STRUCTURE_INCOME, SHAPE,
@@ -180,7 +180,7 @@ export class GameRoom extends Room {
     for (let dy = -half; dy <= half; dy++) {
       for (let dx = -half; dx <= half; dx++) {
         const tile = this.state.getTile(cx + dx, cy + dy);
-        if (!tile || tile.type === TileType.Water || tile.type === TileType.Rock) {
+        if (!tile || isWaterTile(tile.type) || tile.type === TileType.Rock) {
           count++;
         }
       }

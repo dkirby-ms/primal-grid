@@ -956,3 +956,6 @@ Hal (Lead) architected pawn-based territory expansion system per same user direc
 - `tickDayNightCycle()` needs to be public (not private) for test access via `Object.create(GameRoom.prototype)` pattern.
 - On larger maps, test helpers that find tiles by linear scan may land on edge tiles with no walkable neighbors — always verify movement preconditions in movement tests.
 
+- Splitting `TileType.Water` into `ShallowWater` and `DeepWater` shifts enum ordinals for Rock (6→7) and Sand (7→8). Every `TileType.Water` reference across server, shared, client, and all tests must be updated — grep the entire codebase before committing.
+- BFS-based water depth classification runs as a second pass after map generation and cellular automata smoothing. Uses `WATER_GENERATION.SHALLOW_RADIUS` (2 tiles) to separate shallow from deep water.
+- `isWaterTile()` helper in shared/types.ts is the canonical way to check for any water variant — use it instead of comparing against both `ShallowWater` and `DeepWater` individually.

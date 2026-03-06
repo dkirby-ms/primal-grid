@@ -1,7 +1,7 @@
 import { GameState, CreatureState } from "./GameState.js";
 import { moveToward } from "./creatureAI.js";
 import { isAdjacentToTerritory } from "./territory.js";
-import { PAWN, SHAPE, TileType, PROGRESSION } from "@primal-grid/shared";
+import { PAWN, SHAPE, TileType, PROGRESSION, isWaterTile } from "@primal-grid/shared";
 
 /**
  * Builder pawn FSM: idle → find_build_site → move_to_site → building → idle
@@ -106,7 +106,7 @@ export function stepBuilder(creature: CreatureState, state: GameState): void {
 
 /** Check if a tile is valid for building (walkable terrain, no shape). */
 function isValidBuildTile(tile: { type: number; shapeHP: number }): boolean {
-  if (tile.type === TileType.Water || tile.type === TileType.Rock) return false;
+  if (isWaterTile(tile.type) || tile.type === TileType.Rock) return false;
   if (tile.shapeHP > 0) return false;
   return true;
 }

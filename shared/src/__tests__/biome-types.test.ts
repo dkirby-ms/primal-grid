@@ -2,9 +2,9 @@ import { describe, it, expect } from "vitest";
 import { TileType } from "../types.js";
 
 describe("TileType enum — Phase 2.1 biomes", () => {
-  it("has exactly 8 biome types", () => {
+  it("has exactly 9 biome types", () => {
     const members = Object.keys(TileType).filter((k) => isNaN(Number(k)));
-    expect(members).toHaveLength(8);
+    expect(members).toHaveLength(9);
   });
 
   it("includes all expected biome names", () => {
@@ -14,7 +14,8 @@ describe("TileType enum — Phase 2.1 biomes", () => {
     expect(members).toContain("Swamp");
     expect(members).toContain("Desert");
     expect(members).toContain("Highland");
-    expect(members).toContain("Water");
+    expect(members).toContain("ShallowWater");
+    expect(members).toContain("DeepWater");
     expect(members).toContain("Rock");
     expect(members).toContain("Sand");
   });
@@ -26,12 +27,13 @@ describe("TileType enum — Phase 2.1 biomes", () => {
       TileType.Swamp,
       TileType.Desert,
       TileType.Highland,
-      TileType.Water,
+      TileType.ShallowWater,
+      TileType.DeepWater,
       TileType.Rock,
       TileType.Sand,
     ];
     const unique = new Set(values);
-    expect(unique.size).toBe(8);
+    expect(unique.size).toBe(9);
     values.forEach((v) => expect(typeof v).toBe("number"));
   });
 
@@ -41,7 +43,8 @@ describe("TileType enum — Phase 2.1 biomes", () => {
     expect(TileType[TileType.Swamp]).toBe("Swamp");
     expect(TileType[TileType.Desert]).toBe("Desert");
     expect(TileType[TileType.Highland]).toBe("Highland");
-    expect(TileType[TileType.Water]).toBe("Water");
+    expect(TileType[TileType.ShallowWater]).toBe("ShallowWater");
+    expect(TileType[TileType.DeepWater]).toBe("DeepWater");
     expect(TileType[TileType.Rock]).toBe("Rock");
     expect(TileType[TileType.Sand]).toBe("Sand");
   });

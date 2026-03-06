@@ -63,7 +63,7 @@ describe("GameState", () => {
     // Populate a small 2x2 grid for testing
     state.mapWidth = 2;
     state.mapHeight = 2;
-    const types = [TileType.Grassland, TileType.Water, TileType.Rock, TileType.Sand];
+    const types = [TileType.Grassland, TileType.ShallowWater, TileType.Rock, TileType.Sand];
     for (let i = 0; i < 4; i++) {
       const t = new TileState();
       t.x = i % 2;

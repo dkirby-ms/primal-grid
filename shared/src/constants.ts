@@ -170,6 +170,12 @@ export const PAWN = {
   BUILDER_EXHAUSTED_THRESHOLD: 5,
 } as const;
 
+/** Water depth generation constants. */
+export const WATER_GENERATION = {
+  /** Tiles within this distance of non-water are shallow. */
+  SHALLOW_RADIUS: 2,
+} as const;
+
 /** Day/night cycle constants (Phase 1 — visual only). */
 export const DAY_NIGHT = {
   /** Total ticks for one full day/night cycle (480 ticks = 2 minutes at 4 ticks/sec). */

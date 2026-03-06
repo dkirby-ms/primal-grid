@@ -28,6 +28,16 @@
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
+### Water Depth Variants — Issue #15 (2026-03-09)
+
+- **18 new tests** in `server/src/__tests__/water-depth.test.ts`. Total suite: **331 tests, all passing.**
+- **TileType.Water removed** — replaced by `TileType.ShallowWater` and `TileType.DeepWater`. The `isWaterTile()` helper covers both. All existing tests already updated by Pemulis to use `isWaterTile()`.
+- **Water depth classification** uses BFS from land tiles outward. Tiles within `WATER_GENERATION.SHALLOW_RADIUS` (2) of non-water are ShallowWater; interior tiles beyond that distance are DeepWater.
+- **DeepWater distance check** in tests uses cardinal (Manhattan) distance to match the BFS implementation in `classifyWaterDepth()`, which expands only through cardinal neighbors (not diagonal).
+- **Both water types block movement** — `isWalkable()` and `isTileOpenForCreature()` both reject ShallowWater and DeepWater for all creature types (herbivore, carnivore, pawn_builder).
+- **Performance stable** — 128×128 map with water depth pass generates in ~180ms, well under 500ms budget.
+- **Incremental build gotcha still applies** — must `rm -f shared/tsconfig.tsbuildinfo` before rebuilding shared when types change. Server tsbuildinfo may also need deletion if build references stale `.d.ts` files.
+
 ### Phase C — Integration Testing (2026-02-27)
 
 - **Test suite:** 244 tests covering ASSIGN_PAWN routing (30), FSM transitions (60), UI interaction (70), command dedup (20), network latency resilience (64).

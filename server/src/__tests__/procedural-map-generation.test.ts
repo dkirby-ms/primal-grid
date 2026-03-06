@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { GameState, PlayerState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
-import { TileType, DEFAULT_MAP_SIZE } from "@primal-grid/shared";
+import { TileType, DEFAULT_MAP_SIZE, isWaterTile } from "@primal-grid/shared";
 
 /**
  * Create a room-like object with a seeded procedural map.
@@ -33,12 +33,13 @@ const ALL_BIOME_VALUES = new Set([
   TileType.Swamp,
   TileType.Desert,
   TileType.Highland,
-  TileType.Water,
+  TileType.ShallowWater,
+  TileType.DeepWater,
   TileType.Rock,
   TileType.Sand,
 ]);
 
-const NON_WALKABLE = new Set([TileType.Water, TileType.Rock]);
+const NON_WALKABLE = new Set([TileType.ShallowWater, TileType.DeepWater, TileType.Rock]);
 
 describe("Phase 2.1 — Procedural Map Generation", () => {
   // ── Map size ──────────────────────────────────────────────────────
@@ -70,7 +71,7 @@ describe("Phase 2.1 — Procedural Map Generation", () => {
 
   // ── Tile validity ─────────────────────────────────────────────────
   describe("tile validity", () => {
-    it("all tiles have valid TileType values from the 8-biome set", () => {
+    it("all tiles have valid TileType values from the 9-biome set", () => {
       const room = createRoomWithMap(42);
       for (let i = 0; i < room.state.tiles.length; i++) {
         const tile = room.state.tiles.at(i)!;
@@ -125,7 +126,7 @@ describe("Phase 2.1 — Procedural Map Generation", () => {
     it("Water tiles exist (elevation layer works)", () => {
       const room = createRoomWithMap(42);
       const typesFound = collectBiomeTypes(room);
-      expect(typesFound.has(TileType.Water)).toBe(true);
+      expect(typesFound.has(TileType.ShallowWater) || typesFound.has(TileType.DeepWater)).toBe(true);
     });
 
     it("Rock tiles exist (elevation layer works)", () => {
@@ -171,7 +172,7 @@ describe("Phase 2.1 — Procedural Map Generation", () => {
       const room = createRoomWithMap(42);
       for (let i = 0; i < room.state.tiles.length; i++) {
         const tile = room.state.tiles.at(i)!;
-        if (tile.type === TileType.Water) {
+        if (isWaterTile(tile.type)) {
           expect(room.state.isWalkable(tile.x, tile.y)).toBe(false);
         }
       }
@@ -285,7 +286,7 @@ describe("Phase 2.1 — Procedural Map Generation", () => {
       const player = room.state.players.get("spawn-biome")!;
       const tile = room.state.getTile(player.hqX, player.hqY)!;
       expect(tile).toBeDefined();
-      expect(tile.type).not.toBe(TileType.Water);
+      expect(isWaterTile(tile.type)).toBe(false);
       expect(tile.type).not.toBe(TileType.Rock);
     });
 
@@ -300,7 +301,7 @@ describe("Phase 2.1 — Procedural Map Generation", () => {
         expect(player.hqY).toBeGreaterThanOrEqual(0);
         expect(room.state.isWalkable(player.hqX, player.hqY)).toBe(true);
         const tile = room.state.getTile(player.hqX, player.hqY)!;
-        expect(tile.type).not.toBe(TileType.Water);
+        expect(isWaterTile(tile.type)).toBe(false);
         expect(tile.type).not.toBe(TileType.Rock);
       });
     });

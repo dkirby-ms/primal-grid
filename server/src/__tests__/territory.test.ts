@@ -3,7 +3,7 @@ import { GameState, PlayerState, TileState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import { isAdjacentToTerritory, getTerritoryCounts, spawnHQ } from "../rooms/territory.js";
 import {
-  TERRITORY, TileType,
+  TERRITORY, TileType, isWaterTile,
 } from "@primal-grid/shared";
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -33,7 +33,7 @@ function findClaimableAdjacentTile(room: GameRoom, playerId: string): { x: numbe
     const tile = room.state.tiles.at(i)!;
     if (
       tile.ownerID === "" &&
-      tile.type !== TileType.Water &&
+      !isWaterTile(tile.type) &&
       tile.type !== TileType.Rock &&
       isAdjacentToTerritory(room.state, playerId, tile.x, tile.y)
     ) {
@@ -49,7 +49,7 @@ function findNonAdjacentUnownedTile(room: GameRoom, playerId: string): { x: numb
     const tile = room.state.tiles.at(i)!;
     if (
       tile.ownerID === "" &&
-      tile.type !== TileType.Water &&
+      !isWaterTile(tile.type) &&
       tile.type !== TileType.Rock &&
       !isAdjacentToTerritory(room.state, playerId, tile.x, tile.y)
     ) {
@@ -63,7 +63,7 @@ function findNonAdjacentUnownedTile(room: GameRoom, playerId: string): { x: numb
 function _findUnwalkableTile(room: GameRoom): { x: number; y: number } | null {
   for (let i = 0; i < room.state.tiles.length; i++) {
     const tile = room.state.tiles.at(i)!;
-    if (tile.type === TileType.Water || tile.type === TileType.Rock) {
+    if (isWaterTile(tile.type) || tile.type === TileType.Rock) {
       return { x: tile.x, y: tile.y };
     }
   }
@@ -173,7 +173,7 @@ describe("Territory System", () => {
 
           // No Water/Rock should remain — force-converted to Grassland
           if (tile) {
-            expect(tile.type).not.toBe(TileType.Water);
+            expect(isWaterTile(tile.type)).toBe(false);
             expect(tile.type).not.toBe(TileType.Rock);
             expect(tile.ownerID).toBe("p1");
             ownedInZone++;
@@ -283,7 +283,7 @@ describe("Territory System", () => {
         if (
           x >= HQ_X - HALF && x <= HQ_X + HALF &&
           y >= HQ_Y - HALF && y <= HQ_Y + HALF
-        ) return TileType.Water;
+        ) return TileType.ShallowWater;
         return TileType.Grassland;
       });
       const player = makePlayer("p1", state);
@@ -324,10 +324,10 @@ describe("Territory System", () => {
     it("mixed terrain — Water/Rock converted, Forest/Grassland preserved, all 25 owned", () => {
       // Arrange specific tile types in the 5×5 zone
       const zoneTypes: TileType[][] = [
-        [TileType.Water,     TileType.Forest,    TileType.Grassland, TileType.Rock,      TileType.Water],
-        [TileType.Rock,      TileType.Grassland, TileType.Forest,    TileType.Water,     TileType.Grassland],
-        [TileType.Grassland, TileType.Water,     TileType.Grassland, TileType.Rock,      TileType.Forest],
-        [TileType.Forest,    TileType.Rock,      TileType.Water,     TileType.Grassland,  TileType.Highland],
+        [TileType.ShallowWater, TileType.Forest,    TileType.Grassland, TileType.Rock,      TileType.ShallowWater],
+        [TileType.Rock,         TileType.Grassland, TileType.Forest,    TileType.ShallowWater, TileType.Grassland],
+        [TileType.Grassland,    TileType.ShallowWater, TileType.Grassland, TileType.Rock,      TileType.Forest],
+        [TileType.Forest,       TileType.Rock,      TileType.ShallowWater, TileType.Grassland, TileType.Highland],
         [TileType.Sand,      TileType.Desert,    TileType.Swamp,     TileType.Forest,    TileType.Rock],
       ];
       const state = buildState((x, y) => {
@@ -346,7 +346,7 @@ describe("Territory System", () => {
         for (let dx = -HALF; dx <= HALF; dx++) {
           const tile = state.getTile(HQ_X + dx, HQ_Y + dy)!;
           // Water and Rock must be converted to Grassland
-          expect(tile.type).not.toBe(TileType.Water);
+          expect(isWaterTile(tile.type)).toBe(false);
           expect(tile.type).not.toBe(TileType.Rock);
 
           // All tiles must be owned
@@ -370,9 +370,9 @@ describe("Territory System", () => {
     it("player score is exactly 25 (STARTING_SIZE²)", () => {
       // Mix some Water/Rock so we know they're being converted, not skipped
       const state = buildState((x, y) => {
-        if (x === HQ_X && y === HQ_Y) return TileType.Water;
+        if (x === HQ_X && y === HQ_Y) return TileType.ShallowWater;
         if (x === HQ_X + 1 && y === HQ_Y) return TileType.Rock;
-        if (x === HQ_X - 1 && y === HQ_Y + 1) return TileType.Water;
+        if (x === HQ_X - 1 && y === HQ_Y + 1) return TileType.ShallowWater;
         return TileType.Forest;
       });
       const player = makePlayer("p1", state);
@@ -384,7 +384,7 @@ describe("Territory System", () => {
     it("all 25 tiles have isHQTerritory and structureType 'hq'", () => {
       const state = buildState((x, y) => {
         // Scatter Water/Rock through the zone
-        if ((x + y) % 3 === 0) return TileType.Water;
+        if ((x + y) % 3 === 0) return TileType.ShallowWater;
         if ((x + y) % 5 === 0) return TileType.Rock;
         return TileType.Grassland;
       });
@@ -412,7 +412,7 @@ describe("Territory System", () => {
             const tile = room.state.getTile(player.hqX + dx, player.hqY + dy)!;
             expect(tile).toBeDefined();
             // No Water or Rock should remain in the HQ zone
-            expect(tile.type).not.toBe(TileType.Water);
+            expect(isWaterTile(tile.type)).toBe(false);
             expect(tile.type).not.toBe(TileType.Rock);
             expect(tile.ownerID).toBe(`s${seed}`);
             expect(tile.isHQTerritory).toBe(true);
