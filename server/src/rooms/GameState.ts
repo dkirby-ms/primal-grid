@@ -110,6 +110,9 @@ export class CreatureState extends Schema {
 
   @type("string")
   buildMode: string = "outpost";
+
+  @type("number")
+  nextMoveTick: number = 0;
 }
 
 export class GameState extends Schema {

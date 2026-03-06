@@ -118,6 +118,8 @@ export class GameRoom extends Room {
     creature.targetX = -1;
     creature.targetY = -1;
     creature.buildProgress = 0;
+    // Stagger so pawns don't all step on the same tick
+    creature.nextMoveTick = this.state.tick + 1 + ((this.nextCreatureId - 1) % CREATURE_AI.TICK_INTERVAL);
     this.state.creatures.set(creature.id, creature);
     this.broadcast("game_log", { message: "Builder spawned", type: "spawn" });
   }
@@ -267,7 +269,6 @@ export class GameRoom extends Room {
   }
 
   private tickCreatureAI() {
-    if (this.state.tick % CREATURE_AI.TICK_INTERVAL !== 0) return;
     tickCreatureAI(this.state, this);
   }
 
@@ -357,6 +358,8 @@ export class GameRoom extends Room {
     creature.health = typeDef.health;
     creature.hunger = typeDef.hunger;
     creature.currentState = "idle";
+    // Stagger AI ticks so creatures don't all move on the same tick
+    creature.nextMoveTick = this.state.tick + 1 + ((this.nextCreatureId - 1) % CREATURE_AI.TICK_INTERVAL);
     this.state.creatures.set(creature.id, creature);
   }
 

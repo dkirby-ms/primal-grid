@@ -543,29 +543,57 @@ describe("Phase 2.5 — Creature AI: Greedy Manhattan", () => {
 // ── AI Tick Interval ────────────────────────────────────────────────
 
 describe("Phase 2.5 — Creature AI: Tick Interval", () => {
-  it("creature AI does NOT run on every game tick (uses TICK_INTERVAL)", () => {
+  it("creatures have staggered nextMoveTick values after spawn", () => {
     const room = createRoomWithCreatures(42);
 
-    // Record positions
-    const positionsBefore = new Map<string, { x: number; y: number; state: string }>();
-    room.state.creatures.forEach((c: any) => {
-      positionsBefore.set(c.id, { x: c.x, y: c.y, state: c.currentState });
-    });
+    if (CREATURE_AI.TICK_INTERVAL > 1) {
+      const nextMoveValues = new Set<number>();
+      room.state.creatures.forEach((c: any) => {
+        nextMoveValues.add(c.nextMoveTick);
+      });
+      // With TICK_INTERVAL=2, there should be 2 distinct values (0 and 1)
+      expect(nextMoveValues.size).toBeGreaterThan(1);
+    }
+  });
 
-    // Advance by 1 tick (less than TICK_INTERVAL) — AI should NOT update
-    room.state.tick += 1;
+  it("creature does not step before its nextMoveTick", () => {
+    const room = Object.create(GameRoom.prototype) as any;
+    room.state = new GameState();
+    room.generateMap(42);
+
+    const pos = findWalkableTile(room);
+    const creature = addCreature(room, "test_timer", "herbivore", pos.x, pos.y);
+    creature.nextMoveTick = 10; // far in the future
+
+    const origHunger = creature.hunger;
+
+    // Tick at tick=5 — creature should NOT step
+    room.state.tick = 5;
     room.tickCreatureAI();
 
-    // If TICK_INTERVAL > 1, nothing should have changed
-    if (CREATURE_AI.TICK_INTERVAL > 1) {
-      room.state.creatures.forEach((c: any) => {
-        const prev = positionsBefore.get(c.id);
-        if (!prev) return;
-        expect(c.x).toBe(prev.x);
-        expect(c.y).toBe(prev.y);
-        expect(c.currentState).toBe(prev.state);
-      });
-    }
+    // Hunger should not have drained (AI didn't run for this creature)
+    expect(creature.hunger).toBe(origHunger);
+  });
+
+  it("creature steps when tick reaches its nextMoveTick", () => {
+    const room = Object.create(GameRoom.prototype) as any;
+    room.state = new GameState();
+    room.generateMap(42);
+
+    const pos = findWalkableTile(room);
+    const creature = addCreature(room, "test_timer2", "herbivore", pos.x, pos.y);
+    creature.nextMoveTick = 4;
+
+    const origHunger = creature.hunger;
+
+    // Tick at 4 — creature SHOULD step
+    room.state.tick = 4;
+    room.tickCreatureAI();
+
+    // Hunger should have drained
+    expect(creature.hunger).toBe(origHunger - CREATURE_AI.HUNGER_DRAIN);
+    // nextMoveTick should have advanced
+    expect(creature.nextMoveTick).toBe(4 + CREATURE_AI.TICK_INTERVAL);
   });
 });
 
