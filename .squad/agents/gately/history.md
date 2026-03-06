@@ -727,3 +727,12 @@ Added a scrolling game log panel below the main game area:
 - **Pattern:** State-specific visuals follow the same indicator + background pattern as flee/hunt/eat. No new render objects or dependencies.
 - **Integration:** Integrates seamlessly with Pemulis stamina system — exhausted state is set by server via CreatureState sync. No client-side logic changes.
 - **Test results:** Typecheck clean, 257 integration tests pass.
+
+### Day/Night Phase HUD Display (2026-03-07)
+
+- **"Time of Day" section** added to top of HUD panel in `client/index.html` — new `#section-day-phase` div with `#day-phase-display` element, default showing "☀️ Day"
+- **Phase-to-emoji mapping** via static `PHASE_EMOJI` and `PHASE_COLOR` records on `HudDOM`: Dawn→🌅 orange, Day→☀️ yellow, Dusk→🌆 deep orange, Night→🌙 light blue
+- **`updateDayPhase(phase)`** public method updates text content and color dynamically
+- **State wiring:** Reads `state['dayPhase']` inside existing `onStateChange` callback in `bindToRoom()` — no extra listener or `main.ts` changes needed since it's global state alongside creatures
+- **Parallel work with Pemulis:** Server-side `dayPhase` and `dayTick` fields being added in parallel; client code is ready to consume them once committed
+- **Pattern:** Same duck-typed state access as other fields (bracket notation + type assertion), consistent with existing HUD approach
