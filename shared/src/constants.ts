@@ -2,7 +2,7 @@
 export const TICK_RATE = 4;
 
 /** Default world map size (tiles per side). */
-export const DEFAULT_MAP_SIZE = 64;
+export const DEFAULT_MAP_SIZE = 128;
 
 /** Default Colyseus server port. */
 export const SERVER_PORT = 2567;
@@ -38,10 +38,10 @@ export const RESOURCE_REGEN = {
 
 /** Creature spawning constants. */
 export const CREATURE_SPAWN = {
-  /** Number of herbivores to spawn on 64×64 map. */
-  HERBIVORE_COUNT: 32,
-  /** Number of carnivores to spawn on 64×64 map. */
-  CARNIVORE_COUNT: 16,
+  /** Number of herbivores to spawn on 128×128 map. */
+  HERBIVORE_COUNT: 64,
+  /** Number of carnivores to spawn on 128×128 map. */
+  CARNIVORE_COUNT: 32,
 } as const;
 
 /** Creature respawning constants. */
@@ -168,4 +168,17 @@ export const PAWN = {
   BUILDER_STAMINA_REGEN_PER_TICK: 2,
   /** Builder stamina threshold to exit exhaustion. */
   BUILDER_EXHAUSTED_THRESHOLD: 5,
+} as const;
+
+/** Day/night cycle constants (Phase 1 — visual only). */
+export const DAY_NIGHT = {
+  /** Total ticks for one full day/night cycle (480 ticks = 2 minutes at 4 ticks/sec). */
+  CYCLE_LENGTH_TICKS: 480,
+  /** Phase definitions with name and percentage boundaries. */
+  PHASES: [
+    { name: "dawn",  startPercent: 0,  endPercent: 15 },
+    { name: "day",   startPercent: 15, endPercent: 50 },
+    { name: "dusk",  startPercent: 50, endPercent: 65 },
+    { name: "night", startPercent: 65, endPercent: 100 },
+  ],
 } as const;

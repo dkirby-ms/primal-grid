@@ -108,6 +108,75 @@ After editing files in `shared/src/`, TypeScript's incremental build may skip em
 rm -f shared/tsconfig.tsbuildinfo && npm run build -w shared
 ```
 
+## 🚀 Deployment & Environments
+
+### Environments
+
+| Environment | Branch | Container App | URL | Deploys On |
+|-------------|--------|---------------|-----|------------|
+| Production | `master` | `primal-grid` | (prod URL) | Push to `master` |
+| UAT | `uat` | `primal-grid-uat` | (UAT URL) | Push to `uat` |
+
+### Infrastructure
+
+- Both environments share ACR (`primalgridacr`), Log Analytics, and Container Apps Environment
+- Only the Container App itself differs: `primal-grid` (prod) vs `primal-grid-uat` (UAT)
+- UAT scales to zero when idle (~$1/month); prod always has at least 1 replica
+- Infrastructure is defined in `infra/main.bicep` with an `environment` parameter
+- UAT parameters: `infra/main-uat.bicepparam`
+
+### Branch Strategy
+
+```
+feature/* ──PR──▶ uat ──PR──▶ master
+                  │              │
+                  ▼              ▼
+              UAT deploy    Prod deploy
+```
+
+1. **Feature → UAT:** Open a PR from your feature branch to `uat`. On merge, `deploy-uat.yml` auto-deploys.
+2. **UAT → Master:** Once validated on UAT, open a PR from `uat` → `master`. On merge, `deploy.yml` auto-deploys to prod.
+3. **After promotion:** Reset uat to master to prevent divergence:
+   ```bash
+   git checkout uat && git reset --hard origin/master && git push --force-with-lease
+   ```
+
+### Branch Protection
+
+The `uat` branch is protected:
+- Requires pull request (no direct push)
+- Requires CI status checks to pass
+- No force push (except for post-promotion reset by admins)
+- No branch deletion
+
+### CI/CD Workflows
+
+| Workflow | File | Trigger | What it does |
+|----------|------|---------|--------------|
+| CI | `ci.yml` | PR to `main` | Lint, typecheck, build, test |
+| Deploy Prod | `deploy.yml` | Push to `master` | Build image → push to ACR (tag: `{sha}`) → deploy to `primal-grid` |
+| Deploy UAT | `deploy-uat.yml` | Push to `uat` / workflow_dispatch | Build image → push to ACR (tag: `uat-{branch}-{sha}`) → deploy to `primal-grid-uat` |
+
+### Emergency UAT Override
+
+For testing a specific branch without merging to `uat`, use the workflow_dispatch trigger:
+
+```bash
+gh workflow run deploy-uat.yml -f branch=feature/my-fix
+```
+
+### Initial UAT Provisioning
+
+To provision the UAT Container App for the first time:
+
+```bash
+az deployment group create -g primal-grid-rg \
+  --template-file infra/main.bicep \
+  --parameters infra/main-uat.bicepparam
+```
+
+The param file uses a quickstart placeholder image. The first deploy via `deploy-uat.yml` will replace it with the real app image.
+
 ## 🏗 Architecture
 
 ### Client-Server Split
