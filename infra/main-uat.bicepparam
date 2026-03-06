@@ -1,6 +1,5 @@
 using 'main.bicep'
 
-param location = 'eastus'
 param appName = 'primal-grid'
 param acrName = 'primalgridacr'
 param environment = 'uat'
