@@ -23,12 +23,12 @@ describe("Phase 2.4 — Creature Spawning", () => {
     expect(room.state.creatures.size).toBeGreaterThan(0);
   });
 
-  it("creature count is reasonable (~48 for 64×64 map)", () => {
+  it("creature count is reasonable (~96 for 128×128 map)", () => {
     const room = createRoomWithCreatures(42);
     const count = room.state.creatures.size;
-    // Target ~48 (32 herbivores + 16 carnivores), allow generous range
-    expect(count).toBeGreaterThanOrEqual(20);
-    expect(count).toBeLessThanOrEqual(80);
+    // Target ~96 (64 herbivores + 32 carnivores), allow generous range
+    expect(count).toBeGreaterThanOrEqual(40);
+    expect(count).toBeLessThanOrEqual(160);
   });
 
   it("all creatures spawn on walkable tiles", () => {

@@ -1,5 +1,5 @@
 import { Schema, type, ArraySchema, MapSchema } from "@colyseus/schema";
-import { TileType, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED } from "@primal-grid/shared";
+import { TileType, DayPhase, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED } from "@primal-grid/shared";
 
 export class TileState extends Schema {
   @type("number")
@@ -145,6 +145,14 @@ export class GameState extends Schema {
 
   @type("number")
   mapSeed: number = DEFAULT_MAP_SEED;
+
+  /** Current position in the day/night cycle (0 to CYCLE_LENGTH_TICKS-1). */
+  @type("number")
+  dayTick: number = 0;
+
+  /** Current day/night phase name, synced to client for display. */
+  @type("string")
+  dayPhase: string = DayPhase.Dawn;
 
   /** Get tile at (x, y). Returns undefined if out of bounds. */
   getTile(x: number, y: number): TileState | undefined {
