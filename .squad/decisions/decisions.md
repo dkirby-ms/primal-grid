@@ -138,6 +138,181 @@ Ship it. Strict improvement: removes mode friction, improves discoverability, ma
 
 ---
 
+## Water Tile Split — ShallowWater & DeepWater
+
+**Date:** 2026-03-10  
+**Status:** ✅ IMPLEMENTED  
+**Author:** Pemulis (Systems Dev)  
+**Issue:** #15  
+
+### The Decision
+
+`TileType.Water` has been replaced with `TileType.ShallowWater` (ordinal 5) and `TileType.DeepWater` (ordinal 6). This shifts `Rock` to 7 and `Sand` to 8. The enum now has 9 members.
+
+### Key API
+
+- **`isWaterTile(tileType)`** — canonical helper for checking any water variant. Exported from `@primal-grid/shared`. All server/test code should use this instead of comparing against both variants.
+- **`WATER_GENERATION.SHALLOW_RADIUS`** — distance threshold (2 tiles) for shallow vs deep classification. Lives in `shared/src/constants.ts`.
+
+### Map Generation
+
+Water depth classification runs as a BFS-based second pass *after* initial biome assignment and cellular automata smoothing. Tiles within `SHALLOW_RADIUS` of any non-water tile → ShallowWater, otherwise → DeepWater.
+
+### Impact on Other Agents
+
+- **Client (Gately):** Must use `TileType.ShallowWater` and `TileType.DeepWater` for tile colors/rendering. Already handled in GridRenderer.ts.
+- **All code:** Never reference `TileType.Water` — it no longer exists. Use `isWaterTile()` for boolean checks.
+
+---
+
+## Rendering Constants Location — Client-Only
+
+**Date:** 2026-03-07  
+**Status:** ✅ APPLIED  
+**Author:** Gately (Game Dev)  
+
+### The Decision
+
+All particle/overlay rendering constants are defined at the top of `client/src/renderer/ParticleSystem.ts`, **not** in `shared/src/constants.ts`. This keeps the shared package focused on game-mechanic tuning that both server and client need.
+
+### Implications
+
+- Future rendering-only constants (animation speeds, glow radii, camera effects) should follow the same pattern: define them in the client file that uses them.
+- If a visual constant ever needs to be driven by server state (e.g. server controls particle density per biome), it should migrate to shared at that point.
+
+---
+
+## Water Depth Color Palette
+
+**Date:** 2026-03-07  
+**Status:** ✅ IMPLEMENTED  
+**Author:** Gately (Game Dev)  
+**Issue:** #15 — Shallow/Deep Water Variants  
+
+### The Decision
+
+- `ShallowWater` → `0x87CEEB` (light sky blue — inviting, traversable feel)
+- `DeepWater` → `0x1a3a5c` (dark navy — deep, foreboding, impassable feel)
+
+### Rationale
+
+- **Contrast with each other:** ~4:1 luminance ratio ensures players instantly distinguish depth at a glance.
+- **Contrast with neighbors:** Sky blue is distinct from Forest green and Sand tan. Navy is distinct from Rock gray and Swamp olive.
+- **Game design signal:** Light = safe/traversable, dark = dangerous/impassable. Follows standard game water conventions.
+
+### Impact
+
+- Single file change: `client/src/renderer/GridRenderer.ts` (TILE_COLORS map)
+- No other client files referenced `TileType.Water`
+
+---
+
+## Day/Night Phase Names Use Lowercase Strings
+
+**Date:** 2026-03-10  
+**Status:** ✅ IMPLEMENTED  
+**Author:** Pemulis (Systems Dev)  
+**Scope:** shared types, server state, client display
+
+### Context
+
+Implementing #10 day/night cycle required choosing phase name casing. Pre-existing tests by Gately expected lowercase (`"dawn"`, `"day"`, `"dusk"`, `"night"`).
+
+### Decision
+
+Phase names are lowercase strings matching the `DayPhase` enum values: `dawn`, `day`, `dusk`, `night`. The `dayPhase` field on `GameState` syncs these values to the client. Gately should use these exact strings for client-side rendering/tinting.
+
+### Rationale
+
+- Aligns with pre-existing test expectations
+- Lowercase strings are conventional for Colyseus schema string fields in this codebase
+- `DayPhase` enum in `shared/src/types.ts` provides type-safe access
+
+### Impact
+
+- Client code should import `DayPhase` from `@primal-grid/shared` and compare against `room.state.dayPhase`
+- `DAY_NIGHT.PHASES` array in constants has the phase boundaries for calculating tint interpolation
+
+---
+
+## Implementation Plan: Four Map Visibility Enhancement Issues
+
+**Date:** 2026-03-07  
+**Status:** ✅ ACTIVE  
+**Author:** Hal (Lead)  
+**Branch:** `feature/map-visibility-enhancements`
+
+### Executive Summary
+
+Four issues will land on the visibility enhancements branch in **3 sequential batches** to avoid merge conflicts:
+- **Batch 1 (parallel):** #11 (map size) + #10 (day/night cycle)
+- **Batch 2 (sequential):** #15 (water variants) after Batch 1
+- **Batch 3 (sequential):** #16 (fog of war) after Batch 2
+
+This keeps overlapping files isolated while keeping each team member productive.
+
+### Batch Details
+
+**Batch 1: Map Size + Day/Night (PARALLEL)**
+- **#11 — Larger Map Size** (Pemulis): Increase DEFAULT_MAP_SIZE 64→128. Duration: 0.5d. Files: constants.ts.
+- **#10 — Day/Night Cycle** (Pemulis + Gately): Server tracks time-of-day, client renders cycle in status. Duration: 1.5d. Files: constants.ts, GameState.ts, GameRoom.ts, HudDOM.ts.
+
+**Batch 2: Shallow/Deep Water Variants (Sequential after Batch 1)**
+- **#15 — Water Variants** (Pemulis + Gately): Split Water → ShallowWater/DeepWater. Duration: 1.5d. Files: types.ts, constants.ts, mapGenerator.ts, GridRenderer.ts.
+- **Rationale:** Delayed after Batch 1 merges because #15 modifies GridRenderer.ts, and #16 also needs to modify it.
+
+**Batch 3: Fog of War (Sequential after Batch 2)**
+- **#16 — Fog of War** (Pemulis + Gately): Per-player visibility tracking, server updates visible tiles, client renders fog overlay. Duration: 2.5d. Files: types.ts, GameState.ts, GameRoom.ts, GridRenderer.ts.
+- **Rationale:** Delayed until Batch 2 merges to avoid multi-way conflicts on types.ts and GridRenderer.ts.
+
+### File Conflict Resolution
+
+| File | #11 | #10 | #15 | #16 | Strategy |
+|------|-----|-----|-----|-----|----------|
+| `constants.ts` | ✓ MAP_SIZE | ✓ DAY_CYCLE | ✓ NOISE | — | Different sections; parallel OK |
+| `types.ts` | — | — | ✓ TileType | ✓ VisibilityState | Serialize #15→#16 |
+| `GameState.ts` | — | ✓ dayPhase | — | ✓ visibility | Serialize #10→#15→#16 |
+| `GameRoom.ts` | — | ✓ tickDayNight | — | ✓ tickVisibility | Separate methods, OK in sequence |
+| `GridRenderer.ts` | — | — | ✓ water colors | ✓ fog overlay | Serialize #15→#16 |
+
+### Definition of Done (Branch-Level)
+
+✅ All four issues implemented  
+✅ No merge conflicts on primary files  
+✅ Steeply: 380+ tests passing (baseline 273 + new ~100)  
+✅ Pemulis: All constants centralized, no hardcoded tuning  
+✅ Gately: All rendering optimized, 60 FPS maintained  
+✅ Full map generates, creatures spawn, cycle displays, fog renders end-to-end  
+✅ Code review passed, linting clean  
+✅ Ready for merge to main
+
+---
+
+## Water Depth Test Strategy
+
+**Date:** 2026-03-09  
+**Status:** ✅ IMPLEMENTED  
+**Author:** Steeply (Tester)  
+**Issue:** #15 — Shallow/Deep Water Variants
+
+### What
+
+Wrote 18 tests covering the water depth variant system across 4 categories:
+1. **Enum integrity (6):** ShallowWater/DeepWater exist, Water removed, isWaterTile() correctness
+2. **Map generation distribution (6):** Both variants present, shallow at edges, deep in interior, multi-seed consistency
+3. **Creature AI avoidance (5):** Both water types blocked for all creature types via isWalkable and isTileOpenForCreature
+4. **Performance (1):** 128×128 map with water depth pass under 500ms
+
+### Key Decision: Cardinal Distance for DeepWater Assertions
+
+The `classifyWaterDepth()` BFS uses **cardinal neighbors only** (not diagonal). Tests for DeepWater validate using Manhattan distance (`|dx| + |dy| > radius`) to match the BFS semantics. This is important — using Chebyshev distance would create false negatives at diagonal positions.
+
+### Outcome
+
+331 total tests, all passing. No regressions. Water depth tests are deterministic and seed-stable.
+
+---
+
 ## Territory Starting Size Reduction (9×9 → 5×5)
 
 **Date:** 2026-03-05T12:40:00Z  
