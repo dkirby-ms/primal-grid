@@ -1,12 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { GameState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
-import { TileType, CREATURE_TYPES, DEFAULT_MAP_SIZE } from "@primal-grid/shared";
+import { CREATURE_TYPES, DEFAULT_MAP_SIZE } from "@primal-grid/shared";
+import type { CreatureState } from "../rooms/GameState.js";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function createRoomWithCreatures(seed?: number): any {
-  const room = Object.create(GameRoom.prototype) as any;
+function createRoomWithCreatures(seed?: number): GameRoom {
+  const room = Object.create(GameRoom.prototype) as GameRoom;
   room.state = new GameState();
   room.generateMap(seed);
   room.spawnCreatures();
@@ -32,7 +33,7 @@ describe("Phase 2.4 — Creature Spawning", () => {
 
   it("all creatures spawn on walkable tiles", () => {
     const room = createRoomWithCreatures(42);
-    room.state.creatures.forEach((creature: any) => {
+    room.state.creatures.forEach((creature: CreatureState) => {
       expect(room.state.isWalkable(creature.x, creature.y)).toBe(true);
     });
   });
@@ -41,7 +42,7 @@ describe("Phase 2.4 — Creature Spawning", () => {
     const room = createRoomWithCreatures(42);
     const positions = new Set<string>();
     let total = 0;
-    room.state.creatures.forEach((creature: any) => {
+    room.state.creatures.forEach((creature: CreatureState) => {
       positions.add(`${creature.x},${creature.y}`);
       total++;
     });
@@ -51,9 +52,8 @@ describe("Phase 2.4 — Creature Spawning", () => {
 
   it("creatures spawn in their preferred biomes", () => {
     const room = createRoomWithCreatures(42);
-    const typeMap = CREATURE_TYPES as Record<string, any>;
-    room.state.creatures.forEach((creature: any) => {
-      const typeInfo = typeMap[creature.creatureType];
+    room.state.creatures.forEach((creature: CreatureState) => {
+      const typeInfo = CREATURE_TYPES[creature.creatureType];
       expect(typeInfo).toBeDefined();
       const tile = room.state.getTile(creature.x, creature.y);
       expect(tile).toBeDefined();
@@ -63,18 +63,16 @@ describe("Phase 2.4 — Creature Spawning", () => {
 
   it("all creatures start at full health", () => {
     const room = createRoomWithCreatures(42);
-    const typeMap = CREATURE_TYPES as Record<string, any>;
-    room.state.creatures.forEach((creature: any) => {
-      const typeInfo = typeMap[creature.creatureType];
+    room.state.creatures.forEach((creature: CreatureState) => {
+      const typeInfo = CREATURE_TYPES[creature.creatureType];
       expect(creature.health).toBe(typeInfo.health);
     });
   });
 
   it("all creatures start at full hunger", () => {
     const room = createRoomWithCreatures(42);
-    const typeMap = CREATURE_TYPES as Record<string, any>;
-    room.state.creatures.forEach((creature: any) => {
-      const typeInfo = typeMap[creature.creatureType];
+    room.state.creatures.forEach((creature: CreatureState) => {
+      const typeInfo = CREATURE_TYPES[creature.creatureType];
       expect(creature.hunger).toBe(typeInfo.hunger);
     });
   });
@@ -85,7 +83,7 @@ describe("Phase 2.4 — Creature Spawning", () => {
 describe("Phase 2.4 — CreatureState Schema", () => {
   it("creatures have required schema fields", () => {
     const room = createRoomWithCreatures(42);
-    room.state.creatures.forEach((creature: any) => {
+    room.state.creatures.forEach((creature: CreatureState) => {
       expect(creature.id).toBeDefined();
       expect(typeof creature.id).toBe("string");
       expect(creature.creatureType).toBeDefined();
@@ -101,7 +99,7 @@ describe("Phase 2.4 — CreatureState Schema", () => {
 
   it("creature positions are within map bounds", () => {
     const room = createRoomWithCreatures(42);
-    room.state.creatures.forEach((creature: any) => {
+    room.state.creatures.forEach((creature: CreatureState) => {
       expect(creature.x).toBeGreaterThanOrEqual(0);
       expect(creature.x).toBeLessThan(DEFAULT_MAP_SIZE);
       expect(creature.y).toBeGreaterThanOrEqual(0);
@@ -112,7 +110,7 @@ describe("Phase 2.4 — CreatureState Schema", () => {
   it("creature types reference valid CREATURE_TYPES keys", () => {
     const room = createRoomWithCreatures(42);
     const validKeys = Object.keys(CREATURE_TYPES);
-    room.state.creatures.forEach((creature: any) => {
+    room.state.creatures.forEach((creature: CreatureState) => {
       expect(validKeys).toContain(creature.creatureType);
     });
   });

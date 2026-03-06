@@ -12,10 +12,10 @@ export const DEFAULT_MAP_SEED = 12345;
 
 /** Noise-based terrain generation parameters. */
 export const NOISE_PARAMS = {
-  ELEVATION_SCALE: 0.08,
-  MOISTURE_SCALE: 0.06,
-  ELEVATION_OCTAVES: 4,
-  MOISTURE_OCTAVES: 3,
+  ELEVATION_SCALE: 0.045,
+  MOISTURE_SCALE: 0.035,
+  ELEVATION_OCTAVES: 3,
+  MOISTURE_OCTAVES: 2,
   WATER_LEVEL: 0.35,
   ROCK_LEVEL: 0.80,
   HIGHLAND_LEVEL: 0.65,
@@ -160,4 +160,12 @@ export const PAWN = {
   FARM_COST_WOOD: 8,
   /** Stone cost to build a farm structure. */
   FARM_COST_STONE: 3,
+  /** Builder maximum stamina pool. */
+  BUILDER_MAX_STAMINA: 20,
+  /** Builder stamina cost per tile moved. */
+  BUILDER_STAMINA_COST_PER_MOVE: 1,
+  /** Builder stamina recovered per AI tick when not moving. */
+  BUILDER_STAMINA_REGEN_PER_TICK: 2,
+  /** Builder stamina threshold to exit exhaustion. */
+  BUILDER_EXHAUSTED_THRESHOLD: 5,
 } as const;

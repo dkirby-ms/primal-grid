@@ -8,15 +8,15 @@ import {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function createRoomWithMap(seed?: number): any {
-  const room = Object.create(GameRoom.prototype) as any;
+function createRoomWithMap(seed?: number): GameRoom {
+  const room = Object.create(GameRoom.prototype) as GameRoom;
   room.state = new GameState();
   room.generateMap(seed);
   room.broadcast = () => {};
   return room;
 }
 
-function createRoomWithCreatures(seed?: number): any {
+function createRoomWithCreatures(seed?: number): GameRoom {
   const room = createRoomWithMap(seed);
   room.spawnCreatures();
   return room;
@@ -24,7 +24,7 @@ function createRoomWithCreatures(seed?: number): any {
 
 /** Claim a block of tiles for a player. Returns how many tiles were claimed. */
 function claimTiles(
-  room: any,
+  room: GameRoom,
   ownerID: string,
   startX: number,
   startY: number,
@@ -45,7 +45,7 @@ function claimTiles(
 }
 
 /** Claim ALL tiles on the map for a player. */
-function claimAllTiles(room: any, ownerID: string): void {
+function claimAllTiles(room: GameRoom, ownerID: string): void {
   const w = room.state.mapWidth;
   const h = room.state.mapHeight;
   for (let y = 0; y < h; y++) {
@@ -57,7 +57,7 @@ function claimAllTiles(room: any, ownerID: string): void {
 }
 
 /** Claim all walkable tiles except one. Returns coords of the spared tile. */
-function claimAllWalkableExceptOne(room: any, ownerID: string): { x: number; y: number } | null {
+function claimAllWalkableExceptOne(room: GameRoom, ownerID: string): { x: number; y: number } | null {
   const w = room.state.mapWidth;
   const h = room.state.mapHeight;
   let spared: { x: number; y: number } | null = null;
@@ -92,7 +92,7 @@ describe("Territory Exclusion — Creature Spawning", () => {
 
     room.spawnCreatures();
 
-    room.state.creatures.forEach((creature: any) => {
+    room.state.creatures.forEach((creature: CreatureState) => {
       const tile = room.state.getTile(creature.x, creature.y);
       expect(tile).toBeDefined();
       expect(tile!.ownerID).toBe("");
@@ -110,7 +110,7 @@ describe("Territory Exclusion — Creature Spawning", () => {
       room.spawnOneCreature("herbivore");
     }
 
-    room.state.creatures.forEach((creature: any) => {
+    room.state.creatures.forEach((creature: CreatureState) => {
       const tile = room.state.getTile(creature.x, creature.y);
       expect(tile).toBeDefined();
       expect(tile!.ownerID).toBe("");
@@ -123,7 +123,7 @@ describe("Territory Exclusion — Creature Spawning", () => {
       claimTiles(room, "player1", 5, 5, 15, 15);
       room.spawnCreatures();
 
-      room.state.creatures.forEach((creature: any) => {
+      room.state.creatures.forEach((creature: CreatureState) => {
         const tile = room.state.getTile(creature.x, creature.y);
         expect(tile!.ownerID).toBe("");
       });
@@ -140,7 +140,7 @@ describe("Territory Exclusion — Creature Spawning", () => {
     expect(room.state.creatures.size).toBeGreaterThan(0);
 
     // Verify they're on walkable, unowned tiles
-    room.state.creatures.forEach((creature: any) => {
+    room.state.creatures.forEach((creature: CreatureState) => {
       expect(room.state.isWalkable(creature.x, creature.y)).toBe(true);
       const tile = room.state.getTile(creature.x, creature.y);
       expect(tile!.ownerID).toBe("");
@@ -168,21 +168,21 @@ describe("Territory Exclusion — Creature Spawning", () => {
 
     // Kill all herbivores to force respawn
     const toRemove: string[] = [];
-    room.state.creatures.forEach((c: any) => {
+    room.state.creatures.forEach((c: CreatureState) => {
       if (c.creatureType === "herbivore") toRemove.push(c.id);
     });
     toRemove.forEach((id: string) => room.state.creatures.delete(id));
 
     // Track existing creature IDs before respawn
     const existingIds = new Set<string>();
-    room.state.creatures.forEach((c: any) => existingIds.add(c.id));
+    room.state.creatures.forEach((c: CreatureState) => existingIds.add(c.id));
 
     // Trigger respawn
     room.state.tick = CREATURE_RESPAWN.CHECK_INTERVAL;
     room.tickCreatureRespawn();
 
     // Only verify NEWLY spawned creatures avoid owned tiles
-    room.state.creatures.forEach((creature: any) => {
+    room.state.creatures.forEach((creature: CreatureState) => {
       if (existingIds.has(creature.id)) return; // skip pre-existing
       const tile = room.state.getTile(creature.x, creature.y);
       expect(tile).toBeDefined();
@@ -195,14 +195,14 @@ describe("Territory Exclusion — Creature Spawning", () => {
 
   it("respawned creatures land on walkable unowned tiles", () => {
     const room = createRoomWithCreatures(42);
-    const minPop = (CREATURE_TYPES as Record<string, any>)["carnivore"].minPopulation;
+    const minPop = (CREATURE_TYPES as Record<string, { minPopulation: number }>)["carnivore"].minPopulation;
 
     // Claim tiles
     claimTiles(room, "player2", 10, 10, 20, 20);
 
     // Remove carnivores below minimum
     const toRemove: string[] = [];
-    room.state.creatures.forEach((c: any) => {
+    room.state.creatures.forEach((c: CreatureState) => {
       if (c.creatureType === "carnivore") toRemove.push(c.id);
     });
     toRemove.forEach((id: string) => room.state.creatures.delete(id));
@@ -213,7 +213,7 @@ describe("Territory Exclusion — Creature Spawning", () => {
 
     // Count carnivores — should be at least minPopulation
     let carnCount = 0;
-    room.state.creatures.forEach((c: any) => {
+    room.state.creatures.forEach((c: CreatureState) => {
       if (c.creatureType === "carnivore") {
         carnCount++;
         const tile = room.state.getTile(c.x, c.y);
@@ -235,7 +235,7 @@ describe("Territory Exclusion — Creature Spawning", () => {
 
     // The creature should land on the one unowned walkable tile
     expect(room.state.creatures.size).toBe(1);
-    room.state.creatures.forEach((creature: any) => {
+    room.state.creatures.forEach((creature: CreatureState) => {
       const tile = room.state.getTile(creature.x, creature.y);
       expect(tile!.ownerID).toBe("");
     });
@@ -264,7 +264,7 @@ describe("Territory Exclusion — Creature Spawning", () => {
 
     room.spawnCreatures();
 
-    room.state.creatures.forEach((creature: any) => {
+    room.state.creatures.forEach((creature: CreatureState) => {
       const tile = room.state.getTile(creature.x, creature.y);
       expect(tile).toBeDefined();
       expect(tile!.ownerID).toBe("");

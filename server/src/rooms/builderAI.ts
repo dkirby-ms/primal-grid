@@ -9,7 +9,7 @@ import { PAWN, SHAPE, TileType, PROGRESSION } from "@primal-grid/shared";
  */
 export function stepBuilder(creature: CreatureState, state: GameState): void {
   switch (creature.currentState) {
-    case "idle":
+    case "idle": {
       // Try to find a build site
       const site = findBuildSite(creature, state);
       if (site) {
@@ -18,6 +18,7 @@ export function stepBuilder(creature: CreatureState, state: GameState): void {
         creature.currentState = "move_to_site";
       }
       break;
+    }
 
     case "move_to_site": {
       // Validate target is still valid

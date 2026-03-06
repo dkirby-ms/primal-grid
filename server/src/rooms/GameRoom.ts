@@ -2,7 +2,6 @@ import { Room, Client, CloseCode } from "colyseus";
 import { GameState, PlayerState, CreatureState } from "./GameState.js";
 import { generateProceduralMap } from "./mapGenerator.js";
 import { tickCreatureAI } from "./creatureAI.js";
-import { stepBuilder } from "./builderAI.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
   SPAWN_PAWN,
@@ -118,6 +117,7 @@ export class GameRoom extends Room {
     creature.targetX = -1;
     creature.targetY = -1;
     creature.buildProgress = 0;
+    creature.stamina = PAWN.BUILDER_MAX_STAMINA;
     // Stagger so pawns don't all step on the same tick
     creature.nextMoveTick = this.state.tick + 1 + ((this.nextCreatureId - 1) % CREATURE_AI.TICK_INTERVAL);
     this.state.creatures.set(creature.id, creature);
@@ -358,6 +358,7 @@ export class GameRoom extends Room {
     creature.health = typeDef.health;
     creature.hunger = typeDef.hunger;
     creature.currentState = "idle";
+    creature.stamina = typeDef.maxStamina;
     // Stagger AI ticks so creatures don't all move on the same tick
     creature.nextMoveTick = this.state.tick + 1 + ((this.nextCreatureId - 1) % CREATURE_AI.TICK_INTERVAL);
     this.state.creatures.set(creature.id, creature);

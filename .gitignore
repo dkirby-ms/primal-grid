@@ -4,3 +4,9 @@ dist/
 .env.*
 *.tsbuildinfo
 coverage/
+
+# Compiled JS artifacts emitted from TypeScript sources under src/
+**/src/**/*.js
+**/src/**/*.js.map
+**/src/**/*.d.ts
+**/src/**/*.d.ts.map

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { GameState, PlayerState, CreatureState } from "../rooms/GameState.js";
+import { GameState, PlayerState, CreatureState, TileState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import { isAdjacentToTerritory, getTerritoryCounts } from "../rooms/territory.js";
 import {
@@ -11,19 +11,24 @@ import type { SpawnPawnPayload } from "@primal-grid/shared";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function createRoomWithMap(seed?: number): any {
-  const room = Object.create(GameRoom.prototype) as any;
+interface MockClient {
+  sessionId: string;
+  send: (...args: unknown[]) => void;
+}
+
+function createRoomWithMap(seed?: number): GameRoom {
+  const room = Object.create(GameRoom.prototype) as GameRoom;
   room.state = new GameState();
   room.generateMap(seed);
   room.broadcast = () => {};
   return room;
 }
 
-function fakeClient(sessionId: string): any {
+function fakeClient(sessionId: string): MockClient {
   return { sessionId, send: () => {} };
 }
 
-function joinPlayer(room: any, sessionId: string) {
+function joinPlayer(room: GameRoom, sessionId: string) {
   const client = fakeClient(sessionId);
   room.onJoin(client);
   const player = room.state.players.get(sessionId)!;
@@ -32,7 +37,7 @@ function joinPlayer(room: any, sessionId: string) {
 
 /** Create a pawn_builder CreatureState and add it to the room. */
 function addBuilder(
-  room: any,
+  room: GameRoom,
   id: string,
   ownerID: string,
   x: number,
@@ -44,7 +49,7 @@ function addBuilder(
     targetX: number;
     targetY: number;
   }> = {},
-): any {
+): CreatureState {
   const creature = new CreatureState();
   creature.id = id;
   creature.creatureType = "pawn_builder";
@@ -54,6 +59,7 @@ function addBuilder(
   creature.currentState = overrides.currentState ?? "idle";
   creature.ownerID = ownerID;
   creature.pawnType = "builder";
+  creature.stamina = PAWN.BUILDER_MAX_STAMINA;
   if (overrides.buildProgress !== undefined) {
     creature.buildProgress = overrides.buildProgress;
   }
@@ -69,28 +75,29 @@ function addBuilder(
 
 /** Add a wild creature (carnivore/herbivore). */
 function addCreature(
-  room: any,
+  room: GameRoom,
   id: string,
   type: string,
   x: number,
   y: number,
   overrides: Partial<{ health: number; hunger: number; currentState: string }> = {},
-): any {
+): CreatureState {
   const creature = new CreatureState();
   creature.id = id;
   creature.creatureType = type;
   creature.x = x;
   creature.y = y;
-  const typeDef = (CREATURE_TYPES as Record<string, any>)[type];
+  const typeDef = CREATURE_TYPES[type];
   creature.health = overrides.health ?? typeDef.health;
   creature.hunger = overrides.hunger ?? typeDef.hunger;
   creature.currentState = overrides.currentState ?? "idle";
+  creature.stamina = typeDef.maxStamina;
   room.state.creatures.set(id, creature);
   return creature;
 }
 
 /** Find a walkable tile within the player's HQ zone. */
-function findWalkableTileInHQ(room: any, player: any): { x: number; y: number } | null {
+function findWalkableTileInHQ(room: GameRoom, player: PlayerState): { x: number; y: number } | null {
   const half = Math.floor(TERRITORY.STARTING_SIZE / 2);
   for (let dy = -half; dy <= half; dy++) {
     for (let dx = -half; dx <= half; dx++) {
@@ -105,7 +112,7 @@ function findWalkableTileInHQ(room: any, player: any): { x: number; y: number } 
 }
 
 /** Find an unclaimed walkable tile adjacent to player territory. */
-function findClaimableAdjacentTile(room: any, playerId: string): { x: number; y: number } | null {
+function findClaimableAdjacentTile(room: GameRoom, playerId: string): { x: number; y: number } | null {
   for (let i = 0; i < room.state.tiles.length; i++) {
     const tile = room.state.tiles.at(i)!;
     if (
@@ -121,9 +128,9 @@ function findClaimableAdjacentTile(room: any, playerId: string): { x: number; y:
 }
 
 /** Count builders owned by a specific player. */
-function countPlayerBuilders(room: any, playerId: string): number {
+function countPlayerBuilders(room: GameRoom, playerId: string): number {
   let count = 0;
-  room.state.creatures.forEach((c: any) => {
+  room.state.creatures.forEach((c: CreatureState) => {
     if (c.creatureType === "pawn_builder" && c.ownerID === playerId) {
       count++;
     }
@@ -132,7 +139,7 @@ function countPlayerBuilders(room: any, playerId: string): number {
 }
 
 /** Find a walkable tile anywhere on the map. */
-function findWalkableTile(room: any): { x: number; y: number } {
+function findWalkableTile(room: GameRoom): { x: number; y: number } {
   for (let i = 0; i < room.state.tiles.length; i++) {
     const tile = room.state.tiles.at(i)!;
     if (room.state.isWalkable(tile.x, tile.y)) {
@@ -143,7 +150,7 @@ function findWalkableTile(room: any): { x: number; y: number } {
 }
 
 /** Tick builder / creature AI once. */
-function tickAI(room: any): void {
+function tickAI(room: GameRoom): void {
   room.state.tick += CREATURE_AI.TICK_INTERVAL;
   if (typeof room.tickBuilderAI === "function") {
     room.tickBuilderAI();
@@ -153,7 +160,7 @@ function tickAI(room: any): void {
 }
 
 /** Tick upkeep system once at the given cycle number. */
-function tickUpkeep(room: any, cycle: number): void {
+function tickUpkeep(room: GameRoom, cycle: number): void {
   room.state.tick = PAWN.UPKEEP_INTERVAL_TICKS * cycle;
   if (typeof room.tickPawnUpkeep === "function") {
     room.tickPawnUpkeep();
@@ -265,8 +272,8 @@ describe("Builder AI FSM (idle, move_to_site, building)", () => {
     player.stone = PAWN.BUILDER_COST_STONE;
     room.handleSpawnPawn(client, { pawnType: "builder" });
 
-    let builder: any = null;
-    room.state.creatures.forEach((c: any) => {
+    let builder: CreatureState | null = null;
+    room.state.creatures.forEach((c: CreatureState) => {
       if (c.creatureType === "pawn_builder" && c.ownerID === "p1") builder = c;
     });
     expect(builder).not.toBeNull();
@@ -396,7 +403,7 @@ describe("Adjacency validation (prevent teleport builds)", () => {
     const room = createRoomWithMap(42);
     const { player } = joinPlayer(room, "p1");
 
-    let farTile: any = null;
+    let farTile: TileState | null = null;
     for (let i = 0; i < room.state.tiles.length; i++) {
       const tile = room.state.tiles.at(i)!;
       if (
@@ -428,7 +435,7 @@ describe("Adjacency validation (prevent teleport builds)", () => {
     const room = createRoomWithMap(42);
     joinPlayer(room, "p1");
 
-    let ownedTile: any = null;
+    let ownedTile: TileState | null = null;
     for (let i = 0; i < room.state.tiles.length; i++) {
       const tile = room.state.tiles.at(i)!;
       if (tile.ownerID === "p1") { ownedTile = tile; break; }
@@ -647,7 +654,7 @@ describe("HQ territory (immutability, visual distinction)", () => {
       for (let dx = -half; dx <= half; dx++) {
         const tile = room.state.getTile(player.hqX + dx, player.hqY + dy);
         if (tile && tile.type !== TileType.Water && tile.type !== TileType.Rock) {
-          expect((tile as any).isHQTerritory).toBe(true);
+          expect(tile.isHQTerritory).toBe(true);
           hqTileCount++;
         }
       }
@@ -677,6 +684,6 @@ describe("HQ territory (immutability, visual distinction)", () => {
 
     // HQ tile must still belong to p1
     expect(hqTile!.ownerID).toBe("p1");
-    expect((hqTile as any).isHQTerritory).toBe(true);
+    expect(hqTile!.isHQTerritory).toBe(true);
   });
 });

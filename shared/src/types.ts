@@ -63,6 +63,8 @@ export interface ICreatureState {
   buildMode: string;
   /** Tick at which this creature next takes an AI step. */
   nextMoveTick: number;
+  /** Current stamina level. */
+  stamina: number;
 }
 
 /** Placeable item types. */

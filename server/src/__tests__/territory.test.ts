@@ -3,24 +3,24 @@ import { GameState, PlayerState, TileState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import { isAdjacentToTerritory, getTerritoryCounts, spawnHQ } from "../rooms/territory.js";
 import {
-  TERRITORY, TileType, DEFAULT_MAP_SIZE,
+  TERRITORY, TileType,
 } from "@primal-grid/shared";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function createRoomWithMap(seed?: number): any {
-  const room = Object.create(GameRoom.prototype) as any;
+function createRoomWithMap(seed?: number): GameRoom {
+  const room = Object.create(GameRoom.prototype) as GameRoom;
   room.state = new GameState();
   room.generateMap(seed);
   room.broadcast = () => {};
   return room;
 }
 
-function fakeClient(sessionId: string): any {
+function fakeClient(sessionId: string): { sessionId: string; send: () => void } {
   return { sessionId, send: () => {} };
 }
 
-function joinPlayer(room: any, sessionId: string) {
+function joinPlayer(room: GameRoom, sessionId: string) {
   const client = fakeClient(sessionId);
   room.onJoin(client);
   const player = room.state.players.get(sessionId)!;
@@ -28,8 +28,7 @@ function joinPlayer(room: any, sessionId: string) {
 }
 
 /** Find an unclaimed walkable tile adjacent (cardinal) to the player's territory. */
-function findClaimableAdjacentTile(room: any, playerId: string): { x: number; y: number } | null {
-  const w = room.state.mapWidth;
+function findClaimableAdjacentTile(room: GameRoom, playerId: string): { x: number; y: number } | null {
   for (let i = 0; i < room.state.tiles.length; i++) {
     const tile = room.state.tiles.at(i)!;
     if (
@@ -45,7 +44,7 @@ function findClaimableAdjacentTile(room: any, playerId: string): { x: number; y:
 }
 
 /** Find an unclaimed walkable tile NOT adjacent to the player's territory. */
-function findNonAdjacentUnownedTile(room: any, playerId: string): { x: number; y: number } | null {
+function findNonAdjacentUnownedTile(room: GameRoom, playerId: string): { x: number; y: number } | null {
   for (let i = 0; i < room.state.tiles.length; i++) {
     const tile = room.state.tiles.at(i)!;
     if (
@@ -61,7 +60,7 @@ function findNonAdjacentUnownedTile(room: any, playerId: string): { x: number; y
 }
 
 /** Find a water or rock tile. */
-function findUnwalkableTile(room: any): { x: number; y: number } | null {
+function _findUnwalkableTile(room: GameRoom): { x: number; y: number } | null {
   for (let i = 0; i < room.state.tiles.length; i++) {
     const tile = room.state.tiles.at(i)!;
     if (tile.type === TileType.Water || tile.type === TileType.Rock) {
@@ -106,8 +105,8 @@ describe("Territory System", () => {
     it("cardinal neighbors count as adjacent, isolated tiles do not", () => {
       const room = createRoomWithMap(42);
       const { player } = joinPlayer(room, "p1");
-      const hx = player.hqX;
-      const hy = player.hqY;
+      const _hx = player.hqX;
+      const _hy = player.hqY;
 
       // Find an owned tile, then check the 4 cardinal neighbors of an edge tile
       const adj = findClaimableAdjacentTile(room, "p1");

@@ -1,17 +1,46 @@
 import { describe, it, expect, vi } from "vitest";
-import { GameState, PlayerState, CreatureState } from "../rooms/GameState.js";
+import { GameState, CreatureState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import {
-  TileType, DEFAULT_MAP_SIZE,
-  CREATURE_AI, CREATURE_TYPES, TERRITORY,
-  PAWN, SPAWN_PAWN,
+  DEFAULT_MAP_SIZE,
+  CREATURE_AI, CREATURE_TYPES,
+  PAWN,
 } from "@primal-grid/shared";
 import type { SpawnPawnPayload } from "@primal-grid/shared";
 
+// ── Test types ──────────────────────────────────────────────────────
+
+interface MockClient {
+  sessionId: string;
+  send: ReturnType<typeof vi.fn>;
+}
+
+interface GameLogPayload {
+  type: string;
+  message: string;
+}
+
+interface CreatureTypeDef {
+  health: number;
+  hunger: number;
+  maxStamina: number;
+}
+
+/** Test-only view of GameRoom exposing private methods and mocked broadcast. */
+interface TestGameRoom {
+  state: GameState;
+  broadcast: ReturnType<typeof vi.fn>;
+  generateMap(seed?: number): void;
+  onJoin(client: MockClient): void;
+  handleSpawnPawn(client: MockClient, message: SpawnPawnPayload): void;
+  tickCreatureAI(): void;
+  tickPawnUpkeep(): void;
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function createRoomWithMap(seed?: number): any {
-  const room = Object.create(GameRoom.prototype) as any;
+function createRoomWithMap(seed?: number): TestGameRoom {
+  const room = Object.create(GameRoom.prototype) as TestGameRoom;
   room.state = new GameState();
   room.generateMap(seed);
   // Install a spy so we can capture broadcast calls
@@ -19,11 +48,11 @@ function createRoomWithMap(seed?: number): any {
   return room;
 }
 
-function fakeClient(sessionId: string): any {
+function fakeClient(sessionId: string): MockClient {
   return { sessionId, send: vi.fn() };
 }
 
-function joinPlayer(room: any, sessionId: string) {
+function joinPlayer(room: TestGameRoom, sessionId: string) {
   const client = fakeClient(sessionId);
   room.onJoin(client);
   const player = room.state.players.get(sessionId)!;
@@ -32,7 +61,7 @@ function joinPlayer(room: any, sessionId: string) {
 
 /** Create a pawn_builder CreatureState and add it to the room. */
 function addBuilder(
-  room: any,
+  room: TestGameRoom,
   id: string,
   ownerID: string,
   x: number,
@@ -41,7 +70,7 @@ function addBuilder(
     health: number;
     currentState: string;
   }> = {},
-): any {
+): CreatureState {
   const creature = new CreatureState();
   creature.id = id;
   creature.creatureType = "pawn_builder";
@@ -54,34 +83,36 @@ function addBuilder(
   creature.targetX = -1;
   creature.targetY = -1;
   creature.buildProgress = 0;
+  creature.stamina = PAWN.BUILDER_MAX_STAMINA;
   room.state.creatures.set(id, creature);
   return creature;
 }
 
 /** Add a wild creature (carnivore/herbivore). */
 function addCreature(
-  room: any,
+  room: TestGameRoom,
   id: string,
   type: string,
   x: number,
   y: number,
   overrides: Partial<{ health: number; hunger: number; currentState: string }> = {},
-): any {
+): CreatureState {
   const creature = new CreatureState();
   creature.id = id;
   creature.creatureType = type;
   creature.x = x;
   creature.y = y;
-  const typeDef = (CREATURE_TYPES as Record<string, any>)[type];
+  const typeDef = (CREATURE_TYPES as Record<string, CreatureTypeDef>)[type];
   creature.health = overrides.health ?? typeDef.health;
   creature.hunger = overrides.hunger ?? typeDef.hunger;
   creature.currentState = overrides.currentState ?? "idle";
+  creature.stamina = typeDef.maxStamina;
   room.state.creatures.set(id, creature);
   return creature;
 }
 
 /** Find a walkable tile anywhere on the map. */
-function findWalkableTile(room: any): { x: number; y: number } {
+function findWalkableTile(room: TestGameRoom): { x: number; y: number } {
   for (let i = 0; i < room.state.tiles.length; i++) {
     const tile = room.state.tiles.at(i)!;
     if (room.state.isWalkable(tile.x, tile.y)) {
@@ -91,29 +122,14 @@ function findWalkableTile(room: any): { x: number; y: number } {
   return { x: 1, y: 1 };
 }
 
-/** Find a walkable tile within the player's HQ zone. */
-function findWalkableTileInHQ(room: any, player: any): { x: number; y: number } | null {
-  const half = Math.floor(TERRITORY.STARTING_SIZE / 2);
-  for (let dy = -half; dy <= half; dy++) {
-    for (let dx = -half; dx <= half; dx++) {
-      const tx = player.hqX + dx;
-      const ty = player.hqY + dy;
-      if (room.state.isWalkable(tx, ty)) {
-        return { x: tx, y: ty };
-      }
-    }
-  }
-  return null;
-}
-
 /** Tick creature AI once. */
-function tickAI(room: any): void {
+function tickAI(room: TestGameRoom): void {
   room.state.tick += CREATURE_AI.TICK_INTERVAL;
   if (typeof room.tickCreatureAI === "function") room.tickCreatureAI();
 }
 
 /** Tick upkeep system once at the given cycle number. */
-function tickUpkeep(room: any, cycle: number): void {
+function tickUpkeep(room: TestGameRoom, cycle: number): void {
   room.state.tick = PAWN.UPKEEP_INTERVAL_TICKS * cycle;
   if (typeof room.tickPawnUpkeep === "function") {
     room.tickPawnUpkeep();
@@ -123,19 +139,19 @@ function tickUpkeep(room: any, cycle: number): void {
 }
 
 /** Collect all broadcast calls matching a given message type. */
-function getLogBroadcasts(room: any, logType?: string): any[] {
+function getLogBroadcasts(room: TestGameRoom, logType?: string): GameLogPayload[] {
   return room.broadcast.mock.calls
-    .filter((call: any[]) => call[0] === "game_log")
-    .map((call: any[]) => call[1])
-    .filter((payload: any) => !logType || payload?.type === logType);
+    .filter((call) => call[0] === "game_log")
+    .map((call) => call[1] as GameLogPayload)
+    .filter((payload) => !logType || payload?.type === logType);
 }
 
 /** Collect all client.send calls matching "game_log". */
-function getClientLogs(client: any, logType?: string): any[] {
+function getClientLogs(client: MockClient, logType?: string): GameLogPayload[] {
   return client.send.mock.calls
-    .filter((call: any[]) => call[0] === "game_log")
-    .map((call: any[]) => call[1])
-    .filter((payload: any) => !logType || payload?.type === logType);
+    .filter((call) => call[0] === "game_log")
+    .map((call) => call[1] as GameLogPayload)
+    .filter((payload) => !logType || payload?.type === logType);
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -158,7 +174,7 @@ describe("Game Log Events", () => {
 
       // Verify the builder was actually spawned (state precondition)
       let builderCount = 0;
-      room.state.creatures.forEach((c: any) => {
+      room.state.creatures.forEach((c: CreatureState) => {
         if (c.creatureType === "pawn_builder" && c.ownerID === "p1") builderCount++;
       });
       expect(builderCount).toBe(1);
@@ -209,7 +225,7 @@ describe("Game Log Events", () => {
       // TODO: This assertion will pass once Pemulis lands death event broadcasting in creature AI
       const deathLogs = getLogBroadcasts(room, "death");
       expect(deathLogs.length).toBeGreaterThanOrEqual(1);
-      const deathLog = deathLogs.find((l: any) =>
+      const deathLog = deathLogs.find((l) =>
         l.message.toLowerCase().includes("killed") ||
         l.message.toLowerCase().includes("died") ||
         l.message.toLowerCase().includes("slain")

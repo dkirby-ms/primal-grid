@@ -17,6 +17,9 @@ const CARNIVORE_EAT_COLOR = 0xef9a9a;
 // Darker variants for Hunt state
 const CARNIVORE_HUNT_COLOR = 0xc62828;
 
+// Exhausted state color (gray/muted)
+const EXHAUSTED_COLOR = 0x9e9e9e;
+
 interface CreatureEntry {
   container: Container;
   graphic: Graphics;
@@ -197,9 +200,15 @@ export class CreatureRenderer {
 
   private drawStateBackground(g: Graphics, creatureType: string, currentState: string, isLocalBuilder: boolean): void {
     if (creatureType === 'pawn_builder') {
-      const color = isLocalBuilder ? BUILDER_COLOR : 0x888888;
+      const color = currentState === 'exhausted' ? EXHAUSTED_COLOR : (isLocalBuilder ? BUILDER_COLOR : 0x888888);
+      const alpha = currentState === 'exhausted' ? 0.3 : 0.4;
       g.rect(-CREATURE_RADIUS, -CREATURE_RADIUS, CREATURE_RADIUS * 2, CREATURE_RADIUS * 2);
-      g.fill({ color, alpha: 0.4 });
+      g.fill({ color, alpha });
+      return;
+    }
+    if (currentState === 'exhausted') {
+      g.circle(0, 0, CREATURE_RADIUS + 1);
+      g.fill({ color: EXHAUSTED_COLOR, alpha: 0.3 });
       return;
     }
     if (currentState === 'idle' || currentState === 'wander') return;
@@ -219,6 +228,11 @@ export class CreatureRenderer {
   }
 
   private updateIndicator(indicator: Text, currentState: string, isBuilder: boolean): void {
+    if (currentState === 'exhausted') {
+      indicator.text = '💤';
+      indicator.visible = true;
+      return;
+    }
     if (isBuilder) {
       indicator.text = '';
       indicator.visible = false;

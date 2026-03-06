@@ -40,6 +40,31 @@ Next: **2026-03-04 — Territory Control Redesign** (awaiting user mechanic sele
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
+### Project README (2026-03-09)
+
+- Created root `README.md` — public-facing project documentation.
+- Covers: overview, tech stack, features, getting started, project structure, development workflow, architecture, contributing, license status.
+- Scripts documented from actual `package.json`: `npm run dev`, `npm run build`, `npm run lint`, `npm run typecheck`, `npx vitest run`.
+- Includes the shared/ `tsconfig.tsbuildinfo` rebuild gotcha.
+- No LICENSE file exists yet — noted as "not yet specified."
+
+### Copilot Coding Agent Instructions File (2026-03-08)
+
+- Created `.github/copilot-instructions.md` — comprehensive guidance document for the GitHub Copilot coding agent.
+- Covers: project overview, architecture, build system (including shared/ incremental build gotcha), state management (Colyseus schema patterns), all game systems (creature AI FSM, stamina, territory, resources, map gen), testing patterns (mock room creation, tick advancement), coding conventions (underscore prefix, strict TS, no `any`), and explicit "do not" list.
+- Key details sourced from: constants.ts, types.ts, GameRoom.ts, creatureAI.ts, builderAI.ts, GameState.ts, mapGenerator.ts, territory.ts, .eslintrc.cjs, test files.
+- 287 tests pass with no regressions (documentation-only change).
+
+### Biome Contiguity — Noise Tuning + Cellular Automata (2026-03-07)
+
+- **Problem:** Biomes looked pixelated — too many isolated single-tile patches because noise params produced high-frequency detail and no post-processing smoothed boundaries.
+- **Fix (two-pronged):**
+  1. **Noise parameter tuning** (`shared/src/constants.ts`): Reduced `ELEVATION_SCALE` 0.08→0.045, `MOISTURE_SCALE` 0.06→0.035 (lower scale = larger features). Reduced octaves (4→3 elevation, 3→2 moisture) to remove fine-grained noise that caused pixelation.
+  2. **Cellular automata smoothing** (`server/src/rooms/mapGenerator.ts`): Added `smoothBiomes()` function called after tile generation. 2 passes over the full grid. For each non-Water, non-Rock tile, counts biome types in Moore neighborhood (8 neighbors). If 5+ neighbors share a different biome, flips the center tile. Uses a snapshot array per pass so reads don't see writes.
+- **Post-flip recalculation:** After flipping a tile's biome, `calculateFertility` and `assignResource` are re-run with the tile's stored moisture value to keep fertility/resources consistent with the new biome type.
+- **Protected tiles:** Water and Rock are never smoothed — they're terrain barriers used for gameplay.
+- **Scale is counterintuitive:** In the FBM implementation, *lower* scale values produce *larger* features because scale is used as the initial frequency multiplier.
+
 ### Per-Creature Movement Timers (2026-03-06)
 
 - **Bug:** All creatures moved simultaneously because `tickCreatureAI` was gated by a shared `tick % TICK_INTERVAL === 0` check in `GameRoom.tickCreatureAI()`. Every creature stepped on the exact same tick.
@@ -852,3 +877,25 @@ Hal (Lead) architected pawn-based territory expansion system per same user direc
 - **Implementation Handoff:** Pemulis identified and documented the fix; Steeply implemented with comprehensive test coverage (386 lines, 257 tests passing).
 - **Schema Change:** Added `nextMoveTick: number` field to `CreatureState`. Client receives it via Colyseus sync but can ignore it.
 - **PR:** #5 on `test/creature-independent-movement` branch. Awaiting merge decision post-directive review (branch protection + PR review protocol now active).
+
+### Creature Stamina System (2026-03-07)
+
+- **Feature:** Added stamina as a core creature resource alongside health and hunger. All creature types (herbivore, carnivore, pawn_builder) have independent stamina profiles.
+- **Design:** Stamina depletes per tile moved, regens per AI tick when idle/eating/building. When stamina hits 0, creature enters "exhausted" FSM state and must rest until stamina exceeds a per-type hysteresis threshold. Prevents rapid state flickering.
+- **Stamina profiles:** Herbivore (max=10, cost=2, regen=1, threshold=5), Carnivore (max=14, cost=2, regen=1, threshold=6), Builder (max=20, cost=1, regen=2, threshold=5). Different creature types have distinct movement rhythms.
+- **Architecture:** `CreatureTypeDef` interface extended with 4 stamina fields. Builders use `PAWN.*` constants since they're not in `CREATURE_TYPES`. New `getStaminaConfig()` resolver handles both paths cleanly.
+- **Movement return values:** `wanderRandom`, `moveToward`, `moveAwayFrom` now return `boolean` indicating actual movement. Stamina only deducted on actual moves, not blocked attempts. Builder movement detected via position diff (since `stepBuilder` is in a separate module).
+- **Key files:** `shared/src/data/creatures.ts`, `shared/src/types.ts`, `shared/src/constants.ts`, `server/src/rooms/GameState.ts`, `server/src/rooms/creatureAI.ts`, `server/src/rooms/GameRoom.ts`
+- **Test impact:** Updated all `addCreature` helpers across 7 test files to initialize stamina. Added "exhausted" to valid FSM state lists. Pre-existing stamina test suite (creature-stamina.test.ts) passes.
+- **All 287 tests passing.**
+
+### Creature Stamina System (2026-03-07)
+
+- **Feature:** Added stamina as a core creature resource alongside health and hunger. All creature types (herbivore, carnivore, pawn_builder) have independent stamina profiles.
+- **Design:** Stamina depletes per tile moved, regens per AI tick when idle/eating/building. When stamina hits 0, creature enters "exhausted" FSM state and must rest until stamina exceeds a per-type hysteresis threshold. Prevents rapid state flickering.
+- **Stamina profiles:** Herbivore (max=10, cost=2, regen=1, threshold=5), Carnivore (max=14, cost=2, regen=1, threshold=6), Builder (max=20, cost=1, regen=2, threshold=5). Different creature types have distinct movement rhythms.
+- **Architecture:** `CreatureTypeDef` interface extended with 4 stamina fields. Builders use `PAWN.*` constants since they're not in `CREATURE_TYPES`. New `getStaminaConfig()` resolver handles both paths cleanly.
+- **Movement return values:** `wanderRandom`, `moveToward`, `moveAwayFrom` now return `boolean` indicating actual movement. Stamina only deducted on actual moves, not blocked attempts. Builder movement detected via position diff (since `stepBuilder` is in a separate module).
+- **Key files:** `shared/src/data/creatures.ts`, `shared/src/types.ts`, `shared/src/constants.ts`, `server/src/rooms/GameState.ts`, `server/src/rooms/creatureAI.ts`, `server/src/rooms/GameRoom.ts`
+- **Test impact:** Updated all `addCreature` helpers across 7 test files to initialize stamina. Added "exhausted" to valid FSM state lists. Pre-existing stamina test suite (creature-stamina.test.ts) passes.
+- **All 287 tests passing.**

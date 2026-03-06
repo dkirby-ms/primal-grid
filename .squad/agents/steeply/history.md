@@ -623,3 +623,23 @@ Hal proposed three redesign options for the hollow core gameplay loop. This will
   - Added 386 lines of test coverage validating independence, stagger offset, movement frequency, and synchronization failure modes.
 - **Results:** 257 tests passing (baseline + new creature movement tests). All existing tests still pass.
 - **PR:** #5 opened on `test/creature-independent-movement` branch, linked to issue #4. Ready for review under new branch protection + PR gating protocol.
+
+### Creature Stamina System Tests (2026-02-28)
+
+- **30 new tests** in `server/src/__tests__/creature-stamina.test.ts`. Total suite: 287 tests, all passing.
+- **7 test categories:** stamina initialization (3), depletion (4), regeneration (4), exhaustion state (4), recovery/hysteresis (4), integration with existing AI (5), type variation (6).
+- **Key patterns:** Used `addCreature` helper with `stamina` override field. Tests cover stamina field on CreatureState, per-type constants from CreatureTypeDef (maxStamina, costPerMove, regenPerTick, exhaustedThreshold), and PAWN builder stamina constants.
+- **Hysteresis testing:** Verified exhaustion → recovery transition uses threshold-based exit (not stamina > 0), preventing rapid state toggling.
+- **Integration tests:** Verified stamina drains during flee/hunt, exhausted creatures still starve, mid-flee exhaustion stops movement, hunger continues draining during exhaustion.
+- **Existing test fix:** Updated `creature-ai.test.ts` FSM valid states to include `"exhausted"` alongside idle/wander/eat/flee/hunt.
+- **Move count bounds:** Relaxed upper bounds on "exhausts after ~N moves" tests because idle-regen ticks between wander moves allow creatures to make more total moves than pure maxStamina/cost.
+
+### Creature Stamina System Tests (2026-03-07)
+
+- **30 new tests** in `server/src/__tests__/creature-stamina.test.ts`. Total suite: 287 tests, all passing.
+- **7 test categories:** stamina initialization (3), depletion (4), regeneration (4), exhaustion state (4), recovery/hysteresis (4), integration with existing AI (5), type variation (6).
+- **Key patterns:** Used `addCreature` helper with `stamina` override field. Tests cover stamina field on CreatureState, per-type constants from CreatureTypeDef (maxStamina, costPerMove, regenPerTick, exhaustedThreshold), and PAWN builder stamina constants.
+- **Hysteresis testing:** Verified exhaustion → recovery transition uses threshold-based exit (not stamina > 0), preventing rapid state toggling.
+- **Integration tests:** Verified stamina drains during flee/hunt, exhausted creatures still starve, mid-flee exhaustion stops movement, hunger continues draining during exhaustion.
+- **Existing test fix:** Updated `creature-ai.test.ts` FSM valid states to include `"exhausted"` alongside idle/wander/eat/flee/hunt.
+- **Move count bounds:** Relaxed upper bounds on "exhausts after ~N moves" tests because idle-regen ticks between wander moves allow creatures to make more total moves than pure maxStamina/cost.

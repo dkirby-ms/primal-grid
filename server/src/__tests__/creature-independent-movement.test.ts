@@ -8,8 +8,8 @@ import {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function createRoomWithMap(seed?: number): any {
-  const room = Object.create(GameRoom.prototype) as any;
+function createRoomWithMap(seed?: number): GameRoom {
+  const room = Object.create(GameRoom.prototype) as GameRoom;
   room.state = new GameState();
   room.generateMap(seed);
   room.broadcast = () => {};
@@ -18,23 +18,24 @@ function createRoomWithMap(seed?: number): any {
 
 /** Place a creature manually at a specific position. */
 function addCreature(
-  room: any,
+  room: GameRoom,
   id: string,
   type: string,
   x: number,
   y: number,
   overrides: Partial<{ health: number; hunger: number; currentState: string; nextMoveTick: number }> = {},
-): any {
+): CreatureState {
   const creature = new CreatureState();
   creature.id = id;
   creature.creatureType = type;
   creature.x = x;
   creature.y = y;
-  const typeDef = (CREATURE_TYPES as Record<string, any>)[type];
+  const typeDef = (CREATURE_TYPES as Record<string, { health: number; hunger: number; maxStamina: number }>)[type];
   creature.health = overrides.health ?? typeDef.health;
   creature.hunger = overrides.hunger ?? typeDef.hunger;
   creature.currentState = overrides.currentState ?? "idle";
   creature.nextMoveTick = overrides.nextMoveTick ?? room.state.tick;
+  creature.stamina = typeDef.maxStamina;
   room.state.creatures.set(id, creature);
   return creature;
 }
@@ -44,7 +45,7 @@ function addCreature(
  * Separation ensures no detection-radius interactions between creatures.
  */
 function findSpacedWalkableTiles(
-  room: any, count: number, minSeparation: number = 10,
+  room: GameRoom, count: number, minSeparation: number = 10,
 ): { x: number; y: number }[] {
   const tiles: { x: number; y: number }[] = [];
   const w = room.state.mapWidth;
@@ -74,18 +75,18 @@ function findSpacedWalkableTiles(
 }
 
 /** Snapshot positions of all creatures keyed by id. */
-function snapshotPositions(room: any): Map<string, { x: number; y: number }> {
+function snapshotPositions(room: GameRoom): Map<string, { x: number; y: number }> {
   const snap = new Map<string, { x: number; y: number }>();
-  room.state.creatures.forEach((c: any) => {
+  room.state.creatures.forEach((c: CreatureState) => {
     snap.set(c.id, { x: c.x, y: c.y });
   });
   return snap;
 }
 
 /** Count how many creatures moved compared to a previous snapshot. */
-function countMoved(room: any, before: Map<string, { x: number; y: number }>): number {
+function countMoved(room: GameRoom, before: Map<string, { x: number; y: number }>): number {
   let moved = 0;
-  room.state.creatures.forEach((c: any) => {
+  room.state.creatures.forEach((c: CreatureState) => {
     const prev = before.get(c.id);
     if (prev && (prev.x !== c.x || prev.y !== c.y)) {
       moved++;
@@ -95,7 +96,7 @@ function countMoved(room: any, before: Map<string, { x: number; y: number }>): n
 }
 
 /** Run a single game tick: increment by 1 and call tickCreatureAI. */
-function aiTick(room: any): void {
+function aiTick(room: GameRoom): void {
   room.state.tick += 1;
   tickCreatureAI(room.state, room);
 }
@@ -154,9 +155,9 @@ describe("BUG — Creature Independent Movement", () => {
 
       // Over 20 AI ticks, every creature should move at least once
       for (let t = 0; t < 20; t++) {
-        const before = snapshotPositions(room);
+        const _before = snapshotPositions(room);
         aiTick(room);
-        room.state.creatures.forEach((c: any) => {
+        room.state.creatures.forEach((c: CreatureState) => {
           const prev = initial.get(c.id);
           if (prev && (prev.x !== c.x || prev.y !== c.y)) {
             hasMoved.add(c.id);
@@ -221,9 +222,9 @@ describe("BUG — Creature Independent Movement", () => {
       const firstMoveTick = new Map<string, number>();
 
       for (let t = 1; t <= 20; t++) {
-        const before = snapshotPositions(room);
+        const _before = snapshotPositions(room);
         aiTick(room);
-        room.state.creatures.forEach((c: any) => {
+        room.state.creatures.forEach((c: CreatureState) => {
           if (firstMoveTick.has(c.id)) return;
           const prev = initial.get(c.id);
           if (prev && (prev.x !== c.x || prev.y !== c.y)) {
@@ -310,7 +311,7 @@ describe("BUG — Creature Independent Movement", () => {
       expect(moveTicks.b.length).toBeGreaterThan(0);
 
       // Their movement tick sets should NOT be identical (different cooldown phases)
-      const aSet = new Set(moveTicks.a);
+      const _aSet = new Set(moveTicks.a);
       const bSet = new Set(moveTicks.b);
       const identical = moveTicks.a.length === moveTicks.b.length &&
         moveTicks.a.every((t) => bSet.has(t));
@@ -326,7 +327,7 @@ describe("BUG — Creature Independent Movement", () => {
       const positions = findSpacedWalkableTiles(room, 3, 12);
       expect(positions.length).toBe(3);
 
-      const creatures = positions.map((pos, i) =>
+      const _creatures = positions.map((pos, i) =>
         addCreature(room, `uncorr-${i}`, "herbivore", pos.x, pos.y, {
           hunger: 100,
           currentState: "idle",

@@ -1,16 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { GameState, CreatureState } from "../rooms/GameState.js";
+import { GameState, CreatureState, TileState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import {
-  TileType, ResourceType,
-  CREATURE_TYPES, CREATURE_AI, CREATURE_SPAWN,
-  RESOURCE_REGEN, DEFAULT_MAP_SIZE,
+  CREATURE_TYPES, CREATURE_AI,
+  RESOURCE_REGEN,
 } from "@primal-grid/shared";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function createRoomWithEcosystem(seed?: number): any {
-  const room = Object.create(GameRoom.prototype) as any;
+function createRoomWithEcosystem(seed?: number): GameRoom {
+  const room = Object.create(GameRoom.prototype) as GameRoom;
   room.state = new GameState();
   room.generateMap(seed);
   room.spawnCreatures();
@@ -19,28 +18,29 @@ function createRoomWithEcosystem(seed?: number): any {
 
 /** Place a creature manually at a specific position. */
 function addCreature(
-  room: any,
+  room: GameRoom,
   id: string,
   type: string,
   x: number,
   y: number,
   overrides: Partial<{ health: number; hunger: number; currentState: string }> = {},
-): any {
+): CreatureState {
   const creature = new CreatureState();
   creature.id = id;
   creature.creatureType = type;
   creature.x = x;
   creature.y = y;
-  const typeDef = (CREATURE_TYPES as Record<string, any>)[type];
+  const typeDef = CREATURE_TYPES[type];
   creature.health = overrides.health ?? typeDef.health;
   creature.hunger = overrides.hunger ?? typeDef.hunger;
   creature.currentState = overrides.currentState ?? "idle";
+  creature.stamina = typeDef.maxStamina;
   room.state.creatures.set(id, creature);
   return creature;
 }
 
 /** Find a walkable tile optionally matching a biome type. */
-function findWalkableTile(room: any, tileType?: number): { x: number; y: number } {
+function _findWalkableTile(room: GameRoom, tileType?: number): { x: number; y: number } {
   for (let i = 0; i < room.state.tiles.length; i++) {
     const tile = room.state.tiles.at(i)!;
     if (room.state.isWalkable(tile.x, tile.y)) {
@@ -53,7 +53,7 @@ function findWalkableTile(room: any, tileType?: number): { x: number; y: number 
 }
 
 /** Find a walkable tile WITH resources. */
-function findResourceTile(room: any): any | null {
+function findResourceTile(room: GameRoom): TileState | null {
   for (let i = 0; i < room.state.tiles.length; i++) {
     const tile = room.state.tiles.at(i)!;
     if (tile.resourceAmount > 0 && room.state.isWalkable(tile.x, tile.y)) {
@@ -64,7 +64,7 @@ function findResourceTile(room: any): any | null {
 }
 
 /** Find a walkable tile WITHOUT resources. */
-function findBarrenWalkableTile(room: any): { x: number; y: number } | null {
+function findBarrenWalkableTile(room: GameRoom): { x: number; y: number } | null {
   for (let i = 0; i < room.state.tiles.length; i++) {
     const tile = room.state.tiles.at(i)!;
     if (room.state.isWalkable(tile.x, tile.y) && tile.resourceAmount <= 0) {
@@ -75,7 +75,7 @@ function findBarrenWalkableTile(room: any): { x: number; y: number } | null {
 }
 
 /** Run one full simulation tick: advance tick counter + all subsystems. */
-function simulateTick(room: any): void {
+function simulateTick(room: GameRoom): void {
   room.state.tick += 1;
   room.tickResourceRegen();
   room.tickCreatureAI();
@@ -86,10 +86,10 @@ function simulateTick(room: any): void {
 }
 
 /** Count creatures by type. */
-function countByType(room: any): { herbivores: number; carnivores: number } {
+function countByType(room: GameRoom): { herbivores: number; carnivores: number } {
   let herbivores = 0;
   let carnivores = 0;
-  room.state.creatures.forEach((c: any) => {
+  room.state.creatures.forEach((c: CreatureState) => {
     if (c.creatureType === "herbivore") herbivores++;
     else if (c.creatureType === "carnivore") carnivores++;
   });
@@ -97,7 +97,7 @@ function countByType(room: any): { herbivores: number; carnivores: number } {
 }
 
 /** Total resource amount across all tiles. */
-function totalResources(room: any): number {
+function totalResources(room: GameRoom): number {
   let sum = 0;
   for (let i = 0; i < room.state.tiles.length; i++) {
     const tile = room.state.tiles.at(i)!;
@@ -107,12 +107,12 @@ function totalResources(room: any): number {
 }
 
 /** Manhattan distance. */
-function manhattan(x1: number, y1: number, x2: number, y2: number): number {
+function _manhattan(x1: number, y1: number, x2: number, y2: number): number {
   return Math.abs(x1 - x2) + Math.abs(y1 - y2);
 }
 
 /** Find two adjacent walkable tiles. */
-function findAdjacentWalkablePair(room: any): { a: { x: number; y: number }; b: { x: number; y: number } } | null {
+function findAdjacentWalkablePair(room: GameRoom): { a: { x: number; y: number }; b: { x: number; y: number } } | null {
   const w = room.state.mapWidth;
   for (let y = 0; y < w; y++) {
     for (let x = 0; x < w - 1; x++) {
@@ -301,7 +301,7 @@ describe("Phase 2.6 — Creature Respawning", () => {
     const room = createRoomWithEcosystem(42);
     // Kill all herbivores
     const toRemove: string[] = [];
-    room.state.creatures.forEach((c: any) => {
+    room.state.creatures.forEach((c: CreatureState) => {
       if (c.creatureType === "herbivore") toRemove.push(c.id);
     });
     toRemove.forEach((id: string) => room.state.creatures.delete(id));
@@ -327,7 +327,7 @@ describe("Phase 2.6 — Creature Respawning", () => {
       simulateTick(room);
     }
 
-    room.state.creatures.forEach((c: any) => {
+    room.state.creatures.forEach((c: CreatureState) => {
       expect(room.state.isWalkable(c.x, c.y)).toBe(true);
     });
   });
@@ -340,8 +340,8 @@ describe("Phase 2.6 — Creature Respawning", () => {
       simulateTick(room);
     }
 
-    const typeMap = CREATURE_TYPES as Record<string, any>;
-    room.state.creatures.forEach((c: any) => {
+    const typeMap = CREATURE_TYPES;
+    room.state.creatures.forEach((c: CreatureState) => {
       const typeDef = typeMap[c.creatureType];
       if (!typeDef) return;
       const tile = room.state.getTile(c.x, c.y);
@@ -363,7 +363,6 @@ describe("Phase 2.6 — Resource Regeneration Alongside Consumption", () => {
     const tile = findResourceTile(room);
     if (!tile) return;
 
-    const origType = tile.resourceType;
     // Deplete via simulated grazing
     tile.resourceAmount = 0;
     tile.resourceType = -1;
@@ -405,7 +404,7 @@ describe("Phase 2.6 — Resource Regeneration Alongside Consumption", () => {
   it("system reaches equilibrium — resources do not permanently deplete", () => {
     const room = createRoomWithEcosystem(42);
 
-    const initialTotal = totalResources(room);
+    totalResources(room);
 
     // Run the full simulation for many ticks
     for (let i = 0; i < 500; i++) {
@@ -444,7 +443,7 @@ describe("Phase 2.6 — Ecosystem Stability", () => {
       simulateTick(room);
     }
 
-    room.state.creatures.forEach((c: any) => {
+    room.state.creatures.forEach((c: CreatureState) => {
       expect(Number.isNaN(c.x)).toBe(false);
       expect(Number.isNaN(c.y)).toBe(false);
       expect(Number.isNaN(c.health)).toBe(false);
@@ -464,7 +463,7 @@ describe("Phase 2.6 — Ecosystem Stability", () => {
       simulateTick(room);
     }
 
-    room.state.creatures.forEach((c: any) => {
+    room.state.creatures.forEach((c: CreatureState) => {
       expect(c.x).toBeGreaterThanOrEqual(0);
       expect(c.x).toBeLessThan(room.state.mapWidth);
       expect(c.y).toBeGreaterThanOrEqual(0);
@@ -479,7 +478,7 @@ describe("Phase 2.6 — Ecosystem Stability", () => {
       simulateTick(room);
     }
 
-    room.state.creatures.forEach((c: any) => {
+    room.state.creatures.forEach((c: CreatureState) => {
       expect(room.state.isWalkable(c.x, c.y)).toBe(true);
     });
   });
@@ -509,13 +508,13 @@ describe("Phase 2.6 — Ecosystem Stability", () => {
 
   it("creature states are valid FSM states after 200 ticks", () => {
     const room = createRoomWithEcosystem(42);
-    const validStates = ["idle", "wander", "eat", "flee", "hunt"];
+    const validStates = ["idle", "wander", "eat", "flee", "hunt", "exhausted"];
 
     for (let i = 0; i < 200; i++) {
       simulateTick(room);
     }
 
-    room.state.creatures.forEach((c: any) => {
+    room.state.creatures.forEach((c: CreatureState) => {
       expect(validStates).toContain(c.currentState);
     });
   });
@@ -531,7 +530,7 @@ describe("Phase 2.6 — Edge Cases", () => {
 
     // Remove all herbivores
     const herbIds: string[] = [];
-    room.state.creatures.forEach((c: any) => {
+    room.state.creatures.forEach((c: CreatureState) => {
       if (c.creatureType === "herbivore") herbIds.push(c.id);
     });
     herbIds.forEach((id) => room.state.creatures.delete(id));
@@ -573,7 +572,7 @@ describe("Phase 2.6 — Edge Cases", () => {
 
     // Remove all herbivores — carnivores have nothing to eat
     const herbIds: string[] = [];
-    room.state.creatures.forEach((c: any) => {
+    room.state.creatures.forEach((c: CreatureState) => {
       if (c.creatureType === "herbivore") herbIds.push(c.id);
     });
     herbIds.forEach((id) => room.state.creatures.delete(id));
@@ -633,7 +632,7 @@ describe("Phase 2.6 — Edge Cases", () => {
       simulateTick(room);
     }
 
-    room.state.creatures.forEach((c: any) => {
+    room.state.creatures.forEach((c: CreatureState) => {
       expect(c.health).toBeGreaterThan(0); // alive creatures have positive health
       expect(c.hunger).toBeGreaterThanOrEqual(0);
       expect(c.hunger).toBeLessThanOrEqual(200); // reasonable upper bound

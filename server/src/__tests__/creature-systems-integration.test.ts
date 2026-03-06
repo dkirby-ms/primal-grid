@@ -7,15 +7,15 @@ import {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function createRoomWithMap(seed?: number): any {
-  const room = Object.create(GameRoom.prototype) as any;
+function createRoomWithMap(seed?: number): GameRoom {
+  const room = Object.create(GameRoom.prototype) as GameRoom;
   room.state = new GameState();
   room.generateMap(seed);
   room.broadcast = () => {};
   return room;
 }
 
-function createRoomWithEcosystem(seed?: number): any {
+function createRoomWithEcosystem(seed?: number): GameRoom {
   const room = createRoomWithMap(seed);
   room.spawnCreatures();
   return room;
@@ -32,7 +32,7 @@ describe("Creature Systems Integration", () => {
     let herbivoreCount = 0;
     let carnivoreCount = 0;
     
-    room.state.creatures.forEach((c: any) => {
+    room.state.creatures.forEach((c: CreatureState) => {
       if (c.creatureType === "herbivore") herbivoreCount++;
       if (c.creatureType === "carnivore") carnivoreCount++;
     });
@@ -45,17 +45,17 @@ describe("Creature Systems Integration", () => {
     const room = createRoomWithEcosystem(42);
     
     // Remove herbivores down to below minimum population to trigger respawn
-    const minPop = (CREATURE_TYPES as Record<string, any>)["herbivore"].minPopulation;
+    const minPop = (CREATURE_TYPES as Record<string, { minPopulation: number }>)["herbivore"].minPopulation;
     const toRemove: string[] = [];
     let herbCount = 0;
-    room.state.creatures.forEach((c: any) => {
+    room.state.creatures.forEach((c: CreatureState) => {
       if (c.creatureType === "herbivore") herbCount++;
     });
 
     // Remove all but (minPop - 1) herbivores to ensure respawn triggers
     let removeCount = 0;
     const removeTarget = herbCount - (minPop - 1);
-    room.state.creatures.forEach((c: any) => {
+    room.state.creatures.forEach((c: CreatureState) => {
       if (c.creatureType === "herbivore" && removeCount < removeTarget) {
         toRemove.push(c.id);
         removeCount++;

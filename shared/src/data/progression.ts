@@ -30,7 +30,7 @@ export function xpForNextLevel(currentLevel: number): number | null {
 export function hasAbility(level: number, ability: string): boolean {
   for (const def of PROGRESSION.LEVELS) {
     if (def.level <= level && "abilities" in def) {
-      if ((def as any).abilities?.includes(ability)) return true;
+      if ((def as { abilities?: readonly string[] }).abilities?.includes(ability)) return true;
     }
   }
   return false;

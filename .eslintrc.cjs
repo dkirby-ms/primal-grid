@@ -16,6 +16,12 @@ module.exports = {
     ecmaVersion: 2022,
     sourceType: 'module',
   },
+  rules: {
+    '@typescript-eslint/no-unused-vars': ['error', {
+      argsIgnorePattern: '^_',
+      varsIgnorePattern: '^_',
+    }],
+  },
   ignorePatterns: ['dist', 'node_modules', '*.js', '!.eslintrc.cjs'],
   rules: {
     // Too noisy for game code with frequent array/map bracket access

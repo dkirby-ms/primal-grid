@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { GameState, TileState } from "../rooms/GameState.js";
+import { GameState, PlayerState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import { TileType, DEFAULT_MAP_SIZE } from "@primal-grid/shared";
 
@@ -7,19 +7,19 @@ import { TileType, DEFAULT_MAP_SIZE } from "@primal-grid/shared";
  * Create a room-like object with a seeded procedural map.
  * Uses Object.create to access private methods without full Colyseus server.
  */
-function createRoomWithMap(seed?: number): any {
-  const room = Object.create(GameRoom.prototype) as any;
+function createRoomWithMap(seed?: number): GameRoom {
+  const room = Object.create(GameRoom.prototype) as GameRoom;
   room.state = new GameState();
   room.generateMap(seed);
   return room;
 }
 
-function fakeClient(sessionId: string): any {
+function fakeClient(sessionId: string): { sessionId: string; send: () => void } {
   return { sessionId, send: () => {} };
 }
 
 /** Collect all unique TileType values from the map. */
-function collectBiomeTypes(room: any): Set<number> {
+function collectBiomeTypes(room: GameRoom): Set<number> {
   const types = new Set<number>();
   for (let i = 0; i < room.state.tiles.length; i++) {
     types.add(room.state.tiles.at(i)!.type);
@@ -295,7 +295,7 @@ describe("Phase 2.1 — Procedural Map Generation", () => {
         room.onJoin(fakeClient(`stress-${i}`));
       }
       expect(room.state.players.size).toBe(10);
-      room.state.players.forEach((player: any) => {
+      room.state.players.forEach((player: PlayerState) => {
         expect(player.hqX).toBeGreaterThanOrEqual(0);
         expect(player.hqY).toBeGreaterThanOrEqual(0);
         expect(room.state.isWalkable(player.hqX, player.hqY)).toBe(true);
