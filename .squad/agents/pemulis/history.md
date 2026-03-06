@@ -40,6 +40,23 @@ Next: **2026-03-04 — Territory Control Redesign** (awaiting user mechanic sele
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
+### Copilot Coding Agent Instructions File (2026-03-08)
+
+- Created `.github/copilot-instructions.md` — comprehensive guidance document for the GitHub Copilot coding agent.
+- Covers: project overview, architecture, build system (including shared/ incremental build gotcha), state management (Colyseus schema patterns), all game systems (creature AI FSM, stamina, territory, resources, map gen), testing patterns (mock room creation, tick advancement), coding conventions (underscore prefix, strict TS, no `any`), and explicit "do not" list.
+- Key details sourced from: constants.ts, types.ts, GameRoom.ts, creatureAI.ts, builderAI.ts, GameState.ts, mapGenerator.ts, territory.ts, .eslintrc.cjs, test files.
+- 287 tests pass with no regressions (documentation-only change).
+
+### Biome Contiguity — Noise Tuning + Cellular Automata (2026-03-07)
+
+- **Problem:** Biomes looked pixelated — too many isolated single-tile patches because noise params produced high-frequency detail and no post-processing smoothed boundaries.
+- **Fix (two-pronged):**
+  1. **Noise parameter tuning** (`shared/src/constants.ts`): Reduced `ELEVATION_SCALE` 0.08→0.045, `MOISTURE_SCALE` 0.06→0.035 (lower scale = larger features). Reduced octaves (4→3 elevation, 3→2 moisture) to remove fine-grained noise that caused pixelation.
+  2. **Cellular automata smoothing** (`server/src/rooms/mapGenerator.ts`): Added `smoothBiomes()` function called after tile generation. 2 passes over the full grid. For each non-Water, non-Rock tile, counts biome types in Moore neighborhood (8 neighbors). If 5+ neighbors share a different biome, flips the center tile. Uses a snapshot array per pass so reads don't see writes.
+- **Post-flip recalculation:** After flipping a tile's biome, `calculateFertility` and `assignResource` are re-run with the tile's stored moisture value to keep fertility/resources consistent with the new biome type.
+- **Protected tiles:** Water and Rock are never smoothed — they're terrain barriers used for gameplay.
+- **Scale is counterintuitive:** In the FBM implementation, *lower* scale values produce *larger* features because scale is used as the initial frequency multiplier.
+
 ### Per-Creature Movement Timers (2026-03-06)
 
 - **Bug:** All creatures moved simultaneously because `tickCreatureAI` was gated by a shared `tick % TICK_INTERVAL === 0` check in `GameRoom.tickCreatureAI()`. Every creature stepped on the exact same tick.
