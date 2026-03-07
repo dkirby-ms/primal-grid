@@ -231,7 +231,7 @@ function addBuilder(
 /** Run combat resolution for the current tick. */
 const _combatIdCounter = { value: 10000 };
 function runCombat(room: GameRoom, ebState: Map<string, EnemyBaseTracker>) {
-  tickCombat(room.state, room, ebState, _combatIdCounter);
+  tickCombat(room.state, room, ebState, _combatIdCounter, (room as TestableGameRoom).attackerState);
 }
 
 /** Set a tile as non-HQ owned territory. */

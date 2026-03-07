@@ -201,7 +201,7 @@ function addGraveMarker(
 }
 
 function runCombat(room: GameRoom, ebState: Map<string, EnemyBaseTracker>, counter = idCounter) {
-  tickCombat(room.state, room, ebState, counter);
+  tickCombat(room.state, room, ebState, counter, (room as TestableGameRoom).attackerState);
 }
 
 /** Collect all grave markers currently in state. */

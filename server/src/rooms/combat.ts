@@ -6,6 +6,7 @@ import {
 import type { Room } from "colyseus";
 import { onBaseDestroyed } from "./enemyBaseAI.js";
 import type { EnemyBaseTracker } from "./enemyBaseAI.js";
+import type { AttackerTracker } from "./attackerAI.js";
 
 /** Per-creature combat cooldown tracking (server-side, not synced). */
 const attackCooldowns = new Map<string, number>();
@@ -26,6 +27,7 @@ export function tickCombat(
   room: Room,
   enemyBaseState: Map<string, EnemyBaseTracker>,
   nextCreatureId: { value: number },
+  attackerState: Map<string, AttackerTracker>,
 ): void {
   if (state.tick % COMBAT.COMBAT_TICK_INTERVAL !== 0) return;
 
@@ -145,9 +147,10 @@ export function tickCombat(
       });
     }
 
-    // Clean up cooldown tracking
+    // Clean up cooldown and attacker tracking
     attackCooldowns.delete(id);
     tileAttackCooldowns.delete(id);
+    attackerState.delete(id);
 
     state.creatures.delete(id);
   }

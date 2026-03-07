@@ -447,7 +447,7 @@ export class GameRoom extends Room {
     if (!this.enemyBaseState) this.enemyBaseState = new Map();
     if (!this.creatureIdCounter) this.creatureIdCounter = { value: this.nextCreatureId ?? 0 };
     this.creatureIdCounter.value = this.nextCreatureId;
-    tickCombat(this.state, this, this.enemyBaseState, this.creatureIdCounter);
+    tickCombat(this.state, this, this.enemyBaseState, this.creatureIdCounter, this.attackerState);
     this.nextCreatureId = this.creatureIdCounter.value;
   }
 
