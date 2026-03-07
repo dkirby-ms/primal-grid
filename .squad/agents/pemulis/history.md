@@ -1384,3 +1384,34 @@ Fixed order-of-operations bug in `tickCreatureAI()` where enemy bases/mobiles we
 **Tests:** All 520 pass.
 
 **Decision:** Documented in decisions.md — enemy entities are a separate AI domain and should not mix into generic creature pipeline.
+
+## 2026-03-07 — Fixed Defender Movement and Attacker Detection Bugs (PR #43)
+
+**Session:** 2026-03-07T16:54:00Z  
+**Status:** ✅ Complete  
+
+Fixed two AI bugs identified in PR #43 review:
+
+1. **Defender territory movement bug** (`creatureAI.ts` line 409):
+   - **Problem:** Defenders couldn't move through unclaimed tiles (ownerID === ""), causing them to get permanently stuck when returning to territory after engaging enemies
+   - **Fix:** Changed `isTileOpenForCreature` logic for defenders from `tile.ownerID === creature.ownerID` to `tile.ownerID === "" || tile.ownerID === creature.ownerID`
+   - **Impact:** Defenders can now pathfind through unclaimed tiles to return home, but still can't enter enemy territory
+
+2. **Attacker detection radius bug** (`attackerAI.ts` line 137):
+   - **Problem:** `findNearestEnemyTarget()` accepted `_detectionRadius` parameter but never used it, allowing attackers to detect enemies from anywhere on the map
+   - **Fix:** Added distance check `if (dist > detectionRadius) return;` to filter out targets beyond the detection radius
+   - **Impact:** Attackers now properly respect their 6-tile detection radius from `PAWN_TYPES["attacker"]`
+
+**Tests:** All 520/520 pass.
+
+**Pattern learned:** Territory movement logic needs to distinguish between three tile states: owned-by-self, unclaimed, and owned-by-enemy. Using simple equality checks (===) can inadvertently block valid movement through neutral space.
+
+**Requested by:** dkirby-ms via @copilot PR review
+
+---
+
+**Session:** 2026-03-07T22:54:50Z  
+**Status:** ✅ Logged  
+
+Scribe orchestration: PR #43 review fixes for territory movement and detection radius bugs. Both fixes committed to dev, 520/520 tests passing.
+
