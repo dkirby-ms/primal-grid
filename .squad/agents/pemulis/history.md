@@ -1303,3 +1303,10 @@ Coordinated work with Gately (Game Dev) and Steeply (Tester) on grave marker sys
 - **No client fog rendering changes needed** — the client renders fog state purely based on what tiles are in the StateView. All tiles in view = no fog.
 - **Key pattern:** playerViews Map entry now has `devMode: boolean` field: `{ view, visibleIndices, visibleCreatureIds, devMode }`.
 - **Test status:** 520/520 tests pass, no regressions.
+
+### Enemy Spawn Debug Logging + Alignment Bug Discovery (2026-03-12)
+
+- **Enhanced game_log entries for enemy spawning:** Both enemy base spawns (GameRoom.ts `tickEnemyBaseSpawning`) and enemy mobile spawns (enemyBaseAI.ts `stepEnemyBase`) now emit rich `game_log` broadcasts with position, tick, phase, base ID, and mobile counts.
+- **Game log pattern:** `room.broadcast("game_log", { message: string, type: string })` — type is "spawn" for spawn events, "death" for kills, "upkeep" for resource warnings, "info" for general. No schema-level log; purely broadcast events.
+- **CRITICAL BUG FOUND (not yet fixed):** `BASE_SPAWN_INTERVAL_TICKS` (480) equals `DAY_NIGHT.CYCLE_LENGTH_TICKS` (480). The spawn check `tick % 480 === 0` always fires when `dayTick` is 0, which is the start of the dawn phase (0%). Night is 65–100%. So the night-only gate (`dayPhase !== DayPhase.Night`) and the interval modulo check will NEVER align — enemy bases can never spawn. Fix: change BASE_SPAWN_INTERVAL_TICKS to a value that doesn't divide evenly into the cycle length (e.g., 120 or 200).
+- **Test status:** 520/520 tests pass, no regressions.

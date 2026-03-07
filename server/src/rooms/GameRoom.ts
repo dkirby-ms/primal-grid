@@ -5,6 +5,7 @@ import { generateProceduralMap } from "./mapGenerator.js";
 import { tickCreatureAI } from "./creatureAI.js";
 import { computeVisibleTiles } from "./visibility.js";
 import { tickCombat } from "./combat.js";
+import { tickGraveDecay } from "./graveDecay.js";
 import type { EnemyBaseTracker } from "./enemyBaseAI.js";
 import type { AttackerTracker } from "./attackerAI.js";
 import {
@@ -33,7 +34,7 @@ export class GameRoom extends Room {
   state = new GameState();
   private nextCreatureId = 0;
   /** Per-player StateView, cached visible tile indices, and visible creature IDs for fog of war. */
-  playerViews = new Map<string, { view: StateView; visibleIndices: Set<number>; visibleCreatureIds: Set<string> }>();
+  playerViews = new Map<string, { view: StateView; visibleIndices: Set<number>; visibleCreatureIds: Set<string>; devMode: boolean }>();
   /** Server-side tracking for enemy bases (mobile ownership). */
   private enemyBaseState = new Map<string, EnemyBaseTracker>();
   /** Server-side tracking for attacker pawns (sortie timer, home tile). */
@@ -57,6 +58,7 @@ export class GameRoom extends Room {
       this.tickPawnUpkeep();
       this.tickEnemyBaseSpawning();
       this.tickCombat();
+      this.tickGraveDecay();
       this.tickFogOfWar();
     }, 1000 / TICK_RATE);
 
@@ -71,7 +73,7 @@ export class GameRoom extends Room {
     console.log("[GameRoom] Room created.");
   }
 
-  override onJoin(client: Client) {
+  override onJoin(client: Client, options?: Record<string, unknown>) {
     const player = new PlayerState();
     player.id = client.sessionId;
     player.color = PLAYER_COLORS[this.state.players.size % PLAYER_COLORS.length];
@@ -82,8 +84,10 @@ export class GameRoom extends Room {
     const hqPos = this.findHQSpawnLocation();
     spawnHQ(this.state, player, hqPos.x, hqPos.y);
 
+    const devMode = options?.devMode === true;
+
     // Initialize per-player StateView for fog of war
-    this.initPlayerView(client, player);
+    this.initPlayerView(client, player, devMode);
 
     // Add new player to all existing views (scoreboard visibility)
     if (this.playerViews) {
@@ -94,7 +98,7 @@ export class GameRoom extends Room {
       }
     }
 
-    console.log(`[GameRoom] Client joined: ${client.sessionId}, HQ at (${hqPos.x}, ${hqPos.y})`);
+    console.log(`[GameRoom] Client joined: ${client.sessionId}, HQ at (${hqPos.x}, ${hqPos.y})${devMode ? ' [DEV MODE]' : ''}`);
     client.send("game_log", { message: "Welcome to Primal Grid!", type: "info" });
   }
 
@@ -392,7 +396,10 @@ export class GameRoom extends Room {
 
     this.creatureIdCounter.value = this.nextCreatureId;
 
-    this.broadcast("game_log", { message: `${baseDef.name} appeared!`, type: "spawn" });
+    this.broadcast("game_log", {
+      message: `Enemy base spawned: ${baseDef.name} at (${pos.x},${pos.y}) on tick ${this.state.tick} [phase=${this.state.dayPhase}, bases=${baseCount + 1}/${ENEMY_SPAWNING.MAX_BASES}]`,
+      type: "spawn",
+    });
   }
 
   /** Find a valid spawn location for an enemy base. */
@@ -438,7 +445,15 @@ export class GameRoom extends Room {
   /** Resolve combat interactions. */
   private tickCombat() {
     if (!this.enemyBaseState) this.enemyBaseState = new Map();
-    tickCombat(this.state, this, this.enemyBaseState);
+    if (!this.creatureIdCounter) this.creatureIdCounter = { value: this.nextCreatureId ?? 0 };
+    this.creatureIdCounter.value = this.nextCreatureId;
+    tickCombat(this.state, this, this.enemyBaseState, this.creatureIdCounter);
+    this.nextCreatureId = this.creatureIdCounter.value;
+  }
+
+  /** Remove expired grave markers. */
+  private tickGraveDecay() {
+    tickGraveDecay(this.state, this.state.tick);
   }
 
   private tickCreatureAI() {
@@ -603,21 +618,30 @@ export class GameRoom extends Room {
   }
 
   /** Create a StateView for the joining player and add initial visible tiles. */
-  private initPlayerView(client: Client, player: PlayerState): void {
+  private initPlayerView(client: Client, player: PlayerState, devMode: boolean): void {
     if (!this.playerViews) {
       this.playerViews = new Map();
     }
     const view = new StateView();
     client.view = view;
 
-    // Compute initial visibility (HQ + surrounding territory)
-    const visibleIndices = computeVisibleTiles(this.state, player.id);
+    let visibleIndices: Set<number>;
 
-    // Add all initially visible tiles to the view
-    for (const idx of visibleIndices) {
-      const tile = this.state.tiles.at(idx);
-      if (tile) {
-        view.add(tile);
+    if (devMode) {
+      // Dev mode: all tiles visible — no fog of war
+      visibleIndices = new Set<number>();
+      const totalTiles = this.state.tiles.length;
+      for (let i = 0; i < totalTiles; i++) {
+        visibleIndices.add(i);
+        const tile = this.state.tiles.at(i);
+        if (tile) view.add(tile);
+      }
+    } else {
+      // Compute initial visibility (HQ + surrounding territory)
+      visibleIndices = computeVisibleTiles(this.state, player.id);
+      for (const idx of visibleIndices) {
+        const tile = this.state.tiles.at(idx);
+        if (tile) view.add(tile);
       }
     }
 
@@ -627,14 +651,19 @@ export class GameRoom extends Room {
     // Add visible creatures: own pawns always, others only on visible tiles
     const visibleCreatureIds = new Set<string>();
     this.state.creatures.forEach((creature, id) => {
-      const tileIdx = creature.y * this.state.mapWidth + creature.x;
-      if (creature.ownerID === player.id || visibleIndices.has(tileIdx)) {
+      if (devMode) {
         view.add(creature);
         visibleCreatureIds.add(id);
+      } else {
+        const tileIdx = creature.y * this.state.mapWidth + creature.x;
+        if (creature.ownerID === player.id || visibleIndices.has(tileIdx)) {
+          view.add(creature);
+          visibleCreatureIds.add(id);
+        }
       }
     });
 
-    this.playerViews.set(client.sessionId, { view, visibleIndices, visibleCreatureIds });
+    this.playerViews.set(client.sessionId, { view, visibleIndices, visibleCreatureIds, devMode });
   }
 
   /** Remove all tracked items from a player's view and clean up tracking state. */
@@ -675,6 +704,26 @@ export class GameRoom extends Room {
 
     for (const [sessionId, entry] of this.playerViews) {
       const { view, visibleIndices: oldIndices, visibleCreatureIds: oldCreatureIds } = entry;
+
+      // Dev mode: all tiles always visible, just pick up new creatures/tiles
+      if (entry.devMode) {
+        const totalTiles = this.state.tiles.length;
+        for (let i = 0; i < totalTiles; i++) {
+          if (!oldIndices.has(i)) {
+            oldIndices.add(i);
+            const tile = this.state.tiles.at(i);
+            if (tile) view.add(tile);
+          }
+        }
+        this.state.creatures.forEach((creature, id) => {
+          if (!oldCreatureIds.has(id)) {
+            view.add(creature);
+            oldCreatureIds.add(id);
+          }
+        });
+        continue;
+      }
+
       const newIndices = computeVisibleTiles(this.state, sessionId);
 
       // ── Tile visibility ──────────────────────────────────────────

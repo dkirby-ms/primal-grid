@@ -82,7 +82,10 @@ export function stepEnemyBase(
   tracker.spawnedMobileIds.add(mobile.id);
   base.nextMoveTick = state.tick + baseDef.spawnInterval;
 
-  room.broadcast?.("game_log", { message: `${baseDef.name} spawned a ${mobileDef.name}`, type: "spawn" });
+  room.broadcast?.("game_log", {
+    message: `Enemy mobile spawned: ${mobileDef.name} from ${baseDef.name} (base=${base.id}) at (${spawnPos.x},${spawnPos.y}) on tick ${state.tick} [mobiles=${tracker.spawnedMobileIds.size}/${baseDef.maxMobiles}]`,
+    type: "spawn",
+  });
 }
 
 /** Find a walkable tile adjacent (Manhattan dist 1) to (cx, cy). */
