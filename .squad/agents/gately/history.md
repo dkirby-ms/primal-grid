@@ -1087,3 +1087,18 @@ Coordinated work with Pemulis (Systems Dev) and Steeply (Tester) on grave marker
 **Test Status:** 520 total tests, all passing (495 existing + 25 new).
 **Branch:** squad/17-18-combat-system (ready for review)
 **Decisions Merged:** pemulis-grave-markers.md, gately-combat-visuals.md, steeply-grave-tests.md, steeply-combat-test-patterns.md, copilot-directive-2026-03-07T20-55-45Z.md.
+
+### Dev Mode URL Parameter Support (2026-03-07)
+
+**Cross-agent coordination with Pemulis (Systems Dev):**
+
+Pemulis implemented `?dev=1` URL parameter to disable fog of war during development. The feature is fully server-driven:
+
+- **Client (`client/src/main.ts`):** Reads URL search params, passes `{ devMode: true }` in Colyseus join options.
+- **Server (`server/src/rooms/GameRoom.ts`):** Stores devMode flag per-player in playerViews. When devMode=true, `initPlayerView()` adds ALL tiles and creatures to StateView. `tickFogOfWar()` bypasses removal logic for devMode players.
+
+**No client fog rendering changes needed.** Your fog rendering system remains StateView-driven. When `?dev=1` is used, all tiles are in the StateView, so no fog overlay is rendered naturally.
+
+**Test Status:** 520/520 tests pass. The `onJoin()` signature now accepts an optional `options` parameter (backwards compatible — existing tests unaffected).
+
+**For you:** When debugging, use `?dev=1` in the URL to see the full map without fog. No code changes needed.

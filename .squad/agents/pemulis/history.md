@@ -1294,3 +1294,12 @@ Coordinated work with Gately (Game Dev) and Steeply (Tester) on grave marker sys
 **Test Status:** 520 total tests, all passing.
 **Branch:** squad/17-18-combat-system (ready for review)
 **Decisions Merged:** pemulis-grave-markers.md, gately-combat-visuals.md, steeply-grave-tests.md, steeply-combat-test-patterns.md, copilot-directive-2026-03-07T20-55-45Z.md (rescind "close only on master" rule).
+
+### Dev Mode — Fog of War Bypass (2026-03-12)
+
+- **Feature:** Added `?dev=1` or `?devmode=1` URL parameter to disable fog of war for development/debugging.
+- **Client (`client/src/network.ts`):** Reads URL search params, passes `{ devMode: true }` in Colyseus join options.
+- **Server (`server/src/rooms/GameRoom.ts`):** `onJoin()` reads `options.devMode`, passes to `initPlayerView()`. DevMode flag stored in playerViews entry. `initPlayerView()` adds ALL tiles and creatures to StateView when devMode is true. `tickFogOfWar()` short-circuits for devMode players — only picks up newly spawned tiles/creatures, never removes anything from view.
+- **No client fog rendering changes needed** — the client renders fog state purely based on what tiles are in the StateView. All tiles in view = no fog.
+- **Key pattern:** playerViews Map entry now has `devMode: boolean` field: `{ view, visibleIndices, visibleCreatureIds, devMode }`.
+- **Test status:** 520/520 tests pass, no regressions.

@@ -4591,3 +4591,26 @@ Issues may be closed at any time based on project workflow needs. No waiting req
 - **All agents:** Issues can be closed on `dev`, `uat`, or `master` merges as appropriate
 - **Commit messages:** "Closes #N" syntax is valid on any branch merge
 - **Release discipline:** If master-only closure is needed for a specific workflow, re-open the issue explicitly
+# Decision: Dev Mode via URL Parameter
+
+**Author:** Pemulis
+**Date:** 2026-03-12
+**Status:** Implemented
+
+## Context
+
+Need a quick way to disable fog of war during development/debugging without UI changes.
+
+## Decision
+
+- `?dev=1` or `?devmode=1` URL parameter activates dev mode.
+- Client passes `{ devMode: true }` in Colyseus join options.
+- Server stores `devMode` flag per-player in the `playerViews` map and bypasses fog-of-war filtering — all tiles and creatures are added to the player's StateView.
+- No client-side fog rendering changes needed; the fog system is purely server-driven via StateView.
+
+## Impact
+
+- **Gately (client):** No fog rendering changes needed, but be aware that `?dev=1` will show the full map with no fog overlays.
+- **Steeply (tests):** The `onJoin` signature now accepts an optional `options` parameter. Existing tests that call `onJoin(client)` without options are unaffected (devMode defaults to false).
+- **Not a production feature** — no auth or validation. Purely a dev tool.
+
