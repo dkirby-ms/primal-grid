@@ -26,10 +26,11 @@ export function stepEnemyBase(
   if (!baseDef) return;
 
   // Only spawn mobiles during night phase
-  if (state.dayPhase !== DayPhase.Night) return;
-
-  // Check spawn timer
-  if (state.tick < base.nextMoveTick) return;
+  if (state.dayPhase !== DayPhase.Night) {
+    // Re-check periodically so spawning starts promptly when night falls
+    base.nextMoveTick = state.tick + CREATURE_AI.TICK_INTERVAL;
+    return;
+  }
 
   // Get or create tracker
   let tracker = enemyBaseState.get(base.id);

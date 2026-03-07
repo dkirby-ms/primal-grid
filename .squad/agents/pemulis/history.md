@@ -1339,3 +1339,16 @@ Coordinated work with Gately (Game Dev) and Steeply (Tester) on grave marker sys
 - **Pattern:** When source edits don't produce runtime changes, suspect incremental cache. ALWAYS `rm -rf .tsbuildinfo && npm run build` after `shared/src/` edits. Consider pre-build cache cleanup in CI.
 - **Test status:** 520/520 tests pass. Enemy bases now spawn correctly in night phase.
 - **Requested by:** saitcho
+
+### Enemy Mobile Spawn Timer Conflict (2025-07-25)
+
+## Learnings
+
+- **Bug:** Enemy bases (hives) were visible but never spawned mobiles. The `stepEnemyBase()` timer guard (`state.tick < base.nextMoveTick`) always returned early.
+- **Root cause:** `tickCreatureAI()` in `creatureAI.ts` unconditionally overwrites `creature.nextMoveTick` to `currentTick + CREATURE_AI.TICK_INTERVAL` (a short future value) at line 39 BEFORE dispatching to `stepEnemyBase()`. Inside `stepEnemyBase()`, the timer check at line 32 then sees `state.tick < (currentTick + TICK_INTERVAL)` — always true — so it always returns early. No mobile could ever spawn.
+- **Fix (2 files):**
+  1. `creatureAI.ts`: Made the `nextMoveTick` override conditional — skip for enemy bases so they manage their own spawn timer.
+  2. `enemyBaseAI.ts`: Removed the now-redundant inner timer check (`state.tick < base.nextMoveTick`). Added `nextMoveTick = state.tick + CREATURE_AI.TICK_INTERVAL` on the day-phase early return so bases are re-checked promptly when night falls.
+- **Pattern:** When two layers both read/write the same timing field (`nextMoveTick`), one layer's write can silently clobber the other's. Enemy bases need their own timer management because their spawn interval differs from the generic creature AI tick interval.
+- **Test status:** 520/520 tests pass, including 13 enemy base/mobile spawning tests.
+- **Requested by:** saitcho
