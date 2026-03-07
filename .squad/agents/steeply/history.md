@@ -661,3 +661,11 @@ Hal proposed three redesign options for the hollow core gameplay loop. This will
 - **day-night-cycle.test.ts (14 tests):** Initial dayTick=0, initial phase=dawn, tick advancement, wrapping at CYCLE_LENGTH_TICKS, phase transitions through dawn→day→dusk→night, full cycle returns to start, two-cycle determinism, phase always valid/non-empty.
 - **Anticipated imports:** Tests import `DAY_NIGHT` constants (CYCLE_LENGTH_TICKS) from `@primal-grid/shared` and call `room.tickDayNightCycle()` — names may need minor adjustment when Pemulis commits.
 - **Pattern alignment:** Followed existing createRoomWithMap/createRoomWithCreatures helpers, Object.create(GameRoom.prototype) pattern, `room.broadcast = () => {}` stub.
+
+### Player Display Names — Issue #9 (2026-03-10)
+
+- **15 new tests** in `server/src/__tests__/player-names.test.ts`. 14/15 passing; 1 expected failure (`SET_NAME` constant not yet exported from shared — Pemulis hasn't landed that yet).
+- **Pre-existing failure** in `water-depth.test.ts` (ShallowWater/DeepWater distribution) — not related to this change. Full suite: 345/346 passing.
+- **Tests cover:** `PlayerState.displayName` default (""), set/read, `handleSetName` validation (empty rejected, whitespace-only rejected, >20 chars truncated, whitespace trimmed, multiple updates), edge cases (emoji, unicode, tab+spaces, interior spaces preserved, trim-before-truncate ordering).
+- **Pattern:** Tests call `room.handleSetName(client, { name })` directly — same pattern as `handleSpawnPawn`. Pemulis's implementation matched expectations exactly for displayName field and handler method.
+- **Waiting on Pemulis** to add `SET_NAME = "set_name"` to `shared/src/messages.ts` and export from barrel. Once that lands, 15/15 should pass.

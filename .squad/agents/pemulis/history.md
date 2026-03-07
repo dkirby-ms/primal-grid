@@ -990,3 +990,11 @@ Hal (Lead) architected pawn-based territory expansion system per same user direc
 - No `paths-ignore` is appropriate when the goal is strict synchronization rather than conditional deployment
 - `fetch-depth: 0` is needed for workflows that manipulate multiple branches
 - `${{ secrets.GITHUB_TOKEN }}` automatically provides appropriate permissions when `contents: write` is declared
+
+### Player Display Names — Issue #9 (2026-03-11)
+
+- Added `displayName` (`@type("string")`, default `""`) to `PlayerState` schema in `GameState.ts`.
+- Added `SET_NAME = "set_name"` message constant and `SetNamePayload` interface in `shared/src/messages.ts`.
+- Added `IPlayerState.displayName` to `shared/src/types.ts` interface.
+- Added `handleSetName` handler in `GameRoom.ts`: validates non-empty, trims whitespace, caps at 20 chars, broadcasts join message.
+- This is the server-side portion; client scoreboard UI is a separate task.
