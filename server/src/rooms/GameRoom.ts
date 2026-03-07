@@ -4,7 +4,7 @@ import { generateProceduralMap } from "./mapGenerator.js";
 import { tickCreatureAI } from "./creatureAI.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
-  SPAWN_PAWN,
+  SPAWN_PAWN, SET_NAME,
   ResourceType, TileType, isWaterTile,
   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
   CREATURE_AI, CREATURE_RESPAWN, TERRITORY,
@@ -12,7 +12,7 @@ import {
   PROGRESSION, getLevelForXP,
   PAWN, DAY_NIGHT,
 } from "@primal-grid/shared";
-import type { SpawnPawnPayload } from "@primal-grid/shared";
+import type { SpawnPawnPayload, SetNamePayload } from "@primal-grid/shared";
 import { spawnHQ } from "./territory.js";
 
 const PLAYER_COLORS = [
@@ -43,6 +43,10 @@ export class GameRoom extends Room {
 
     this.onMessage(SPAWN_PAWN, (client, message: SpawnPawnPayload) => {
       this.handleSpawnPawn(client, message);
+    });
+
+    this.onMessage(SET_NAME, (client, message: SetNamePayload) => {
+      this.handleSetName(client, message);
     });
 
     console.log("[GameRoom] Room created.");
@@ -77,6 +81,18 @@ export class GameRoom extends Room {
 
   private generateMap(seed: number = DEFAULT_MAP_SEED) {
     generateProceduralMap(this.state, seed, DEFAULT_MAP_SIZE, DEFAULT_MAP_SIZE);
+  }
+
+  private handleSetName(client: Client, message: SetNamePayload) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+
+    const raw = typeof message.name === "string" ? message.name : "";
+    const sanitized = raw.trim().slice(0, 20);
+    if (sanitized.length === 0) return;
+
+    player.displayName = sanitized;
+    this.broadcast("game_log", { message: `${sanitized} has joined`, type: "info" });
   }
 
   private handleSpawnPawn(client: Client, message: SpawnPawnPayload) {

@@ -89,6 +89,8 @@ export enum ItemType {
 /** State of a player in the game world. */
 export interface IPlayerState {
   id: string;
+  /** Player's chosen display name (empty string = unnamed). */
+  displayName: string;
   color: string;
   wood: number;
   stone: number;

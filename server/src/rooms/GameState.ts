@@ -47,6 +47,9 @@ export class PlayerState extends Schema {
   id: string = "";
 
   @type("string")
+  displayName: string = "";
+
+  @type("string")
   color: string = "#ffffff";
 
   @type("number")
