@@ -1246,3 +1246,24 @@ The `@view()` decorator on a collection field is NOT a "field-level filter" — 
 - Enemy entities skip hunger/starvation — guarded by `isEnemyBase()/isEnemyMobile()` checks in tickCreatureAI.
 - Stamina config for enemy entities returns maxStamina=999, costPerMove=0 to prevent exhaustion state.
 - areHostile() function is the single source of truth for combat targeting rules — extend it for new entity types.
+
+### Cross-Agent Update: Gately Combat Client Rendering Complete (2026-03-07)
+
+Gately has completed steps 10-11 of Hal's architecture: client-side combat entity rendering and HUD spawn controls.
+
+**Key decision: Registry-Driven Rendering Pattern**
+- All combat entity display properties (icon, color, max HP) are sourced from shared registries (`ENEMY_BASE_TYPES`, `ENEMY_MOBILE_TYPES`, `PAWN_TYPES`), not hardcoded client-side.
+- The renderer uses `isEnemyBase()`, `isEnemyMobile()`, `isPlayerPawn()` type helpers from shared.
+- **Impact:** Adding a new enemy or pawn type only requires updating the shared registry. The client auto-renders it as long as it follows naming conventions and includes `icon` and `color` fields.
+
+**What's rendering now:**
+- Enemy bases as diamonds (1.5× scale, gold color)
+- Colored mobiles: red raider, purple hive, etc.
+- Defenders (blue), attackers (orange)
+- HP bars with registry-driven max values
+
+**Your next steps:**
+- Verify that your registry entries for enemy bases/mobiles include `icon` and `color` fields.
+- Ensure Steeply's combat tests verify that adding a new type to the registry auto-renders (no client changes needed).
+
+**All 384 tests pass; branch ready for review.**

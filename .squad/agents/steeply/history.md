@@ -909,3 +909,18 @@ Your tests confirm the client-side implementation assumptions are correct. No re
 - **Pattern:** All specs use `it.todo()` — zero implementation, pure behavioral contracts from issue requirements. Will need helpers (addEnemyBase, addMobile, addDefender, addAttacker) once architecture lands.
 - **Pre-existing failure:** `water-depth.test.ts` "water tiles exist on map" — unrelated to combat work, was failing before.
 - **Suite status:** 383 passing + 139 todo + 1 pre-existing failure = no regressions.
+
+### Cross-Agent Update: Gately Combat Client Rendering Complete (2026-03-07)
+
+Gately has completed steps 10-11 of Hal's architecture: client-side combat entity rendering and HUD spawn controls. All 384 tests pass; client typechecks clean.
+
+**What this means for you:**
+- Enemy bases, mobiles, defenders, and attackers are now rendered on the client.
+- The HUD includes spawn buttons and a threat counter.
+- Rendering is **registry-driven** (uses shared type helpers and registries, not hardcoded constants).
+
+**Your work (139 .todo() tests):**
+- Combat AI tests in enemyBaseAI, enemyMobileAI, combat, defenderAI, attackerAI modules.
+- Registry-driven rendering means new tests should verify that rendering respects the registry (e.g., a new enemy type auto-renders without client changes).
+
+**Branch:** `squad/17-18-combat-system` ready for review.
