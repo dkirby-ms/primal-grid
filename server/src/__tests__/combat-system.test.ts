@@ -238,8 +238,9 @@ function gameTick(room: GameRoom, ebState: Map<string, EnemyBaseTracker>, atkSta
 }
 
 /** Run combat resolution for the current tick. */
+const _combatIdCounter = { value: 10000 };
 function runCombat(room: GameRoom, ebState: Map<string, EnemyBaseTracker>) {
-  tickCombat(room.state, room as any, ebState);
+  tickCombat(room.state, room as any, ebState, _combatIdCounter);
 }
 
 /** Set tile ownership (simulate claimed territory). */

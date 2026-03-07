@@ -11,6 +11,7 @@ import {
   isPlayerPawn,
 } from '@primal-grid/shared';
 import type { Room } from '@colyseus/sdk';
+import { CombatEffects } from './CombatEffects.js';
 
 const CREATURE_RADIUS = 6;
 const ENEMY_BASE_RADIUS = 9;
@@ -54,6 +55,7 @@ export class CreatureRenderer {
   public readonly container: Container;
   private entries: Map<string, CreatureEntry> = new Map();
   private localSessionId = '';
+  private combatEffects: CombatEffects | null = null;
 
   /** Latest creature counts, readable by HUD. */
   public herbivoreCount = 0;
@@ -64,6 +66,11 @@ export class CreatureRenderer {
 
   constructor() {
     this.container = new Container();
+  }
+
+  /** Inject combat effects manager for floating damage numbers and hit flashes. */
+  public setCombatEffects(effects: CombatEffects): void {
+    this.combatEffects = effects;
   }
 
   /** Listen to Colyseus state and render/update creature markers. */
@@ -95,6 +102,7 @@ export class CreatureRenderer {
         const healthLow = health < 50;
         const ownerID = (creature['ownerID'] as string) ?? '';
         const buildProgress = (creature['buildProgress'] as number) ?? 0;
+        const isGrave = creatureType === 'grave_marker';
 
         if (creatureType === 'carnivore') carns++;
         else if (creatureType === 'herbivore') herbs++;
@@ -105,11 +113,15 @@ export class CreatureRenderer {
         const isBuilder = creatureType === 'pawn_builder';
         const isLocalPawn = isPlayerPawn(creatureType) && ownerID === this.localSessionId;
         const isLocalBuilder = isBuilder && ownerID === this.localSessionId;
-        const isCombatEntity = isEnemyBase(creatureType) || isEnemyMobile(creatureType) || creatureType === 'pawn_defender' || creatureType === 'pawn_attacker';
+        const isCombatEntity = !isGrave && (isEnemyBase(creatureType) || isEnemyMobile(creatureType) || creatureType === 'pawn_defender' || creatureType === 'pawn_attacker');
 
         let entry = this.entries.get(id);
         if (!entry) {
-          entry = this.createCreatureEntry(creatureType, currentState, isLocalBuilder);
+          if (isGrave) {
+            entry = this.createGraveMarkerEntry();
+          } else {
+            entry = this.createCreatureEntry(creatureType, currentState, isLocalBuilder);
+          }
           this.entries.set(id, entry);
           this.container.addChild(entry.container);
         }
@@ -117,6 +129,20 @@ export class CreatureRenderer {
         // Update target tile (display position interpolated in tick())
         entry.tileX = x;
         entry.tileY = y;
+
+        // Grave markers: skip all living-creature updates
+        if (isGrave) {
+          // Fade in to 0.65 over ~200ms (lerp toward target each sync)
+          if (entry.container.alpha < 0.65) {
+            entry.container.alpha = Math.min(0.65, entry.container.alpha + 0.15);
+          }
+          if (entry.displayX === 0 && entry.displayY === 0) {
+            entry.displayX = x * TILE_SIZE + TILE_SIZE / 2;
+            entry.displayY = y * TILE_SIZE + TILE_SIZE / 2;
+            entry.container.position.set(entry.displayX, entry.displayY);
+          }
+          return; // forEach continue
+        }
 
         // Rebuild graphic if state or type changed
         if (entry.lastType !== creatureType || entry.lastState !== currentState) {
@@ -127,6 +153,11 @@ export class CreatureRenderer {
         if (entry.lastHealthLow !== healthLow) {
           entry.container.alpha = healthLow ? 0.6 : 1.0;
           entry.lastHealthLow = healthLow;
+        }
+
+        // Combat effects: detect HP delta and trigger floating numbers / hit flash
+        if (this.combatEffects) {
+          this.combatEffects.trackHealth(id, health, entry.container, entry.displayX, entry.displayY);
         }
 
         // HP bar for combat entities
@@ -166,9 +197,67 @@ export class CreatureRenderer {
           this.container.removeChild(entry.container);
           entry.container.destroy({ children: true });
           this.entries.delete(id);
+          this.combatEffects?.removeCreature(id);
         }
       }
     });
+  }
+
+  /** Create a tombstone graphic for a grave marker (no emoji, pure PixiJS Graphics). */
+  private createGraveMarkerEntry(): CreatureEntry {
+    const container = new Container();
+    container.alpha = 0; // starts invisible, fades in
+
+    const graphic = new Graphics();
+
+    // Shadow (slightly offset ellipse)
+    graphic.ellipse(1, 6, 7, 2);
+    graphic.fill({ color: 0x000000, alpha: 0.25 });
+
+    // Base (rectangular stone slab)
+    graphic.rect(-6, 2, 12, 4);
+    graphic.fill({ color: 0x555555 });
+
+    // Headstone (rounded rectangle)
+    graphic.roundRect(-5, -10, 10, 14, 3);
+    graphic.fill({ color: 0x666666 });
+    graphic.roundRect(-5, -10, 10, 14, 3);
+    graphic.stroke({ color: 0x555555, width: 0.5 });
+
+    // Cross etching on headstone
+    graphic.rect(-0.5, -7, 1, 7);
+    graphic.fill({ color: 0x4a4a4a });
+    graphic.rect(-2.5, -5, 5, 1);
+    graphic.fill({ color: 0x4a4a4a });
+
+    container.addChild(graphic);
+
+    // Dummy text objects (grave markers don't use emoji/indicator)
+    const emojiText = new Text({ text: '', style: { fontSize: 1 } });
+    emojiText.visible = false;
+    container.addChild(emojiText);
+
+    const indicator = new Text({ text: '', style: { fontSize: 1 } });
+    indicator.visible = false;
+    container.addChild(indicator);
+
+    return {
+      container,
+      graphic,
+      emojiText,
+      indicator,
+      progressBar: null,
+      hpBar: null,
+      lastType: 'grave_marker',
+      lastState: 'idle',
+      lastHealthLow: false,
+      lastBuildProgress: 0,
+      lastHealthPct: 1,
+      tileX: 0,
+      tileY: 0,
+      displayX: 0,
+      displayY: 0,
+    };
   }
 
   private createCreatureEntry(creatureType: string, currentState: string, isLocalBuilder: boolean): CreatureEntry {
@@ -307,7 +396,8 @@ export class CreatureRenderer {
   }
 
   private updateIndicator(indicator: Text, currentState: string, creatureType: string): void {
-    if (currentState === 'exhausted') {
+    // Enemy bases/mobiles never show exhaustion — skip to their own indicators
+    if (currentState === 'exhausted' && !isEnemyBase(creatureType) && !isEnemyMobile(creatureType)) {
       indicator.text = '💤';
       indicator.visible = true;
       return;
@@ -424,7 +514,7 @@ export class CreatureRenderer {
     entry.hpBar.visible = true;
   }
 
-  /** Smoothly interpolate creature display positions toward their target tiles. */
+  /** Smoothly interpolate creature display positions and update combat effects. */
   public tick(_dt: number): void {
     const speed = 0.15;
     for (const entry of this.entries.values()) {
@@ -434,5 +524,8 @@ export class CreatureRenderer {
       entry.displayY += (targetY - entry.displayY) * speed;
       entry.container.position.set(entry.displayX, entry.displayY);
     }
+
+    // Drive combat effect animations (floating numbers, hit flash decay)
+    this.combatEffects?.update(performance.now());
   }
 }

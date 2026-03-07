@@ -35,13 +35,27 @@ export function tickCreatureAI(
     // Per-creature movement timer — skip if not ready
     if (currentTick < creature.nextMoveTick) return;
 
-    // Schedule next AI step — enemy bases manage their own spawn timer
-    if (!isEnemyBase(creature.creatureType)) {
-      creature.nextMoveTick = currentTick + CREATURE_AI.TICK_INTERVAL;
+    // Enemy bases skip ALL generic creature logic — straight to their own AI.
+    // They must never be subject to stamina, hunger, or exhaustion.
+    if (isEnemyBase(creature.creatureType)) {
+      if (creature.currentState === "exhausted") creature.currentState = "idle";
+      stepEnemyBase(creature, state, room, enemyBaseState, nextCreatureId);
+      return;
     }
 
-    // Pawns don't have hunger mechanics; enemy entities also skip hunger
-    if (creature.pawnType === "" && !isEnemyBase(creature.creatureType) && !isEnemyMobile(creature.creatureType)) {
+    // Enemy mobiles skip generic creature logic — straight to their own AI.
+    if (isEnemyMobile(creature.creatureType)) {
+      if (creature.currentState === "exhausted") creature.currentState = "idle";
+      creature.nextMoveTick = currentTick + CREATURE_AI.TICK_INTERVAL;
+      stepEnemyMobile(creature, state);
+      return;
+    }
+
+    // Schedule next AI step for remaining (non-enemy) creatures
+    creature.nextMoveTick = currentTick + CREATURE_AI.TICK_INTERVAL;
+
+    // Pawns don't have hunger mechanics
+    if (creature.pawnType === "") {
       // Drain hunger
       creature.hunger = Math.max(0, creature.hunger - CREATURE_AI.HUNGER_DRAIN);
 
@@ -75,14 +89,9 @@ export function tickCreatureAI(
       return;
     }
 
-    // Run FSM based on creature type
+    // Run FSM based on creature type (enemy entities already handled above)
     let moved = false;
-    if (isEnemyBase(creature.creatureType)) {
-      // Bases don't move — they spawn mobiles
-      stepEnemyBase(creature, state, room, enemyBaseState, nextCreatureId);
-    } else if (isEnemyMobile(creature.creatureType)) {
-      moved = stepEnemyMobile(creature, state);
-    } else if (creature.pawnType === "defender") {
+    if (creature.pawnType === "defender") {
       moved = stepDefender(creature, state);
     } else if (creature.pawnType === "attacker") {
       moved = stepAttacker(creature, state, attackerState);
@@ -396,9 +405,9 @@ export function isTileOpenForCreature(state: GameState, creature: CreatureState,
   // Attackers can enter any walkable tile
   if (creature.pawnType === "attacker") return true;
 
-  // Defenders stay in own territory only
+  // Defenders: own territory or unclaimed (cannot enter enemy-owned tiles)
   if (creature.pawnType === "defender") {
-    return tile.ownerID === creature.ownerID;
+    return tile.ownerID === "" || tile.ownerID === creature.ownerID;
   }
 
   // Builders: own territory or unclaimed

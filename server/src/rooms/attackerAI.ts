@@ -134,7 +134,7 @@ export function stepAttacker(
 function findNearestEnemyTarget(
   creature: CreatureState,
   state: GameState,
-  _detectionRadius: number,
+  detectionRadius: number,
 ): { x: number; y: number; id: string } | null {
   let nearestBase: { x: number; y: number; id: string; dist: number } | null = null;
   let nearestMobile: { x: number; y: number; id: string; dist: number } | null = null;
@@ -143,6 +143,9 @@ function findNearestEnemyTarget(
     if (other.id === creature.id || other.health <= 0) return;
 
     const dist = Math.abs(creature.x - other.x) + Math.abs(creature.y - other.y);
+    
+    // Only consider targets within detection radius
+    if (dist > detectionRadius) return;
 
     if (isEnemyBase(other.creatureType)) {
       if (!nearestBase || dist < nearestBase.dist) {

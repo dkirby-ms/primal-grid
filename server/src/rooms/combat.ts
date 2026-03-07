@@ -1,7 +1,7 @@
 import { GameState, CreatureState } from "./GameState.js";
 import {
   COMBAT, ENEMY_MOBILE_TYPES, ENEMY_BASE_TYPES, PAWN_TYPES,
-  isEnemyBase, isEnemyMobile, isPlayerPawn,
+  isEnemyBase, isEnemyMobile, isPlayerPawn, isGraveMarker,
 } from "@primal-grid/shared";
 import type { Room } from "colyseus";
 import { onBaseDestroyed } from "./enemyBaseAI.js";
@@ -25,6 +25,7 @@ export function tickCombat(
   state: GameState,
   room: Room,
   enemyBaseState: Map<string, EnemyBaseTracker>,
+  nextCreatureId: { value: number },
 ): void {
   if (state.tick % COMBAT.COMBAT_TICK_INTERVAL !== 0) return;
 
@@ -34,6 +35,7 @@ export function tickCombat(
   // Phase 1: Creature-vs-creature combat
   state.creatures.forEach((creature) => {
     if (creature.health <= 0) return;
+    if (isGraveMarker(creature.creatureType)) return;
     const dmg = getCreatureDamage(creature);
     if (dmg <= 0) return;
 
@@ -99,6 +101,21 @@ export function tickCombat(
     const creature = state.creatures.get(id);
     if (!creature) continue;
 
+    // Spawn grave marker at death position (skip for enemy bases — they're structures)
+    if (!isEnemyBase(creature.creatureType)) {
+      const grave = new CreatureState();
+      grave.id = `grave_${nextCreatureId.value++}`;
+      grave.creatureType = "grave_marker";
+      grave.pawnType = creature.creatureType;
+      grave.x = creature.x;
+      grave.y = creature.y;
+      grave.health = 1;
+      grave.spawnTick = state.tick;
+      grave.nextMoveTick = Number.MAX_SAFE_INTEGER;
+      grave.currentState = "idle";
+      state.creatures.set(grave.id, grave);
+    }
+
     if (isEnemyBase(creature.creatureType)) {
       // Base destroyed — despawn mobiles and award resources
       const baseDef = ENEMY_BASE_TYPES[creature.creatureType];
@@ -154,6 +171,7 @@ function findAdjacentHostile(creature: CreatureState, state: GameState): Creatur
 
   state.creatures.forEach((other) => {
     if (other.id === creature.id || other.health <= 0) return;
+    if (isGraveMarker(other.creatureType)) return;
     if (!areHostile(creature, other)) return;
 
     const dist = Math.abs(creature.x - other.x) + Math.abs(creature.y - other.y);

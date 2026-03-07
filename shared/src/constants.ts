@@ -249,6 +249,12 @@ export const PAWN_TYPES: Record<string, PawnTypeDef> = {
   },
 };
 
+/** Grave marker constants. */
+export const GRAVE_MARKER = {
+  /** Ticks before a grave marker decays (480 ticks ≈ 2 minutes at 4 ticks/sec). */
+  DECAY_TICKS: 480,
+} as const;
+
 /** Combat resolution constants. */
 export const COMBAT = {
   ATTACK_COOLDOWN_TICKS: 4,

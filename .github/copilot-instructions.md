@@ -29,23 +29,11 @@ squad/{issue-number}-{kebab-case-slug}
 ```
 Example: `squad/42-fix-login-validation`
 
-## Branching Strategy
-
-The project uses a three-tier branch promotion model:
-
-```
-feature branches → dev → uat → master
-```
-
-- **All PRs must target the `dev` branch** — never `uat` or `master` directly.
-- Use the branch naming convention: `squad/{issue-number}-{kebab-case-slug}` (or `copilot/{slug}` for autonomous work).
-- **Do NOT close issues in PR descriptions** (no `Closes #N` or `Fixes #N`). Issues are only closed when merged to `master`, not when merged to `dev` or `uat`. Instead, reference the issue: `Refs #{issue-number}`.
-
 ## PR Guidelines
 
 When opening a PR:
-- Reference the issue: `Refs #{issue-number}` (do NOT use `Closes` or `Fixes` — issues close only on merge to master)
-- Target the `dev` branch
+- PR into the dev branch unless otherwise instructed.
+- Reference the issue: `Closes #{issue-number}`
 - If the issue had a `squad:{member}` label, mention the member: `Working as {member} ({role})`
 - If this is a 🟡 needs-review task, add to the PR description: `⚠️ This task was flagged as "needs review" — please have a squad member review before merging.`
 - Follow any project conventions in `.squad/decisions.md`

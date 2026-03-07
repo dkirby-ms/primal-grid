@@ -22,13 +22,24 @@ function getServerUrl(): string {
   return `ws://localhost:${SERVER_PORT}`;
 }
 
+function isDevMode(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('dev') === '1' || params.get('devmode') === '1';
+}
+
 export async function connect(): Promise<Room> {
   const client = new Client(getServerUrl());
   statusCallback?.('connecting');
   console.log('[network] Connecting to server…');
 
+  const joinOptions: Record<string, unknown> = {};
+  if (isDevMode()) {
+    joinOptions.devMode = true;
+    console.log('[network] Dev mode enabled — fog of war disabled');
+  }
+
   try {
-    room = await client.joinOrCreate('game');
+    room = await client.joinOrCreate('game', joinOptions);
     console.log('[network] Joined room:', room.roomId);
     statusCallback?.('connected');
 

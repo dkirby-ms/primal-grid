@@ -68,6 +68,11 @@ export function isCombatPawn(pawnType: string): boolean {
   return pawnType === "defender" || pawnType === "attacker";
 }
 
+/** Check if a creature type is a grave marker (inert death remnant). */
+export function isGraveMarker(creatureType: string): boolean {
+  return creatureType === "grave_marker";
+}
+
 /** State of a creature in the game world. */
 export interface ICreatureState {
   id: string;
