@@ -1308,5 +1308,12 @@ Coordinated work with Gately (Game Dev) and Steeply (Tester) on grave marker sys
 
 - **Enhanced game_log entries for enemy spawning:** Both enemy base spawns (GameRoom.ts `tickEnemyBaseSpawning`) and enemy mobile spawns (enemyBaseAI.ts `stepEnemyBase`) now emit rich `game_log` broadcasts with position, tick, phase, base ID, and mobile counts.
 - **Game log pattern:** `room.broadcast("game_log", { message: string, type: string })` — type is "spawn" for spawn events, "death" for kills, "upkeep" for resource warnings, "info" for general. No schema-level log; purely broadcast events.
-- **CRITICAL BUG FOUND (not yet fixed):** `BASE_SPAWN_INTERVAL_TICKS` (480) equals `DAY_NIGHT.CYCLE_LENGTH_TICKS` (480). The spawn check `tick % 480 === 0` always fires when `dayTick` is 0, which is the start of the dawn phase (0%). Night is 65–100%. So the night-only gate (`dayPhase !== DayPhase.Night`) and the interval modulo check will NEVER align — enemy bases can never spawn. Fix: change BASE_SPAWN_INTERVAL_TICKS to a value that doesn't divide evenly into the cycle length (e.g., 120 or 200).
+- **CRITICAL BUG FOUND AND FIXED:** `BASE_SPAWN_INTERVAL_TICKS` was 480 (= `DAY_NIGHT.CYCLE_LENGTH_TICKS`), so the modulo check only fired at dayTick 0 (dawn). Night gate blocked it → bases never spawned. **Fixed:** Changed to 120. Now checks at dayTick 0, 120, 240, 360 — dayTick 360 = 75%, squarely in night phase (65–100%). One guaranteed spawn check per night cycle.
+- **Test status:** 520/520 tests pass, no regressions.
+
+### Enemy Base Spawn Interval Fix (2026-03-12)
+
+- **Bug:** `ENEMY_SPAWNING.BASE_SPAWN_INTERVAL_TICKS` (480) == `DAY_NIGHT.CYCLE_LENGTH_TICKS` (480). `tick % 480 === 0` only fires at `dayTick === 0` (dawn, 0%). Night phase is 65–100%. The night-only guard in `tickEnemyBaseSpawning()` and the modulo check never overlapped — enemy bases could never spawn.
+- **Fix:** Changed `BASE_SPAWN_INTERVAL_TICKS` from 480 to 120 in `shared/src/constants.ts`. Now the check fires 4× per cycle (dayTick 0, 120, 240, 360). dayTick 360 = 75% → night phase → spawn check passes.
+- **Lesson:** When a periodic check is gated by a phase window, the interval must be short enough that at least one modulo hit lands inside that window. Rule of thumb: interval ≤ phase_duration_ticks.
 - **Test status:** 520/520 tests pass, no regressions.
