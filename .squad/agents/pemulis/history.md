@@ -1317,3 +1317,25 @@ Coordinated work with Gately (Game Dev) and Steeply (Tester) on grave marker sys
 - **Fix:** Changed `BASE_SPAWN_INTERVAL_TICKS` from 480 to 120 in `shared/src/constants.ts`. Now the check fires 4× per cycle (dayTick 0, 120, 240, 360). dayTick 360 = 75% → night phase → spawn check passes.
 - **Lesson:** When a periodic check is gated by a phase window, the interval must be short enough that at least one modulo hit lands inside that window. Rule of thumb: interval ≤ phase_duration_ticks.
 - **Test status:** 520/520 tests pass, no regressions.
+
+### Stale shared/dist Root Cause + Spawn Debug Tracing (2026-03-12)
+
+- **ROOT CAUSE FOUND:** The 480→120 interval fix in `shared/src/constants.ts` was never compiled to `shared/dist/constants.js`. The incremental build cache (`tsconfig.tsbuildinfo`) silently skipped re-emitting the file. The server reads from compiled `dist/`, so it was still running with `BASE_SPAWN_INTERVAL_TICKS=480` at runtime — the old value that only fires at dayTick 0 (dawn), never aligning with night phase.
+- **Fix:** Deleted `tsconfig.tsbuildinfo` and rebuilt `shared/` from scratch. Verified `shared/dist/constants.js` now has `120`.
+- **Debug tracing added:** 7 `console.log` statements in `tickEnemyBaseSpawning()` (GameRoom.ts) covering every guard: periodic state dump every 120 ticks, night phase pass, grace period pass, interval pass, base count check, `findEnemyBaseSpawnLocation()` result, and successful spawn confirmation. These are server-side only (no client impact).
+- **Investigation findings:**
+  - `findEnemyBaseSpawnLocation()` exists and works: 100 random attempts on 128×128 map with distance constraints (15 from HQ, 10 between bases). Not the blocker.
+  - `#game-log` element exists in `client/index.html` and is wired correctly in `main.ts` via `GameLog` class. Not the blocker.
+  - DayPhase enum uses string values (`Night = "night"`), PHASES array uses matching string literals. Comparison is correct.
+  - `dayTick` initializes to 0 in GameState schema, increments correctly in `tickDayNightCycle()`. Not the blocker.
+- **Lesson (critical, recurring):** The `tsconfig.tsbuildinfo` gotcha strikes again. After ANY edit to `shared/src/`, MUST delete tsbuildinfo and rebuild before testing runtime behavior. The source file can look correct while the compiled output remains stale. Consider adding a pre-build clean step.
+- **Test status:** 520/520 tests pass, no regressions.
+
+### Stale Build Cache + Spawn Cache Debugging (2026-03-07)
+
+- **Build cache gotcha rediscovered:** After editing `shared/src/constants.ts` to change `BASE_SPAWN_INTERVAL_TICKS` from 480 to 120, the change was saved in source but NOT recompiled to `shared/dist/constants.js`. The incremental build cache (`tsconfig.tsbuildinfo`) silently skipped re-emitting unchanged dependencies. Runtime behavior did not change because the server reads from compiled `dist/`, not source.
+- **Fix:** Deleted `tsconfig.tsbuildinfo`, rebuilt `shared/` from scratch. Verified `shared/dist/constants.js` now contains correct value (120).
+- **Debug improvements:** Added 7 `console.log` tracing points to `tickEnemyBaseSpawning()` in GameRoom.ts — state dump every 120 ticks, night phase gate, grace period, interval check, base count, spawn location lookup, and confirmation.
+- **Pattern:** When source edits don't produce runtime changes, suspect incremental cache. ALWAYS `rm -rf .tsbuildinfo && npm run build` after `shared/src/` edits. Consider pre-build cache cleanup in CI.
+- **Test status:** 520/520 tests pass. Enemy bases now spawn correctly in night phase.
+- **Requested by:** saitcho
