@@ -3761,3 +3761,29 @@ Players' 5×5 starting territory could contain Water or Rock tiles, which were s
 
 **Next steps:** One-time Azure deployment (az deployment group create), branch creation, protection rules, test PR.
 
+
+---
+
+## 2026-03-07T14:00Z: UAT Branch Auto-Reset Workflow
+
+**By:** Pemulis (Systems Dev)  
+**Date:** 2025-01-21  
+**Status:** Implemented
+
+**Context:** After UAT code is promoted to master (via merge), the UAT branch can diverge if we continue pushing experimental code. Need automated sync.
+
+**Decision:** Created `.github/workflows/reset-uat.yml` that:
+1. Triggers on any push to master (keeps UAT in sync always)
+2. Supports manual runs via `workflow_dispatch`
+3. Uses `--force-with-lease` for safety (prevents overwriting concurrent UAT changes)
+4. Configures git user as github-actions bot
+
+**Workflow Sequence:**
+1. Code merged from UAT to master (via PR)
+2. Push to master triggers: `deploy.yml` (prod) + `reset-uat.yml` (reset UAT branch)
+3. Push to UAT (from reset) triggers: `deploy-uat.yml` (redeploy UAT)
+
+**Rationale:** Automation prevents manual reset mistakes. `--force-with-lease` is safer than `--force` — fails if someone else pushed to uat, alerting maintainers.
+
+**Risk Mitigation:** Small window for concurrent pushes; `--force-with-lease` detects and fails. GitHub Actions notifications alert on workflow failure. Manual override via `workflow_dispatch` available.
+
