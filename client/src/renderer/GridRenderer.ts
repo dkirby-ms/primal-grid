@@ -44,6 +44,7 @@ export class GridRenderer {
   private territoryContainer: Container;
   private hqContainer: Container;
   private hqMarkers: Map<string, Container> = new Map();
+  private hqNameLabels: Map<string, Text> = new Map();
   private mapSize: number;
   private playerColors: Map<string, string> = new Map();
   private lastOwnerIDs: string[][] = [];
@@ -245,12 +246,13 @@ export class GridRenderer {
           const color = (player['color'] as string) ?? '#ffffff';
           const hqX = (player['hqX'] as number) ?? -1;
           const hqY = (player['hqY'] as number) ?? -1;
+          const displayName = (player['displayName'] as string) || '';
           this.playerColors.set(id, color);
           currentPlayerIds.add(id);
 
           // Render HQ marker if player has an HQ
           if (hqX >= 0 && hqY >= 0) {
-            this.updateHQMarker(id, hqX, hqY);
+            this.updateHQMarker(id, hqX, hqY, displayName, color);
           } else {
             this.removeHQMarker(id);
           }
@@ -335,7 +337,7 @@ export class GridRenderer {
   }
 
   /** Update or create an HQ marker for a player at the given tile coordinates. */
-  private updateHQMarker(playerId: string, hqX: number, hqY: number): void {
+  private updateHQMarker(playerId: string, hqX: number, hqY: number, displayName: string, color: string): void {
     let marker = this.hqMarkers.get(playerId);
     if (!marker) {
       marker = new Container();
@@ -352,6 +354,30 @@ export class GridRenderer {
     }
 
     marker.position.set(hqX * TILE_SIZE, hqY * TILE_SIZE);
+
+    // Player name label below HQ
+    let nameLabel = this.hqNameLabels.get(playerId);
+    if (!nameLabel && displayName) {
+      nameLabel = new Text({
+        text: displayName,
+        style: {
+          fontSize: 10,
+          fontFamily: 'monospace',
+          fontWeight: 'bold',
+          fill: color,
+          stroke: { color: '#000000', width: 3 },
+        },
+      });
+      nameLabel.anchor.set(0.5, 0);
+      nameLabel.position.set(TILE_SIZE / 2, TILE_SIZE + 2);
+      marker.addChild(nameLabel);
+      this.hqNameLabels.set(playerId, nameLabel);
+    } else if (nameLabel) {
+      if (nameLabel.text !== displayName && displayName) {
+        nameLabel.text = displayName;
+      }
+      nameLabel.style.fill = color;
+    }
   }
 
   /** Remove the HQ marker for a player. */
@@ -361,5 +387,6 @@ export class GridRenderer {
       this.hqContainer.removeChild(marker);
       this.hqMarkers.delete(playerId);
     }
+    this.hqNameLabels.delete(playerId);
   }
 }

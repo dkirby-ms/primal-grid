@@ -754,3 +754,11 @@ Added a scrolling game log panel below the main game area:
 - **Water split rendering:** Replaced single `TileType.Water` color (0x3498db) with two entries: `ShallowWater` → 0x87CEEB (light sky blue), `DeepWater` → 0x1a3a5c (dark navy). Colors are visually distinct from each other and from all other biomes.
 - **Shared dependency:** Pemulis split `Water` into `ShallowWater`/`DeepWater` in `shared/src/types.ts` and added `isWaterTile()` helper. Rebuilt shared before client build.
 - **No other client references:** `TileType.Water` only appeared in the `TILE_COLORS` map — single-point change, no cascade.
+
+### Issue #9 — Player Display Names + Scoreboard (2026-03-07)
+- **Name prompt modal:** DOM overlay shown after Colyseus connect. Input field + submit button. Sends `SET_NAME` message to server with the entered name (default: "Explorer"). Uses `{ once: true }` event listeners to avoid leaks.
+- **Player name rendering:** PixiJS `Text` labels positioned below each HQ marker in GridRenderer. Uses player's color with black stroke outline for readability. Dynamically updates if displayName changes. Cleaned up in `removeHQMarker()`.
+- **Scoreboard overlay:** DOM-based scoreboard toggled with Tab key. Shows Player Name (in player color), Score, and Territory count (computed by iterating tiles). Sorted by score descending. Local player annotated with "(you)". Semi-transparent centered panel, `pointer-events: none` on overlay.
+- **InputHandler:** Added `setScoreboard()` method and Tab key handler with `preventDefault()` to suppress browser tab cycling.
+- **Message constant:** Added `SET_NAME = "set_name"` and `SetNamePayload` interface to `shared/src/messages.ts`.
+- **Pattern:** Scoreboard only refreshes tile counts when visible (perf optimization — skips `onStateChange` iteration when hidden). Uses same duck-typed forEach pattern as HudDOM for Colyseus schema compatibility.
