@@ -24,7 +24,6 @@ jobs:
 
       - name: Reset UAT branch to master
         run: |
-          git fetch origin master:master
           git fetch origin uat:uat || true
           git checkout uat
           git reset --hard master
