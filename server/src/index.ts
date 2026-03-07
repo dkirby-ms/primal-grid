@@ -8,7 +8,7 @@ import { Encoder } from "@colyseus/schema";
 import { SERVER_PORT } from "@primal-grid/shared";
 import { GameRoom } from "./rooms/GameRoom.js";
 
-Encoder.BUFFER_SIZE = 256 * 1024; // 256 KB — needed for 64×64 map state sync
+Encoder.BUFFER_SIZE = 768 * 1024; // 768 KB — needed for 128×128 map state sync
 
 const app = express();
 
