@@ -1172,3 +1172,29 @@ Hal (Lead) architected pawn-based territory expansion system per same user direc
 
 **Camera bounds API:** grid.exploredCache.getExploredBounds() and camera.setExploredBounds(bounds) — use for HUD features.
 
+
+---
+
+## 2025-07-25: Fog-of-War Fix — @view() Required for StateView Filtering
+
+**Bug:** Players could see the entire map — fog of war was not filtering visibility despite StateView being correctly wired (view.add/remove calls, client.view assignment, tickFogOfWar recomputation).
+
+**Root Cause:** Colyseus 0.17's SchemaSerializer checks `encoder.context.hasFilters` before using view-based encoding. Without `@view()` on any Schema field, `hasFilters` stays `false` and the serializer broadcasts full state to all clients, completely ignoring `client.view`.
+
+**Fix:** Added `@view()` decorator to the `tiles` field in `GameState`. This one-line change activates the entire filtered encoding pipeline:
+- `hasFilters = true` in TypeContext (via `$viewFieldIndexes` metadata)
+- Per-tile `isFiltered = true` with `isVisibilitySharedWithParent = false` (because the field HAS a view tag)
+- ArraySchema's `$filter` checks `view.isChangeTreeVisible()` per element
+- Only tiles explicitly `view.add()`'d are encoded for each client
+- Non-@view fields (players, creatures, tick, etc.) continue via the shared encoding pass
+
+**Key Learning — Colyseus 0.17 StateView Architecture:**
+The `@view()` decorator on a collection field is NOT a "field-level filter" — it's the mechanism that ENABLES element-level filtering. Without it, StateView is dead code. The earlier decision "NO @view field decorators" was based on a misunderstanding of the API. `@view()` on the collection is required for `view.add(item)` / `view.remove(item)` to have any effect.
+
+**Encoding pipeline (two-pass):**
+1. Shared pass (no view): encodes non-@view fields once for all clients
+2. View pass (per client): encodes @view fields filtered by each client's StateView
+
+**isVisibilitySharedWithParent detail:** When `@view()` is on the parent field, child items get `isVisibilitySharedWithParent = false` (because `!fieldHasViewTag = false`). This means each item MUST be individually `view.add()`'d. Without `@view()`, items would auto-inherit parent visibility, defeating per-element filtering.
+
+**Tests:** All 372 tests pass. The `@view()` decorator only affects encoding metadata — test code that accesses state directly (via `room.state.tiles.at(i)`) is unaffected.
