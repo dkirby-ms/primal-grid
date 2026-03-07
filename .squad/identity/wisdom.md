@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-02-25T00:41:44.682Z
+last_updated: 2026-03-07T11:51:58.314Z
 ---
 
 # Team Wisdom
@@ -9,7 +9,3 @@ Reusable patterns and heuristics learned through work. NOT transcripts — each 
 ## Patterns
 
 <!-- Append entries below. Format: **Pattern:** description. **Context:** when it applies. -->
-
-## Anti-Patterns
-
-<!-- Things we tried that didn't work. **Avoid:** description. **Why:** reason. -->
