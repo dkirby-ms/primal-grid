@@ -6,6 +6,7 @@ import { computeVisibleTiles } from "../rooms/visibility.js";
 import {
   TileType, isWaterTile,
   DEFAULT_MAP_SIZE, TERRITORY, PAWN, DAY_NIGHT, FOG_OF_WAR,
+  CREATURE_TYPES,
 } from "@primal-grid/shared";
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -60,6 +61,28 @@ function addBuilder(
   creature.ownerID = ownerID;
   creature.pawnType = "builder";
   creature.stamina = PAWN.BUILDER_MAX_STAMINA;
+  room.state.creatures.set(id, creature);
+  return creature;
+}
+
+/** Add a wildlife creature (herbivore/carnivore) at a specific position. */
+function addWildlife(
+  room: GameRoom,
+  id: string,
+  creatureType: string,
+  x: number,
+  y: number,
+): CreatureState {
+  const typeDef = CREATURE_TYPES[creatureType];
+  const creature = new CreatureState();
+  creature.id = id;
+  creature.creatureType = creatureType;
+  creature.x = x;
+  creature.y = y;
+  creature.health = typeDef.health;
+  creature.hunger = typeDef.hunger;
+  creature.stamina = typeDef.maxStamina;
+  creature.currentState = "idle";
   room.state.creatures.set(id, creature);
   return creature;
 }
@@ -605,6 +628,167 @@ describe("Fog of War — Phase A", () => {
         const visible = computeVisibleTiles(room.state, "p1");
         expect(visible.size).toBeGreaterThan(0);
       }
+    });
+  });
+
+  // ─── 8. Creature Visibility Filtering ─────────────────────────────
+
+  describe("Creature visibility filtering", () => {
+
+    /** Run one fog tick at the correct interval. */
+    function fogTick(room: GameRoom): void {
+      room.state.tick += FOG_OF_WAR.TICK_INTERVAL;
+      // Call tickFogOfWar via the room's internal method (public via prototype access)
+      (room as unknown as { tickFogOfWar(): void }).tickFogOfWar();
+    }
+
+    it("wildlife creature on a visible tile is tracked as visible", () => {
+      const room = createRoomWithMap(42);
+      const { player } = joinPlayer(room, "p1");
+      setDayPhase(room, "day");
+
+      // Place herbivore right next to HQ (definitely visible)
+      addWildlife(room, "herb-vis", "herbivore", player.hqX + 1, player.hqY);
+
+      fogTick(room);
+
+      const entry = room.playerViews.get("p1")!;
+      expect(entry.visibleCreatureIds.has("herb-vis")).toBe(true);
+    });
+
+    it("wildlife creature far outside visible tiles is NOT tracked as visible", () => {
+      const room = createRoomWithMap(42);
+      const { player } = joinPlayer(room, "p1");
+      setDayPhase(room, "day");
+
+      // Place herbivore far from all vision sources
+      const farX = (player.hqX + 30) % room.state.mapWidth;
+      const farY = (player.hqY + 30) % room.state.mapHeight;
+      addWildlife(room, "herb-far", "herbivore", farX, farY);
+
+      fogTick(room);
+
+      const entry = room.playerViews.get("p1")!;
+      expect(entry.visibleCreatureIds.has("herb-far")).toBe(false);
+    });
+
+    it("own pawn builders are ALWAYS visible regardless of fog", () => {
+      const room = createRoomWithMap(42);
+      const { player } = joinPlayer(room, "p1");
+      setDayPhase(room, "day");
+
+      // Place own builder far from HQ — outside any vision source
+      const farX = (player.hqX + 30) % room.state.mapWidth;
+      const farY = (player.hqY + 30) % room.state.mapHeight;
+      addBuilder(room, "own-builder", "p1", farX, farY);
+
+      fogTick(room);
+
+      const entry = room.playerViews.get("p1")!;
+      expect(entry.visibleCreatureIds.has("own-builder")).toBe(true);
+    });
+
+    it("enemy pawn builders outside fog are NOT visible", () => {
+      const room = createRoomWithMap(42);
+      const { player } = joinPlayer(room, "p1");
+      joinPlayer(room, "p2");
+      setDayPhase(room, "day");
+
+      // Place enemy builder far from p1's vision
+      const p1 = room.state.players.get("p1")!;
+      const farX = (p1.hqX + 30) % room.state.mapWidth;
+      const farY = (p1.hqY + 30) % room.state.mapHeight;
+      addBuilder(room, "enemy-builder", "p2", farX, farY);
+
+      fogTick(room);
+
+      const entry = room.playerViews.get("p1")!;
+      expect(entry.visibleCreatureIds.has("enemy-builder")).toBe(false);
+    });
+
+    it("creature moving into fog becomes invisible after fog tick", () => {
+      const room = createRoomWithMap(42);
+      const { player } = joinPlayer(room, "p1");
+      setDayPhase(room, "day");
+
+      // Place creature on visible tile first
+      const herb = addWildlife(room, "herb-move", "herbivore", player.hqX + 1, player.hqY);
+      fogTick(room);
+
+      const entry = room.playerViews.get("p1")!;
+      expect(entry.visibleCreatureIds.has("herb-move")).toBe(true);
+
+      // Move creature far away
+      herb.x = (player.hqX + 30) % room.state.mapWidth;
+      herb.y = (player.hqY + 30) % room.state.mapHeight;
+      fogTick(room);
+
+      expect(entry.visibleCreatureIds.has("herb-move")).toBe(false);
+    });
+
+    it("creature moving onto a visible tile becomes visible after fog tick", () => {
+      const room = createRoomWithMap(42);
+      const { player } = joinPlayer(room, "p1");
+      setDayPhase(room, "day");
+
+      // Place creature far away initially
+      const farX = (player.hqX + 30) % room.state.mapWidth;
+      const farY = (player.hqY + 30) % room.state.mapHeight;
+      const herb = addWildlife(room, "herb-approach", "herbivore", farX, farY);
+      fogTick(room);
+
+      const entry = room.playerViews.get("p1")!;
+      expect(entry.visibleCreatureIds.has("herb-approach")).toBe(false);
+
+      // Move creature next to HQ
+      herb.x = player.hqX + 1;
+      herb.y = player.hqY;
+      fogTick(room);
+
+      expect(entry.visibleCreatureIds.has("herb-approach")).toBe(true);
+    });
+
+    it("initPlayerView includes creatures already on visible tiles", () => {
+      const room = createRoomWithMap(42);
+
+      // Add a wildlife creature before any player joins
+      // Use center of map so it won't conflict with HQ spawn
+      const midX = Math.floor(room.state.mapWidth / 2);
+      const midY = Math.floor(room.state.mapHeight / 2);
+      addWildlife(room, "pre-herb", "herbivore", midX, midY);
+
+      const { player } = joinPlayer(room, "p1");
+      setDayPhase(room, "day");
+
+      const entry = room.playerViews.get("p1")!;
+      const visibleIndices = computeVisibleTiles(room.state, "p1");
+      const creatureTileIdx = midY * room.state.mapWidth + midX;
+
+      // If the creature happens to be on a visible tile, it should be tracked
+      if (visibleIndices.has(creatureTileIdx)) {
+        expect(entry.visibleCreatureIds.has("pre-herb")).toBe(true);
+      } else {
+        expect(entry.visibleCreatureIds.has("pre-herb")).toBe(false);
+      }
+    });
+
+    it("carnivore on visible tile is visible; same carnivore off tile is not", () => {
+      const room = createRoomWithMap(42);
+      const { player } = joinPlayer(room, "p1");
+      setDayPhase(room, "day");
+
+      const carn = addWildlife(room, "raptor-1", "carnivore", player.hqX, player.hqY + 1);
+      fogTick(room);
+
+      const entry = room.playerViews.get("p1")!;
+      expect(entry.visibleCreatureIds.has("raptor-1")).toBe(true);
+
+      // Move off-screen
+      carn.x = (player.hqX + 30) % room.state.mapWidth;
+      carn.y = (player.hqY + 30) % room.state.mapHeight;
+      fogTick(room);
+
+      expect(entry.visibleCreatureIds.has("raptor-1")).toBe(false);
     });
   });
 });

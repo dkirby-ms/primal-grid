@@ -26,8 +26,8 @@ const PLAYER_COLORS = [
 export class GameRoom extends Room {
   state = new GameState();
   private nextCreatureId = 0;
-  /** Per-player StateView and cached visible tile indices for fog of war. */
-  playerViews = new Map<string, { view: StateView; visibleIndices: Set<number> }>();
+  /** Per-player StateView, cached visible tile indices, and visible creature IDs for fog of war. */
+  playerViews = new Map<string, { view: StateView; visibleIndices: Set<number>; visibleCreatureIds: Set<string> }>();
 
   override onCreate(options: Record<string, unknown>) {
     const seed = typeof options?.seed === "number" ? options.seed : DEFAULT_MAP_SEED;
@@ -70,6 +70,15 @@ export class GameRoom extends Room {
 
     // Initialize per-player StateView for fog of war
     this.initPlayerView(client, player);
+
+    // Add new player to all existing views (scoreboard visibility)
+    if (this.playerViews) {
+      for (const [sid, entry] of this.playerViews) {
+        if (sid !== client.sessionId) {
+          entry.view.add(player);
+        }
+      }
+    }
 
     console.log(`[GameRoom] Client joined: ${client.sessionId}, HQ at (${hqPos.x}, ${hqPos.y})`);
     client.send("game_log", { message: "Welcome to Primal Grid!", type: "info" });
@@ -481,22 +490,48 @@ export class GameRoom extends Room {
       }
     }
 
-    this.playerViews.set(client.sessionId, { view, visibleIndices });
+    // All players are always visible (scoreboard)
+    this.state.players.forEach((p) => view.add(p));
+
+    // Add visible creatures: own pawns always, others only on visible tiles
+    const visibleCreatureIds = new Set<string>();
+    this.state.creatures.forEach((creature, id) => {
+      const tileIdx = creature.y * this.state.mapWidth + creature.x;
+      if (creature.ownerID === player.id || visibleIndices.has(tileIdx)) {
+        view.add(creature);
+        visibleCreatureIds.add(id);
+      }
+    });
+
+    this.playerViews.set(client.sessionId, { view, visibleIndices, visibleCreatureIds });
   }
 
-  /** Remove all tiles from a player's view and clean up tracking state. */
+  /** Remove all tracked items from a player's view and clean up tracking state. */
   private cleanupPlayerView(sessionId: string): void {
     if (!this.playerViews) return;
     const entry = this.playerViews.get(sessionId);
     if (!entry) return;
 
-    const { view, visibleIndices } = entry;
+    const { view, visibleIndices, visibleCreatureIds } = entry;
+
+    // Remove tiles
     for (const idx of visibleIndices) {
       const tile = this.state.tiles.at(idx);
       if (tile) {
         view.remove(tile);
       }
     }
+
+    // Remove creatures
+    for (const id of visibleCreatureIds) {
+      const creature = this.state.creatures.get(id);
+      if (creature) {
+        view.remove(creature);
+      }
+    }
+
+    // Remove players
+    this.state.players.forEach((p) => view.remove(p));
 
     this.playerViews.delete(sessionId);
   }
@@ -508,8 +543,10 @@ export class GameRoom extends Room {
     if (!this.playerViews) return;
 
     for (const [sessionId, entry] of this.playerViews) {
-      const { view, visibleIndices: oldIndices } = entry;
+      const { view, visibleIndices: oldIndices, visibleCreatureIds: oldCreatureIds } = entry;
       const newIndices = computeVisibleTiles(this.state, sessionId);
+
+      // ── Tile visibility ──────────────────────────────────────────
 
       // Add newly visible tiles
       for (const idx of newIndices) {
@@ -532,6 +569,39 @@ export class GameRoom extends Room {
       }
 
       entry.visibleIndices = newIndices;
+
+      // ── Creature visibility ──────────────────────────────────────
+
+      const newCreatureIds = new Set<string>();
+      this.state.creatures.forEach((creature, id) => {
+        const tileIdx = creature.y * this.state.mapWidth + creature.x;
+        // Own pawns are always visible; other creatures only on visible tiles
+        if (creature.ownerID === sessionId || newIndices.has(tileIdx)) {
+          newCreatureIds.add(id);
+        }
+      });
+
+      // Add newly visible creatures
+      for (const id of newCreatureIds) {
+        if (!oldCreatureIds.has(id)) {
+          const creature = this.state.creatures.get(id);
+          if (creature) {
+            view.add(creature);
+          }
+        }
+      }
+
+      // Remove creatures no longer visible
+      for (const id of oldCreatureIds) {
+        if (!newCreatureIds.has(id)) {
+          const creature = this.state.creatures.get(id);
+          if (creature) {
+            view.remove(creature);
+          }
+        }
+      }
+
+      entry.visibleCreatureIds = newCreatureIds;
     }
   }
 }

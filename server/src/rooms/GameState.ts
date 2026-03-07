@@ -137,9 +137,15 @@ export class GameState extends Schema {
   @type([TileState])
   tiles = new ArraySchema<TileState>();
 
+  // @view() ensures per-client filtering; all players are added to every
+  // view so the scoreboard stays complete.
+  @view()
   @type({ map: PlayerState })
   players = new MapSchema<PlayerState>();
 
+  // @view() enables per-client creature filtering — only creatures on
+  // tiles within a player's fog-of-war visibility (plus own pawns) are synced.
+  @view()
   @type({ map: CreatureState })
   creatures = new MapSchema<CreatureState>();
 
