@@ -1352,3 +1352,10 @@ Coordinated work with Gately (Game Dev) and Steeply (Tester) on grave marker sys
 - **Pattern:** When two layers both read/write the same timing field (`nextMoveTick`), one layer's write can silently clobber the other's. Enemy bases need their own timer management because their spawn interval differs from the generic creature AI tick interval.
 - **Test status:** 520/520 tests pass, including 13 enemy base/mobile spawning tests.
 - **Requested by:** saitcho
+
+### Console Log Cleanup & Spawn Consolidation (2026-03-07)
+
+- **Cleanup:** Removed 7 `[ENEMY SPAWN]` console.log statements from GameRoom.ts that were added during debugging. Retained game_log broadcasts for telemetry.
+- **Consolidation note:** The timer conflict fix from the previous session proved stable. No additional adjustments needed. Enemy mobile spawning now fully functional.
+- **Test status:** 520/520 tests pass.
+- **Requested by:** saitcho
