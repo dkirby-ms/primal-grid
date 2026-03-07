@@ -1035,3 +1035,20 @@ Hal (Lead) architected pawn-based territory expansion system per same user direc
 
 **Impact:** Filter design approved for implementation. Three issues are refinements, not blockers. Issue #3 (client breaking change) is highest priority to surface to client team.
 
+
+## Session 2026-03-12 — Fog of War Design Review (Hal + Gately)
+
+**Status:** Complete
+**Output:** `.squad/decisions/inbox/pemulis-fog-review.md`
+**Verdict:** APPROVE WITH NOTES
+
+## Learnings
+
+- For two-tier fog (visible vs. not visible), `@view()` decorators on individual TileState fields are unnecessary. Element-level `view.add(tile)` / `view.remove(tile)` controls the entire tile's visibility. `@view()` only matters for three-tier filtering with explicit tags like `@view(1)` + `view.add(tile, 1)`.
+- `StateView.add()` throws if the object has no parent ChangeTree (not yet assigned to state). Tiles in `state.tiles` ArraySchema already have parents, so `view.add(tile)` is safe to call after map generation.
+- `onRemove` callback on client-side ArraySchema fires synchronously during patch application. The tile instance fields are still readable at callback time — safe for ExploredTileCache to capture terrain/structure data before GC.
+- Watchtower (new structure type) integrates cleanly with existing builder FSM. The `buildMode` switch in `builderAI.ts` needs a third case; `handleSpawnPawn()` needs extended validation. No conflicts with outpost/farm logic.
+- Destructible watchtowers require no special vision-loss logic — `tickVisibility()` naturally omits destroyed watchtowers, and tiles exclusively covered by them drop from visible set on next tick. ExploredTileCache preserves last-known terrain.
+- Alliance/shared vision multiplies StateView mutation churn by alliance size. For N-player alliances, compute a shared visible set once and apply to all allies rather than re-computing per ally.
+- Camera bounds clamped to explored bounding box need a minimum padding to avoid degenerate UX when explored area is small (5×5 HQ = 160px). Recommend minimum 20×20 tile bounds or viewport-proportional padding.
+- `DEFAULT_MAP_SIZE` is 128 (not 64 as mentioned in some docs). Full tile scan for 128×128 = 16,384 tiles × 8 players = 131K iterations per tick — must use owned-tile cache to keep visibility computation sub-millisecond.

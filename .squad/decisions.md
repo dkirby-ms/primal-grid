@@ -3863,6 +3863,138 @@ Client-side player display names + scoreboard overlay for Issue #9.
 
 ---
 
+
+## 2026-03-07T01:14:00Z: User Directive — Watchtower Destruction & Shared Alliance Vision
+
+**By:** dkirby-ms (via Copilot)  
+**Status:** DECISION — User-confirmed future feature flags  
+
+**What:**
+1. **Destructible Watchtowers:** Watchtowers are a structure that can be destroyed in future versions. Not part of MVP fog of war, but design must accommodate graceful vision loss when watchtower is removed.
+2. **Shared Team Vision (Alliances):** Allied players share visibility when alliance system is implemented. Each player sees all tiles visible to any ally.
+
+**Why:** User decisions on Hal's fog of war open questions (#1 and #3). Establish future compatibility constraints.
+
+**Impact:**
+- Watchtower destruction: Natural fallout of tickVisibility() — when structure is deleted, its 8-tile radius drops from visibility on next tick. Client's ExploredTileCache preserves terrain data. No special logic needed.
+- Alliance vision: Requires `tickVisibility()` to union allied player visibility sets and call `view.add()` for ally tiles. Multiplies StateView mutations by alliance size. Benchmarking required before 8-player testing.
+
+---
+
+## 2026-03-07T01:14:30Z: User Directive — Explored Tiles Show Structure Silhouettes
+
+**By:** dkirby-ms (via Copilot)  
+**Status:** DECISION — User-confirmed UI detail  
+
+**What:** Explored tiles (fog state) should show structure silhouettes — a faded/greyed building outline so the player knows "something was built there" without revealing current owner or live state.
+
+**Why:** User decision on Hal's fog of war open question #4. Adds atmospheric detail to explored tiles beyond bare terrain.
+
+**Implementation:**
+- Client-side only. ExploredTileCache must cache `structureType` alongside terrain data (type, x, y, fertility, moisture).
+- FogManager renders dimmed structure icon when tile is in explored state.
+- Shows last-known structure (not current server state) — correct fog of war semantics.
+- No server changes beyond StateView filtering.
+
+**Interpretation:** "Show structures that were visible when the tile was last seen" (achievable client-side). NOT "always show current structures" (would require server-side explored state tracking, contradicts no-new-APIs design).
+
+---
+
+## 2026-03-07: Review — Fog of War Game Mechanics Design (Hal)
+
+**Reviewer:** Steeply (Tester)  
+**Date:** 2026-03-07  
+**Verdict:** APPROVE WITH NOTES  
+**Full Review:** .squad/decisions/inbox/steeply-fog-review.md (290 lines)
+
+**Executive Summary:**
+Hal's fog of war game mechanics design is well-structured and fully testable with existing infrastructure. No architectural blockers. Edge case coverage planned (40 test cases, 4 phases). Performance estimate revised: 4-8ms typical (not 12ms), with potential 15-20ms spike on day/night phase transitions.
+
+**Edge Cases Identified:** 14 high/medium items
+- E1: Map edge visibility clamping
+- E3: Creature death visibility loss (1-tick delay acceptable)
+- E5: Player disconnect cleanup (onLeave must delete playerViews + visibleTiles)
+- E6: Minimum radius floor at night (per-source application verified)
+- E11: ExploredTileCache consistency (cache on onAdd, not onRemove)
+- E14: Tile access pattern breaking change (index-based → coordinate-based)
+
+**Required Before Implementation:**
+1. onLeave cleanup specification (E5)
+2. Tick ordering verification: tickVisibility() MUST be last (I1)
+3. Full regression test on 331 existing tests after @view() decorators (T1)
+4. Player displayName constant clamping (currently undefined)
+
+**Test Plan:** 40 test cases
+- Phase 1 (Schema + StateView): 8 tests
+- Phase 2 (Visibility Engine): 22 tests
+- Phase 3 (Client Logic): 6 tests
+- Phase 4 (Integration): 4 tests
+
+**Recommended Optimizations:**
+- Tick ordering comment in GameRoom.ts
+- Day/night transition stagger (2 ticks) to avoid CPU spike
+- Camera center-lock when viewport > explored area
+- Performance benchmark test (T40) for baseline
+
+**Reviewer Confidence:** "Zero trust in happy paths." All edge cases identified and testable.
+
+---
+
+## 2026-03-07: Review — Fog of War Systems Integration (Pemulis)
+
+**Reviewer:** Pemulis (Systems Dev)  
+**Date:** 2026-03-07  
+**Verdict:** APPROVE WITH NOTES  
+**Full Review:** .squad/decisions/inbox/pemulis-fog-review.md (275 lines)
+
+**Executive Summary:**
+Both Hal's game mechanics and Gately's client rendering designs are architecturally sound and compatible with existing simulation. StateView mechanism correctly applied. Creature AI, territory, builder systems are unaffected. All risks are implementation refinements, not blockers.
+
+**Critical Findings:**
+
+1. **@view() Decorator Simplification:** Skip field-level @view() decorators in Phase 1. Element-level `view.add/remove` is sufficient for two-tier visibility. Only add decorators if three-tier filtering (visible/explored/hidden with numeric tags) becomes necessary.
+
+2. **Owned-Tile Cache → Phase 2:** Performance analysis shows full 16K tile scan per player per tick is unacceptable (131K iterations for 8 players). With owned-tile cache: ~5,600 iterations/tick. **Required from Phase 2 onward.** Trivial to implement: `Map<sessionId, Set<number>>` updated in tickClaiming(), spawnHQ(), builder build-complete.
+
+3. **Tile Access Pattern Breaking Change:** With StateView filtering active, `state.tiles.at(y * mapWidth + x)` returns wrong tile. GridRenderer already uses per-tile `x`/`y` fields (safe). Must audit and migrate CreatureRenderer, InputHandler for index-based accesses.
+
+4. **Watchtower Constants Required:** Add to shared/src/constants.ts:
+   - COST_WOOD: 15, COST_STONE: 10
+   - BUILD_TIME_TICKS: 24
+   - VISION_RADIUS: 8
+   - MAX_PER_PLAYER: 3
+
+**Performance Assessment:**
+- Typical visibility tick: 4-8ms (8 players, late game)
+- Day/night transition spike: 15-20ms (all players' radii change simultaneously)
+- Memory: ~1 MB (8 players' visibility sets) — negligible
+- Tick budget: 250ms at 4 Hz — safe
+
+**Integration Safety:**
+- Creature AI unaffected (operates on full server state)
+- Builder pathfinding unaffected (uses server-authoritative data)
+- Territory barriers unaffected (wildlife still blocked)
+- Tick ordering safe if visibility runs last (code comment recommended)
+
+**Must-Fix Before Implementation:**
+1. Skip @view() field decorators (simplification)
+2. Merge owned-tile cache into Phase 2
+3. Add WATCHTOWER constants
+4. Add minimum camera bounds padding (5×5 explored area bad UX at low zoom)
+
+**Should-Fix:**
+5. Watchtower max-per-player validation
+6. Document "explored shows last-known structures" semantics
+7. Consider batch fog overlay rendering (single Graphics vs. per-tile)
+
+**User Decision Compatibility:**
+- **Destructible Watchtowers:** Automatically handled by tickVisibility() — no special logic needed
+- **Alliance Shared Vision:** Requires multiplying view.add() calls by alliance size. Benchmarking needed before 8-player test.
+- **Structure Silhouettes:** Client-side caching of structureType. Shows last-known structures. No server changes.
+
+**Reviewer Confidence:** "Architecturally sound. Creature AI, territory, builder systems verified as unaffected."
+
+
 ## 2026-03-07: Fog of War — Game Mechanics Design (Hal)
 
 **Author:** Hal (Lead)  

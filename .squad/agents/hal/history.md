@@ -401,3 +401,53 @@ User preference learned: Deploy to UAT via protected branch (PR merge to `uat` b
 
 **Cross-Team Impact:** User directive (dkirby-ms 2026-03-07T01:03) on camera restriction to explored areas addressed by Gately's camera bounds design.
 
+
+---
+
+## 2026-03-07T01:21 — Design Reviews Complete: Fog of War Mechanics APPROVED
+
+**Status:** Design reviews by Steeply (Tester) and Pemulis (Systems Dev) completed.
+
+**Verdict:** APPROVE WITH NOTES (both reviewers)
+
+### Key Approvals
+
+✅ **Steeply's Testability Review:**
+- Fully testable with existing infrastructure
+- No architectural blockers
+- 40 test cases planned across 4 phases
+- Edge cases identified and documented (E1–E14)
+- Performance estimate revised: 4–8ms typical (15–20ms on day/night transitions)
+
+✅ **Pemulis's Systems Review:**
+- Architecturally sound
+- Compatible with creature AI, territory, builder systems
+- StateView mechanism correctly applied
+- All identified risks are implementation refinements, not blockers
+
+### Critical Actions Required
+
+1. **Skip @view() field decorators** — Element-level view.add/remove sufficient for two-tier visibility
+2. **Merge owned-tile cache into Phase 2** — Full-tile scan unacceptable (131K iterations/tick for 8 players)
+3. **Add WATCHTOWER constants** to shared/src/constants.ts (costs, build time, radius, max)
+4. **Verify onLeave cleanup** — Ensure playerViews and visibleTiles are deleted on disconnect
+5. **Full regression test** on 331 existing tests after @view() decorators (gate before merge)
+
+### User Directives Incorporated
+
+✅ **Watchtower Destruction (future):** Naturally handled by tickVisibility() — no special logic
+✅ **Shared Alliance Vision (future):** Requires view.add() multiplication by alliance size — benchmarking TBD
+✅ **Explored Structure Silhouettes:** Client-side caching of last-known structureType — no server changes
+
+### Reviewer Confidence
+
+Steeply: "Zero trust in happy paths." — 40 test cases designed for phase transitions, edge positions, lifecycle errors.
+
+Pemulis: "Architecturally sound. Creature AI, territory, builder systems verified as unaffected."
+
+### Next Steps
+
+Proceed to implementation phase with noted precautions. Reviews are comprehensive and implementation-ready. All edge cases documented for phased test coverage.
+
+Full reviews merged to `.squad/decisions.md`.
+

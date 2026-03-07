@@ -802,3 +802,79 @@ Design written to `.squad/decisions/inbox/gately-fog-camera-design.md`.
 
 **Status:** COMPLETE. Ready for implementation once server-side filtering (Hal/Pemulis/Steeply) is in place.
 
+
+---
+
+## 2026-03-07T01:21 — Design Review Complete: Fog of War Client Architecture APPROVED
+
+**Status:** Design review by Pemulis (Systems Dev) completed.
+
+**Verdict:** APPROVE WITH NOTES
+
+### Key Approvals
+
+✅ **Pemulis's Systems Review:**
+- Client rendering architecture is sound
+- Zero new server APIs required (builds cleanly on Hal's StateView filtering)
+- ExploredTileCache design correct (cache on onAdd, not onRemove)
+- FogManager approach validates as standard fog-of-war pattern
+- CreatureRenderer integration verified (no changes needed)
+
+### Critical Findings & Actions
+
+1. **Tile Access Pattern Breaking Change (HIGH):** With StateView filtering, `state.tiles.at(y * mapWidth + x)` returns wrong tile.
+   - ✅ GridRenderer already uses per-tile `x`/`y` fields (safe)
+   - ⚠️ Must audit and migrate CreatureRenderer, InputHandler for index-based accesses
+   - ✅ ExploredTileCache provides coordinate-based lookup (future-proof)
+
+2. **ExploredTileCache Race Condition (ACCEPTABLE):** Server may filter tile removal before final state mutation.
+   - One tick of staleness (250ms) is unnoticeable
+   - "Explored" state shows last-known data by design
+   - Recommendation: Cache `structureType` from day one (supports future silhouettes feature)
+
+3. **Camera Bounds Edge Case (MEDIUM):** 5×5 HQ with 3-tile visibility radius = ~15×15 explored area.
+   - At low zoom (0.5×), this fits in 80px
+   - Viewport > explored area produces bad UX (player sees dead space)
+   - **Recommendation:** Add minimum camera bounds padding (expand bounds by `viewportWidth / (2 * TILE_SIZE * scale)` tiles)
+
+4. **Watchtower Constants:** Pemulis defined required constants (costs, build time, radius, max):
+   - COST_WOOD: 15, COST_STONE: 10
+   - BUILD_TIME_TICKS: 24
+   - VISION_RADIUS: 8
+   - MAX_PER_PLAYER: 3
+
+### User Directives Incorporated
+
+✅ **Explored Tiles Show Structure Silhouettes:** Client-side caching of `structureType` alongside terrain data.
+   - Interpretation: Show last-known structures (fog semantics), not current server state
+   - FogManager renders dimmed structure icon at reduced alpha
+   - No server changes needed
+
+✅ **Camera Bounds Restriction:** Dynamic bounding box of explored tiles + minimum padding.
+   - Addresses user directive (dkirby-ms 2026-03-07T01:03)
+   - Smooth expansion via lerp prevents jarring jumps
+
+### Performance Notes
+
+- ExploredTileCache memory: ~655 KB max (full 128×128 map) — negligible
+- Fog overlays: ~16K Graphics objects + existing 32K scene objects = 48K total — within PixiJS 8 budget
+- Recommendation: Consider batch fog overlay rendering (single Graphics vs. per-tile) for better draw call efficiency
+
+### Implementation Guidance
+
+**Should-Fix Before Implementation:**
+1. Tile access pattern migration (audit index-based accesses)
+2. Minimum camera bounds padding (5×5 HQ UX improvement)
+3. ExploredTileCache includes structureType from day one
+
+**Nice-to-Have:**
+- Batch fog overlay rendering (performance optimization)
+- Viewport culling deferred until 128×128 if needed
+
+### Reviewer Confidence
+
+Pemulis: "Architecturally sound. StateView filtering handles creature visibility at server level. Client integration straightforward."
+
+### Next Steps
+
+Merge reviews to decisions.md. Hal's server-side filtering must complete first (prerequisite). Then proceed with client implementation, addressing tile access pattern migration and camera bounds padding.

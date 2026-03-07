@@ -709,3 +709,14 @@ Hal proposed three redesign options for the hollow core gameplay loop. This will
 
 **Status:** APPROVE WITH NOTES. Design is sound; edge case analysis complete. Test infrastructure ready.
 
+### Fog of War + Camera Design Review (2026-03-09)
+
+- **Reviewed:** Hal's fog of war game mechanics design (5 vision sources, 3 fog states, day/night modifiers, watchtower structure) and Gately's client rendering & camera design (ExploredTileCache, FogManager, camera bounds clamping).
+- **Verdict:** APPROVE WITH NOTES. 40 test cases planned across 4 phases.
+- **Key edge cases found:** (1) Camera bounds smaller than viewport at game start (5×5 HQ = 160×160px vs ~1280×720 viewport). (2) Player disconnect doesn't clean up `playerViews`/`visibleTiles` — must be specified. (3) ExploredTileCache must cache on `onAdd`, not `onRemove`, to avoid data loss. (4) Day/night transition CPU spike for 8 players — stagger recommended. (5) Minimum radius floor of 1 must be per-source, not global clamp.
+- **Future features flagged:** Destructible watchtowers need 3 additional tests (exclusive vision ring calculation). Alliance shared vision needs 3 tests (union semantics). ExploredTileCache should store `structureType` from day one for future silhouette rendering.
+- **Performance:** Hal's 12ms/tick estimate for 8 players may undercount. Revised to 4-8ms normal, 15-20ms on day/night transitions. 250ms budget has room but staggering is advised.
+- **No client tests exist today.** Recommended adding `client/src/__tests__/` for ExploredTileCache and FogManager pure logic tests (no PixiJS dependency).
+- **Test count:** 331 existing (all server/shared). 40 new tests planned. @view() decorator regression is a P0 gate.
+- **Review written to:** `.squad/decisions/inbox/steeply-fog-review.md`
+
