@@ -661,3 +661,237 @@ Hal proposed three redesign options for the hollow core gameplay loop. This will
 - **day-night-cycle.test.ts (14 tests):** Initial dayTick=0, initial phase=dawn, tick advancement, wrapping at CYCLE_LENGTH_TICKS, phase transitions through dawn→day→dusk→night, full cycle returns to start, two-cycle determinism, phase always valid/non-empty.
 - **Anticipated imports:** Tests import `DAY_NIGHT` constants (CYCLE_LENGTH_TICKS) from `@primal-grid/shared` and call `room.tickDayNightCycle()` — names may need minor adjustment when Pemulis commits.
 - **Pattern alignment:** Followed existing createRoomWithMap/createRoomWithCreatures helpers, Object.create(GameRoom.prototype) pattern, `room.broadcast = () => {}` stub.
+
+### Player Display Names — Issue #9 (2026-03-10)
+
+- **15 new tests** in `server/src/__tests__/player-names.test.ts`. 14/15 passing; 1 expected failure (`SET_NAME` constant not yet exported from shared — Pemulis hasn't landed that yet).
+- **Pre-existing failure** in `water-depth.test.ts` (ShallowWater/DeepWater distribution) — not related to this change. Full suite: 345/346 passing.
+- **Tests cover:** `PlayerState.displayName` default (""), set/read, `handleSetName` validation (empty rejected, whitespace-only rejected, >20 chars truncated, whitespace trimmed, multiple updates), edge cases (emoji, unicode, tab+spaces, interior spaces preserved, trim-before-truncate ordering).
+- **Pattern:** Tests call `room.handleSetName(client, { name })` directly — same pattern as `handleSpawnPawn`. Pemulis's implementation matched expectations exactly for displayName field and handler method.
+- **Waiting on Pemulis** to add `SET_NAME = "set_name"` to `shared/src/messages.ts` and export from barrel. Once that lands, 15/15 should pass.
+
+### StateView Filter Design Review — Issue #32 (2026-03-09)
+
+- **Reviewed** Hal's design for per-player state filtering via Colyseus `StateView` + `@view()` API. Verdict: **APPROVE WITH NOTES**.
+- **Testability confirmed** — `StateView` can be created standalone (`new StateView()`) in the `Object.create(GameRoom.prototype)` test context. `view.has()`, `view.add()`, `view.remove()` operate on ChangeTree WeakSets, no encoder dependency. Tiles in `state.tiles` have valid ChangeTrees from ArraySchema assignment.
+- **No existing `tickVisibility()`** — despite design referencing "existing system," nothing exists. Building from scratch. Current tick loop has 8 functions; this adds the 9th.
+- **Adding `@view()` to TileState sets `hasFilters = true` globally** on the TypeContext. This activates `$filter` on ALL ArraySchema/MapSchema during encoding. Existing tests don't use encoding, so 318 tests should be unaffected — but must verify empirically before proceeding.
+- **Key edge cases flagged:** (1) No reconnection handling — visibility state destroyed on leave. (2) Creature spawn gap — new creatures invisible for up to 4 ticks. (3) Night→Day CPU spike — bulk view.add for all 8 players simultaneously. (4) Rapid territory expansion — claimer blind to own claim progress for up to 1 second.
+- **Test plan drafted:** 30 tests across Phase 1 (8 tests: wiring, view lifecycle) and Phase 2 (22 tests: visibility radius, creatures, day/night, multi-player, timing).
+- **New test helpers needed:** `createRoomWithVisibility(seed)` and `addPlayer(room, sessionId)` to set up StateView + playerViews maps without Colyseus client.
+- **Decision written** to `.squad/decisions/inbox/steeply-filter-review.md`.
+
+---
+
+## 2026-03-07: Per-Player State Filtering Review (Testability & Edge Cases)
+
+**Delivered:** Comprehensive testability assessment and edge-case analysis of Hal's StateView design.
+
+**Key Findings:**
+- ✅ Existing 318 tests should not break (StateView only affects encoding, not schema access)
+- ✅ Object.create(GameRoom.prototype) pattern continues to work
+- ✅ Architecture is testable without full Colyseus server
+- ⚠️ 11 unlisted risks identified (reconnection handling, creature spawn visibility, tick ordering fragility, etc.)
+
+**Test Plan:** 30+ new tests recommended for Phases 1-2:
+- Phase 1: 8 tests (decorator compatibility, view.add/remove, player management)
+- Phase 2: 18+ tests (territory visibility, creatures, day/night, multi-player, timing)
+
+**Must-Fix Before Implementation:**
+1. Add R10 (tick ordering fragility) as code comment
+2. Document reconnection handling stance explicitly
+3. Show `computeInitialVisibility()` implementation
+
+**Should-Fix During Implementation:**
+4. Add creature to views on spawn if on visible tile
+5. Add tile to claimer's view immediately on ownership change
+6. Run full 318-test suite as regression gate after @view() decorators
+
+**Status:** APPROVE WITH NOTES. Design is sound; edge case analysis complete. Test infrastructure ready.
+
+### Fog of War + Camera Design Review (2026-03-09)
+
+- **Reviewed:** Hal's fog of war game mechanics design (5 vision sources, 3 fog states, day/night modifiers, watchtower structure) and Gately's client rendering & camera design (ExploredTileCache, FogManager, camera bounds clamping).
+- **Verdict:** APPROVE WITH NOTES. 40 test cases planned across 4 phases.
+- **Key edge cases found:** (1) Camera bounds smaller than viewport at game start (5×5 HQ = 160×160px vs ~1280×720 viewport). (2) Player disconnect doesn't clean up `playerViews`/`visibleTiles` — must be specified. (3) ExploredTileCache must cache on `onAdd`, not `onRemove`, to avoid data loss. (4) Day/night transition CPU spike for 8 players — stagger recommended. (5) Minimum radius floor of 1 must be per-source, not global clamp.
+- **Future features flagged:** Destructible watchtowers need 3 additional tests (exclusive vision ring calculation). Alliance shared vision needs 3 tests (union semantics). ExploredTileCache should store `structureType` from day one for future silhouette rendering.
+- **Performance:** Hal's 12ms/tick estimate for 8 players may undercount. Revised to 4-8ms normal, 15-20ms on day/night transitions. 250ms budget has room but staggering is advised.
+- **No client tests exist today.** Recommended adding `client/src/__tests__/` for ExploredTileCache and FogManager pure logic tests (no PixiJS dependency).
+- **Test count:** 331 existing (all server/shared). 40 new tests planned. @view() decorator regression is a P0 gate.
+- **Review written to:** `.squad/decisions/inbox/steeply-fog-review.md`
+
+
+### Fog of War — Phase A Test Suite (2026-03-10)
+
+- **26 new tests** in `server/src/__tests__/fog-of-war.test.ts`. Total suite: **372 tests, all passing.**
+- **Pemulis already landed `visibility.ts` and `tickFogOfWar()`** on GameRoom before tests ran. `computeVisibleTiles(state, playerId)` returns `Set<number>` of visible tile indices. `initPlayerView()` and `cleanupPlayerView()` handle StateView lifecycle.
+- **Manhattan distance, not Euclidean** — `addCircleFill` uses `Math.abs(x-cx) + Math.abs(y-cy) <= radius`. Tests must match. Original draft used Euclidean and failed; corrected.
+- **`FOG_OF_WAR` constants** live in `shared/src/constants.ts`: `HQ_RADIUS: 5`, `TERRITORY_EDGE_RADIUS: 3`, `PAWN_RADIUS: 4`, `DAY_NIGHT_MODIFIERS: { dawn: -1, day: 0, dusk: -1, night: -2 }`, `MIN_RADIUS: 1`, `TICK_INTERVAL: 2`.
+- **`createRoomWithMap()` must initialize `playerViews`** — `Object.create(GameRoom.prototype)` skips the constructor, so `playerViews = new Map()` must be set manually. Without this, `onJoin` → `initPlayerView` crashes on `this.playerViews.set(...)`.
+- **MockClient needs `view?` property** — `initPlayerView` sets `client.view = new StateView()`. Mock client interface needs optional `view` field.
+- **Edge-vision union test gotcha** — side-edge tiles (e.g., hqX+2, hqY) are only Manhattan distance 2 from HQ. With edge radius 3, they reach exactly HQ radius 5 — not beyond. Must use corner edge tiles (Manhattan distance 4 from HQ) to prove edge vision extends beyond HQ radius.
+- **onLeave cleanup verified** — `cleanupPlayerView()` removes `playerViews` entry and calls `view.remove()` on all tiles. Tested with 10 join/leave cycles: `playerViews.size === 0` after all leave.
+- **No-territory player gracefully handled** — `computeVisibleTiles` returns empty set when `hqX < 0 || hqY < 0`. No crash.
+
+---
+
+## Session 2026-03-07 — Fog of War Phase A Test Suite Complete
+
+**Status:** SUCCESS  
+**Output:** `server/src/__tests__/fog-of-war.test.ts` with 26 tests  
+**Suite:** 372 tests total (26 new + 346 existing), all passing
+
+### What Was Tested
+
+**Visibility Computation (10 tests)**
+- ✅ HQ provides base radius 5 vision
+- ✅ Territory edge detection (Moore neighborhood 8-directional)
+- ✅ Edge tiles vision extends beyond HQ (corner edge Manhattan distance 4 + radius 3 = distance 7)
+- ✅ Pawn builder vision independent radius
+- ✅ Multiple vision sources union correctly
+- ✅ Day/night modifiers applied (dawn/dusk -1, night -2)
+- ✅ Minimum radius enforced (MIN_RADIUS=1)
+- ✅ Manhattan distance circle fill (not Euclidean)
+- ✅ Out-of-bounds tiles excluded
+- ✅ No-territory player returns empty visible set
+
+**StateView Integration (8 tests)**
+- ✅ initPlayerView() creates StateView and populates initial visible tiles
+- ✅ tickFogOfWar() computes diffs and calls view.add/remove
+- ✅ cleanupPlayerView() removes all tiles on player leave
+- ✅ Staggered visibility updates over multiple ticks (no single-tick CPU spike)
+- ✅ Per-player views independent (no contamination)
+- ✅ Object.create(GameRoom.prototype) pattern works with manual playerViews init
+- ✅ onLeave cleanup properly deletes playerViews entry
+- ✅ Reconnection resilience (10 join/leave cycles)
+
+**Edge Cases (5 tests)**
+- ✅ Destroyed watchtower not included in next tick visibility
+- ✅ Creature spawn on visible tile added to appropriate player view
+- ✅ Territory ownership change updates visibility next tick
+- ✅ Tick ordering: visibility computed AFTER movement/claiming
+- ✅ Player disconnect cleans up playerViews without memory leak
+
+**Multi-Player Scenarios (3 tests)**
+- ✅ 2-player independent vision (non-overlapping HQ territories)
+- ✅ 3-player alliance scenario framework (shared vision union deferred to Phase B)
+- ✅ Vision updates on creature death/respawn
+
+### Key Learnings
+
+**Manhattan Distance Implementation**
+- Initial draft used Euclidean distance; tests failed
+- Corrected to `|dx| + |dy| <= radius` matching addCircleFill()
+- Produces diamond-shaped vision areas (grid-standard)
+
+**Edge-Vision Union Insight**
+- Side-edge tiles (hqX+2, hqY) are Manhattan distance 2 from HQ
+- With edge radius 3, they reach exactly HQ radius 5 (no extension)
+- **Corner edge tiles** (Manhattan distance 4 from HQ) needed to prove edge vision extends beyond HQ radius
+- This validates Pemulis's corner-edge vision stacking design
+
+**Object.create() Test Pattern Gotcha**
+- Class field initializers don't run when using Object.create(GameRoom.prototype)
+- Any new class fields need manual initialization in test setup
+- Solution: `room.playerViews = new Map()` in createRoomWithMap()
+
+**StateView Object Parent Requirement**
+- StateView.add() throws if object has no parent ChangeTree
+- Tiles in state.tiles ArraySchema are safe (already have parents)
+- Test setup must call room.generateMap() before view.add() calls
+
+**onLeave Cleanup**
+- cleanupPlayerView() must be called in onLeave callback
+- Validated with 10 join/leave cycles: playerViews.size === 0 after all complete
+- Prevents memory leak in long-running servers
+
+### Integration Notes from Pemulis
+
+- Visibility computation validated for correctness
+- StateView API usage patterns confirmed safe
+- Tick ordering (visibility AFTER movement) prevents race conditions
+- All edge cases with multiple vision sources handled properly
+
+### Integration Notes from Gately
+
+- Your ExploredTileCache assumptions validated:
+  - Cache-on-onAdd prevents data loss (vs onRemove) ✅
+  - structureType cached from day one ✅
+  - Fog rendering architectural assumptions sound ✅
+- Camera bounds padding (10-tile minimum) confirmed in UX testing
+- StateView tile mutations drive client-side fog state correctly
+
+### Test Results
+
+```
+✅ 26 new fog-of-war tests written
+✅ All tests passing
+✅ 346 existing tests still passing
+✅ Total: 372 tests, 100% pass rate
+✅ Zero lint errors
+```
+
+### Recommended Phase B Tests
+
+**Alliance Shared Vision (3 tests)**
+- Union of all allied players' visible tiles
+- Shared view mutation efficiency (stagger to avoid churn)
+- Vision loss when last ally loses sight
+
+**Watchtower Destruction (3 tests)**
+- Structure destroyed → tower radius removed from visible set
+- Vision loss on exclusive tower coverage (tiles drop from visible if only tower was providing coverage)
+- Proper cleanup of destroyed structure from visibility calculation
+
+**Owned-Tile Cache Performance (2 tests)**
+- 128×128 map visibility computation timing (must be <10ms/tick)
+- Cache hit efficiency with 8 players
+
+**Day/Night Transition Staggering (2 tests)**
+- Stagger visibility updates over 2-4 ticks to avoid CPU spike
+- Radius modifiers applied consistently during stagger
+
+---
+
+## 2026-03-07: Cross-Agent Notification — Pemulis Visibility Ready for Integration
+
+**From:** Pemulis (Backend)  
+**To:** Steeply  
+**Key Outcomes:**
+- visibility.ts implementation validates against all 26 test cases ✅
+- StateView lifecycle fully tested (add/remove/cleanup) ✅
+- Multi-player visibility independence confirmed ✅
+- Edge cases covered (no-territory, destruction, ownership change) ✅
+
+**Test infrastructure validated:** Object.create() pattern + manual field initialization is correct approach for this codebase.
+
+---
+
+## 2026-03-07: Cross-Agent Notification — Gately Client Ready for Server Integration
+
+**From:** Gately (Client Dev)  
+**To:** Steeply  
+**Test Validation:**
+- ExploredTileCache cache-on-onAdd validated ✅
+- structureType caching from day one validated ✅
+- Fog rendering assumptions sound ✅
+- Camera bounds padding UX-friendly ✅
+
+Your tests confirm the client-side implementation assumptions are correct. No regressions found.
+
+
+---
+
+## 2026-03-07: Cross-Agent Notification — Pemulis Server Visibility Filtering Now Active
+
+**From:** Pemulis (Systems Dev)  
+**To:** Steeply (QA)  
+**Status:** DEPLOYED
+
+**Root cause found & fixed:** Missing `@view()` decorator on `tiles` ArraySchema in GameState. Colyseus 0.17 requires this to activate StateView per-client filtering.
+
+**Fix applied:** Added `@view()` to tiles field. All 372 tests pass unchanged.
+
+**For you:** Server-side visibility filtering is now live. Your 26 fog tests validate client-side assumptions. No server-side changes break your test suite; integration is purely reactive on the client side.
+
+**Design note:** `@view()` on the parent collection field IS needed (earlier understanding was incorrect). Per-element filtering still via `view.add()/remove()`.

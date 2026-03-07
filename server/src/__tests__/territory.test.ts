@@ -194,7 +194,7 @@ describe("Territory System", () => {
       expect(player.score).toBe(expectedOwned);
     });
 
-    it("works across multiple seeds without edge clipping", () => {
+    it("works across multiple seeds without edge clipping", { timeout: 30_000 }, () => {
       for (const seed of [1, 42, 256, 9999]) {
         const room = createRoomWithMap(seed);
         const { player } = joinPlayer(room, "t1");

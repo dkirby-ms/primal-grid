@@ -1,4 +1,4 @@
-import { Schema, type, ArraySchema, MapSchema } from "@colyseus/schema";
+import { Schema, type, view, ArraySchema, MapSchema } from "@colyseus/schema";
 import { TileType, DayPhase, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED, isWaterTile } from "@primal-grid/shared";
 
 export class TileState extends Schema {
@@ -45,6 +45,9 @@ export class TileState extends Schema {
 export class PlayerState extends Schema {
   @type("string")
   id: string = "";
+
+  @type("string")
+  displayName: string = "";
 
   @type("string")
   color: string = "#ffffff";
@@ -128,12 +131,21 @@ export class GameState extends Schema {
   @type("string")
   roundPhase: string = "playing";
 
+  // @view() enables per-element StateView filtering so each client only
+  // receives tiles within their fog-of-war visibility radius.
+  @view()
   @type([TileState])
   tiles = new ArraySchema<TileState>();
 
+  // @view() ensures per-client filtering; all players are added to every
+  // view so the scoreboard stays complete.
+  @view()
   @type({ map: PlayerState })
   players = new MapSchema<PlayerState>();
 
+  // @view() enables per-client creature filtering — only creatures on
+  // tiles within a player's fog-of-war visibility (plus own pawns) are synced.
+  @view()
   @type({ map: CreatureState })
   creatures = new MapSchema<CreatureState>();
 

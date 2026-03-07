@@ -134,6 +134,114 @@
         padding: 4px 4px 0 0;
       }
 
+      /* Name prompt modal */
+      #name-prompt-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.7);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+      }
+      #name-prompt-overlay.visible { display: flex; }
+      #name-prompt-box {
+        background: #1a1a2e;
+        border: 1px solid #444466;
+        border-radius: 8px;
+        padding: 24px 32px;
+        text-align: center;
+        min-width: 300px;
+      }
+      #name-prompt-box h2 {
+        font-size: 16px;
+        color: #ffd700;
+        margin-bottom: 12px;
+        font-family: 'Courier New', monospace;
+      }
+      #name-prompt-input {
+        width: 100%;
+        padding: 8px 10px;
+        font-size: 14px;
+        font-family: 'Courier New', monospace;
+        background: #222;
+        color: #ffffff;
+        border: 1px solid #444466;
+        border-radius: 4px;
+        outline: none;
+        margin-bottom: 12px;
+      }
+      #name-prompt-input:focus { border-color: #7ecfff; }
+      #name-prompt-submit {
+        padding: 8px 20px;
+        font-size: 12px;
+        font-family: 'Courier New', monospace;
+        background: #2a2a4a;
+        color: #cccccc;
+        border: 1px solid #444466;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      #name-prompt-submit:hover { background: #3a3a5a; border-color: #7ecfff; color: #fff; }
+
+      /* Scoreboard overlay */
+      #scoreboard-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 900;
+        justify-content: center;
+        align-items: center;
+        pointer-events: none;
+      }
+      #scoreboard-overlay.visible { display: flex; }
+      #scoreboard-panel {
+        background: rgba(17,17,34,0.92);
+        border: 1px solid #444466;
+        border-radius: 8px;
+        padding: 16px 24px;
+        min-width: 420px;
+        pointer-events: auto;
+      }
+      #scoreboard-panel h2 {
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        color: #ffd700;
+        margin-bottom: 10px;
+        text-align: center;
+        font-family: 'Courier New', monospace;
+      }
+      #scoreboard-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+      }
+      #scoreboard-table th {
+        text-align: left;
+        color: #888;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        padding: 4px 8px;
+        border-bottom: 1px solid #333;
+      }
+      #scoreboard-table td {
+        padding: 5px 8px;
+        color: #cccccc;
+        border-bottom: 1px solid #222;
+      }
+      #scoreboard-table tr:last-child td { border-bottom: none; }
+      #scoreboard-hint {
+        text-align: center;
+        font-size: 10px;
+        color: #666;
+        margin-top: 8px;
+        font-family: 'Courier New', monospace;
+      }
+
     </style>
   </head>
   <body>
@@ -189,6 +297,29 @@
     <div id="game-log"></div>
     <div id="help-hint">Press ? for help</div>
     </div>
+
+    <!-- Name prompt modal -->
+    <div id="name-prompt-overlay">
+      <div id="name-prompt-box">
+        <h2>🏰 Enter Your Name</h2>
+        <input id="name-prompt-input" type="text" maxlength="20" placeholder="Explorer" autocomplete="off" />
+        <br />
+        <button id="name-prompt-submit">Join Game</button>
+      </div>
+    </div>
+
+    <!-- Scoreboard overlay (Tab key) -->
+    <div id="scoreboard-overlay">
+      <div id="scoreboard-panel">
+        <h2>🏆 Scoreboard</h2>
+        <table id="scoreboard-table">
+          <thead><tr><th>Player</th><th>Score</th><th>Territory</th></tr></thead>
+          <tbody id="scoreboard-body"></tbody>
+        </table>
+        <div id="scoreboard-hint">Press Tab to close</div>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -3761,3 +3761,550 @@ Players' 5×5 starting territory could contain Water or Rock tiles, which were s
 
 **Next steps:** One-time Azure deployment (az deployment group create), branch creation, protection rules, test PR.
 
+
+---
+
+## 2026-03-07T14:00Z: UAT Branch Auto-Reset Workflow
+
+**By:** Pemulis (Systems Dev)  
+**Date:** 2025-01-21  
+**Status:** Implemented
+
+**Context:** After UAT code is promoted to master (via merge), the UAT branch can diverge if we continue pushing experimental code. Need automated sync.
+
+**Decision:** Created `.github/workflows/reset-uat.yml` that:
+1. Triggers on any push to master (keeps UAT in sync always)
+2. Supports manual runs via `workflow_dispatch`
+3. Uses `--force-with-lease` for safety (prevents overwriting concurrent UAT changes)
+4. Configures git user as github-actions bot
+
+**Workflow Sequence:**
+1. Code merged from UAT to master (via PR)
+2. Push to master triggers: `deploy.yml` (prod) + `reset-uat.yml` (reset UAT branch)
+3. Push to UAT (from reset) triggers: `deploy-uat.yml` (redeploy UAT)
+
+**Rationale:** Automation prevents manual reset mistakes. `--force-with-lease` is safer than `--force` — fails if someone else pushed to uat, alerting maintainers.
+
+**Risk Mitigation:** Small window for concurrent pushes; `--force-with-lease` detects and fails. GitHub Actions notifications alert on workflow failure. Manual override via `workflow_dispatch` available.
+
+
+---
+
+## 2026-03-11: Player Display Names & Scoreboard (Issue #9)
+
+### Decision 1: Player Display Name Schema & Message Protocol (Pemulis)
+
+**By:** Pemulis (Systems Dev)  
+**Date:** 2026-03-11  
+**Issue:** #9  
+**Status:** IMPLEMENTED  
+
+**What:**
+- `PlayerState.displayName` is a `@type("string")` Colyseus schema field, default `""`. Synced to all clients automatically.
+- `SET_NAME` message (`"set_name"`) with `SetNamePayload { name: string }` is the client→server protocol for setting names.
+- Server validates: trims whitespace, caps at 20 characters, rejects empty strings.
+- Server broadcasts `game_log` with `"{name} has joined"` on successful name set.
+
+**Why:**
+- Schema field (not a side-channel) so scoreboard/nameplate rendering on any client can read `player.displayName` directly from synced state.
+- 20-char limit prevents layout-breaking names in UI. Trim + empty-check prevents blank names.
+- Broadcast on name-set gives all players feedback when someone identifies themselves.
+
+**Impact:**
+- Client team needs to: (1) send `SET_NAME` message after joining, (2) read `player.displayName` from schema for scoreboard/nameplates.
+- Any future rename feature reuses the same message — handler is idempotent.
+
+---
+
+### Decision 2: Scoreboard UI Pattern (Gately)
+
+**Date:** 2026-03-11  
+**Author:** Gately (Game Dev)  
+**Status:** IMPLEMENTED  
+
+**What:**
+Client-side player display names + scoreboard overlay for Issue #9.
+
+**Components Added:**
+1. **Name prompt modal** — DOM overlay after connect, sends `SET_NAME` to server
+2. **HQ name labels** — PixiJS Text under each player's HQ marker (all players visible)
+3. **Scoreboard overlay** — Tab key toggle, DOM table showing Name/Score/Territory
+4. **`SET_NAME` message constant** — Added to `shared/src/messages.ts`
+
+**Design Choices:**
+- **Scoreboard is DOM-based** (not PixiJS) — follows HudDOM pattern, easier to style, no canvas z-ordering issues
+- **Territory count computed client-side** by iterating tiles where `ownerID === player.id` — no new server field needed
+- **Scoreboard skips refresh when hidden** — only iterates state on `onStateChange` when panel is visible
+- **Name label uses stroke outline** (`stroke: { color: '#000000', width: 3 }`) for readability against any biome
+
+**Server Dependency:**
+- Server handles `SET_NAME` message and sets `displayName` on `PlayerState` schema
+- `SET_NAME` and `SetNamePayload` exported from shared — server imports directly
+
+**Files Changed:**
+- `shared/src/messages.ts` — `SET_NAME` constant + `SetNamePayload` interface
+- `server/src/rooms/GameState.ts` — `displayName` field on `PlayerState`
+- `server/src/rooms/GameRoom.ts` — `SET_NAME` message handler
+- `shared/src/types.ts` — Type definitions
+- `client/index.html` — Name prompt modal + scoreboard overlay HTML/CSS
+- `client/src/main.ts` — Name prompt flow, scoreboard wiring
+- `client/src/ui/HudDOM.ts` — Scoreboard component
+- `client/src/input/InputHandler.ts` — Tab key handler + `setScoreboard()`
+- `client/src/renderer/GridRenderer.ts` — HQ name labels
+- `server/src/__tests__/player-names.test.ts` — Integration tests (15 tests, all pass)
+
+---
+
+## 2026-03-07T01:03:00Z: User Directive — Camera Restriction to Explored Areas
+
+**By:** dkirby-ms (via Copilot)  
+**What:** Camera should be restricted to explored areas. Before a player has discovered an area of the map, it shouldn't be possible to scroll over to it (it would just be a black screen anyway). Camera bounds must update as the player's explored area expands.  
+**Why:** User request — captured for team memory. Affects both fog of war rendering and InputHandler/Camera system.
+
+---
+
+
+## 2026-03-07T01:14:00Z: User Directive — Watchtower Destruction & Shared Alliance Vision
+
+**By:** dkirby-ms (via Copilot)  
+**Status:** DECISION — User-confirmed future feature flags  
+
+**What:**
+1. **Destructible Watchtowers:** Watchtowers are a structure that can be destroyed in future versions. Not part of MVP fog of war, but design must accommodate graceful vision loss when watchtower is removed.
+2. **Shared Team Vision (Alliances):** Allied players share visibility when alliance system is implemented. Each player sees all tiles visible to any ally.
+
+**Why:** User decisions on Hal's fog of war open questions (#1 and #3). Establish future compatibility constraints.
+
+**Impact:**
+- Watchtower destruction: Natural fallout of tickVisibility() — when structure is deleted, its 8-tile radius drops from visibility on next tick. Client's ExploredTileCache preserves terrain data. No special logic needed.
+- Alliance vision: Requires `tickVisibility()` to union allied player visibility sets and call `view.add()` for ally tiles. Multiplies StateView mutations by alliance size. Benchmarking required before 8-player testing.
+
+---
+
+## 2026-03-07T01:14:30Z: User Directive — Explored Tiles Show Structure Silhouettes
+
+**By:** dkirby-ms (via Copilot)  
+**Status:** DECISION — User-confirmed UI detail  
+
+**What:** Explored tiles (fog state) should show structure silhouettes — a faded/greyed building outline so the player knows "something was built there" without revealing current owner or live state.
+
+**Why:** User decision on Hal's fog of war open question #4. Adds atmospheric detail to explored tiles beyond bare terrain.
+
+**Implementation:**
+- Client-side only. ExploredTileCache must cache `structureType` alongside terrain data (type, x, y, fertility, moisture).
+- FogManager renders dimmed structure icon when tile is in explored state.
+- Shows last-known structure (not current server state) — correct fog of war semantics.
+- No server changes beyond StateView filtering.
+
+**Interpretation:** "Show structures that were visible when the tile was last seen" (achievable client-side). NOT "always show current structures" (would require server-side explored state tracking, contradicts no-new-APIs design).
+
+---
+
+## 2026-03-07: Review — Fog of War Game Mechanics Design (Hal)
+
+**Reviewer:** Steeply (Tester)  
+**Date:** 2026-03-07  
+**Verdict:** APPROVE WITH NOTES  
+**Full Review:** .squad/decisions/inbox/steeply-fog-review.md (290 lines)
+
+**Executive Summary:**
+Hal's fog of war game mechanics design is well-structured and fully testable with existing infrastructure. No architectural blockers. Edge case coverage planned (40 test cases, 4 phases). Performance estimate revised: 4-8ms typical (not 12ms), with potential 15-20ms spike on day/night phase transitions.
+
+**Edge Cases Identified:** 14 high/medium items
+- E1: Map edge visibility clamping
+- E3: Creature death visibility loss (1-tick delay acceptable)
+- E5: Player disconnect cleanup (onLeave must delete playerViews + visibleTiles)
+- E6: Minimum radius floor at night (per-source application verified)
+- E11: ExploredTileCache consistency (cache on onAdd, not onRemove)
+- E14: Tile access pattern breaking change (index-based → coordinate-based)
+
+**Required Before Implementation:**
+1. onLeave cleanup specification (E5)
+2. Tick ordering verification: tickVisibility() MUST be last (I1)
+3. Full regression test on 331 existing tests after @view() decorators (T1)
+4. Player displayName constant clamping (currently undefined)
+
+**Test Plan:** 40 test cases
+- Phase 1 (Schema + StateView): 8 tests
+- Phase 2 (Visibility Engine): 22 tests
+- Phase 3 (Client Logic): 6 tests
+- Phase 4 (Integration): 4 tests
+
+**Recommended Optimizations:**
+- Tick ordering comment in GameRoom.ts
+- Day/night transition stagger (2 ticks) to avoid CPU spike
+- Camera center-lock when viewport > explored area
+- Performance benchmark test (T40) for baseline
+
+**Reviewer Confidence:** "Zero trust in happy paths." All edge cases identified and testable.
+
+---
+
+## 2026-03-07: Review — Fog of War Systems Integration (Pemulis)
+
+**Reviewer:** Pemulis (Systems Dev)  
+**Date:** 2026-03-07  
+**Verdict:** APPROVE WITH NOTES  
+**Full Review:** .squad/decisions/inbox/pemulis-fog-review.md (275 lines)
+
+**Executive Summary:**
+Both Hal's game mechanics and Gately's client rendering designs are architecturally sound and compatible with existing simulation. StateView mechanism correctly applied. Creature AI, territory, builder systems are unaffected. All risks are implementation refinements, not blockers.
+
+**Critical Findings:**
+
+1. **@view() Decorator Simplification:** Skip field-level @view() decorators in Phase 1. Element-level `view.add/remove` is sufficient for two-tier visibility. Only add decorators if three-tier filtering (visible/explored/hidden with numeric tags) becomes necessary.
+
+2. **Owned-Tile Cache → Phase 2:** Performance analysis shows full 16K tile scan per player per tick is unacceptable (131K iterations for 8 players). With owned-tile cache: ~5,600 iterations/tick. **Required from Phase 2 onward.** Trivial to implement: `Map<sessionId, Set<number>>` updated in tickClaiming(), spawnHQ(), builder build-complete.
+
+3. **Tile Access Pattern Breaking Change:** With StateView filtering active, `state.tiles.at(y * mapWidth + x)` returns wrong tile. GridRenderer already uses per-tile `x`/`y` fields (safe). Must audit and migrate CreatureRenderer, InputHandler for index-based accesses.
+
+4. **Watchtower Constants Required:** Add to shared/src/constants.ts:
+   - COST_WOOD: 15, COST_STONE: 10
+   - BUILD_TIME_TICKS: 24
+   - VISION_RADIUS: 8
+   - MAX_PER_PLAYER: 3
+
+**Performance Assessment:**
+- Typical visibility tick: 4-8ms (8 players, late game)
+- Day/night transition spike: 15-20ms (all players' radii change simultaneously)
+- Memory: ~1 MB (8 players' visibility sets) — negligible
+- Tick budget: 250ms at 4 Hz — safe
+
+**Integration Safety:**
+- Creature AI unaffected (operates on full server state)
+- Builder pathfinding unaffected (uses server-authoritative data)
+- Territory barriers unaffected (wildlife still blocked)
+- Tick ordering safe if visibility runs last (code comment recommended)
+
+**Must-Fix Before Implementation:**
+1. Skip @view() field decorators (simplification)
+2. Merge owned-tile cache into Phase 2
+3. Add WATCHTOWER constants
+4. Add minimum camera bounds padding (5×5 explored area bad UX at low zoom)
+
+**Should-Fix:**
+5. Watchtower max-per-player validation
+6. Document "explored shows last-known structures" semantics
+7. Consider batch fog overlay rendering (single Graphics vs. per-tile)
+
+**User Decision Compatibility:**
+- **Destructible Watchtowers:** Automatically handled by tickVisibility() — no special logic needed
+- **Alliance Shared Vision:** Requires multiplying view.add() calls by alliance size. Benchmarking needed before 8-player test.
+- **Structure Silhouettes:** Client-side caching of structureType. Shows last-known structures. No server changes.
+
+**Reviewer Confidence:** "Architecturally sound. Creature AI, territory, builder systems verified as unaffected."
+
+
+## 2026-03-07: Fog of War — Game Mechanics Design (Hal)
+
+**Author:** Hal (Lead)  
+**Date:** 2026-03-07  
+**Status:** DESIGN — Comprehensive game mechanics specification  
+**Depends on:** Per-Player State Filtering (hal-colyseus-filter-design.md)  
+**Implements:** #16 (Fog of War)
+
+### Overview
+
+Complete fog of war system with 5 vision sources, 3 fog states (unexplored/explored/visible), day/night modifiers, and watchtower structure.
+
+**Vision Sources:**
+1. **Territory Edge Visibility** — 3-tile radius from owned territory perimeter (not interior)
+2. **HQ Bonus Visibility** — 5-tile radius from HQ center (larger than territory edge)
+3. **Pawn Builder Visibility** — 4-tile radius from each builder position (mobile scouts)
+4. **Allied Creature Vision** — Tamed creatures provide vision using their detectionRadius (4 tiles for herbivores, 6 for carnivores)
+5. **Watchtower (Observation Post)** — 8-tile radius, new structure type; costs 15W/10S, takes 24 ticks to build, max 3 per player
+
+**Fog States:**
+- **Unexplored (black):** Tile not sent to client; no data visible
+- **Explored (dimmed):** Tile sent once, now removed from view; terrain visible, no live data
+- **Visible (clear):** Tile actively in player's StateView; all real-time data sent
+
+**Day/Night System:**
+- Day: Full visibility radius
+- Dawn/Dusk: −1 radius penalty
+- Night: −2 radius penalty (minimum radius floor of 1)
+- Minimum radius: No source drops below radius 1 (always see tile you're on + neighbors)
+
+**Implementation Plan:**
+- Phase 1: Add @view() decorators to TileState fields
+- Phase 2: Implement tickVisibility() with visibility computation
+- Phase 3: Add owned-tile index cache optimization
+- Phase 4: Client-side rendering and camera bounds
+
+---
+
+## 2026-03-07: Per-Player State Filtering Design (Hal)
+
+**Author:** Hal (Lead)  
+**Date:** 2026-03-07  
+**Status:** DESIGN — Server-side filtering foundation  
+**Implements:** #32 (Per-Player State Filtering)  
+**Blocks:** #16 (Fog of War implementation)
+
+### Critical Finding
+
+The issue title references `.filter()`, but that API is deprecated in Colyseus ≥ 0.16. Current stack (0.17, @colyseus/schema 4.0.16) uses **StateView + @view()** decorator pattern.
+
+### Architecture
+
+**StateView mechanism:**
+1. `@view()` decorator marks Schema fields as visibility-controlled
+2. Adding `@view()` to any field sets `hasFilters = true` globally on TypeContext, activating per-client encoding
+3. `client.view = new StateView()` assigns per-client view in onJoin
+4. `view.add(schemaInstance)` makes instance visible; `view.remove()` hides it
+5. Built-in `$filter` on ArraySchema/MapSchema checks `view.isChangeTreeVisible()` (O(1) WeakSet lookup)
+
+**Schema changes:**
+- **TileState static fields** (always sent when tile in view): type, x, y, fertility, moisture
+- **TileState dynamic fields** (only sent when actively visible, marked with @view()): resourceType, resourceAmount, resourceAmount, shapeHP, ownerID, claimProgress, claimingPlayerID, isHQTerritory, structureType
+- **GameState:** No @view() on collections; element-level filtering via StateView
+
+**Server data structures (in GameRoom):**
+- `playerViews: Map<sessionId, StateView>` — per-client view
+- `visibleTiles: Map<sessionId, Set<number>>` — visible tile indices per player
+
+**Visibility tick function:**
+```
+tickVisibility():
+  For each player:
+    Compute newVisibleSet from territory, HQ, pawns, creatures, watchtowers
+    Diff against previousVisibleSet
+    view.add/remove() as needed
+    Update creature visibility
+```
+
+---
+
+## 2026-03-07: Review — Per-Player State Filtering (Pemulis)
+
+**Reviewer:** Pemulis (Systems Dev)  
+**Date:** 2026-03-07  
+**Design:** hal-colyseus-filter-design.md  
+**Verdict:** APPROVE WITH NOTES
+
+### Summary
+
+Hal's design is architecturally correct. StateView + @view() pattern matches @colyseus/schema@4.0.16 source code exactly. No simulation-breaking issues.
+
+### Key Findings
+
+✅ **Colyseus API Accuracy:** Verified against installed schema source code. All API claims confirmed correct.
+
+✅ **Creature AI Compatible:** No race conditions. Tick ordering correct (tickVisibility runs last after all game systems).
+
+⚠️ **Issue #1 — Performance (Phase 2):** Owned-tile index cache should be merged into Phase 2. Without cache, full 16K tile scan per player costs 3.5-4.5ms per tick, creating CPU spikes. Cache is trivial to add (update in tickClaiming() and spawnHQ()).
+
+⚠️ **Issue #2 — UX Gap:** Player-spawned pawns should get immediate `view.add()` in handleSpawnPawn() to avoid 1-second visibility lag. One line of code.
+
+⚠️ **Issue #3 — Client Breaking Change:** ArraySchema index-based access will break. Client accesses tiles via `state.tiles.at(y * mapWidth + x)`, but with filtering, indices don't correspond to coordinates anymore. Client must switch to coordinate-based access (Map<number, TileState>, sparse array, or iterate+match). MUST communicate to Gately before implementation.
+
+### Verdict
+
+Architecturally correct. Three items are implementation refinements, not blockers.
+
+---
+
+## 2026-03-07: Review — Per-Player State Filtering (Steeply)
+
+**Reviewer:** Steeply (Tester)  
+**Date:** 2026-03-07  
+**Design:** hal-colyseus-filter-design.md  
+**Verdict:** APPROVE WITH NOTES
+
+### Summary
+
+Design is solid and well-researched. StateView + @view() is the correct API. Architecture is testable with existing infrastructure. Several edge cases and one high-risk item need attention.
+
+### Testability
+
+✅ **StateView works in test context:** No Colyseus server dependency needed. `new StateView()` works standalone. Object.create(GameRoom.prototype) pattern continues to work.
+
+✅ **Existing 318 tests should not break:** @view() only affects encoding (which tests don't call), not schema field access.
+
+### Edge Cases Identified
+
+- **No reconnection handling:** If allowReconnection() ever added, visibility state must be rebuilt
+- **Mid-game join timing:** onJoin runs ~1.6ms for visibility scan; acceptable but should document
+- **Creature spawn visibility gap:** New creatures aren't visible until next tickVisibility() (up to 4 ticks / 1 second)
+- **Night→Day bulk operation:** Radius expansion for all players can spike 64K tile operations; consider staggering per-player updates
+- **Tile ownership change lag:** Claimer can't see their own claim progress for up to 1 second; consider forcing view.add() on ownership change
+
+### New Risks
+
+- **R10 (Tick ordering fragility):** tickVisibility MUST be last. Add code comment to prevent future developers breaking this.
+- **R11 (@view() global activation):** hasFilters flag is global. Verify empirically with full test suite after adding @view() decorators.
+
+### Test Plan
+
+30+ new tests recommended:
+- Phase 1 (Schema + StateView): 8 tests (decorator compatibility, view.add/remove, player management)
+- Phase 2 (Visibility engine): 18+ tests (territory visibility, creatures, day/night, multi-player, timing)
+
+### Verdict
+
+Approve with conditions:
+1. Add R10 (tick ordering) as code comment where tickVisibility added
+2. Document reconnection stance explicitly
+3. Show `computeInitialVisibility()` implementation
+4. Run full 318-test suite as regression gate after @view() decorators
+5. Implement creature spawn visibility immediately on spawn (don't wait for next tick)
+6. Implement tile ownership change visibility immediately
+7. Stagger per-player visibility updates for day/night transitions (optional, nice-to-have)
+
+---
+
+## 2026-03-07: Fog of War — Client Rendering & Camera Design (Gately)
+
+**Author:** Gately (Game Dev/Frontend)  
+**Date:** 2026-03-07  
+**Status:** DESIGN — Client-side rendering specification  
+**Depends on:** hal-colyseus-filter-design.md (server-side StateView filtering)  
+**Implements:** #16 (Fog of War — client rendering), User directive (camera restriction)
+
+### Overview
+
+Client-side architecture for fog rendering, tile visibility state tracking, and camera bounds. Zero new server APIs beyond Hal's StateView filtering.
+
+### Tile Visibility Derivation
+
+Client derives visibility state from Colyseus sync lifecycle (no explicit server field):
+- Tile appears in state → **Visible**
+- Tile removed from state → **Explored** (cache terrain data before removal)
+- Tile never received → **Unexplored** (default)
+- Tile re-appears → **Visible** again
+
+### ExploredTileCache
+
+Client-side memory of terrain data for tiles no longer in StateView.
+
+**Interface:**
+```
+cacheTile(tile) — store terrain data when server sends tile
+has(x, y) — check if tile was ever seen
+get(x, y) — retrieve cached terrain data
+keys() — all explored tile indices (for bounds computation)
+```
+
+**Memory cost:** Full 128×128 explored = 16,384 tiles × 40 bytes = ~655 KB. Negligible.
+
+### FogManager
+
+Centralized coordinator for tile visibility, fog overlays, and camera bounds.
+
+**Responsibilities:**
+1. Track per-tile fog state (unexplored / explored / visible)
+2. Manage fog overlay PixiJS Container (black for unexplored, dimmed for explored)
+3. Compute explored bounding box for camera bounds
+4. Provide `isExplored(x, y)` and `isVisible(x, y)` API
+
+**Fog overlays:**
+- Unexplored: Solid black
+- Explored: Dimmed terrain (alpha 0.3 or similar)
+- Visible: Normal brightness (no overlay)
+
+### Camera Bounds Integration
+
+Camera bounds are dynamically clamped to explored bounding box (computed from ExploredTileCache.keys()). Updates as player explores new areas.
+
+### Integration with Existing Systems
+
+- **GridRenderer:** Render visible tiles normally, explored tiles dimmed, skip unexplored
+- **CreatureRenderer:** No changes needed; StateView ensures server only sends visible creatures
+- **InputHandler:** Clamp camera bounds to explored bounding box
+- **Tile access pattern change:** ⚠️ BREAKING CHANGE — must switch from index-based (`state.tiles.at(y * mapWidth + x)`) to coordinate-based access. Use ExploredTileCache or maintain coordinate-based tile Map.
+
+### Verdict
+
+Design is complete and reactive. Ready for implementation once Hal's StateView filtering is in place.
+
+
+---
+
+## 2026-03-07: Fog of War — Phase A Implementation Complete
+
+**By:** Pemulis, Gately, Steeply  
+**Date:** 2026-03-07  
+**Status:** DECISION — Phase A fog of war system delivered and tested
+
+**What was implemented:**
+
+1. **Server visibility computation** (Pemulis):
+   - `server/src/rooms/visibility.ts` with `computeVisibleTiles(state, playerId): Set<number>`
+   - Three vision sources: HQ center (radius 5), territory edge tiles (radius 3), pawn builders (radius 4)
+   - Manhattan distance for circle fill; day/night modifiers applied
+   - StateView integration: `initPlayerView()` in onJoin, `cleanupPlayerView()` in onLeave, `tickFogOfWar()` every 2 ticks
+   - Constants: FOG_OF_WAR + WATCHTOWER blocks in shared/constants.ts
+   - Types: FogState enum in shared/types.ts (Unexplored=0, Explored=1, Visible=2)
+
+2. **Client fog rendering** (Gately):
+   - `client/src/renderer/ExploredTileCache.ts` — caches tileType + structureType on tile onAdd, retains after removal
+   - GridRenderer fog overlay layer with three visual states: black (unexplored), dimmed (explored), transparent (visible)
+   - Camera bounds clamping with 2-tile padding, 10-tile minimum extent, smooth lerp
+   - No changes to CreatureRenderer or InputHandler
+
+3. **Test coverage** (Steeply):
+   - 26 tests in server/src/__tests__/fog-of-war.test.ts
+   - Full coverage: HQ vision, edge detection, pawn vision, day/night modifiers, StateView lifecycle, multi-player scenarios, edge cases
+   - All 372 tests passing (26 new + 346 existing)
+   - Key finding: Object.create(GameRoom.prototype) pattern requires manual playerViews initialization in tests
+
+**Design decisions:**
+
+1. **Manhattan distance** (not Euclidean) — matches grid-based world
+2. **Cache-on-onAdd** for ExploredTileCache — prevents data loss
+3. **No owned-tile cache** — deferred to Phase 2 (not critical for 64×64)
+4. **No `@view()` decorators** — element-level add/remove sufficient for two-tier visibility
+5. **Tick interval 2** for visibility updates — balances responsiveness vs. CPU cost
+6. **StateView assignment in onJoin** — after spawnHQ() to ensure HQ exists
+
+**Rationale:**
+
+Manhattan distance is standard for grid-based games. Cache-on-onAdd prevents losing terrain data when tile exits StateView. Two-tier visibility (visible vs. not visible) doesn't need per-field filtering; element-level visibility is cleaner. Staggered updates prevent CPU spike on large player bases. Test suite validated all edge cases and integration points.
+
+**Integration notes:**
+
+- Server filters tiles per player via StateView; client receives only visible + explored tiles
+- Client ExploredTileCache preserves terrain after visibility loss (fog semantics)
+- No client-side code changes needed for server deployment — fog rendering automatically activates once StateView filtering lands
+- Camera bounds accessible via grid.exploredCache for HUD features (e.g., explored tile count)
+
+**Performance:** 372 tests pass with zero lint errors. No breaking changes to existing systems.
+
+**Next phase (Phase B):**
+- Alliance shared vision union semantics
+- Watchtower destruction + vision loss mechanics
+- Owned-tile cache optimization for 128×128 maps
+- Day/night transition staggering (CPU mitigation)
+# Decision: @view() Decorator Required for StateView Filtering
+
+**Author:** Pemulis (Systems Dev)  
+**Date:** 2025-07-25  
+**Status:** Implemented  
+**Affects:** Server (GameState schema), all team members working with Colyseus state sync
+
+## Context
+
+The Phase A fog-of-war implementation wired StateView correctly (view.add/remove, client.view assignment, tickFogOfWar) but tiles were not being filtered per-player. Players could see the entire map.
+
+## Decision
+
+Added `@view()` decorator to the `tiles` field in `GameState`. This reverses the earlier decision of "NO @view() field decorators."
+
+## Why
+
+In Colyseus 0.17, `@view()` on a collection field is the **required activation mechanism** for element-level StateView filtering. Without it:
+- `encoder.context.hasFilters` stays `false`
+- `SchemaSerializer` ignores `client.view` entirely
+- Full state is broadcast to all clients
+
+The earlier "no @view" decision was based on a misunderstanding — `@view()` on the field doesn't filter the field itself, it enables per-element filtering within the collection via `view.add(item)` / `view.remove(item)`.
+
+## Impact
+
+- **Gately (Client):** No client changes needed. The fog overlay code already reacts to which tiles exist in Colyseus state. With filtering active, `state.tiles.forEach` only iterates visible tiles, and the fog system handles the rest.
+- **Server:** Non-@view fields (players, creatures, tick, etc.) are still sent to all clients via the shared encoding pass. Only tiles are per-client filtered.
+- **Tests:** All 372 tests pass unchanged. Test code accesses state directly, not through the encoding pipeline.
+
+## Future Considerations
+
+If creatures or players need per-client filtering (e.g., hiding enemy pawns in fog), add `@view()` to `creatures` MapSchema and manage creature visibility in the StateView alongside tiles.

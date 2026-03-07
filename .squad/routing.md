@@ -23,6 +23,7 @@ How to decide who handles what.
 | `squad:gately` | Rendering, UI, game loop work | Gately |
 | `squad:pemulis` | Game systems, simulation, AI work | Pemulis |
 | `squad:steeply` | Testing, quality work | Steeply |
+| `squad:copilot` | Single-file fixes, test writing, scoped implementation | @copilot |
 
 ## Rules
 

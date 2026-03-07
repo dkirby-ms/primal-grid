@@ -10,6 +10,13 @@ const ZOOM_LEVELS = [
   2.0, 2.25, 2.5, 2.75, 3.0,
 ];
 
+/** Minimum explored area padding in tiles for comfortable scrolling. */
+const BOUNDS_PADDING = 2;
+/** Minimum viewport extent in tiles so a 5×5 HQ area isn't claustrophobic. */
+const MIN_BOUNDS_EXTENT = 10;
+/** Lerp speed for smooth bounds expansion (0–1 per frame). */
+const BOUNDS_LERP_SPEED = 0.08;
+
 export class Camera {
   private target: Container;
   private viewWidth: number;
@@ -19,6 +26,10 @@ export class Camera {
   private keys = { w: false, a: false, s: false, d: false };
   private dragging = false;
   private lastMouse = { x: 0, y: 0 };
+
+  // Explored-area camera bounds (in pixels). Null = use full map bounds.
+  private exploredBoundsTarget: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
+  private exploredBoundsCurrent: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
 
   constructor(target: Container, viewWidth: number, viewHeight: number, mapTiles: number) {
     this.target = target;
@@ -82,8 +93,43 @@ export class Camera {
     this.dragging = false;
   }
 
+  /**
+   * Update the explored bounding box (in tile coordinates).
+   * The camera will smoothly lerp to the new bounds.
+   */
+  public setExploredBounds(minTileX: number, minTileY: number, maxTileX: number, maxTileY: number): void {
+    // Apply padding and enforce minimum extent
+    const centerX = (minTileX + maxTileX) / 2;
+    const centerY = (minTileY + maxTileY) / 2;
+    const halfW = Math.max((maxTileX - minTileX) / 2 + BOUNDS_PADDING, MIN_BOUNDS_EXTENT / 2);
+    const halfH = Math.max((maxTileY - minTileY) / 2 + BOUNDS_PADDING, MIN_BOUNDS_EXTENT / 2);
+
+    const mapTiles = this.mapPixelSize / TILE_SIZE;
+    const padMinX = Math.max(0, centerX - halfW) * TILE_SIZE;
+    const padMinY = Math.max(0, centerY - halfH) * TILE_SIZE;
+    const padMaxX = Math.min(mapTiles, centerX + halfW + 1) * TILE_SIZE;
+    const padMaxY = Math.min(mapTiles, centerY + halfH + 1) * TILE_SIZE;
+
+    this.exploredBoundsTarget = { minX: padMinX, minY: padMinY, maxX: padMaxX, maxY: padMaxY };
+
+    // First-time: snap immediately instead of lerping from zero
+    if (!this.exploredBoundsCurrent) {
+      this.exploredBoundsCurrent = { ...this.exploredBoundsTarget };
+    }
+  }
+
   /** Call once per frame to apply WASD panning. */
   public update(): void {
+    // Smoothly lerp camera bounds toward target
+    if (this.exploredBoundsTarget && this.exploredBoundsCurrent) {
+      const t = this.exploredBoundsTarget;
+      const c = this.exploredBoundsCurrent;
+      c.minX += (t.minX - c.minX) * BOUNDS_LERP_SPEED;
+      c.minY += (t.minY - c.minY) * BOUNDS_LERP_SPEED;
+      c.maxX += (t.maxX - c.maxX) * BOUNDS_LERP_SPEED;
+      c.maxY += (t.maxY - c.maxY) * BOUNDS_LERP_SPEED;
+    }
+
     let dx = 0;
     let dy = 0;
     if (this.keys.w) dy += PAN_SPEED;
@@ -98,18 +144,45 @@ export class Camera {
     }
   }
 
-  /** Keep the viewport within map bounds. */
+  /** Keep the viewport within bounds (explored area if set, otherwise full map). */
   private clamp(): void {
     const scale = this.target.scale.x;
-    const worldW = this.mapPixelSize * scale;
-    const worldH = this.mapPixelSize * scale;
+    const b = this.exploredBoundsCurrent;
 
-    // Don't let the user scroll past the edges
-    const minX = this.viewWidth - worldW;
-    const minY = this.viewHeight - worldH;
+    if (b) {
+      // Clamp to explored bounding box
+      const worldMinX = b.minX * scale;
+      const worldMinY = b.minY * scale;
+      const worldMaxX = b.maxX * scale;
+      const worldMaxY = b.maxY * scale;
+      const worldW = worldMaxX - worldMinX;
+      const worldH = worldMaxY - worldMinY;
 
-    this.target.position.x = Math.min(0, Math.max(minX, this.target.position.x));
-    this.target.position.y = Math.min(0, Math.max(minY, this.target.position.y));
+      if (worldW <= this.viewWidth) {
+        // Explored area fits in viewport — center it
+        this.target.position.x = this.viewWidth / 2 - (worldMinX + worldW / 2);
+      } else {
+        const maxPosX = -worldMinX;
+        const minPosX = this.viewWidth - worldMaxX;
+        this.target.position.x = Math.min(maxPosX, Math.max(minPosX, this.target.position.x));
+      }
+
+      if (worldH <= this.viewHeight) {
+        this.target.position.y = this.viewHeight / 2 - (worldMinY + worldH / 2);
+      } else {
+        const maxPosY = -worldMinY;
+        const minPosY = this.viewHeight - worldMaxY;
+        this.target.position.y = Math.min(maxPosY, Math.max(minPosY, this.target.position.y));
+      }
+    } else {
+      // Full map bounds (original behavior)
+      const worldW = this.mapPixelSize * scale;
+      const worldH = this.mapPixelSize * scale;
+      const minX = this.viewWidth - worldW;
+      const minY = this.viewHeight - worldH;
+      this.target.position.x = Math.min(0, Math.max(minX, this.target.position.x));
+      this.target.position.y = Math.min(0, Math.max(minY, this.target.position.y));
+    }
   }
 
   public resize(w: number, h: number): void {
