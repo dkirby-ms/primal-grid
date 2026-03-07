@@ -878,3 +878,14 @@ Pemulis: "Architecturally sound. StateView filtering handles creature visibility
 ### Next Steps
 
 Merge reviews to decisions.md. Hal's server-side filtering must complete first (prerequisite). Then proceed with client implementation, addressing tile access pattern migration and camera bounds padding.
+
+### Fog of War — Phase A Client Implementation (2026-03-07)
+
+Implemented full fog of war MVP rendering on `feature/fog-of-war` branch. All reviewer must-fixes addressed:
+
+- **ExploredTileCache** (`client/src/renderer/ExploredTileCache.ts`): Cache-on-onAdd (not onRemove, per Steeply's review). Stores `tileType` + `structureType` per tile. Tracks explored bounding box with dirty flag for camera integration. O(1) lookup by tile index.
+- **GridRenderer fog layer**: Pre-allocated `Graphics` per tile in `fogContainer`, added above territory but below creatures via container ordering. Three states: unexplored (solid black), explored (alpha 0.6 black + structure silhouette icons for hq/outpost/farm), visible (hidden overlay). Fog state updated in `bindToRoom` by diffing visible tile sets between frames.
+- **Camera bounds clamping**: Camera now has `setExploredBounds()` accepting tile-coordinate bounding box. Applies 2-tile padding, enforces minimum 10-tile extent (so 5×5 HQ start isn't claustrophobic), and lerps smoothly at 0.08/frame. Falls back to full map bounds when no explored bounds set. `main.ts` ticker pushes bounds from cache when dirty.
+- **Zero changes** to `CreatureRenderer.ts` or `InputHandler.ts`.
+- **Pattern**: Fog overlays follow the same pre-allocated Graphics-per-tile pattern as territory overlays. Structure silhouettes use PixiJS Text with emoji icons (same pattern as HQ markers).
+- **Compatibility**: Until Pemulis's server-side StateView filtering lands, all tiles arrive as visible → no fog effect. But all rendering code is ready for filtered state.
