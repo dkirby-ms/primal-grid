@@ -965,3 +965,19 @@ Coordinated work with Pemulis (Systems Dev) and Gately (Game Dev) on grave marke
 **Test Status:** 520 total tests (384 existing + 111 combat + 25 grave), all passing, 31 test files.
 **Branch:** squad/17-18-combat-system (ready for review)
 **Decisions Merged:** pemulis-grave-markers.md, gately-combat-visuals.md, steeply-grave-tests.md, steeply-combat-test-patterns.md, copilot-directive-2026-03-07T20-55-45Z.md.
+
+### Enemy Spawn Logging & Night Spawn Bug Discovery (2026-03-07)
+
+**Cross-Agent Update from Pemulis (Systems Dev):**
+
+Pemulis added game_log broadcasts for enemy spawn events and discovered a critical bug in the enemy spawning system.
+
+**Critical Bug:** `BASE_SPAWN_INTERVAL_TICKS` (480) equals the day-night cycle length (480). The spawn check `tick % 480 === 0` always fires at dawn (dayTick=0, phase 0%), but spawning is gated on night phase (65–100%). These conditions never overlap — **enemy bases cannot spawn**, blocking enemy mobiles.
+
+**For you (tests):** Once Pemulis fixes this (changing BASE_SPAWN_INTERVAL_TICKS to 120 or 200), plan to add regression tests for:
+1. Base spawns occurring during night phase
+2. Mobile spawns following base spawns
+3. Spawn tick alignment with day-night cycle
+
+**Test Status:** 520/520 tests pass; no regressions.
+**Decision:** Pemulis filed detailed bug report at .squad/decisions.md with fix recommendations and impact assessment.

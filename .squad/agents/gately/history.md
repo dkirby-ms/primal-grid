@@ -1102,3 +1102,17 @@ Pemulis implemented `?dev=1` URL parameter to disable fog of war during developm
 **Test Status:** 520/520 tests pass. The `onJoin()` signature now accepts an optional `options` parameter (backwards compatible — existing tests unaffected).
 
 **For you:** When debugging, use `?dev=1` in the URL to see the full map without fog. No code changes needed.
+
+### Enemy Spawn Logging & Night Spawn Bug Discovery (2026-03-07)
+
+**Cross-Agent Update from Pemulis (Systems Dev):**
+
+Pemulis added game_log broadcasts for enemy spawn events and discovered a critical bug in the enemy spawning system.
+
+**Relevant Finding:**
+`BASE_SPAWN_INTERVAL_TICKS` (480) equals the day-night cycle length (480), causing spawn checks to always land at dawn (dayTick=0), but the night-only gate prevents spawning. **Enemy bases cannot spawn.** This blocks enemy mobile spawns as well.
+
+**For you (client):** Once the server fix is deployed (changing BASE_SPAWN_INTERVAL_TICKS to 120 or 200), enemy bases and mobiles will start appearing at night. No client-side changes needed. The rendering code already handles creature spawning.
+
+**Test Status:** 520/520 tests pass; no regressions.
+**Decision:** Pemulis filed bug report at .squad/decisions.md with fix recommendations.
