@@ -1116,3 +1116,21 @@ Pemulis added game_log broadcasts for enemy spawn events and discovered a critic
 
 **Test Status:** 520/520 tests pass; no regressions.
 **Decision:** Pemulis filed bug report at .squad/decisions.md with fix recommendations.
+
+---
+
+## 2026-03-07 — Client ESLint Cleanup (3 Errors Resolved)
+
+**Session:** 2026-03-07T23:12:21Z  
+**Status:** IN PROGRESS (concurrent with Pemulis server fixes)  
+
+Resolving 3 client-side ESLint errors as part of team-wide lint cleanup effort (205 total errors).
+
+**Client-Side Fixes (Gately):**
+- **Files:** CombatEffects.ts, CreatureRenderer.ts, HudDOM.ts
+- **Scope:** Unused imports and variable cleanup
+- **Total Team Effort:** 202 server errors (Pemulis) + 3 client errors (Gately) = 205 resolved
+
+**Cross-Agent Coordination:** Spawned in parallel with Pemulis (Systems Dev). Logs merged by Scribe into unified session log.
+
+**Test Status:** Awaiting final test run post-fix.
