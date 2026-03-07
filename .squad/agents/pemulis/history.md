@@ -1198,3 +1198,72 @@ The `@view()` decorator on a collection field is NOT a "field-level filter" — 
 **isVisibilitySharedWithParent detail:** When `@view()` is on the parent field, child items get `isVisibilitySharedWithParent = false` (because `!fieldHasViewTag = false`). This means each item MUST be individually `view.add()`'d. Without `@view()`, items would auto-inherit parent visibility, defeating per-element filtering.
 
 **Tests:** All 372 tests pass. The `@view()` decorator only affects encoding metadata — test code that accesses state directly (via `room.state.tiles.at(i)`) is unaffected.
+
+---
+
+## Session 2026-03-07 — Combat System Implementation (Issues #17, #18)
+
+**Status:** SUCCESS
+**Branch:** `squad/17-18-combat-system` (from `dev`)
+**Output:** 5 new server modules, extended shared constants/types, GameRoom integration
+**Tests:** 384 passing (all existing tests green), 139 combat specs as .todo()
+
+### What Was Built
+
+- **shared/src/constants.ts** — ENEMY_BASE_TYPES, ENEMY_MOBILE_TYPES, PAWN_TYPES registries with full type defs. COMBAT constants (cooldowns). ENEMY_SPAWNING (replaces WAVE_SPAWNER). Type interfaces: EnemyBaseTypeDef, EnemyMobileTypeDef, PawnTypeDef.
+- **shared/src/types.ts** — isEnemyBase(), isEnemyMobile(), isPlayerPawn(), isCombatPawn() helpers.
+- **shared/src/messages.ts** — SpawnPawnPayload extended: pawnType accepts 'builder' | 'defender' | 'attacker'.
+- **server/src/rooms/enemyBaseAI.ts** — stepEnemyBase(): spawns mobiles from bases, night-only. EnemyBaseTracker for mobile ownership. onBaseDestroyed() despawns all child mobiles.
+- **server/src/rooms/enemyMobileAI.ts** — stepEnemyMobile(): FSM (seek_territory → move_to_target → attacking_tile). Targets non-HQ player tiles.
+- **server/src/rooms/combat.ts** — tickCombat(): 3-phase resolution (creature-vs-creature, tile damage, death/cleanup). Simultaneous symmetric damage. Base destruction awards resources. Uses attack cooldown tracking maps.
+- **server/src/rooms/defenderAI.ts** — stepDefender(): FSM (patrol → engage → returning). Territory-constrained. Targets enemy mobiles and carnivores within own territory.
+- **server/src/rooms/attackerAI.ts** — stepAttacker(): FSM (seek_target → move_to_target → attacking → returning). Prefers bases over mobiles. Sortie timer with home return.
+- **server/src/rooms/creatureAI.ts** — Extended dispatch for all new types. Updated isTileOpenForCreature: enemy mobiles + attackers can enter any tile, defenders stay in territory.
+- **server/src/rooms/GameRoom.ts** — tickEnemyBaseSpawning() (night-only, MIN_DISTANCE_FROM_HQ, MAX_BASES). tickCombat() wired. handleSpawnPawn() uses PAWN_TYPES registry. tickPawnUpkeep() handles all pawn types.
+- **server/src/rooms/visibility.ts** — All pawn types provide per-type visionRadius from PAWN_TYPES.
+
+### Architecture Decisions
+
+1. **WAVE_SPAWNER replaced by ENEMY_SPAWNING** — single constant group for all enemy spawning config.
+2. **Base destruction awards resources** — reward defined per base type in ENEMY_BASE_TYPES registry.
+3. **Enemy bases spawn at night only** — checked via `state.dayPhase !== DayPhase.Night`.
+4. **Lazy-init server-side Maps** — enemyBaseState, attackerState, creatureIdCounter all use lazy init guards to support `Object.create(GameRoom.prototype)` test pattern.
+5. **Combat cooldowns stored in module-level Maps** — not on CreatureState schema (server-only state).
+6. **PAWN_TYPES registry centralizes all pawn config** — existing flat PAWN constants retained for backward compat.
+
+### Key File Paths
+
+- Constants: `shared/src/constants.ts` (ENEMY_BASE_TYPES, ENEMY_MOBILE_TYPES, PAWN_TYPES, COMBAT, ENEMY_SPAWNING)
+- Type helpers: `shared/src/types.ts` (isEnemyBase, isEnemyMobile, isPlayerPawn, isCombatPawn)
+- Enemy base AI: `server/src/rooms/enemyBaseAI.ts`
+- Enemy mobile AI: `server/src/rooms/enemyMobileAI.ts`
+- Combat resolution: `server/src/rooms/combat.ts`
+- Defender AI: `server/src/rooms/defenderAI.ts`
+- Attacker AI: `server/src/rooms/attackerAI.ts`
+
+## Learnings
+- Module-level Maps (attackCooldowns, tileAttackCooldowns) in combat.ts persist across ticks but need cleanup on creature death to avoid memory leaks.
+- Enemy entities skip hunger/starvation — guarded by `isEnemyBase()/isEnemyMobile()` checks in tickCreatureAI.
+- Stamina config for enemy entities returns maxStamina=999, costPerMove=0 to prevent exhaustion state.
+- areHostile() function is the single source of truth for combat targeting rules — extend it for new entity types.
+
+### Cross-Agent Update: Gately Combat Client Rendering Complete (2026-03-07)
+
+Gately has completed steps 10-11 of Hal's architecture: client-side combat entity rendering and HUD spawn controls.
+
+**Key decision: Registry-Driven Rendering Pattern**
+- All combat entity display properties (icon, color, max HP) are sourced from shared registries (`ENEMY_BASE_TYPES`, `ENEMY_MOBILE_TYPES`, `PAWN_TYPES`), not hardcoded client-side.
+- The renderer uses `isEnemyBase()`, `isEnemyMobile()`, `isPlayerPawn()` type helpers from shared.
+- **Impact:** Adding a new enemy or pawn type only requires updating the shared registry. The client auto-renders it as long as it follows naming conventions and includes `icon` and `color` fields.
+
+**What's rendering now:**
+- Enemy bases as diamonds (1.5× scale, gold color)
+- Colored mobiles: red raider, purple hive, etc.
+- Defenders (blue), attackers (orange)
+- HP bars with registry-driven max values
+
+**Your next steps:**
+- Verify that your registry entries for enemy bases/mobiles include `icon` and `color` fields.
+- Ensure Steeply's combat tests verify that adding a new type to the registry auto-renders (no client changes needed).
+
+**All 384 tests pass; branch ready for review.**

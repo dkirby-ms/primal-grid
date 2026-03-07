@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { xpForNextLevel } from '@primal-grid/shared';
+import { xpForNextLevel, PAWN_TYPES, isEnemyBase, isEnemyMobile } from '@primal-grid/shared';
 
 /** Cost to spawn a builder pawn. */
 const BUILDER_COST_WOOD = 10;
@@ -31,6 +31,16 @@ export class HudDOM {
   private currentStone = 0;
   private currentBuilderCount = 0;
 
+  // Combat panel
+  private spawnDefenderBtn: HTMLButtonElement;
+  private spawnAttackerBtn: HTMLButtonElement;
+  private defenderCountEl: HTMLElement;
+  private attackerCountEl: HTMLElement;
+  private enemyBaseCountEl: HTMLElement;
+  private currentDefenderCount = 0;
+  private currentAttackerCount = 0;
+  private currentEnemyBaseCount = 0;
+
   /** HQ position for colony interactions. */
   public localHqX = 0;
   public localHqY = 0;
@@ -56,6 +66,15 @@ export class HudDOM {
     this.builderCountEl = document.getElementById('builder-count')!;
     this.spawnBuilderBtn = document.getElementById('spawn-builder-btn') as HTMLButtonElement;
     this.spawnBuilderBtn.addEventListener('click', () => this.onSpawnBuilder());
+
+    // Combat panel elements
+    this.defenderCountEl = document.getElementById('defender-count')!;
+    this.attackerCountEl = document.getElementById('attacker-count')!;
+    this.enemyBaseCountEl = document.getElementById('enemy-base-count')!;
+    this.spawnDefenderBtn = document.getElementById('spawn-defender-btn') as HTMLButtonElement;
+    this.spawnAttackerBtn = document.getElementById('spawn-attacker-btn') as HTMLButtonElement;
+    this.spawnDefenderBtn.addEventListener('click', () => this.onSpawnPawn('defender'));
+    this.spawnAttackerBtn.addEventListener('click', () => this.onSpawnPawn('attacker'));
   }
 
   /** Update the level/XP display. */
@@ -84,11 +103,36 @@ export class HudDOM {
     this.room.send('spawn_pawn', { pawnType: 'builder' });
   }
 
+  /** Handle spawn defender/attacker button click. */
+  private onSpawnPawn(pawnType: 'defender' | 'attacker'): void {
+    if (!this.room) return;
+    const def = PAWN_TYPES[pawnType];
+    if (!def) return;
+    if (this.currentWood < def.cost.wood || this.currentStone < def.cost.stone) return;
+    const count = pawnType === 'defender' ? this.currentDefenderCount : this.currentAttackerCount;
+    if (count >= def.maxCount) return;
+    this.room.send('spawn_pawn', { pawnType });
+  }
+
   /** Update spawn button enabled/disabled state. */
   private updateSpawnButton(): void {
     const canAfford = this.currentWood >= BUILDER_COST_WOOD && this.currentStone >= BUILDER_COST_STONE;
     const underCap = this.currentBuilderCount < MAX_BUILDERS;
     this.spawnBuilderBtn.disabled = !canAfford || !underCap;
+
+    // Defender button
+    const defDef = PAWN_TYPES['defender'];
+    if (defDef) {
+      const canAffordDef = this.currentWood >= defDef.cost.wood && this.currentStone >= defDef.cost.stone;
+      this.spawnDefenderBtn.disabled = !canAffordDef || this.currentDefenderCount >= defDef.maxCount;
+    }
+
+    // Attacker button
+    const atkDef = PAWN_TYPES['attacker'];
+    if (atkDef) {
+      const canAffordAtk = this.currentWood >= atkDef.cost.wood && this.currentStone >= atkDef.cost.stone;
+      this.spawnAttackerBtn.disabled = !canAffordAtk || this.currentAttackerCount >= atkDef.maxCount;
+    }
   }
 
   private static readonly PHASE_EMOJI: Record<string, string> = {
@@ -154,7 +198,7 @@ export class HudDOM {
         });
       }
 
-      // Creature counts (including builder pawns)
+      // Creature counts (including builder pawns and combat entities)
       const creatures = state['creatures'] as
         | { forEach: (cb: (creature: Record<string, unknown>, key: string) => void) => void }
         | undefined;
@@ -162,20 +206,39 @@ export class HudDOM {
         let herbs = 0;
         let carns = 0;
         let builders = 0;
+        let defenders = 0;
+        let attackers = 0;
+        let enemyBases = 0;
         creatures.forEach((creature) => {
           const t = (creature['creatureType'] as string) ?? 'herbivore';
           const ownerID = (creature['ownerID'] as string) ?? '';
           if (t === 'pawn_builder' && ownerID === this.localSessionId) {
             builders++;
+          } else if (t === 'pawn_defender' && ownerID === this.localSessionId) {
+            defenders++;
+          } else if (t === 'pawn_attacker' && ownerID === this.localSessionId) {
+            attackers++;
           } else if (t === 'carnivore') {
             carns++;
           } else if (t === 'herbivore') {
             herbs++;
           }
+          if (isEnemyBase(t)) enemyBases++;
         });
         this.creatureCounts.textContent = `🦕 ${herbs}  🦖 ${carns}`;
         this.currentBuilderCount = builders;
         this.builderCountEl.textContent = `Builders: ${builders}/${MAX_BUILDERS}`;
+
+        // Combat counts
+        const defDef = PAWN_TYPES['defender'];
+        const atkDef = PAWN_TYPES['attacker'];
+        this.currentDefenderCount = defenders;
+        this.currentAttackerCount = attackers;
+        this.currentEnemyBaseCount = enemyBases;
+        this.defenderCountEl.textContent = `🛡 ${defenders}/${defDef?.maxCount ?? 3}`;
+        this.attackerCountEl.textContent = `⚔ ${attackers}/${atkDef?.maxCount ?? 2}`;
+        this.enemyBaseCountEl.textContent = enemyBases > 0 ? `⛺ ${enemyBases} active` : 'No threats';
+
         this.updateSpawnButton();
       }
     });

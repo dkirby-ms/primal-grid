@@ -909,3 +909,29 @@ Your tests confirm the client-side implementation assumptions are correct. No re
 - **Pattern:** All specs use `it.todo()` — zero implementation, pure behavioral contracts from issue requirements. Will need helpers (addEnemyBase, addMobile, addDefender, addAttacker) once architecture lands.
 - **Pre-existing failure:** `water-depth.test.ts` "water tiles exist on map" — unrelated to combat work, was failing before.
 - **Suite status:** 383 passing + 139 todo + 1 pre-existing failure = no regressions.
+
+### Cross-Agent Update: Gately Combat Client Rendering Complete (2026-03-07)
+
+Gately has completed steps 10-11 of Hal's architecture: client-side combat entity rendering and HUD spawn controls. All 384 tests pass; client typechecks clean.
+
+**What this means for you:**
+- Enemy bases, mobiles, defenders, and attackers are now rendered on the client.
+- The HUD includes spawn buttons and a threat counter.
+- Rendering is **registry-driven** (uses shared type helpers and registries, not hardcoded constants).
+
+**Your work (139 .todo() tests):**
+- Combat AI tests in enemyBaseAI, enemyMobileAI, combat, defenderAI, attackerAI modules.
+- Registry-driven rendering means new tests should verify that rendering respects the registry (e.g., a new enemy type auto-renders without client changes).
+
+**Branch:** `squad/17-18-combat-system` ready for review.
+
+### Combat System Tests — Issues #17 & #18 (2026-03-10)
+
+- **111 real tests** implemented from 139 todo specs. 28 specs consolidated where implementation differed from anticipatory specs. Total suite: **495 tests, all passing.**
+- **Combat cooldown gotcha:** `attackCooldowns` and `tileAttackCooldowns` are module-level Maps in `combat.ts` that persist across tests. Default `?? 0` means the first attack tick must be ≥ `ATTACK_COOLDOWN_TICKS` (4) for creature combat and ≥ `TILE_ATTACK_COOLDOWN_TICKS` (8) for tile attacks. Always use `FIRST_COMBAT_TICK` or `FIRST_TILE_TICK` helpers.
+- **Pair-based combat resolution:** `damagePairs` uses sorted ID pairs (`[a.id, b.id].sort().join(":")`). The same creature CAN appear in multiple pairs per tick (e.g., a defender fights two adjacent mobs in the same tick). This is by design — it's not AoE, it's independent pair resolution.
+- **Base spawning requires room initialization:** `Object.create(GameRoom.prototype)` mock needs `nextCreatureId`, `creatureIdCounter`, `enemyBaseState`, `attackerState` set manually. Without these, `tickEnemyBaseSpawning()` crashes.
+- **Enemy base ownerID is empty string** (not "enemy" sentinel). Discriminate enemy entities by `creatureType` prefix (`enemy_base_*`, `enemy_scout/raider/swarm`).
+- **Defenders are territory-locked:** `moveTowardInTerritory` only moves onto tiles where `tile.ownerID === creature.ownerID`. `wanderInTerritory` uses the same constraint. Defenders in `returning` state use unrestricted `moveToward` to get back.
+- **Attacker sortie timeout:** When `returnTick` expires, attacker transitions to "returning" then walks home. If already at home tile (dist ≤ 1), it immediately transitions to "seek_target" — tests must place attacker far from home to verify the returning state.
+- **Test file:** `server/src/__tests__/combat-system.test.ts` — 2100+ lines covering enemy bases, mobiles, defenders, attackers, combat resolution, upkeep, and edge cases.

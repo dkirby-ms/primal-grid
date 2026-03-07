@@ -1,14 +1,26 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { TILE_SIZE } from './GridRenderer.js';
-import { CREATURE_TYPES, PAWN } from '@primal-grid/shared';
+import {
+  CREATURE_TYPES,
+  PAWN,
+  ENEMY_BASE_TYPES,
+  ENEMY_MOBILE_TYPES,
+  PAWN_TYPES,
+  isEnemyBase,
+  isEnemyMobile,
+  isPlayerPawn,
+} from '@primal-grid/shared';
 import type { Room } from '@colyseus/sdk';
 
 const CREATURE_RADIUS = 6;
+const ENEMY_BASE_RADIUS = 9;
 
 // Base colors per creature type
 const HERBIVORE_COLOR = 0x4caf50;
 const CARNIVORE_COLOR = 0xf44336;
 const BUILDER_COLOR = 0x42a5f5;
+const DEFENDER_COLOR = 0x2196f3;
+const ATTACKER_COLOR = 0xff9800;
 
 // Brighter variants for Eat state
 const HERBIVORE_EAT_COLOR = 0x81c784;
@@ -26,10 +38,12 @@ interface CreatureEntry {
   emojiText: Text;
   indicator: Text;
   progressBar: Graphics | null;
+  hpBar: Graphics | null;
   lastType: string;
   lastState: string;
   lastHealthLow: boolean;
   lastBuildProgress: number;
+  lastHealthPct: number;
   tileX: number;
   tileY: number;
   displayX: number;
@@ -44,6 +58,9 @@ export class CreatureRenderer {
   /** Latest creature counts, readable by HUD. */
   public herbivoreCount = 0;
   public carnivoreCount = 0;
+  public defenderCount = 0;
+  public attackerCount = 0;
+  public enemyBaseCount = 0;
 
   constructor() {
     this.container = new Container();
@@ -62,6 +79,9 @@ export class CreatureRenderer {
       const seen = new Set<string>();
       let herbs = 0;
       let carns = 0;
+      let defenders = 0;
+      let attackers = 0;
+      let enemyBases = 0;
 
       creatures.forEach((creature, key) => {
         const id = (creature['id'] as string) ?? key;
@@ -78,9 +98,14 @@ export class CreatureRenderer {
 
         if (creatureType === 'carnivore') carns++;
         else if (creatureType === 'herbivore') herbs++;
+        else if (creatureType === 'pawn_defender' && ownerID === this.localSessionId) defenders++;
+        else if (creatureType === 'pawn_attacker' && ownerID === this.localSessionId) attackers++;
+        if (isEnemyBase(creatureType)) enemyBases++;
 
         const isBuilder = creatureType === 'pawn_builder';
+        const isLocalPawn = isPlayerPawn(creatureType) && ownerID === this.localSessionId;
         const isLocalBuilder = isBuilder && ownerID === this.localSessionId;
+        const isCombatEntity = isEnemyBase(creatureType) || isEnemyMobile(creatureType) || creatureType === 'pawn_defender' || creatureType === 'pawn_attacker';
 
         let entry = this.entries.get(id);
         if (!entry) {
@@ -104,6 +129,15 @@ export class CreatureRenderer {
           entry.lastHealthLow = healthLow;
         }
 
+        // HP bar for combat entities
+        if (isCombatEntity) {
+          const maxHealth = this.getMaxHealth(creatureType);
+          const healthPct = maxHealth > 0 ? Math.min(1, Math.max(0, health / maxHealth)) : 1;
+          if (Math.abs(healthPct - entry.lastHealthPct) > 0.01 || healthPct < 1) {
+            this.updateHpBar(entry, healthPct, creatureType);
+          }
+        }
+
         // Build progress indicator for builders
         if (isBuilder && buildProgress > 0) {
           this.updateBuildProgress(entry, buildProgress);
@@ -122,6 +156,9 @@ export class CreatureRenderer {
 
       this.herbivoreCount = herbs;
       this.carnivoreCount = carns;
+      this.defenderCount = defenders;
+      this.attackerCount = attackers;
+      this.enemyBaseCount = enemyBases;
 
       // Remove creatures that despawned
       for (const [id, entry] of this.entries) {
@@ -142,9 +179,10 @@ export class CreatureRenderer {
     this.drawStateBackground(graphic, creatureType, currentState, isLocalBuilder);
     container.addChild(graphic);
 
-    // Emoji icon as primary visual
+    // Emoji icon as primary visual (enemy bases render 1.5× larger)
+    const isBase = isEnemyBase(creatureType);
+    const fontSize = isBase ? ENEMY_BASE_RADIUS * 2.5 : CREATURE_RADIUS * 2.5;
     const icon = this.getIcon(creatureType, isLocalBuilder);
-    const fontSize = CREATURE_RADIUS * 2.5;
     const emojiText = new Text({
       text: icon,
       style: { fontSize, fontFamily: 'sans-serif' },
@@ -160,7 +198,7 @@ export class CreatureRenderer {
     indicator.position.set(0, -CREATURE_RADIUS - 2);
     container.addChild(indicator);
 
-    this.updateIndicator(indicator, currentState, creatureType === 'pawn_builder');
+    this.updateIndicator(indicator, currentState, creatureType);
 
     return {
       container,
@@ -168,10 +206,12 @@ export class CreatureRenderer {
       emojiText,
       indicator,
       progressBar: null,
+      hpBar: null,
       lastType: creatureType,
       lastState: currentState,
       lastHealthLow: false,
       lastBuildProgress: 0,
+      lastHealthPct: 1,
       tileX: 0,
       tileY: 0,
       displayX: 0,
@@ -186,7 +226,7 @@ export class CreatureRenderer {
     if (entry.emojiText.text !== icon) {
       entry.emojiText.text = icon;
     }
-    this.updateIndicator(entry.indicator, currentState, creatureType === 'pawn_builder');
+    this.updateIndicator(entry.indicator, currentState, creatureType);
     entry.lastType = creatureType;
     entry.lastState = currentState;
   }
@@ -195,17 +235,56 @@ export class CreatureRenderer {
     if (creatureType === 'pawn_builder') {
       return isLocalBuilder ? '🔨' : '⬜';
     }
+    // Combat pawn icons from PAWN_TYPES registry
+    if (creatureType === 'pawn_defender') return PAWN_TYPES['defender']?.icon ?? '🛡';
+    if (creatureType === 'pawn_attacker') return PAWN_TYPES['attacker']?.icon ?? '⚔';
+    // Enemy base icons from ENEMY_BASE_TYPES registry
+    if (isEnemyBase(creatureType)) return ENEMY_BASE_TYPES[creatureType]?.icon ?? '⛺';
+    // Enemy mobile icons from ENEMY_MOBILE_TYPES registry
+    if (isEnemyMobile(creatureType)) return ENEMY_MOBILE_TYPES[creatureType]?.icon ?? '👁';
     return CREATURE_TYPES[creatureType]?.icon ?? '🦕';
   }
 
   private drawStateBackground(g: Graphics, creatureType: string, currentState: string, isLocalBuilder: boolean): void {
-    if (creatureType === 'pawn_builder') {
-      const color = currentState === 'exhausted' ? EXHAUSTED_COLOR : (isLocalBuilder ? BUILDER_COLOR : 0x888888);
-      const alpha = currentState === 'exhausted' ? 0.3 : 0.4;
+    // Player pawns — square backgrounds
+    if (isPlayerPawn(creatureType)) {
+      let color: number;
+      let alpha = 0.4;
+      if (creatureType === 'pawn_builder') {
+        color = currentState === 'exhausted' ? EXHAUSTED_COLOR : (isLocalBuilder ? BUILDER_COLOR : 0x888888);
+        alpha = currentState === 'exhausted' ? 0.3 : 0.4;
+      } else if (creatureType === 'pawn_defender') {
+        color = currentState === 'exhausted' ? EXHAUSTED_COLOR : DEFENDER_COLOR;
+        alpha = currentState === 'exhausted' ? 0.3 : 0.4;
+      } else {
+        // pawn_attacker
+        color = currentState === 'exhausted' ? EXHAUSTED_COLOR : ATTACKER_COLOR;
+        alpha = currentState === 'exhausted' ? 0.3 : 0.4;
+      }
       g.rect(-CREATURE_RADIUS, -CREATURE_RADIUS, CREATURE_RADIUS * 2, CREATURE_RADIUS * 2);
       g.fill({ color, alpha });
       return;
     }
+    // Enemy bases — larger diamond shape
+    if (isEnemyBase(creatureType)) {
+      const baseColor = ENEMY_BASE_TYPES[creatureType]?.color ?? 0xcc0000;
+      g.moveTo(0, -ENEMY_BASE_RADIUS);
+      g.lineTo(ENEMY_BASE_RADIUS, 0);
+      g.lineTo(0, ENEMY_BASE_RADIUS);
+      g.lineTo(-ENEMY_BASE_RADIUS, 0);
+      g.closePath();
+      g.fill({ color: baseColor, alpha: 0.45 });
+      g.stroke({ color: baseColor, width: 1.5, alpha: 0.7 });
+      return;
+    }
+    // Enemy mobiles — circle with enemy color
+    if (isEnemyMobile(creatureType)) {
+      const mobileColor = ENEMY_MOBILE_TYPES[creatureType]?.color ?? 0xff0000;
+      g.circle(0, 0, CREATURE_RADIUS + 1);
+      g.fill({ color: mobileColor, alpha: 0.4 });
+      return;
+    }
+    // Wildlife
     if (currentState === 'exhausted') {
       g.circle(0, 0, CREATURE_RADIUS + 1);
       g.fill({ color: EXHAUSTED_COLOR, alpha: 0.3 });
@@ -227,17 +306,49 @@ export class CreatureRenderer {
     return HERBIVORE_COLOR;
   }
 
-  private updateIndicator(indicator: Text, currentState: string, isBuilder: boolean): void {
+  private updateIndicator(indicator: Text, currentState: string, creatureType: string): void {
     if (currentState === 'exhausted') {
       indicator.text = '💤';
       indicator.visible = true;
       return;
     }
-    if (isBuilder) {
+    if (creatureType === 'pawn_builder') {
       indicator.text = '';
       indicator.visible = false;
       return;
     }
+    // Combat pawn state indicators
+    if (creatureType === 'pawn_defender' || creatureType === 'pawn_attacker') {
+      if (currentState === 'engage' || currentState === 'attack') {
+        indicator.text = '⚔';
+        indicator.visible = true;
+      } else if (currentState === 'patrol') {
+        indicator.text = '👁';
+        indicator.visible = true;
+      } else if (currentState === 'return') {
+        indicator.text = '↩';
+        indicator.visible = true;
+      } else {
+        indicator.text = '';
+        indicator.visible = false;
+      }
+      return;
+    }
+    // Enemy mobile state indicators
+    if (isEnemyMobile(creatureType)) {
+      if (currentState === 'attack') {
+        indicator.text = '💥';
+        indicator.visible = true;
+      } else if (currentState === 'seek') {
+        indicator.text = '!';
+        indicator.visible = true;
+      } else {
+        indicator.text = '';
+        indicator.visible = false;
+      }
+      return;
+    }
+    // Wildlife indicators
     if (currentState === 'flee') {
       indicator.text = '!';
       indicator.visible = true;
@@ -276,6 +387,41 @@ export class CreatureRenderer {
       entry.progressBar.fill({ color: 0x4caf50, alpha: 0.9 });
     }
     entry.progressBar.visible = true;
+  }
+
+  /** Look up max health for a combat entity from the registries. */
+  private getMaxHealth(creatureType: string): number {
+    if (isEnemyBase(creatureType)) return ENEMY_BASE_TYPES[creatureType]?.health ?? 100;
+    if (isEnemyMobile(creatureType)) return ENEMY_MOBILE_TYPES[creatureType]?.health ?? 20;
+    if (creatureType === 'pawn_defender') return PAWN_TYPES['defender']?.health ?? 80;
+    if (creatureType === 'pawn_attacker') return PAWN_TYPES['attacker']?.health ?? 60;
+    return 100;
+  }
+
+  /** Show/update HP bar above a combat entity. */
+  private updateHpBar(entry: CreatureEntry, healthPct: number, creatureType: string): void {
+    entry.lastHealthPct = healthPct;
+
+    if (!entry.hpBar) {
+      entry.hpBar = new Graphics();
+      entry.container.addChild(entry.hpBar);
+    }
+
+    const radius = isEnemyBase(creatureType) ? ENEMY_BASE_RADIUS : CREATURE_RADIUS;
+    const barWidth = TILE_SIZE * 0.7;
+    const barHeight = 2;
+    const barX = -barWidth / 2;
+    const barY = -radius - 6;
+
+    entry.hpBar.clear();
+    entry.hpBar.rect(barX, barY, barWidth, barHeight);
+    entry.hpBar.fill({ color: 0x333333, alpha: 0.8 });
+    if (healthPct > 0) {
+      const fillColor = healthPct > 0.5 ? 0x4caf50 : healthPct > 0.25 ? 0xff9800 : 0xf44336;
+      entry.hpBar.rect(barX, barY, barWidth * healthPct, barHeight);
+      entry.hpBar.fill({ color: fillColor, alpha: 0.9 });
+    }
+    entry.hpBar.visible = true;
   }
 
   /** Smoothly interpolate creature display positions toward their target tiles. */
