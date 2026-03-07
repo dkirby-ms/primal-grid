@@ -1452,3 +1452,47 @@ Resolved all 202 ESLint errors across 7 server files in parallel with Gately's c
 **Pattern:** TestableGameRoom = GameRoom & { ... } intersection type eliminates type casting while maintaining type safety for test mocks.
 
 **Cross-Agent:** Gately handled client-side lint (CombatEffects.ts, CreatureRenderer.ts, HudDOM.ts). Both agents spawned in parallel, logs merged by Scribe.
+
+---
+
+### Session: Fix attackerState memory leak (PR #43 review)
+
+**Task:** Clean up `attackerState` Map entries when attacker pawns die in `tickCombat()`.
+
+**Problem:** `tickCombat()` had no reference to `attackerState`, so dead attacker entries persisted indefinitely — a memory leak over long game sessions.
+
+**Fix:** Added `attackerState: Map<string, AttackerTracker>` as the 5th parameter to `tickCombat()`. In Phase 3 death cleanup, `attackerState.delete(id)` now runs alongside existing `attackCooldowns.delete(id)` and `tileAttackCooldowns.delete(id)`.
+
+**Files changed:** `server/src/rooms/combat.ts`, `server/src/rooms/GameRoom.ts`, both combat test files.
+
+**Test Status:** 520/520 passing, 0 lint errors.
+
+## Learnings
+
+1. **Server-side Map cleanup pattern** — When a creature dies, ALL server-side Maps keyed by creature ID must be cleaned up: `attackCooldowns`, `tileAttackCooldowns`, and `attackerState`. Any new per-creature Maps added in the future must also be cleaned up in Phase 3 of `tickCombat()`.
+2. **tickCombat signature** — Now takes 5 params: `(state, room, enemyBaseState, nextCreatureId, attackerState)`. Tests use `TestableGameRoom` intersection type to access private members without `any` casts.
+3. **Decision:** Preferred approach 1 (pass attackerState into tickCombat) over approach 2 (post-hoc cleanup in GameRoom) because it co-locates all death cleanup in one place and follows the existing pattern for cooldown maps.
+
+---
+
+## Implementation Detail Update: tickCombat() Signature
+
+**Commit:** ccd2a84  
+**Scope:** Cross-agent awareness — Gately (Game Dev) uses tickCombat() testing patterns
+
+**Update:** `tickCombat()` now takes **5 parameters** instead of 4:
+1. `state: GameState`
+2. `room: GameRoom`
+3. `enemyBaseState: Map<string, EnemyBaseTracker>`
+4. `nextCreatureId: Ref<number>`
+5. **`attackerState: Map<string, AttackerTracker>` (NEW)**
+
+**Why:** Centralized memory cleanup — attackerState entries are now deleted in Phase 3 death loop, alongside attackCooldowns and tileAttackCooldowns.
+
+**Convention:** Any future `Map<creatureId, ...>` added for combat mechanics must be:
+1. Passed as a parameter to tickCombat()
+2. Cleaned up in Phase 3 of the death handling loop
+3. Documented in this learnings section
+
+**Impact on Gately:** If combat testing patterns in your test helpers reference tickCombat() directly, they now require the 5th parameter. Use the room's internal attackerState map from the test double.
+

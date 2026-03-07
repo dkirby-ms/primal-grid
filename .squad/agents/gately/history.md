@@ -1134,3 +1134,31 @@ Resolving 3 client-side ESLint errors as part of team-wide lint cleanup effort (
 **Cross-Agent Coordination:** Spawned in parallel with Pemulis (Systems Dev). Logs merged by Scribe into unified session log.
 
 **Test Status:** Awaiting final test run post-fix.
+
+---
+
+## Docker Build Fix: client/tsconfig.json Test File Exclusion
+
+**Commit:** 37e34e1  
+**Scope:** CI/Build maintenance — affects all team Docker builds  
+
+**Update:** Modified client/tsconfig.json to exclude test files from production build path:
+```json
+{
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "**/__tests__/**"
+  ]
+}
+```
+
+**Why:** Vitest imports in test files (e.g., `describe()`, `it()`, `expect()`) were breaking tsc compilation during Docker image builds. This is a compile-time issue, not a runtime issue — Vite bundler handles test files correctly.
+
+**Impact:** Docker builds now succeed. No code changes required in src/. All test suites continue to run normally.
+
+**For Your Work:** If you add new test files or see compilation errors mentioning Vitest in Docker, this exclusion pattern should prevent them. The exclusions only affect the standalone tsc compiler (used in Docker), not the bundler or test runners.
+

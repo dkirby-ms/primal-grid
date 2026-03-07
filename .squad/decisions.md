@@ -4694,3 +4694,25 @@ Enemy entities are a fundamentally different AI domain. Mixing them into the gen
 - `creatureAI.ts`: Enemy base/mobile processing moved to top of loop
 - `CreatureRenderer.ts`: Exhausted indicator guarded for enemy types
 - If new enemy entity types are added, they must also be routed early in `tickCreatureAI()`
+
+---
+
+## 2026-03-07T23:57: tickCombat() Memory Leak Fix — attackerState Cleanup Convention
+
+**By:** Pemulis (Systems Dev)  
+**Status:** IMPLEMENTED — Commit ccd2a84  
+
+**Decision:** Pass `attackerState` Map as 5th parameter to `tickCombat()` and delete entries in Phase 3 (pawn death cleanup).
+
+**Rationale:**
+- Centralizes all per-creature Map cleanup in Phase 3 death loop
+- Avoids split cleanup logic across GameRoom + combat.ts
+- Establishes convention: all new `Map<creatureId, ...>` must be cleaned up in Phase 3
+
+**Impact:**
+- `tickCombat()` signature: 4 → 5 parameters
+- All call sites (GameRoom, test helpers) updated
+- Prevents memory leaks when new per-creature state Maps are added
+
+**Convention Going Forward:** Combat-related per-creature state Maps must be passed to `tickCombat()` and cleaned up in Phase 3 death handling.
+
