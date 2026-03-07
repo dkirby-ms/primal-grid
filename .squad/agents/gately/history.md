@@ -983,3 +983,19 @@ Implemented full fog of war MVP rendering on `feature/fog-of-war` branch. All re
 
 Test suite validates your architectural assumptions about tile addition/removal timing.
 
+
+---
+
+## 2026-03-07: Cross-Agent Notification — Pemulis Server Visibility Filtering Now Active
+
+**From:** Pemulis (Systems Dev)  
+**To:** Gately (Client)  
+**Status:** DEPLOYED
+
+**Root cause found & fixed:** Missing `@view()` decorator on `tiles` ArraySchema in GameState. Colyseus 0.17 requires this to activate StateView per-client filtering.
+
+**Fix applied:** Added `@view()` to tiles field. All 372 tests pass.
+
+**For you:** Server-side visibility filtering is now active. Your ExploredTileCache will receive only visible tiles on arrival. Fog rendering will auto-activate on StateView mutations. No client changes needed.
+
+**Design note:** Earlier decision "NO @view() on fields" was based on misunderstanding. The decorator enables the filtering pipeline; per-element filtering still happens via `view.add()/remove()`.

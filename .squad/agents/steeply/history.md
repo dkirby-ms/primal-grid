@@ -879,3 +879,19 @@ Hal proposed three redesign options for the hollow core gameplay loop. This will
 
 Your tests confirm the client-side implementation assumptions are correct. No regressions found.
 
+
+---
+
+## 2026-03-07: Cross-Agent Notification — Pemulis Server Visibility Filtering Now Active
+
+**From:** Pemulis (Systems Dev)  
+**To:** Steeply (QA)  
+**Status:** DEPLOYED
+
+**Root cause found & fixed:** Missing `@view()` decorator on `tiles` ArraySchema in GameState. Colyseus 0.17 requires this to activate StateView per-client filtering.
+
+**Fix applied:** Added `@view()` to tiles field. All 372 tests pass unchanged.
+
+**For you:** Server-side visibility filtering is now live. Your 26 fog tests validate client-side assumptions. No server-side changes break your test suite; integration is purely reactive on the client side.
+
+**Design note:** `@view()` on the parent collection field IS needed (earlier understanding was incorrect). Per-element filtering still via `view.add()/remove()`.
