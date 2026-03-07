@@ -990,3 +990,211 @@ Hal (Lead) architected pawn-based territory expansion system per same user direc
 - No `paths-ignore` is appropriate when the goal is strict synchronization rather than conditional deployment
 - `fetch-depth: 0` is needed for workflows that manipulate multiple branches
 - `${{ secrets.GITHUB_TOKEN }}` automatically provides appropriate permissions when `contents: write` is declared
+
+### Player Display Names — Issue #9 (2026-03-11)
+
+- Added `displayName` (`@type("string")`, default `""`) to `PlayerState` schema in `GameState.ts`.
+- Added `SET_NAME = "set_name"` message constant and `SetNamePayload` interface in `shared/src/messages.ts`.
+- Added `IPlayerState.displayName` to `shared/src/types.ts` interface.
+- Added `handleSetName` handler in `GameRoom.ts`: validates non-empty, trims whitespace, caps at 20 chars, broadcasts join message.
+- This is the server-side portion; client scoreboard UI is a separate task.
+
+---
+
+## Session 2026-03-12 — StateView Filter Design Review
+
+**Status:** Complete
+**Output:** `.squad/decisions/inbox/pemulis-filter-review.md`
+**Verdict:** APPROVE WITH NOTES
+
+## Learnings
+
+- Colyseus `@colyseus/schema@4.0.16` StateView API: `view.add(obj)`, `view.remove(obj)`, `view.has(obj)` use a `WeakSet<ChangeTree>` for O(1) visibility checks. Adding `@view()` to ANY field in ANY schema class sets `hasFilters=true` globally, activating `$filter` on ALL `ArraySchema`/`MapSchema` instances.
+- ArraySchema `$filter` with `hasFilters=true` uses `OPERATION.ADD_BY_REFID`/`DELETE_BY_REFID` instead of index-based operations. This means client-side array indices do NOT correspond to server-side indices. Any code using `tiles.at(y * mapWidth + x)` on the client will break when filtering is active.
+- `view.add(obj)` on a previously-removed Schema re-sends ALL current field values as ADD operations via `encodeView()`. No stale state — client always gets current truth when an object re-enters visibility.
+- `view.remove(obj)` on an ArraySchema/MapSchema child sends a DELETE operation to the client (not just field removals). The child is fully removed from the client's collection.
+- MapSchema handles deletion of filtered elements via `deletedItems[index]` fallback in `$filter` — deleted creatures are properly sent as DELETE only to clients that had them in their view.
+- Schema `$filter` always sends non-tagged fields (`!Metadata.hasViewTagAtIndex(...)` → true) regardless of view membership. Root-level GameState scalar fields (tick, mapWidth, dayPhase) are always sent to all clients.
+- `@view()` (default tag = -1) on TileState fields is inert in two-tier visibility — `view.add(tile)` sends ALL fields (tagged and untagged). The field-level tag distinction only matters for three-tier with explicit `@view(1)` + `view.add(tile, 1)`.
+- `room.broadcast()` messages bypass schema filtering entirely — useful for game log events that should reach all players regardless of visibility.
+
+---
+
+## 2026-03-07: Per-Player State Filtering Review
+
+**Delivered:** Comprehensive technical review of Hal's StateView + @view() design.
+
+**Key Findings:**
+- ✅ Colyseus API accuracy verified against @colyseus/schema@4.0.16 source
+- ✅ Creature AI compatibility confirmed (no race conditions; tick ordering correct)
+- ⚠️ Issue #1: Merge owned-tile cache into Phase 2 (performance optimization)
+- ⚠️ Issue #2: Add immediate view.add() for player-spawned pawns (UX improvement)
+- ⚠️ Issue #3: ArraySchema index-based access will break (client breaking change; communicate to Gately)
+
+**Status:** APPROVE WITH NOTES
+
+**Impact:** Filter design approved for implementation. Three issues are refinements, not blockers. Issue #3 (client breaking change) is highest priority to surface to client team.
+
+
+## Session 2026-03-12 — Fog of War Design Review (Hal + Gately)
+
+**Status:** Complete
+**Output:** `.squad/decisions/inbox/pemulis-fog-review.md`
+**Verdict:** APPROVE WITH NOTES
+
+## Learnings
+
+- For two-tier fog (visible vs. not visible), `@view()` decorators on individual TileState fields are unnecessary. Element-level `view.add(tile)` / `view.remove(tile)` controls the entire tile's visibility. `@view()` only matters for three-tier filtering with explicit tags like `@view(1)` + `view.add(tile, 1)`.
+- `StateView.add()` throws if the object has no parent ChangeTree (not yet assigned to state). Tiles in `state.tiles` ArraySchema already have parents, so `view.add(tile)` is safe to call after map generation.
+- `onRemove` callback on client-side ArraySchema fires synchronously during patch application. The tile instance fields are still readable at callback time — safe for ExploredTileCache to capture terrain/structure data before GC.
+- Watchtower (new structure type) integrates cleanly with existing builder FSM. The `buildMode` switch in `builderAI.ts` needs a third case; `handleSpawnPawn()` needs extended validation. No conflicts with outpost/farm logic.
+- Destructible watchtowers require no special vision-loss logic — `tickVisibility()` naturally omits destroyed watchtowers, and tiles exclusively covered by them drop from visible set on next tick. ExploredTileCache preserves last-known terrain.
+- Alliance/shared vision multiplies StateView mutation churn by alliance size. For N-player alliances, compute a shared visible set once and apply to all allies rather than re-computing per ally.
+- Camera bounds clamped to explored bounding box need a minimum padding to avoid degenerate UX when explored area is small (5×5 HQ = 160px). Recommend minimum 20×20 tile bounds or viewport-proportional padding.
+- `DEFAULT_MAP_SIZE` is 128 (not 64 as mentioned in some docs). Full tile scan for 128×128 = 16,384 tiles × 8 players = 131K iterations per tick — must use owned-tile cache to keep visibility computation sub-millisecond.
+
+---
+
+## Session 2026-03-12 — Fog of War Phase A Server Implementation
+
+**Status:** Complete
+**Output:** `server/src/rooms/visibility.ts`, constants + types in shared, GameRoom integration
+**Branch:** `feature/fog-of-war`
+
+### What was built
+
+1. **shared/src/constants.ts** — Added `FOG_OF_WAR` (tick interval, radii, day/night modifiers, min radius) and `WATCHTOWER` (radius, costs, cap, build ticks) constant blocks.
+2. **shared/src/types.ts** — Added `FogState` enum (Unexplored=0, Explored=1, Visible=2). Auto-exported via barrel.
+3. **server/src/rooms/visibility.ts** — Pure visibility computation module:
+   - `computeVisibleTiles(state, playerId): Set<number>` returns flat tile indices visible to a player
+   - Three vision sources: HQ center (radius 5), territory edge tiles (radius 3), pawn builders (radius 4)
+   - Edge detection: Moore neighbor check (8-directional) for unowned/out-of-bounds neighbors
+   - Manhattan distance circle fill, clamped to map bounds
+   - Day/night modifier applied: `effectiveRadius = max(MIN_RADIUS, base + modifier)`
+4. **server/src/rooms/GameRoom.ts** — Full integration:
+   - `playerViews: Map<string, { view: StateView, visibleIndices: Set<number> }>` tracks per-player state
+   - `initPlayerView()` called in `onJoin()` after `spawnHQ()` — creates StateView, computes initial visibility, adds tiles
+   - `cleanupPlayerView()` called in `onLeave()` — removes all tiles from view, deletes map entry
+   - `tickFogOfWar()` runs every 2 ticks, diffs old/new visible sets, calls view.add/remove
+   - Runs last in tick loop (after all movement/claiming resolves)
+
+### Design decisions respected
+- No `@view()` decorators — element-level `view.add/remove` is sufficient for two-tier visibility
+- No owned-tile cache — deferred to Phase 2 performance optimization
+- Lazy `playerViews` initialization guards for `Object.create()` test pattern
+
+## Learnings
+- `StateView` from `@colyseus/schema` v4.0.16: `view.add(obj)` / `view.remove(obj)` / `view.has(obj)`. Assign to `client.view` in `onJoin()`.
+- `Object.create(GameRoom.prototype)` test pattern skips class field initializers — any new class fields need lazy `??` or `if (!this.x)` guards in methods.
+- Test suite uses Manhattan distance for circle fill checks, matching the `addCircleFill` implementation. The `euclidean` helper in tests is unused.
+- Manhattan circle fill: `|dx| + |dy| <= radius`. Produces diamond-shaped vision areas. Corner edge tiles at Manhattan distance 4 from HQ center (half=2, diagonal) with edge radius 3 can reach Manhattan 7, extending well beyond HQ radius 5.
+- `FOG_OF_WAR.DAY_NIGHT_MODIFIERS` needs `as Record<string, number>` cast to allow string-keyed access from `state.dayPhase`.
+
+---
+
+## Session 2026-03-07 — Fog of War Phase A Server Implementation Complete
+
+**Status:** SUCCESS  
+**Output:** `server/src/rooms/visibility.ts`, FOG_OF_WAR/WATCHTOWER constants, StateView integration in GameRoom  
+**Tests:** 372 total passing (26 new fog tests)
+
+### What Was Built
+
+- **visibility.ts** — Pure `computeVisibleTiles(state, playerId): Set<number>` function with Manhattan distance visibility calculation
+  - Three vision sources: HQ (radius 5), territory edges (radius 3), pawn builders (radius 4)
+  - Edge detection via Moore neighborhood unowned/out-of-bounds checks
+  - Day/night modifiers applied (dawn/dusk -1, night -2, day 0)
+  - MIN_RADIUS=1 floor prevents zero-radius collapse
+  
+- **GameRoom integration**
+  - `playerViews: Map<string, { view: StateView, visibleIndices: Set<number> }>`
+  - `initPlayerView(client, playerId)` in onJoin() after spawnHQ() — creates StateView, populates initial tiles
+  - `cleanupPlayerView(playerId)` in onLeave() — removes all tiles, deletes map entry
+  - `tickFogOfWar()` every 2 ticks — diffs old/new visibility, calls view.add/remove for deltas
+  
+- **Constants & Types**
+  - `shared/src/constants.ts`: FOG_OF_WAR block (radii, modifiers, MIN_RADIUS, TICK_INTERVAL), WATCHTOWER block
+  - `shared/src/types.ts`: FogState enum (Unexplored=0, Explored=1, Visible=2)
+
+### Key Learnings for Steeply
+
+- StateView.add() requires object already in parent ChangeTree (tiles in state.tiles ArraySchema have parents)
+- Manhattan distance `|dx| + |dy| <= radius` produces diamond vision shapes, not circles
+- Corner edge tiles (Manhattan distance 4 from HQ) needed to prove edge vision extends beyond HQ radius 5
+- Object.create(GameRoom.prototype) test pattern skips constructor — playerViews manual init needed in test setup
+- onRemove callback fires synchronously during patch application; tile fields readable for data capture
+
+### Integration Notes from Gately
+
+- StateView filters tiles per player; client receives only visible + explored tiles
+- No client changes needed until StateView filtering lands — fog rendering automatically activates once tiles are filtered
+- ExploredTileCache preserves last-known terrain data after visibility loss (fog semantics)
+- Camera bounds accessible via grid.exploredCache for HUD integration (explored tile count, etc.)
+
+### Integration Notes from Steeply
+
+- All 26 fog tests passing validates visibility computation correctness
+- Manhattan distance matching implemented correctly
+- StateView lifecycle (add/remove) validated in integration tests
+- Multi-player visibility independence verified (per-player views don't contaminate each other)
+- Edge case validation: no-territory player, tile removal, destroyed watchtower scenarios all pass
+
+### Open Questions for Phase B
+
+- Owned-tile cache for 128×128 optimization (not critical for Phase A 64×64 maps)
+- Alliance/shared vision union semantics (would multiply StateView mutations by alliance size)
+- Destructible watchtower vision loss mechanics (structure type approved, destruction deferred)
+
+---
+
+## 2026-03-07: Cross-Agent Notification — Steeply Fog Tests Complete
+
+**From:** Steeply (QA)  
+**To:** Pemulis  
+**Key Finding:** All 26 fog tests passing. Manhattan distance implementation correct. StateView integration validated.
+
+**Must-verify before Phase B:**
+1. Owned-tile cache critical for 128×128 (not included in Phase A)
+2. Alliance shared vision would require visibility union logic (3 extra tests planned)
+3. Watchtower destruction needs vision loss validation (additional test coverage pending)
+
+**Test infrastructure note:** Object.create() pattern requires manual playerViews initialization in tests — this is a quirk of the class field initializer pattern, not a bug. All future tests of GameRoom mutations should manually initialize new class fields.
+
+---
+
+## 2026-03-07: Cross-Agent Notification — Gately Client Rendering Ready
+
+**From:** Gately (Client Dev)  
+**To:** Pemulis  
+**Integration Point:** ExploredTileCache + fog overlay auto-activate once StateView filters tiles
+
+**No server changes needed** — fog rendering is purely reactive to which tiles exist in Colyseus state.
+
+**Camera bounds API:** grid.exploredCache.getExploredBounds() and camera.setExploredBounds(bounds) — use for HUD features.
+
+
+---
+
+## 2025-07-25: Fog-of-War Fix — @view() Required for StateView Filtering
+
+**Bug:** Players could see the entire map — fog of war was not filtering visibility despite StateView being correctly wired (view.add/remove calls, client.view assignment, tickFogOfWar recomputation).
+
+**Root Cause:** Colyseus 0.17's SchemaSerializer checks `encoder.context.hasFilters` before using view-based encoding. Without `@view()` on any Schema field, `hasFilters` stays `false` and the serializer broadcasts full state to all clients, completely ignoring `client.view`.
+
+**Fix:** Added `@view()` decorator to the `tiles` field in `GameState`. This one-line change activates the entire filtered encoding pipeline:
+- `hasFilters = true` in TypeContext (via `$viewFieldIndexes` metadata)
+- Per-tile `isFiltered = true` with `isVisibilitySharedWithParent = false` (because the field HAS a view tag)
+- ArraySchema's `$filter` checks `view.isChangeTreeVisible()` per element
+- Only tiles explicitly `view.add()`'d are encoded for each client
+- Non-@view fields (players, creatures, tick, etc.) continue via the shared encoding pass
+
+**Key Learning — Colyseus 0.17 StateView Architecture:**
+The `@view()` decorator on a collection field is NOT a "field-level filter" — it's the mechanism that ENABLES element-level filtering. Without it, StateView is dead code. The earlier decision "NO @view field decorators" was based on a misunderstanding of the API. `@view()` on the collection is required for `view.add(item)` / `view.remove(item)` to have any effect.
+
+**Encoding pipeline (two-pass):**
+1. Shared pass (no view): encodes non-@view fields once for all clients
+2. View pass (per client): encodes @view fields filtered by each client's StateView
+
+**isVisibilitySharedWithParent detail:** When `@view()` is on the parent field, child items get `isVisibilitySharedWithParent = false` (because `!fieldHasViewTag = false`). This means each item MUST be individually `view.add()`'d. Without `@view()`, items would auto-inherit parent visibility, defeating per-element filtering.
+
+**Tests:** All 372 tests pass. The `@view()` decorator only affects encoding metadata — test code that accesses state directly (via `room.state.tiles.at(i)`) is unaffected.

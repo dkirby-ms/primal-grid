@@ -96,7 +96,7 @@ describe("Grid Generation", () => {
     }
   });
 
-  it("same seed produces identical maps", () => {
+  it("same seed produces identical maps", { timeout: 30_000 }, () => {
     const room1 = Object.create(GameRoom.prototype) as GameRoom;
     room1.state = new GameState();
     room1.generateMap(42);

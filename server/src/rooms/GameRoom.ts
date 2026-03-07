@@ -1,18 +1,20 @@
 import { Room, Client, CloseCode } from "colyseus";
+import { StateView } from "@colyseus/schema";
 import { GameState, PlayerState, CreatureState } from "./GameState.js";
 import { generateProceduralMap } from "./mapGenerator.js";
 import { tickCreatureAI } from "./creatureAI.js";
+import { computeVisibleTiles } from "./visibility.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
-  SPAWN_PAWN,
+  SPAWN_PAWN, SET_NAME,
   ResourceType, TileType, isWaterTile,
   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
   CREATURE_AI, CREATURE_RESPAWN, TERRITORY,
   STRUCTURE_INCOME, SHAPE,
   PROGRESSION, getLevelForXP,
-  PAWN, DAY_NIGHT,
+  PAWN, DAY_NIGHT, FOG_OF_WAR,
 } from "@primal-grid/shared";
-import type { SpawnPawnPayload } from "@primal-grid/shared";
+import type { SpawnPawnPayload, SetNamePayload } from "@primal-grid/shared";
 import { spawnHQ } from "./territory.js";
 
 const PLAYER_COLORS = [
@@ -24,6 +26,8 @@ const PLAYER_COLORS = [
 export class GameRoom extends Room {
   state = new GameState();
   private nextCreatureId = 0;
+  /** Per-player StateView, cached visible tile indices, and visible creature IDs for fog of war. */
+  playerViews = new Map<string, { view: StateView; visibleIndices: Set<number>; visibleCreatureIds: Set<string> }>();
 
   override onCreate(options: Record<string, unknown>) {
     const seed = typeof options?.seed === "number" ? options.seed : DEFAULT_MAP_SEED;
@@ -39,10 +43,15 @@ export class GameRoom extends Room {
       this.tickCreatureRespawn();
       this.tickStructureIncome();
       this.tickPawnUpkeep();
+      this.tickFogOfWar();
     }, 1000 / TICK_RATE);
 
     this.onMessage(SPAWN_PAWN, (client, message: SpawnPawnPayload) => {
       this.handleSpawnPawn(client, message);
+    });
+
+    this.onMessage(SET_NAME, (client, message: SetNamePayload) => {
+      this.handleSetName(client, message);
     });
 
     console.log("[GameRoom] Room created.");
@@ -59,11 +68,26 @@ export class GameRoom extends Room {
     const hqPos = this.findHQSpawnLocation();
     spawnHQ(this.state, player, hqPos.x, hqPos.y);
 
+    // Initialize per-player StateView for fog of war
+    this.initPlayerView(client, player);
+
+    // Add new player to all existing views (scoreboard visibility)
+    if (this.playerViews) {
+      for (const [sid, entry] of this.playerViews) {
+        if (sid !== client.sessionId) {
+          entry.view.add(player);
+        }
+      }
+    }
+
     console.log(`[GameRoom] Client joined: ${client.sessionId}, HQ at (${hqPos.x}, ${hqPos.y})`);
     client.send("game_log", { message: "Welcome to Primal Grid!", type: "info" });
   }
 
   override onLeave(client: Client, code: number) {
+    // Clean up fog of war StateView
+    this.cleanupPlayerView(client.sessionId);
+
     this.state.players.delete(client.sessionId);
     const consented = code === CloseCode.CONSENTED;
     console.log(
@@ -77,6 +101,18 @@ export class GameRoom extends Room {
 
   private generateMap(seed: number = DEFAULT_MAP_SEED) {
     generateProceduralMap(this.state, seed, DEFAULT_MAP_SIZE, DEFAULT_MAP_SIZE);
+  }
+
+  private handleSetName(client: Client, message: SetNamePayload) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+
+    const raw = typeof message.name === "string" ? message.name : "";
+    const sanitized = raw.trim().slice(0, 20);
+    if (sanitized.length === 0) return;
+
+    player.displayName = sanitized;
+    this.broadcast("game_log", { message: `${sanitized} has joined`, type: "info" });
   }
 
   private handleSpawnPawn(client: Client, message: SpawnPawnPayload) {
@@ -433,5 +469,139 @@ export class GameRoom extends Room {
       }
     }
     return { x: 0, y: 0 };
+  }
+
+  /** Create a StateView for the joining player and add initial visible tiles. */
+  private initPlayerView(client: Client, player: PlayerState): void {
+    if (!this.playerViews) {
+      this.playerViews = new Map();
+    }
+    const view = new StateView();
+    client.view = view;
+
+    // Compute initial visibility (HQ + surrounding territory)
+    const visibleIndices = computeVisibleTiles(this.state, player.id);
+
+    // Add all initially visible tiles to the view
+    for (const idx of visibleIndices) {
+      const tile = this.state.tiles.at(idx);
+      if (tile) {
+        view.add(tile);
+      }
+    }
+
+    // All players are always visible (scoreboard)
+    this.state.players.forEach((p) => view.add(p));
+
+    // Add visible creatures: own pawns always, others only on visible tiles
+    const visibleCreatureIds = new Set<string>();
+    this.state.creatures.forEach((creature, id) => {
+      const tileIdx = creature.y * this.state.mapWidth + creature.x;
+      if (creature.ownerID === player.id || visibleIndices.has(tileIdx)) {
+        view.add(creature);
+        visibleCreatureIds.add(id);
+      }
+    });
+
+    this.playerViews.set(client.sessionId, { view, visibleIndices, visibleCreatureIds });
+  }
+
+  /** Remove all tracked items from a player's view and clean up tracking state. */
+  private cleanupPlayerView(sessionId: string): void {
+    if (!this.playerViews) return;
+    const entry = this.playerViews.get(sessionId);
+    if (!entry) return;
+
+    const { view, visibleIndices, visibleCreatureIds } = entry;
+
+    // Remove tiles
+    for (const idx of visibleIndices) {
+      const tile = this.state.tiles.at(idx);
+      if (tile) {
+        view.remove(tile);
+      }
+    }
+
+    // Remove creatures
+    for (const id of visibleCreatureIds) {
+      const creature = this.state.creatures.get(id);
+      if (creature) {
+        view.remove(creature);
+      }
+    }
+
+    // Remove players
+    this.state.players.forEach((p) => view.remove(p));
+
+    this.playerViews.delete(sessionId);
+  }
+
+  /** Recompute fog of war per player — runs every FOG_OF_WAR.TICK_INTERVAL ticks.
+   *  Runs last in the tick loop so all movement/claiming has resolved. */
+  private tickFogOfWar(): void {
+    if (this.state.tick % FOG_OF_WAR.TICK_INTERVAL !== 0) return;
+    if (!this.playerViews) return;
+
+    for (const [sessionId, entry] of this.playerViews) {
+      const { view, visibleIndices: oldIndices, visibleCreatureIds: oldCreatureIds } = entry;
+      const newIndices = computeVisibleTiles(this.state, sessionId);
+
+      // ── Tile visibility ──────────────────────────────────────────
+
+      // Add newly visible tiles
+      for (const idx of newIndices) {
+        if (!oldIndices.has(idx)) {
+          const tile = this.state.tiles.at(idx);
+          if (tile) {
+            view.add(tile);
+          }
+        }
+      }
+
+      // Remove tiles no longer visible
+      for (const idx of oldIndices) {
+        if (!newIndices.has(idx)) {
+          const tile = this.state.tiles.at(idx);
+          if (tile) {
+            view.remove(tile);
+          }
+        }
+      }
+
+      entry.visibleIndices = newIndices;
+
+      // ── Creature visibility ──────────────────────────────────────
+
+      const newCreatureIds = new Set<string>();
+      this.state.creatures.forEach((creature, id) => {
+        const tileIdx = creature.y * this.state.mapWidth + creature.x;
+        // Own pawns are always visible; other creatures only on visible tiles
+        if (creature.ownerID === sessionId || newIndices.has(tileIdx)) {
+          newCreatureIds.add(id);
+        }
+      });
+
+      // Add newly visible creatures
+      for (const id of newCreatureIds) {
+        if (!oldCreatureIds.has(id)) {
+          const creature = this.state.creatures.get(id);
+          if (creature) {
+            view.add(creature);
+          }
+        }
+      }
+
+      // Remove creatures no longer visible
+      for (const id of oldCreatureIds) {
+        if (!newCreatureIds.has(id)) {
+          const creature = this.state.creatures.get(id);
+          if (creature) {
+            view.remove(creature);
+          }
+        }
+      }
+
+      entry.visibleCreatureIds = newCreatureIds;
+    }
   }
 }

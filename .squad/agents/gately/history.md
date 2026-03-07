@@ -754,3 +754,248 @@ Added a scrolling game log panel below the main game area:
 - **Water split rendering:** Replaced single `TileType.Water` color (0x3498db) with two entries: `ShallowWater` → 0x87CEEB (light sky blue), `DeepWater` → 0x1a3a5c (dark navy). Colors are visually distinct from each other and from all other biomes.
 - **Shared dependency:** Pemulis split `Water` into `ShallowWater`/`DeepWater` in `shared/src/types.ts` and added `isWaterTile()` helper. Rebuilt shared before client build.
 - **No other client references:** `TileType.Water` only appeared in the `TILE_COLORS` map — single-point change, no cascade.
+
+### Issue #9 — Player Display Names + Scoreboard (2026-03-07)
+- **Name prompt modal:** DOM overlay shown after Colyseus connect. Input field + submit button. Sends `SET_NAME` message to server with the entered name (default: "Explorer"). Uses `{ once: true }` event listeners to avoid leaks.
+- **Player name rendering:** PixiJS `Text` labels positioned below each HQ marker in GridRenderer. Uses player's color with black stroke outline for readability. Dynamically updates if displayName changes. Cleaned up in `removeHQMarker()`.
+- **Scoreboard overlay:** DOM-based scoreboard toggled with Tab key. Shows Player Name (in player color), Score, and Territory count (computed by iterating tiles). Sorted by score descending. Local player annotated with "(you)". Semi-transparent centered panel, `pointer-events: none` on overlay.
+- **InputHandler:** Added `setScoreboard()` method and Tab key handler with `preventDefault()` to suppress browser tab cycling.
+- **Message constant:** Added `SET_NAME = "set_name"` and `SetNamePayload` interface to `shared/src/messages.ts`.
+- **Pattern:** Scoreboard only refreshes tile counts when visible (perf optimization — skips `onStateChange` iteration when hidden). Uses same duck-typed forEach pattern as HudDOM for Colyseus schema compatibility.
+
+### Fog of War — Client Rendering & Camera System Design (2026-03-07)
+
+Designed the complete client-side fog of war system covering rendering, camera bounds, and Colyseus StateView integration. Key architectural decisions:
+
+- **Three visual states:** Unexplored (solid black overlay, alpha 1.0), Explored (dimmed overlay, alpha 0.55), Visible (overlay hidden — full brightness). Implemented as pre-allocated per-tile `Graphics` overlays in a `FogManager` class, matching the existing `territoryOverlays` pattern in GridRenderer.
+- **ExploredTileCache:** Client-side `Map<tileIndex, CachedTile>` that persists terrain data (type, x, y, fertility, moisture) for every tile the client has ever received. When the server removes a tile from StateView (`onRemove`), the cache preserves its terrain for dimmed rendering. ~655 KB worst case for full 128×128 map — no eviction needed.
+- **Dynamic camera bounds:** Camera is restricted to the bounding box of explored tiles + 2-tile margin (implementing user directive). Bounds recompute lazily on tile discovery (O(exploredTileCount), triggered by `boundsDirty` flag). Smooth expansion via lerp (0.08/frame) prevents jarring jumps when new tiles are discovered. At game start with 9×9 HQ + 3-tile radius, explored area is ~15×15 tiles — camera is nearly locked, forcing intimate starting view.
+- **Camera.ts changes:** `clamp()` method updated to use FogManager's smoothed pixel bounds instead of fixed map-size bounds. Auto-centers when explored area is smaller than viewport. Falls back to full-map bounds when FogManager is not set (backward compatible).
+- **Colyseus integration:** Uses `tiles.onAdd` / `tiles.onRemove` callbacks to drive fog state transitions. Zero server changes beyond Hal's StateView filtering. CreatureRenderer needs no changes — StateView already controls which creatures the client receives.
+- **Fog transitions:** Visible→Explored fades in (0.1 lerp factor, ~15 frames). Explored→Visible is instant reveal (discovery feels impactful). Unexplored→Visible is also instant.
+- **Layer order:** Fog overlay container sits inside `grid.container` above territory overlays and day/night overlay, but below creature container. Visible creatures are never dimmed.
+- **New files planned:** `client/src/fog/ExploredTileCache.ts`, `client/src/fog/FogManager.ts`, `client/src/fog/index.ts`. Modified files: Camera.ts, GridRenderer.ts, main.ts. No InputHandler changes needed — bounds enforcement lives entirely in Camera.clamp().
+- **Viewport culling deferred:** Full fog works without culling at 64×64 map size. Culling architecture designed for future 128×128 maps if frame rate drops below 50 FPS.
+- **Open questions raised:** Map size increase timing, three-tier @view() tag support, spectator mode, team visibility sharing.
+
+Design written to `.squad/decisions/inbox/gately-fog-camera-design.md`.
+
+---
+
+## 2026-03-07: Fog of War Client Rendering & Camera Design
+
+**Delivered:** Comprehensive client-side architecture for fog rendering, tile visibility tracking, and dynamic camera bounds.
+
+**Key Components:**
+1. **ExploredTileCache** — Client-side terrain memory (665 KB max for full map)
+2. **FogManager** — Central coordinator for tile visibility, fog overlays, dynamic camera bounds
+3. **Per-tile fog overlays** — Black (unexplored) / dimmed (explored) / normal (visible)
+4. **Camera bounds restriction** — Addresses user directive (dkirby-ms 2026-03-07T01:03)
+
+**Design Characteristics:**
+- Zero new server APIs beyond Hal's StateView filtering
+- Reactive to Colyseus sync lifecycle (onAdd/onRemove)
+- Graceful handling of tile appearance/disappearance
+- Smooth camera bounds expansion with lerp
+
+**Critical Note:** Pemulis review identified tile access pattern breaking change. Client must switch from index-based (`state.tiles.at(y * mapWidth + x)`) to coordinate-based access. Affects GridRenderer, InputHandler, CreatureRenderer.
+
+**Status:** COMPLETE. Ready for implementation once server-side filtering (Hal/Pemulis/Steeply) is in place.
+
+
+---
+
+## 2026-03-07T01:21 — Design Review Complete: Fog of War Client Architecture APPROVED
+
+**Status:** Design review by Pemulis (Systems Dev) completed.
+
+**Verdict:** APPROVE WITH NOTES
+
+### Key Approvals
+
+✅ **Pemulis's Systems Review:**
+- Client rendering architecture is sound
+- Zero new server APIs required (builds cleanly on Hal's StateView filtering)
+- ExploredTileCache design correct (cache on onAdd, not onRemove)
+- FogManager approach validates as standard fog-of-war pattern
+- CreatureRenderer integration verified (no changes needed)
+
+### Critical Findings & Actions
+
+1. **Tile Access Pattern Breaking Change (HIGH):** With StateView filtering, `state.tiles.at(y * mapWidth + x)` returns wrong tile.
+   - ✅ GridRenderer already uses per-tile `x`/`y` fields (safe)
+   - ⚠️ Must audit and migrate CreatureRenderer, InputHandler for index-based accesses
+   - ✅ ExploredTileCache provides coordinate-based lookup (future-proof)
+
+2. **ExploredTileCache Race Condition (ACCEPTABLE):** Server may filter tile removal before final state mutation.
+   - One tick of staleness (250ms) is unnoticeable
+   - "Explored" state shows last-known data by design
+   - Recommendation: Cache `structureType` from day one (supports future silhouettes feature)
+
+3. **Camera Bounds Edge Case (MEDIUM):** 5×5 HQ with 3-tile visibility radius = ~15×15 explored area.
+   - At low zoom (0.5×), this fits in 80px
+   - Viewport > explored area produces bad UX (player sees dead space)
+   - **Recommendation:** Add minimum camera bounds padding (expand bounds by `viewportWidth / (2 * TILE_SIZE * scale)` tiles)
+
+4. **Watchtower Constants:** Pemulis defined required constants (costs, build time, radius, max):
+   - COST_WOOD: 15, COST_STONE: 10
+   - BUILD_TIME_TICKS: 24
+   - VISION_RADIUS: 8
+   - MAX_PER_PLAYER: 3
+
+### User Directives Incorporated
+
+✅ **Explored Tiles Show Structure Silhouettes:** Client-side caching of `structureType` alongside terrain data.
+   - Interpretation: Show last-known structures (fog semantics), not current server state
+   - FogManager renders dimmed structure icon at reduced alpha
+   - No server changes needed
+
+✅ **Camera Bounds Restriction:** Dynamic bounding box of explored tiles + minimum padding.
+   - Addresses user directive (dkirby-ms 2026-03-07T01:03)
+   - Smooth expansion via lerp prevents jarring jumps
+
+### Performance Notes
+
+- ExploredTileCache memory: ~655 KB max (full 128×128 map) — negligible
+- Fog overlays: ~16K Graphics objects + existing 32K scene objects = 48K total — within PixiJS 8 budget
+- Recommendation: Consider batch fog overlay rendering (single Graphics vs. per-tile) for better draw call efficiency
+
+### Implementation Guidance
+
+**Should-Fix Before Implementation:**
+1. Tile access pattern migration (audit index-based accesses)
+2. Minimum camera bounds padding (5×5 HQ UX improvement)
+3. ExploredTileCache includes structureType from day one
+
+**Nice-to-Have:**
+- Batch fog overlay rendering (performance optimization)
+- Viewport culling deferred until 128×128 if needed
+
+### Reviewer Confidence
+
+Pemulis: "Architecturally sound. StateView filtering handles creature visibility at server level. Client integration straightforward."
+
+### Next Steps
+
+Merge reviews to decisions.md. Hal's server-side filtering must complete first (prerequisite). Then proceed with client implementation, addressing tile access pattern migration and camera bounds padding.
+
+### Fog of War — Phase A Client Implementation (2026-03-07)
+
+Implemented full fog of war MVP rendering on `feature/fog-of-war` branch. All reviewer must-fixes addressed:
+
+- **ExploredTileCache** (`client/src/renderer/ExploredTileCache.ts`): Cache-on-onAdd (not onRemove, per Steeply's review). Stores `tileType` + `structureType` per tile. Tracks explored bounding box with dirty flag for camera integration. O(1) lookup by tile index.
+- **GridRenderer fog layer**: Pre-allocated `Graphics` per tile in `fogContainer`, added above territory but below creatures via container ordering. Three states: unexplored (solid black), explored (alpha 0.6 black + structure silhouette icons for hq/outpost/farm), visible (hidden overlay). Fog state updated in `bindToRoom` by diffing visible tile sets between frames.
+- **Camera bounds clamping**: Camera now has `setExploredBounds()` accepting tile-coordinate bounding box. Applies 2-tile padding, enforces minimum 10-tile extent (so 5×5 HQ start isn't claustrophobic), and lerps smoothly at 0.08/frame. Falls back to full map bounds when no explored bounds set. `main.ts` ticker pushes bounds from cache when dirty.
+- **Zero changes** to `CreatureRenderer.ts` or `InputHandler.ts`.
+- **Pattern**: Fog overlays follow the same pre-allocated Graphics-per-tile pattern as territory overlays. Structure silhouettes use PixiJS Text with emoji icons (same pattern as HQ markers).
+- **Compatibility**: Until Pemulis's server-side StateView filtering lands, all tiles arrive as visible → no fog effect. But all rendering code is ready for filtered state.
+
+---
+
+## Session 2026-03-07 — Fog of War Phase A Client Implementation Complete
+
+**Status:** SUCCESS  
+**Output:** `client/src/renderer/ExploredTileCache.ts`, fog overlay in GridRenderer, camera bounds clamping  
+**Tests:** Builds clean, zero lint errors
+
+### What Was Built
+
+- **ExploredTileCache** (`client/src/renderer/ExploredTileCache.ts`)
+  - Cache-on-onAdd pattern (captures tileType + structureType when tiles enter StateView)
+  - Retains terrain memory after tiles removed (fog semantics: shows last-known state)
+  - Tracks explored bounding box with dirty flag
+  - O(1) lookup by tile index; O(1) iteration for camera bounds calculation
+  - ~655 KB max footprint (full 128×128 map)
+  
+- **GridRenderer Fog Layer**
+  - Pre-allocated Graphics per tile in fogContainer
+  - Three visual states: unexplored (black), explored (alpha 0.6 dim + structure silhouettes), visible (transparent)
+  - Container ordering: fog above territory, below creatures (via main.ts)
+  - Fog state updates per tick via StateView mutation diffs
+  
+- **Camera Bounds Clamping**
+  - Constrained to explored bounding box + 2-tile padding
+  - Minimum 10-tile extent (prevents claustrophobic 5×5 HQ UX)
+  - Smooth lerp at 0.08/frame for viewport expansion
+  - Falls back to full map bounds when no explored area
+
+### Zero Changes To
+
+- CreatureRenderer.ts — creature rendering unaffected by fog
+- InputHandler.ts — input handling unaffected by camera clamping
+- Any message handlers or network logic
+
+### Integration Notes from Pemulis
+
+- StateView server-side filtering sends only visible tiles to client
+- No server-side changes needed before Phase B — integration is purely reactive
+- Visibility computation uses Manhattan distance (not Euclidean) for circle fill
+- Day/night modifiers affect vision radii; visibility updates every 2 ticks
+
+### Integration Notes from Steeply
+
+- ExploredTileCache must cache structureType from day one (validated in tests)
+- Cache-on-onAdd pattern prevents data loss (onRemove would lose data if tile removed before capture)
+- Structure silhouettes match existing HQ marker pattern (Text emoji icons)
+- Fog overlay follows same Graphics-per-tile architecture as territory overlays
+
+### Performance Notes
+
+- Memory: ~655 KB max for full map — negligible
+- Graphics objects: ~16K fog + 32K existing = 48K total — within budget
+- CPU: No per-frame allocations; fog state O(delta tile count) per tick
+- Future: Batch rendering (single Graphics vs per-tile) for draw call efficiency
+
+### Known Limitations
+
+- No client-side unit tests exist (pure logic could be tested separately)
+- Explored bounds clamping assumes non-zero bounds (falls back to full map)
+- Structure silhouettes use emoji icons (future: could use sprite sheet for polish)
+
+---
+
+## 2026-03-07: Cross-Agent Notification — Pemulis Server Visibility Ready
+
+**From:** Pemulis (Backend)  
+**To:** Gately  
+**Integration Point:** StateView filtering automatically makes fog rendering activate
+
+**Visibility sources deployed:**
+1. HQ center (radius 5)
+2. Territory edge tiles (radius 3)
+3. Pawn builders (radius 4)
+
+**Day/night modifiers applied:** dawn/dusk -1, night -2, day 0
+
+**Server sends only visible tiles to each player.** Your ExploredTileCache will cache them on arrival, fog rendering will auto-activate on StateView tile mutations. No client changes needed.
+
+---
+
+## 2026-03-07: Cross-Agent Notification — Steeply Fog Tests Confirm Client Design
+
+**From:** Steeply (QA)  
+**To:** Gately  
+**Validation:** All 26 tests pass. Edge cases confirmed:
+- Camera bounds padding (10-tile minimum) prevents degenerate UX
+- ExploredTileCache cache-on-onAdd prevents data loss ✅
+- structureType cached from day one ✅
+- Structure silhouettes rendering ready ✅
+
+Test suite validates your architectural assumptions about tile addition/removal timing.
+
+
+---
+
+## 2026-03-07: Cross-Agent Notification — Pemulis Server Visibility Filtering Now Active
+
+**From:** Pemulis (Systems Dev)  
+**To:** Gately (Client)  
+**Status:** DEPLOYED
+
+**Root cause found & fixed:** Missing `@view()` decorator on `tiles` ArraySchema in GameState. Colyseus 0.17 requires this to activate StateView per-client filtering.
+
+**Fix applied:** Added `@view()` to tiles field. All 372 tests pass.
+
+**For you:** Server-side visibility filtering is now active. Your ExploredTileCache will receive only visible tiles on arrival. Fog rendering will auto-activate on StateView mutations. No client changes needed.
+
+**Design note:** Earlier decision "NO @view() on fields" was based on misunderstanding. The decorator enables the filtering pipeline; per-element filtering still happens via `view.add()/remove()`.

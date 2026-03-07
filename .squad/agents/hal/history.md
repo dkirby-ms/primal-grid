@@ -378,3 +378,76 @@ User preference learned: Deploy to UAT via protected branch (PR merge to `uat` b
 
 **Team update:** Plan accepted. Pemulis implemented Bicep + workflow. Next: manual Azure setup, branch creation, test PR.
 
+
+- **Colyseus StateView API (2026-03-07):** Researched per-client state filtering for #32. Critical finding: `@filter()` / `@filterChildren()` API is **deprecated** in Colyseus ≥ 0.16. Our stack (Colyseus 0.17, @colyseus/schema 4.0.16) uses `StateView` + `@view()` decorator. Key mechanics: (1) `@view()` on any schema field sets `hasFilters = true` globally, activating `$filter` on ALL ArraySchema/MapSchema instances; (2) `client.view = new StateView()` assigns per-client view; (3) `view.add(instance)` / `view.remove(instance)` controls visibility with O(1) WeakSet checks; (4) instance must be assigned to state BEFORE `view.add()` (throws otherwise); (5) encoder caches per-view encoded bytes within a tick. Full design at `.squad/decisions/inbox/hal-colyseus-filter-design.md`. Two-tier visibility (hidden/visible) for v1, three-tier (hidden/explored/visible via `@view(tag)` numeric tags) deferred.
+
+- **Visibility Engine Design (2026-03-07):** Designed server-side visibility tracking for fog of war (#16 prerequisite). Per-player `Set<number>` of visible tile indices, computed from owned territory + pawn builder radius + day/night modifiers. Update frequency: every 4 ticks (1 second). Diff-based view updates (add/remove only changed tiles). Performance: ~4ms for 8 players mid-game at 1-second interval = 0.4% CPU. Key risk: `@view()` activates filtering on ALL collections — `players` MapSchema also requires explicit `view.add()` for every player on every client.
+
+- **Fog of War Game Mechanics Design (2026-03-07):** Authored complete fog of war game design at `.squad/decisions/inbox/hal-fog-of-war-design.md`. Three-tier visibility: Unexplored (black, no data), Explored (terrain only via `@view()` static fields), Visible (full real-time data via `@view(1)` dynamic fields). Five vision sources: (1) Territory edge tiles radius 3, (2) HQ bonus radius 5, (3) Pawn builders radius 4, (4) Allied tamed creatures using `detectionRadius` (4 for herbivore, 6 for carnivore), (5) Watchtower structure radius 8. Day/night modifiers: Dawn/Dusk −1, Night −2, minimum radius 1. Edge-only territory vision (not all owned tiles) for O(perimeter) performance. New structure: Watchtower (15W/10S, 24-tick build, max 3/player, no income — pure vision). Four implementation phases: A (MVP fog 3-4d), B (Watchtowers 1-2d), C (Allied creature vision 1d), D (Explored state 1-2d). B/C/D independent and parallelizable. Builds on StateView filter design plumbing layer.
+
+---
+
+## 2026-03-07: Fog of War Design Deliverables & Reviews
+
+**Delivered:** Two comprehensive design documents:
+1. **hal-fog-of-war-design.md** — Game mechanics (5 vision sources, 3 fog states, day/night modifiers, watchtower structure)
+2. **hal-colyseus-filter-design.md** — Server-side StateView + @view() filtering architecture
+
+**Reviews Received:**
+- **Pemulis (Systems Dev):** APPROVE WITH NOTES — Design is architecturally correct. Three implementation items: (1) merge owned-tile cache into Phase 2, (2) add immediate view.add() for player pawns, (3) communicate tile access pattern change to client team
+- **Steeply (Tester):** APPROVE WITH NOTES — Testability verified. Design sound; edge cases identified (reconnection handling, creature spawn lag, tick ordering fragility). 30+ new tests planned for visibility engine
+
+**Status:** Both reviews approved fog design. Ready to enter 4-phase implementation. Pemulis and Steeply findings are implementation refinements, not blockers.
+
+**Cross-Team Impact:** User directive (dkirby-ms 2026-03-07T01:03) on camera restriction to explored areas addressed by Gately's camera bounds design.
+
+
+---
+
+## 2026-03-07T01:21 — Design Reviews Complete: Fog of War Mechanics APPROVED
+
+**Status:** Design reviews by Steeply (Tester) and Pemulis (Systems Dev) completed.
+
+**Verdict:** APPROVE WITH NOTES (both reviewers)
+
+### Key Approvals
+
+✅ **Steeply's Testability Review:**
+- Fully testable with existing infrastructure
+- No architectural blockers
+- 40 test cases planned across 4 phases
+- Edge cases identified and documented (E1–E14)
+- Performance estimate revised: 4–8ms typical (15–20ms on day/night transitions)
+
+✅ **Pemulis's Systems Review:**
+- Architecturally sound
+- Compatible with creature AI, territory, builder systems
+- StateView mechanism correctly applied
+- All identified risks are implementation refinements, not blockers
+
+### Critical Actions Required
+
+1. **Skip @view() field decorators** — Element-level view.add/remove sufficient for two-tier visibility
+2. **Merge owned-tile cache into Phase 2** — Full-tile scan unacceptable (131K iterations/tick for 8 players)
+3. **Add WATCHTOWER constants** to shared/src/constants.ts (costs, build time, radius, max)
+4. **Verify onLeave cleanup** — Ensure playerViews and visibleTiles are deleted on disconnect
+5. **Full regression test** on 331 existing tests after @view() decorators (gate before merge)
+
+### User Directives Incorporated
+
+✅ **Watchtower Destruction (future):** Naturally handled by tickVisibility() — no special logic
+✅ **Shared Alliance Vision (future):** Requires view.add() multiplication by alliance size — benchmarking TBD
+✅ **Explored Structure Silhouettes:** Client-side caching of last-known structureType — no server changes
+
+### Reviewer Confidence
+
+Steeply: "Zero trust in happy paths." — 40 test cases designed for phase transitions, edge positions, lifecycle errors.
+
+Pemulis: "Architecturally sound. Creature AI, territory, builder systems verified as unaffected."
+
+### Next Steps
+
+Proceed to implementation phase with noted precautions. Reviews are comprehensive and implementation-ready. All edge cases documented for phased test coverage.
+
+Full reviews merged to `.squad/decisions.md`.
+

@@ -2,6 +2,7 @@ import type { Room } from '@colyseus/sdk';
 import type { Container } from 'pixi.js';
 import type { HudDOM } from '../ui/HudDOM.js';
 import type { HelpScreen } from '../ui/HelpScreen.js';
+import type { Scoreboard } from '../ui/Scoreboard.js';
 import type { Camera } from '../renderer/Camera.js';
 
 export class InputHandler {
@@ -11,6 +12,7 @@ export class InputHandler {
 
   private hud: HudDOM | null = null;
   private helpScreen: HelpScreen | null = null;
+  private scoreboard: Scoreboard | null = null;
   private camera: Camera | null = null;
 
   constructor(room: Room, worldContainer: Container, canvas: HTMLCanvasElement) {
@@ -31,6 +33,11 @@ export class InputHandler {
     this.helpScreen = helpScreen;
   }
 
+  /** Wire up the scoreboard for toggle. */
+  public setScoreboard(scoreboard: Scoreboard): void {
+    this.scoreboard = scoreboard;
+  }
+
   /** Wire up the camera. */
   public setCamera(camera: Camera): void {
     this.camera = camera;
@@ -41,6 +48,13 @@ export class InputHandler {
       // Help screen toggle
       if (e.key === '?' || e.key === '/') {
         this.helpScreen?.toggle();
+        return;
+      }
+
+      // Scoreboard toggle (Tab key)
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        this.scoreboard?.toggle();
         return;
       }
 
