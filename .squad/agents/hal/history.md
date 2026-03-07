@@ -451,3 +451,46 @@ Proceed to implementation phase with noted precautions. Reviews are comprehensiv
 
 Full reviews merged to `.squad/decisions.md`.
 
+
+**2026-03-07 — Combat System Architecture (Issues #17 + #18)**
+
+Architected unified combat system for enemy bases (#17) and player combat pawns (#18). Key decisions:
+
+- **Zero new schema classes.** All entities (enemy bases, enemy mobiles, defenders, attackers) reuse `CreatureState` with `creatureType` discrimination. Matches existing builder pattern (`creatureType="pawn_builder"`). Server-side AI state in GameRoom Maps, not schema.
+- **Data-driven type registries.** Three new constant registries: `ENEMY_BASE_TYPES` (raider_camp, hive, fortress), `ENEMY_MOBILE_TYPES` (scout, raider, swarm), `PAWN_TYPES` (builder, defender, attacker). All behavior parameterized through constants.
+- **Tick-based adjacency combat.** New `tickCombat()` function. Adjacent hostiles deal damage per cooldown. No projectiles, no range.
+- **Tile damage system.** Enemy mobiles attack `tile.shapeHP`. When shapeHP ≤ 0, tile unclaimed. HQ tiles immune (`isHQTerritory`).
+- **`isTileOpenForCreature()` extended.** Enemy mobiles and attackers can enter any tile. Defenders stay in own territory only. Builders unchanged.
+- **Single branch:** `squad/17-18-combat-system` targeting `dev`. Issues too coupled for separate branches.
+- **Existing `WAVE_SPAWNER` constant** (line 89 constants.ts) should be replaced by `ENEMY_SPAWNING`.
+- **New AI modules:** `enemyBaseAI.ts`, `enemyMobileAI.ts`, `defenderAI.ts`, `attackerAI.ts` — each follows `builderAI.ts` pattern (exported step function, FSM states as strings).
+- **`nextMoveTick` reused** as spawn timer for enemy bases — no new fields needed.
+- **Key file:** Architecture decision at `.squad/decisions/inbox/hal-combat-system-architecture.md`.
+
+---
+
+## 2026-03-07: Combat System Architecture Implementation Complete
+
+**Status:** IMPLEMENTED (Pemulis)
+
+Your combat system architecture for issues #17 & #18 has been fully implemented on squad/17-18-combat-system.
+
+**Delivered:**
+- 5 new AI modules (enemyBaseAI, enemyMobileAI, combat, defenderAI, attackerAI)
+- 1,311 lines across 13 files
+- All 384 tests pass; 139 .todo() tests await test implementation
+
+**Key implementation notes for documentation updates:**
+
+1. **WAVE_SPAWNER is gone** — All references replaced with ENEMY_SPAWNING constant group. Update any docs/ADRs accordingly.
+2. **Registry-driven architecture** — PAWN_TYPES, ENEMY_BASE_TYPES, ENEMY_MOBILE_TYPES all in shared/constants.ts. Data-driven config as proposed.
+3. **CreatureState reuse pattern** — No new schema classes. All entity types use existing CreatureState with `creatureType` and `pawnType` fields.
+4. **Server-side AI maps** — Combat cooldowns, enemy base spawn state, attacker return timers all live in GameRoom as module-level Maps (not synced to clients).
+5. **Night-only base spawning** — Implemented as dayPhase guard in tickEnemyBaseSpawning.
+6. **Base destruction rewards** — Implemented per-base-type amounts (fortress > hive > raider_camp).
+
+**Next phase (blocking on):**
+- Gately: UI rendering for new creatures + spawn buttons
+- Steeply: Test implementation (139 .todo() tests)
+
+**Branch:** squad/17-18-combat-system (ready for review)

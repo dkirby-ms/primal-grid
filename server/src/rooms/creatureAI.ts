@@ -1,7 +1,14 @@
 import { GameState, CreatureState } from "./GameState.js";
 import { stepBuilder } from "./builderAI.js";
+import { stepDefender } from "./defenderAI.js";
+import { stepAttacker } from "./attackerAI.js";
+import type { AttackerTracker } from "./attackerAI.js";
+import { stepEnemyBase } from "./enemyBaseAI.js";
+import type { EnemyBaseTracker } from "./enemyBaseAI.js";
+import { stepEnemyMobile } from "./enemyMobileAI.js";
 import {
-  CREATURE_AI, CREATURE_TYPES, PAWN,
+  CREATURE_AI, CREATURE_TYPES, PAWN, PAWN_TYPES,
+  isEnemyBase, isEnemyMobile, isPlayerPawn,
 } from "@primal-grid/shared";
 import type { CreatureTypeDef } from "@primal-grid/shared";
 import type { Room } from "colyseus";
@@ -14,7 +21,13 @@ export type AIState = "idle" | "wander" | "eat" | "flee" | "hunt" | "exhausted";
  * Each creature has its own `nextMoveTick` so they move independently.
  * Modifies creature states in-place. Removes dead creatures from state.
  */
-export function tickCreatureAI(state: GameState, room: Room): void {
+export function tickCreatureAI(
+  state: GameState,
+  room: Room,
+  enemyBaseState: Map<string, EnemyBaseTracker>,
+  attackerState: Map<string, AttackerTracker>,
+  nextCreatureId: { value: number },
+): void {
   const toRemove: string[] = [];
   const currentTick = state.tick;
 
@@ -22,7 +35,23 @@ export function tickCreatureAI(state: GameState, room: Room): void {
     // Per-creature movement timer — skip if not ready
     if (currentTick < creature.nextMoveTick) return;
 
-    // Schedule next AI step
+    // Enemy bases skip ALL generic creature logic — straight to their own AI.
+    // They must never be subject to stamina, hunger, or exhaustion.
+    if (isEnemyBase(creature.creatureType)) {
+      if (creature.currentState === "exhausted") creature.currentState = "idle";
+      stepEnemyBase(creature, state, room, enemyBaseState, nextCreatureId);
+      return;
+    }
+
+    // Enemy mobiles skip generic creature logic — straight to their own AI.
+    if (isEnemyMobile(creature.creatureType)) {
+      if (creature.currentState === "exhausted") creature.currentState = "idle";
+      creature.nextMoveTick = currentTick + CREATURE_AI.TICK_INTERVAL;
+      stepEnemyMobile(creature, state);
+      return;
+    }
+
+    // Schedule next AI step for remaining (non-enemy) creatures
     creature.nextMoveTick = currentTick + CREATURE_AI.TICK_INTERVAL;
 
     // Pawns don't have hunger mechanics
@@ -60,9 +89,13 @@ export function tickCreatureAI(state: GameState, room: Room): void {
       return;
     }
 
-    // Run FSM based on creature type
+    // Run FSM based on creature type (enemy entities already handled above)
     let moved = false;
-    if (creature.creatureType === "pawn_builder") {
+    if (creature.pawnType === "defender") {
+      moved = stepDefender(creature, state);
+    } else if (creature.pawnType === "attacker") {
+      moved = stepAttacker(creature, state, attackerState);
+    } else if (creature.creatureType === "pawn_builder") {
       const prevX = creature.x;
       const prevY = creature.y;
       stepBuilder(creature, state);
@@ -104,13 +137,19 @@ function getStaminaConfig(creature: CreatureState): {
   regenPerTick: number;
   exhaustedThreshold: number;
 } {
-  if (creature.creatureType === "pawn_builder") {
+  // Check PAWN_TYPES registry first (covers builder, defender, attacker)
+  if (creature.pawnType && PAWN_TYPES[creature.pawnType]) {
+    const pawnDef = PAWN_TYPES[creature.pawnType];
     return {
-      maxStamina: PAWN.BUILDER_MAX_STAMINA,
-      costPerMove: PAWN.BUILDER_STAMINA_COST_PER_MOVE,
-      regenPerTick: PAWN.BUILDER_STAMINA_REGEN_PER_TICK,
-      exhaustedThreshold: PAWN.BUILDER_EXHAUSTED_THRESHOLD,
+      maxStamina: pawnDef.maxStamina,
+      costPerMove: pawnDef.staminaCostPerMove,
+      regenPerTick: pawnDef.staminaRegenPerTick,
+      exhaustedThreshold: pawnDef.exhaustedThreshold,
     };
+  }
+  // Enemy entities don't use stamina — return high values to avoid exhaustion
+  if (isEnemyBase(creature.creatureType) || isEnemyMobile(creature.creatureType)) {
+    return { maxStamina: 999, costPerMove: 0, regenPerTick: 0, exhaustedThreshold: 0 };
   }
   const typeDef = CREATURE_TYPES[creature.creatureType] as CreatureTypeDef | undefined;
   if (typeDef) {
@@ -345,19 +384,39 @@ function findNearestResource(
 /**
  * Check if a tile is open for a given creature to enter.
  * Walkability + territory ownership check:
- * - Non-pawn creatures (herbivores, carnivores) cannot enter tiles with an ownerID.
- * - Pawn builders can enter tiles owned by their own player.
+ * - Enemy mobiles can enter any walkable tile (they invade territory)
+ * - Enemy bases don't move
+ * - Attackers can enter any walkable tile (they leave territory to fight)
+ * - Defenders stay in own territory only
+ * - Builders can enter own territory only
+ * - Wildlife (herbivores, carnivores) cannot enter owned tiles
  */
 export function isTileOpenForCreature(state: GameState, creature: CreatureState, x: number, y: number): boolean {
   if (!state.isWalkable(x, y)) return false;
   const tile = state.getTile(x, y);
   if (!tile) return false;
-  if (tile.ownerID !== "") {
-    if (creature.creatureType === "pawn_builder" && creature.ownerID === tile.ownerID) {
-      return true;
-    }
-    return false;
+
+  // Enemy mobiles can enter any walkable tile
+  if (isEnemyMobile(creature.creatureType)) return true;
+
+  // Enemy bases don't move
+  if (isEnemyBase(creature.creatureType)) return false;
+
+  // Attackers can enter any walkable tile
+  if (creature.pawnType === "attacker") return true;
+
+  // Defenders: own territory or unclaimed (cannot enter enemy-owned tiles)
+  if (creature.pawnType === "defender") {
+    return tile.ownerID === "" || tile.ownerID === creature.ownerID;
   }
+
+  // Builders: own territory or unclaimed
+  if (creature.creatureType === "pawn_builder" && creature.ownerID === tile.ownerID) {
+    return true;
+  }
+
+  // Wildlife and default: cannot enter owned territory
+  if (tile.ownerID !== "") return false;
   return true;
 }
 

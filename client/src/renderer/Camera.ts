@@ -17,13 +17,18 @@ const MIN_BOUNDS_EXTENT = 10;
 /** Lerp speed for smooth bounds expansion (0–1 per frame). */
 const BOUNDS_LERP_SPEED = 0.08;
 
+const ARROW_KEYS = ['arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
+
 export class Camera {
   private target: Container;
   private viewWidth: number;
   private viewHeight: number;
   private mapPixelSize: number;
 
-  private keys = { w: false, a: false, s: false, d: false };
+  private keys = {
+    w: false, a: false, s: false, d: false,
+    arrowup: false, arrowdown: false, arrowleft: false, arrowright: false,
+  };
   private dragging = false;
   private lastMouse = { x: 0, y: 0 };
 
@@ -40,7 +45,12 @@ export class Camera {
   }
 
   private bindEvents(): void {
-    window.addEventListener('keydown', (e) => this.onKey(e.key.toLowerCase(), true));
+    window.addEventListener('keydown', (e) => {
+      if (ARROW_KEYS.includes(e.key.toLowerCase())) {
+        e.preventDefault();
+      }
+      this.onKey(e.key.toLowerCase(), true);
+    });
     window.addEventListener('keyup', (e) => this.onKey(e.key.toLowerCase(), false));
     window.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
     window.addEventListener('mousedown', (e) => this.onMouseDown(e));
@@ -56,18 +66,29 @@ export class Camera {
 
   private onWheel(e: WheelEvent): void {
     e.preventDefault();
-    const cur = this.target.scale.x;
+    const oldScale = this.target.scale.x;
     // Find the current index (nearest level)
     let idx = 0;
-    let minDist = Math.abs(ZOOM_LEVELS[0] - cur);
+    let minDist = Math.abs(ZOOM_LEVELS[0] - oldScale);
     for (let i = 1; i < ZOOM_LEVELS.length; i++) {
-      const dist = Math.abs(ZOOM_LEVELS[i] - cur);
+      const dist = Math.abs(ZOOM_LEVELS[i] - oldScale);
       if (dist < minDist) { minDist = dist; idx = i; }
     }
     // Step to next/previous level
     const dir = e.deltaY < 0 ? 1 : -1;
     const nextIdx = Math.min(ZOOM_LEVELS.length - 1, Math.max(0, idx + dir));
-    this.target.scale.set(ZOOM_LEVELS[nextIdx], ZOOM_LEVELS[nextIdx]);
+    const newScale = ZOOM_LEVELS[nextIdx];
+
+    // Anchor zoom to the mouse cursor position so the world point under
+    // the cursor stays fixed after the scale change.
+    const anchorX = e.clientX;
+    const anchorY = e.clientY;
+    const worldX = (anchorX - this.target.position.x) / oldScale;
+    const worldY = (anchorY - this.target.position.y) / oldScale;
+    this.target.scale.set(newScale, newScale);
+    this.target.position.x = anchorX - worldX * newScale;
+    this.target.position.y = anchorY - worldY * newScale;
+
     this.clamp();
   }
 
@@ -118,7 +139,7 @@ export class Camera {
     }
   }
 
-  /** Call once per frame to apply WASD panning. */
+  /** Call once per frame to apply WASD/arrow-key panning. */
   public update(): void {
     // Smoothly lerp camera bounds toward target
     if (this.exploredBoundsTarget && this.exploredBoundsCurrent) {
@@ -132,10 +153,10 @@ export class Camera {
 
     let dx = 0;
     let dy = 0;
-    if (this.keys.w) dy += PAN_SPEED;
-    if (this.keys.s) dy -= PAN_SPEED;
-    if (this.keys.a) dx += PAN_SPEED;
-    if (this.keys.d) dx -= PAN_SPEED;
+    if (this.keys.w || this.keys.arrowup) dy += PAN_SPEED;
+    if (this.keys.s || this.keys.arrowdown) dy -= PAN_SPEED;
+    if (this.keys.a || this.keys.arrowleft) dx += PAN_SPEED;
+    if (this.keys.d || this.keys.arrowright) dx -= PAN_SPEED;
 
     if (dx !== 0 || dy !== 0) {
       this.target.position.x += dx;

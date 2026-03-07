@@ -86,14 +86,191 @@ export const TERRITORY = {
   CLAIM_TICKS: 8,
 } as const;
 
-/** Wave spawner constants (Phase B). */
-export const WAVE_SPAWNER = {
-  /** Ticks between waves (240 ticks = 60 seconds at 4 ticks/sec). */
-  INTERVAL_TICKS: 240,
-  /** Base number of creatures per wave. */
-  BASE_WAVE_SIZE: 3,
-  /** Additional creatures per wave number. */
-  ESCALATION_PER_WAVE: 1,
+/** Enemy base type definition. */
+export interface EnemyBaseTypeDef {
+  readonly name: string;
+  readonly icon: string;
+  readonly health: number;
+  readonly spawnInterval: number;
+  readonly spawnType: string;
+  readonly maxMobiles: number;
+  readonly color: number;
+  /** Resources awarded to the player who destroys this base. */
+  readonly reward: { wood: number; stone: number };
+}
+
+/** Enemy mobile type definition. */
+export interface EnemyMobileTypeDef {
+  readonly name: string;
+  readonly icon: string;
+  readonly health: number;
+  readonly damage: number;
+  readonly tileDamage: number;
+  readonly speed: number;
+  readonly detectionRadius: number;
+  readonly color: number;
+}
+
+/** Pawn type definition (builder, defender, attacker). */
+export interface PawnTypeDef {
+  readonly name: string;
+  readonly icon: string;
+  readonly creatureType: string;
+  readonly health: number;
+  readonly cost: { wood: number; stone: number };
+  readonly upkeep: { wood: number };
+  readonly maxCount: number;
+  readonly damage: number;
+  readonly detectionRadius: number;
+  readonly maxStamina: number;
+  readonly staminaCostPerMove: number;
+  readonly staminaRegenPerTick: number;
+  readonly exhaustedThreshold: number;
+  readonly visionRadius: number;
+}
+
+/** Enemy base type registry. */
+export const ENEMY_BASE_TYPES: Record<string, EnemyBaseTypeDef> = {
+  enemy_base_raider: {
+    name: "Raider Camp",
+    icon: "⛺",
+    health: 200,
+    spawnInterval: 80,
+    spawnType: "enemy_raider",
+    maxMobiles: 3,
+    color: 0xcc0000,
+    reward: { wood: 15, stone: 10 },
+  },
+  enemy_base_hive: {
+    name: "Hive",
+    icon: "🪺",
+    health: 150,
+    spawnInterval: 40,
+    spawnType: "enemy_swarm",
+    maxMobiles: 6,
+    color: 0xcccc00,
+    reward: { wood: 10, stone: 5 },
+  },
+  enemy_base_fortress: {
+    name: "Fortress",
+    icon: "🏰",
+    health: 400,
+    spawnInterval: 120,
+    spawnType: "enemy_raider",
+    maxMobiles: 4,
+    color: 0x880000,
+    reward: { wood: 25, stone: 20 },
+  },
+};
+
+/** Enemy mobile type registry. */
+export const ENEMY_MOBILE_TYPES: Record<string, EnemyMobileTypeDef> = {
+  enemy_scout: {
+    name: "Scout",
+    icon: "👁",
+    health: 20,
+    damage: 5,
+    tileDamage: 10,
+    speed: 1,
+    detectionRadius: 6,
+    color: 0xff6600,
+  },
+  enemy_raider: {
+    name: "Raider",
+    icon: "⚔",
+    health: 40,
+    damage: 15,
+    tileDamage: 25,
+    speed: 2,
+    detectionRadius: 4,
+    color: 0xff0000,
+  },
+  enemy_swarm: {
+    name: "Swarm",
+    icon: "🐛",
+    health: 15,
+    damage: 8,
+    tileDamage: 5,
+    speed: 1,
+    detectionRadius: 3,
+    color: 0xffcc00,
+  },
+};
+
+/** Pawn type registry (builder, defender, attacker). */
+export const PAWN_TYPES: Record<string, PawnTypeDef> = {
+  builder: {
+    name: "Builder",
+    icon: "🔨",
+    creatureType: "pawn_builder",
+    health: 50,
+    cost: { wood: 10, stone: 5 },
+    upkeep: { wood: 1 },
+    maxCount: 5,
+    damage: 0,
+    detectionRadius: 0,
+    maxStamina: 20,
+    staminaCostPerMove: 1,
+    staminaRegenPerTick: 2,
+    exhaustedThreshold: 5,
+    visionRadius: 4,
+  },
+  defender: {
+    name: "Defender",
+    icon: "🛡",
+    creatureType: "pawn_defender",
+    health: 80,
+    cost: { wood: 15, stone: 10 },
+    upkeep: { wood: 2 },
+    maxCount: 3,
+    damage: 20,
+    detectionRadius: 5,
+    maxStamina: 25,
+    staminaCostPerMove: 1,
+    staminaRegenPerTick: 2,
+    exhaustedThreshold: 5,
+    visionRadius: 4,
+  },
+  attacker: {
+    name: "Attacker",
+    icon: "⚔",
+    creatureType: "pawn_attacker",
+    health: 60,
+    cost: { wood: 20, stone: 15 },
+    upkeep: { wood: 3 },
+    maxCount: 2,
+    damage: 25,
+    detectionRadius: 6,
+    maxStamina: 30,
+    staminaCostPerMove: 1,
+    staminaRegenPerTick: 2,
+    exhaustedThreshold: 5,
+    visionRadius: 5,
+  },
+};
+
+/** Grave marker constants. */
+export const GRAVE_MARKER = {
+  /** Ticks before a grave marker decays (480 ticks ≈ 2 minutes at 4 ticks/sec). */
+  DECAY_TICKS: 480,
+} as const;
+
+/** Combat resolution constants. */
+export const COMBAT = {
+  ATTACK_COOLDOWN_TICKS: 4,
+  TILE_ATTACK_COOLDOWN_TICKS: 8,
+  COMBAT_TICK_INTERVAL: 2,
+} as const;
+
+/** Enemy spawning constants (replaces WAVE_SPAWNER). */
+export const ENEMY_SPAWNING = {
+  BASE_SPAWN_INTERVAL_TICKS: 120,
+  MAX_BASES: 8,
+  MIN_DISTANCE_FROM_HQ: 15,
+  MIN_DISTANCE_BETWEEN_BASES: 10,
+  FIRST_BASE_DELAY_TICKS: 240,
+  /** Maximum ticks an attacker stays on sortie before returning. */
+  ATTACKER_SORTIE_TICKS: 200,
 } as const;
 
 /** Round timer constants (Phase D). */

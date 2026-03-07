@@ -1198,3 +1198,220 @@ The `@view()` decorator on a collection field is NOT a "field-level filter" — 
 **isVisibilitySharedWithParent detail:** When `@view()` is on the parent field, child items get `isVisibilitySharedWithParent = false` (because `!fieldHasViewTag = false`). This means each item MUST be individually `view.add()`'d. Without `@view()`, items would auto-inherit parent visibility, defeating per-element filtering.
 
 **Tests:** All 372 tests pass. The `@view()` decorator only affects encoding metadata — test code that accesses state directly (via `room.state.tiles.at(i)`) is unaffected.
+
+---
+
+## Session 2026-03-07 — Combat System Implementation (Issues #17, #18)
+
+**Status:** SUCCESS
+**Branch:** `squad/17-18-combat-system` (from `dev`)
+**Output:** 5 new server modules, extended shared constants/types, GameRoom integration
+**Tests:** 384 passing (all existing tests green), 139 combat specs as .todo()
+
+### What Was Built
+
+- **shared/src/constants.ts** — ENEMY_BASE_TYPES, ENEMY_MOBILE_TYPES, PAWN_TYPES registries with full type defs. COMBAT constants (cooldowns). ENEMY_SPAWNING (replaces WAVE_SPAWNER). Type interfaces: EnemyBaseTypeDef, EnemyMobileTypeDef, PawnTypeDef.
+- **shared/src/types.ts** — isEnemyBase(), isEnemyMobile(), isPlayerPawn(), isCombatPawn() helpers.
+- **shared/src/messages.ts** — SpawnPawnPayload extended: pawnType accepts 'builder' | 'defender' | 'attacker'.
+- **server/src/rooms/enemyBaseAI.ts** — stepEnemyBase(): spawns mobiles from bases, night-only. EnemyBaseTracker for mobile ownership. onBaseDestroyed() despawns all child mobiles.
+- **server/src/rooms/enemyMobileAI.ts** — stepEnemyMobile(): FSM (seek_territory → move_to_target → attacking_tile). Targets non-HQ player tiles.
+- **server/src/rooms/combat.ts** — tickCombat(): 3-phase resolution (creature-vs-creature, tile damage, death/cleanup). Simultaneous symmetric damage. Base destruction awards resources. Uses attack cooldown tracking maps.
+- **server/src/rooms/defenderAI.ts** — stepDefender(): FSM (patrol → engage → returning). Territory-constrained. Targets enemy mobiles and carnivores within own territory.
+- **server/src/rooms/attackerAI.ts** — stepAttacker(): FSM (seek_target → move_to_target → attacking → returning). Prefers bases over mobiles. Sortie timer with home return.
+- **server/src/rooms/creatureAI.ts** — Extended dispatch for all new types. Updated isTileOpenForCreature: enemy mobiles + attackers can enter any tile, defenders stay in territory.
+- **server/src/rooms/GameRoom.ts** — tickEnemyBaseSpawning() (night-only, MIN_DISTANCE_FROM_HQ, MAX_BASES). tickCombat() wired. handleSpawnPawn() uses PAWN_TYPES registry. tickPawnUpkeep() handles all pawn types.
+- **server/src/rooms/visibility.ts** — All pawn types provide per-type visionRadius from PAWN_TYPES.
+
+### Architecture Decisions
+
+1. **WAVE_SPAWNER replaced by ENEMY_SPAWNING** — single constant group for all enemy spawning config.
+2. **Base destruction awards resources** — reward defined per base type in ENEMY_BASE_TYPES registry.
+3. **Enemy bases spawn at night only** — checked via `state.dayPhase !== DayPhase.Night`.
+4. **Lazy-init server-side Maps** — enemyBaseState, attackerState, creatureIdCounter all use lazy init guards to support `Object.create(GameRoom.prototype)` test pattern.
+5. **Combat cooldowns stored in module-level Maps** — not on CreatureState schema (server-only state).
+6. **PAWN_TYPES registry centralizes all pawn config** — existing flat PAWN constants retained for backward compat.
+
+### Key File Paths
+
+- Constants: `shared/src/constants.ts` (ENEMY_BASE_TYPES, ENEMY_MOBILE_TYPES, PAWN_TYPES, COMBAT, ENEMY_SPAWNING)
+- Type helpers: `shared/src/types.ts` (isEnemyBase, isEnemyMobile, isPlayerPawn, isCombatPawn)
+- Enemy base AI: `server/src/rooms/enemyBaseAI.ts`
+- Enemy mobile AI: `server/src/rooms/enemyMobileAI.ts`
+- Combat resolution: `server/src/rooms/combat.ts`
+- Defender AI: `server/src/rooms/defenderAI.ts`
+- Attacker AI: `server/src/rooms/attackerAI.ts`
+
+## Learnings
+- Module-level Maps (attackCooldowns, tileAttackCooldowns) in combat.ts persist across ticks but need cleanup on creature death to avoid memory leaks.
+- Enemy entities skip hunger/starvation — guarded by `isEnemyBase()/isEnemyMobile()` checks in tickCreatureAI.
+- Stamina config for enemy entities returns maxStamina=999, costPerMove=0 to prevent exhaustion state.
+- areHostile() function is the single source of truth for combat targeting rules — extend it for new entity types.
+
+### Cross-Agent Update: Gately Combat Client Rendering Complete (2026-03-07)
+
+Gately has completed steps 10-11 of Hal's architecture: client-side combat entity rendering and HUD spawn controls.
+
+**Key decision: Registry-Driven Rendering Pattern**
+- All combat entity display properties (icon, color, max HP) are sourced from shared registries (`ENEMY_BASE_TYPES`, `ENEMY_MOBILE_TYPES`, `PAWN_TYPES`), not hardcoded client-side.
+- The renderer uses `isEnemyBase()`, `isEnemyMobile()`, `isPlayerPawn()` type helpers from shared.
+- **Impact:** Adding a new enemy or pawn type only requires updating the shared registry. The client auto-renders it as long as it follows naming conventions and includes `icon` and `color` fields.
+
+**What's rendering now:**
+- Enemy bases as diamonds (1.5× scale, gold color)
+- Colored mobiles: red raider, purple hive, etc.
+- Defenders (blue), attackers (orange)
+- HP bars with registry-driven max values
+
+**Your next steps:**
+- Verify that your registry entries for enemy bases/mobiles include `icon` and `color` fields.
+- Ensure Steeply's combat tests verify that adding a new type to the registry auto-renders (no client changes needed).
+
+**All 384 tests pass; branch ready for review.**
+
+### Grave Marker System (2026-03-12)
+
+- **Feature:** Grave markers spawn at death positions when creatures/pawns die in combat, then decay after GRAVE_MARKER.DECAY_TICKS (480 ticks ≈ 2 minutes).
+- **Architecture:** Grave markers are CreatureState entities with `creatureType="grave_marker"` and `pawnType` storing the original creature type (for client rendering). `spawnTick` field added to CreatureState schema for decay timing.
+- **Inertness guarantees:** `nextMoveTick = Number.MAX_SAFE_INTEGER` naturally excludes grave markers from creature AI (timer gate). `isGraveMarker()` guard added to combat Phase 1 and `findAdjacentHostile()` so they can't attack or be targeted. Not in `PAWN_TYPES` registry so pawn upkeep ignores them. Not in `CREATURE_TYPES` so respawn logic ignores them.
+- **Exclusion:** Enemy bases don't spawn grave markers (they're structures, not living entities).
+- **tickCombat signature change:** Added `nextCreatureId: { value: number }` parameter (same mutable counter pattern used by `tickCreatureAI`). Updated both GameRoom.ts call site and test helper.
+- **New file:** `server/src/rooms/graveDecay.ts` — `tickGraveDecay()` runs every tick, removes markers past their decay lifetime.
+- **Key files:** `shared/src/constants.ts` (GRAVE_MARKER), `shared/src/types.ts` (isGraveMarker), `server/src/rooms/GameState.ts` (spawnTick), `server/src/rooms/combat.ts`, `server/src/rooms/graveDecay.ts`, `server/src/rooms/GameRoom.ts`.
+- **Tests:** 495/495 pass, 31/31 test files.
+
+### Cross-Agent Coordination (2026-03-07)
+
+**Grave Markers & Combat VFX — Team Delivery**
+
+Coordinated work with Gately (Game Dev) and Steeply (Tester) on grave marker system (server + client) and combat visual effects.
+
+- **Pemulis contribution:** Server-side grave spawning (Phase 3 of combat.ts), decay module, type guards, `spawnTick` schema field, `GRAVE_MARKER.DECAY_TICKS` constant, `tickCombat` signature change to add `nextCreatureId` counter.
+- **Gately contribution:** Client-side CombatEffects manager (HP delta detection, floating damage numbers, hit flashes), grave marker PixiJS Graphics rendering (tombstone with rounded rect + cross).
+- **Steeply contribution:** 25 grave marker tests, 111 combat test fixes (tickCombat signature), documented combat test patterns (cooldown ticks, room mocks, pair-based resolution).
+
+**Cross-Impact:** Pemulis's signature change (tickCombat now requires `nextCreatureId` counter) broke 111 existing tests, which Steeply fixed. All agents' history.md updated with cross-references.
+
+**Test Status:** 520 total tests, all passing.
+**Branch:** squad/17-18-combat-system (ready for review)
+**Decisions Merged:** pemulis-grave-markers.md, gately-combat-visuals.md, steeply-grave-tests.md, steeply-combat-test-patterns.md, copilot-directive-2026-03-07T20-55-45Z.md (rescind "close only on master" rule).
+
+### Dev Mode — Fog of War Bypass (2026-03-12)
+
+- **Feature:** Added `?dev=1` or `?devmode=1` URL parameter to disable fog of war for development/debugging.
+- **Client (`client/src/network.ts`):** Reads URL search params, passes `{ devMode: true }` in Colyseus join options.
+- **Server (`server/src/rooms/GameRoom.ts`):** `onJoin()` reads `options.devMode`, passes to `initPlayerView()`. DevMode flag stored in playerViews entry. `initPlayerView()` adds ALL tiles and creatures to StateView when devMode is true. `tickFogOfWar()` short-circuits for devMode players — only picks up newly spawned tiles/creatures, never removes anything from view.
+- **No client fog rendering changes needed** — the client renders fog state purely based on what tiles are in the StateView. All tiles in view = no fog.
+- **Key pattern:** playerViews Map entry now has `devMode: boolean` field: `{ view, visibleIndices, visibleCreatureIds, devMode }`.
+- **Test status:** 520/520 tests pass, no regressions.
+
+### Enemy Spawn Debug Logging + Alignment Bug Discovery (2026-03-12)
+
+- **Enhanced game_log entries for enemy spawning:** Both enemy base spawns (GameRoom.ts `tickEnemyBaseSpawning`) and enemy mobile spawns (enemyBaseAI.ts `stepEnemyBase`) now emit rich `game_log` broadcasts with position, tick, phase, base ID, and mobile counts.
+- **Game log pattern:** `room.broadcast("game_log", { message: string, type: string })` — type is "spawn" for spawn events, "death" for kills, "upkeep" for resource warnings, "info" for general. No schema-level log; purely broadcast events.
+- **CRITICAL BUG FOUND AND FIXED:** `BASE_SPAWN_INTERVAL_TICKS` was 480 (= `DAY_NIGHT.CYCLE_LENGTH_TICKS`), so the modulo check only fired at dayTick 0 (dawn). Night gate blocked it → bases never spawned. **Fixed:** Changed to 120. Now checks at dayTick 0, 120, 240, 360 — dayTick 360 = 75%, squarely in night phase (65–100%). One guaranteed spawn check per night cycle.
+- **Test status:** 520/520 tests pass, no regressions.
+
+### Enemy Base Spawn Interval Fix (2026-03-12)
+
+- **Bug:** `ENEMY_SPAWNING.BASE_SPAWN_INTERVAL_TICKS` (480) == `DAY_NIGHT.CYCLE_LENGTH_TICKS` (480). `tick % 480 === 0` only fires at `dayTick === 0` (dawn, 0%). Night phase is 65–100%. The night-only guard in `tickEnemyBaseSpawning()` and the modulo check never overlapped — enemy bases could never spawn.
+- **Fix:** Changed `BASE_SPAWN_INTERVAL_TICKS` from 480 to 120 in `shared/src/constants.ts`. Now the check fires 4× per cycle (dayTick 0, 120, 240, 360). dayTick 360 = 75% → night phase → spawn check passes.
+- **Lesson:** When a periodic check is gated by a phase window, the interval must be short enough that at least one modulo hit lands inside that window. Rule of thumb: interval ≤ phase_duration_ticks.
+- **Test status:** 520/520 tests pass, no regressions.
+
+### Stale shared/dist Root Cause + Spawn Debug Tracing (2026-03-12)
+
+- **ROOT CAUSE FOUND:** The 480→120 interval fix in `shared/src/constants.ts` was never compiled to `shared/dist/constants.js`. The incremental build cache (`tsconfig.tsbuildinfo`) silently skipped re-emitting the file. The server reads from compiled `dist/`, so it was still running with `BASE_SPAWN_INTERVAL_TICKS=480` at runtime — the old value that only fires at dayTick 0 (dawn), never aligning with night phase.
+- **Fix:** Deleted `tsconfig.tsbuildinfo` and rebuilt `shared/` from scratch. Verified `shared/dist/constants.js` now has `120`.
+- **Debug tracing added:** 7 `console.log` statements in `tickEnemyBaseSpawning()` (GameRoom.ts) covering every guard: periodic state dump every 120 ticks, night phase pass, grace period pass, interval pass, base count check, `findEnemyBaseSpawnLocation()` result, and successful spawn confirmation. These are server-side only (no client impact).
+- **Investigation findings:**
+  - `findEnemyBaseSpawnLocation()` exists and works: 100 random attempts on 128×128 map with distance constraints (15 from HQ, 10 between bases). Not the blocker.
+  - `#game-log` element exists in `client/index.html` and is wired correctly in `main.ts` via `GameLog` class. Not the blocker.
+  - DayPhase enum uses string values (`Night = "night"`), PHASES array uses matching string literals. Comparison is correct.
+  - `dayTick` initializes to 0 in GameState schema, increments correctly in `tickDayNightCycle()`. Not the blocker.
+- **Lesson (critical, recurring):** The `tsconfig.tsbuildinfo` gotcha strikes again. After ANY edit to `shared/src/`, MUST delete tsbuildinfo and rebuild before testing runtime behavior. The source file can look correct while the compiled output remains stale. Consider adding a pre-build clean step.
+- **Test status:** 520/520 tests pass, no regressions.
+
+### Stale Build Cache + Spawn Cache Debugging (2026-03-07)
+
+- **Build cache gotcha rediscovered:** After editing `shared/src/constants.ts` to change `BASE_SPAWN_INTERVAL_TICKS` from 480 to 120, the change was saved in source but NOT recompiled to `shared/dist/constants.js`. The incremental build cache (`tsconfig.tsbuildinfo`) silently skipped re-emitting unchanged dependencies. Runtime behavior did not change because the server reads from compiled `dist/`, not source.
+- **Fix:** Deleted `tsconfig.tsbuildinfo`, rebuilt `shared/` from scratch. Verified `shared/dist/constants.js` now contains correct value (120).
+- **Debug improvements:** Added 7 `console.log` tracing points to `tickEnemyBaseSpawning()` in GameRoom.ts — state dump every 120 ticks, night phase gate, grace period, interval check, base count, spawn location lookup, and confirmation.
+- **Pattern:** When source edits don't produce runtime changes, suspect incremental cache. ALWAYS `rm -rf .tsbuildinfo && npm run build` after `shared/src/` edits. Consider pre-build cache cleanup in CI.
+- **Test status:** 520/520 tests pass. Enemy bases now spawn correctly in night phase.
+- **Requested by:** saitcho
+
+### Enemy Mobile Spawn Timer Conflict (2025-07-25)
+
+## Learnings
+
+- **Bug:** Enemy bases (hives) were visible but never spawned mobiles. The `stepEnemyBase()` timer guard (`state.tick < base.nextMoveTick`) always returned early.
+- **Root cause:** `tickCreatureAI()` in `creatureAI.ts` unconditionally overwrites `creature.nextMoveTick` to `currentTick + CREATURE_AI.TICK_INTERVAL` (a short future value) at line 39 BEFORE dispatching to `stepEnemyBase()`. Inside `stepEnemyBase()`, the timer check at line 32 then sees `state.tick < (currentTick + TICK_INTERVAL)` — always true — so it always returns early. No mobile could ever spawn.
+- **Fix (2 files):**
+  1. `creatureAI.ts`: Made the `nextMoveTick` override conditional — skip for enemy bases so they manage their own spawn timer.
+  2. `enemyBaseAI.ts`: Removed the now-redundant inner timer check (`state.tick < base.nextMoveTick`). Added `nextMoveTick = state.tick + CREATURE_AI.TICK_INTERVAL` on the day-phase early return so bases are re-checked promptly when night falls.
+- **Pattern:** When two layers both read/write the same timing field (`nextMoveTick`), one layer's write can silently clobber the other's. Enemy bases need their own timer management because their spawn interval differs from the generic creature AI tick interval.
+- **Test status:** 520/520 tests pass, including 13 enemy base/mobile spawning tests.
+- **Requested by:** saitcho
+
+### Console Log Cleanup & Spawn Consolidation (2026-03-07)
+
+- **Cleanup:** Removed 7 `[ENEMY SPAWN]` console.log statements from GameRoom.ts that were added during debugging. Retained game_log broadcasts for telemetry.
+- **Consolidation note:** The timer conflict fix from the previous session proved stable. No additional adjustments needed. Enemy mobile spawning now fully functional.
+- **Test status:** 520/520 tests pass.
+- **Requested by:** saitcho
+
+### Enemy Base Exhaustion Bug Fix (2026-03-08)
+
+- **Bug:** Enemy bases showed 💤 (exhausted) status in-game and stopped spawning mobiles entirely.
+- **Root cause:** In `tickCreatureAI()`, the exhaustion recovery check (`creature.currentState === "exhausted"` at ~line 67) ran BEFORE the `isEnemyBase` routing at ~line 80. If a base ever entered "exhausted" state (stamina=0 triggering the post-move exhaustion check), the early `return` prevented `stepEnemyBase()` from ever being called.
+- **Fix (2 files, 3 changes):**
+  1. `creatureAI.ts`: Moved `isEnemyBase` and `isEnemyMobile` checks to the TOP of the creature loop (right after `nextMoveTick` skip). Enemy entities now bail out immediately to their own AI — they never touch stamina, hunger, exhaustion, or any generic creature logic. Also resets `currentState` from "exhausted" to "idle" if somehow corrupted.
+  2. `creatureAI.ts`: Removed the now-redundant `isEnemyBase`/`isEnemyMobile` branches from the FSM routing block and the hunger guard.
+  3. `CreatureRenderer.ts`: Added guard so enemy bases and enemy mobiles skip the 💤 exhausted indicator in `updateIndicator()`.
+- **Pattern:** Enemy entities are a completely separate AI domain. They should exit the generic creature processing loop as early as possible — no shared stamina/hunger/exhaustion logic should ever apply to them. Defense-in-depth: even the client-side renderer now refuses to show exhaustion visuals for enemy types.
+- **Test status:** 520/520 tests pass.
+- **Requested by:** saitcho
+
+## 2026-03-07 — Fixed Enemy Base Exhaustion Bug
+
+**Session:** 2026-03-07T22:29:32Z  
+**Status:** ✅ Complete  
+
+Fixed order-of-operations bug in `tickCreatureAI()` where enemy bases/mobiles were processed through generic creature logic before reaching their specialized step functions. This caused exhausted bases to return early and never spawn mobiles.
+
+**Solution:** Moved `isEnemyBase` / `isEnemyMobile` checks to top of loop — enemy entities now skip generic creature AI entirely. Also added client-side guard to prevent 💤 indicator on enemies.
+
+**Tests:** All 520 pass.
+
+**Decision:** Documented in decisions.md — enemy entities are a separate AI domain and should not mix into generic creature pipeline.
+
+## 2026-03-07 — Fixed Defender Movement and Attacker Detection Bugs (PR #43)
+
+**Session:** 2026-03-07T16:54:00Z  
+**Status:** ✅ Complete  
+
+Fixed two AI bugs identified in PR #43 review:
+
+1. **Defender territory movement bug** (`creatureAI.ts` line 409):
+   - **Problem:** Defenders couldn't move through unclaimed tiles (ownerID === ""), causing them to get permanently stuck when returning to territory after engaging enemies
+   - **Fix:** Changed `isTileOpenForCreature` logic for defenders from `tile.ownerID === creature.ownerID` to `tile.ownerID === "" || tile.ownerID === creature.ownerID`
+   - **Impact:** Defenders can now pathfind through unclaimed tiles to return home, but still can't enter enemy territory
+
+2. **Attacker detection radius bug** (`attackerAI.ts` line 137):
+   - **Problem:** `findNearestEnemyTarget()` accepted `_detectionRadius` parameter but never used it, allowing attackers to detect enemies from anywhere on the map
+   - **Fix:** Added distance check `if (dist > detectionRadius) return;` to filter out targets beyond the detection radius
+   - **Impact:** Attackers now properly respect their 6-tile detection radius from `PAWN_TYPES["attacker"]`
+
+**Tests:** All 520/520 pass.
+
+**Pattern learned:** Territory movement logic needs to distinguish between three tile states: owned-by-self, unclaimed, and owned-by-enemy. Using simple equality checks (===) can inadvertently block valid movement through neutral space.
+
+**Requested by:** dkirby-ms via @copilot PR review
+
+---
+
+**Session:** 2026-03-07T22:54:50Z  
+**Status:** ✅ Logged  
+
+Scribe orchestration: PR #43 review fixes for territory movement and detection radius bugs. Both fixes committed to dev, 520/520 tests passing.
+

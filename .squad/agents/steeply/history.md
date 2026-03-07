@@ -895,3 +895,89 @@ Your tests confirm the client-side implementation assumptions are correct. No re
 **For you:** Server-side visibility filtering is now live. Your 26 fog tests validate client-side assumptions. No server-side changes break your test suite; integration is purely reactive on the client side.
 
 **Design note:** `@view()` on the parent collection field IS needed (earlier understanding was incorrect). Per-element filtering still via `view.add()/remove()`.
+
+### Combat System Test Specifications — Issues #17 & #18 (anticipatory)
+
+- **139 test specs** written in `server/src/__tests__/combat-system.test.ts` using `it.todo()` pattern.
+- **Coverage:** 4 major areas across 19 describe blocks:
+  1. Enemy Bases (spawning, properties, destruction/rewards) — 27 specs
+  2. Enemy Mobiles (spawning from bases, pathfinding AI, territory attack, lifecycle) — 24 specs
+  3. Defenders & Attackers (spawning, patrol AI, combat engagement, seek & destroy, upkeep) — 37 specs
+  4. Combat Resolution & Integration (defender vs mobile, attacker vs base, multi-unit) — 16 specs
+  5. Edge Cases (base destroyed mid-combat, multiple enemies, target destroyed en route, territory changes, resource boundaries, map boundaries, tick ordering) — 35 specs
+- **Key edge cases identified:** orphan mobiles after base destruction, defender overwhelm scenarios, attacker re-targeting when target destroyed mid-path, territory shrinking under defender's feet, zombie damage on death tick, fog of war for newly spawned bases.
+- **Pattern:** All specs use `it.todo()` — zero implementation, pure behavioral contracts from issue requirements. Will need helpers (addEnemyBase, addMobile, addDefender, addAttacker) once architecture lands.
+- **Pre-existing failure:** `water-depth.test.ts` "water tiles exist on map" — unrelated to combat work, was failing before.
+- **Suite status:** 383 passing + 139 todo + 1 pre-existing failure = no regressions.
+
+### Cross-Agent Update: Gately Combat Client Rendering Complete (2026-03-07)
+
+Gately has completed steps 10-11 of Hal's architecture: client-side combat entity rendering and HUD spawn controls. All 384 tests pass; client typechecks clean.
+
+**What this means for you:**
+- Enemy bases, mobiles, defenders, and attackers are now rendered on the client.
+- The HUD includes spawn buttons and a threat counter.
+- Rendering is **registry-driven** (uses shared type helpers and registries, not hardcoded constants).
+
+**Your work (139 .todo() tests):**
+- Combat AI tests in enemyBaseAI, enemyMobileAI, combat, defenderAI, attackerAI modules.
+- Registry-driven rendering means new tests should verify that rendering respects the registry (e.g., a new enemy type auto-renders without client changes).
+
+**Branch:** `squad/17-18-combat-system` ready for review.
+
+### Combat System Tests — Issues #17 & #18 (2026-03-10)
+
+- **111 real tests** implemented from 139 todo specs. 28 specs consolidated where implementation differed from anticipatory specs. Total suite: **495 tests, all passing.**
+- **Combat cooldown gotcha:** `attackCooldowns` and `tileAttackCooldowns` are module-level Maps in `combat.ts` that persist across tests. Default `?? 0` means the first attack tick must be ≥ `ATTACK_COOLDOWN_TICKS` (4) for creature combat and ≥ `TILE_ATTACK_COOLDOWN_TICKS` (8) for tile attacks. Always use `FIRST_COMBAT_TICK` or `FIRST_TILE_TICK` helpers.
+- **Pair-based combat resolution:** `damagePairs` uses sorted ID pairs (`[a.id, b.id].sort().join(":")`). The same creature CAN appear in multiple pairs per tick (e.g., a defender fights two adjacent mobs in the same tick). This is by design — it's not AoE, it's independent pair resolution.
+- **Base spawning requires room initialization:** `Object.create(GameRoom.prototype)` mock needs `nextCreatureId`, `creatureIdCounter`, `enemyBaseState`, `attackerState` set manually. Without these, `tickEnemyBaseSpawning()` crashes.
+- **Enemy base ownerID is empty string** (not "enemy" sentinel). Discriminate enemy entities by `creatureType` prefix (`enemy_base_*`, `enemy_scout/raider/swarm`).
+- **Defenders are territory-locked:** `moveTowardInTerritory` only moves onto tiles where `tile.ownerID === creature.ownerID`. `wanderInTerritory` uses the same constraint. Defenders in `returning` state use unrestricted `moveToward` to get back.
+- **Attacker sortie timeout:** When `returnTick` expires, attacker transitions to "returning" then walks home. If already at home tile (dist ≤ 1), it immediately transitions to "seek_target" — tests must place attacker far from home to verify the returning state.
+- **Test file:** `server/src/__tests__/combat-system.test.ts` — 2100+ lines covering enemy bases, mobiles, defenders, attackers, combat resolution, upkeep, and edge cases.
+
+### Grave Marker System — Tests
+
+- **25 new tests** in `server/src/__tests__/grave-marker.test.ts`. Total suite: **520 tests, all passing.**
+- **Grave marker spawning:** `tickCombat` Phase 3 now spawns a `grave_marker` CreatureState at the death position for all non-base creatures. `creatureType='grave_marker'`, `pawnType` stores the original creature's type.
+- **Grave marker properties:** `health=1`, `nextMoveTick=Number.MAX_SAFE_INTEGER` (immobile), `spawnTick=currentTick`.
+- **Grave marker decay:** `tickGraveDecay(state, currentTick)` in `server/src/rooms/graveDecay.ts` removes markers when `currentTick - spawnTick >= GRAVE_MARKER.DECAY_TICKS` (480 ticks ≈ 2 minutes).
+- **Grave marker inertness:** `isGraveMarker()` guard in `findAdjacentHostile` and Phase 1 iteration skips grave markers entirely. `getCreatureDamage` returns 0 for grave markers (no mobileDef, no pawnDef match). `areHostile` returns false for grave markers.
+- **`tickCombat` signature changed:** Now takes 4 args — `(state, room, enemyBaseState, nextCreatureId: { value: number })`. Fixed existing `runCombat` helper in `combat-system.test.ts` to pass a `_combatIdCounter`.
+- **`CreatureState.spawnTick`** added to schema (`@type("number")`, default 0). Used by grave decay logic.
+- **`EnemyBaseTracker.spawnedMobileIds`** (not `spawnedMobiles`) — mock must use correct property name.
+- **Client tests:** Only `camera-zoom.test.ts` exists. No CombatEffects test infrastructure. `CombatEffects.ts` and `CreatureRenderer.ts` have HP delta logic but would require PixiJS canvas mocking to test — skipped.
+- **`GRAVE_MARKER` constant** in `shared/src/constants.ts`: `{ DECAY_TICKS: 480 }`.
+- **`isGraveMarker()`** in `shared/src/types.ts`: checks `creatureType === "grave_marker"`.
+
+### Cross-Agent Coordination (2026-03-07)
+
+**Grave Markers & Combat VFX — Team Delivery**
+
+Coordinated work with Pemulis (Systems Dev) and Gately (Game Dev) on grave marker system (server + client) and combat visual effects.
+
+- **Steeply contribution:** 25 new grave marker tests in grave-marker.test.ts (spawning, properties, decay, inertness), 111 existing combat test fixes for `tickCombat` signature change (added `nextCreatureId` counter), documented combat test patterns (cooldown tick values, room mocks, pair-based combat resolution).
+- **Pemulis contribution:** Server-side grave spawning, decay module, type guards, `spawnTick` field, constants, signature change to tickCombat.
+- **Gately contribution:** Client-side CombatEffects manager, grave marker PixiJS rendering, HP delta detection, floating damage numbers, hit flashes.
+
+**Cross-Impact:** Pemulis's tickCombat signature change initially broke 111 tests (required adding nextCreatureId counter). Steeply fixed all 111 existing tests and created new grave marker test suite. Gately's client rendering depends on Pemulis's creatureType="grave_marker" data model (no test changes needed on client).
+
+**Test Status:** 520 total tests (384 existing + 111 combat + 25 grave), all passing, 31 test files.
+**Branch:** squad/17-18-combat-system (ready for review)
+**Decisions Merged:** pemulis-grave-markers.md, gately-combat-visuals.md, steeply-grave-tests.md, steeply-combat-test-patterns.md, copilot-directive-2026-03-07T20-55-45Z.md.
+
+### Enemy Spawn Logging & Night Spawn Bug Discovery (2026-03-07)
+
+**Cross-Agent Update from Pemulis (Systems Dev):**
+
+Pemulis added game_log broadcasts for enemy spawn events and discovered a critical bug in the enemy spawning system.
+
+**Critical Bug:** `BASE_SPAWN_INTERVAL_TICKS` (480) equals the day-night cycle length (480). The spawn check `tick % 480 === 0` always fires at dawn (dayTick=0, phase 0%), but spawning is gated on night phase (65–100%). These conditions never overlap — **enemy bases cannot spawn**, blocking enemy mobiles.
+
+**For you (tests):** Once Pemulis fixes this (changing BASE_SPAWN_INTERVAL_TICKS to 120 or 200), plan to add regression tests for:
+1. Base spawns occurring during night phase
+2. Mobile spawns following base spawns
+3. Spawn tick alignment with day-night cycle
+
+**Test Status:** 520/520 tests pass; no regressions.
+**Decision:** Pemulis filed detailed bug report at .squad/decisions.md with fix recommendations and impact assessment.

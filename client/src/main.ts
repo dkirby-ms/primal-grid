@@ -1,6 +1,7 @@
 import { Application } from 'pixi.js';
 import { GridRenderer } from './renderer/GridRenderer.js';
 import { CreatureRenderer } from './renderer/CreatureRenderer.js';
+import { CombatEffects } from './renderer/CombatEffects.js';
 import { Camera } from './renderer/Camera.js';
 import { InputHandler } from './input/InputHandler.js';
 import { ConnectionStatusUI } from './ui/ConnectionStatus.js';
@@ -97,6 +98,12 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
 
     const creatures = new CreatureRenderer();
     grid.container.addChild(creatures.container);
+
+    // Combat effects layer above creatures for correct z-order
+    const combatEffects = new CombatEffects();
+    grid.container.addChild(combatEffects.container);
+    creatures.setCombatEffects(combatEffects);
+
     creatures.bindToRoom(room);
 
     // Drive smooth creature movement from the app ticker

@@ -4308,3 +4308,389 @@ The earlier "no @view" decision was based on a misunderstanding — `@view()` on
 ## Future Considerations
 
 If creatures or players need per-client filtering (e.g., hiding enemy pawns in fog), add `@view()` to `creatures` MapSchema and manage creature visibility in the StateView alongside tiles.
+
+# Decision: Issue Closure — master Merge Only
+
+**Author:** dkirby-ms (via Copilot)  
+**Date:** 2026-03-07  
+**Status:** Active  
+**Affects:** All squad agents, issue workflow
+
+## Summary
+
+Issues are closed only when merged to `master`, not when merged to `dev` or `uat`.
+
+## Rationale
+
+- `dev` is for integration testing
+- `uat` is for user acceptance testing
+- `master` is production-ready (or ready for release)
+- Early closure gives false confidence
+
+## Impact
+
+- **All agents:** Do not auto-close issues on `dev`/`uat` merges
+- **Merge commits:** When merging to `master`, use "Closes #N" in commit message
+- **Release discipline:** Issues map to production deployments
+
+# Decision: Branching Strategy — dev as Top-Line Integration
+
+**Author:** dkirby-ms (via Copilot)  
+**Date:** 2026-03-07  
+**Status:** Active  
+**Affects:** All squad agents, PR workflow
+
+## Summary
+
+Added `dev` branch as the top-line development integration point. Feature branches now merge into `dev` first, then `dev` merges into `uat` for staging before `master`.
+
+## Changes
+
+- Feature branches target `dev` (not `uat` directly)
+- `dev` is the primary integration branch for squad work
+- After `dev` stabilization, merge to `uat` for staging validation
+- Only merge to `master` after `uat` validation
+
+## Impact
+
+- **All agents:** Update PR base branch to `dev` for feature work
+- **Copilot:** Route PRs to `dev` by default
+- **Merge timing:** Issues are closed only when merged to `master` (see next decision)
+
+# Decision: Combat System Open Questions — Resolved
+
+**Author:** dkirby-ms (via Copilot)  
+**Date:** 2026-03-07  
+**Status:** Resolved  
+**Affects:** Pemulis (combat implementation), Issues #17, #18
+
+## Questions & Answers
+
+1. **Should destroying an enemy base award resources?**
+   - **YES.** Base destruction grants resources to the attacking player.
+   - Amounts are per-base-type in ENEMY_BASE_TYPES registry (fortress > hive > raider_camp).
+
+2. **When do enemy bases spawn?**
+   - **Night phase only.** Enemy bases spawn during the night phase of the day/night cycle.
+   - Server guard: `state.dayPhase !== DayPhase.Night` in tickEnemyBaseSpawning.
+
+3. **WAVE_SPAWNER vs. ENEMY_SPAWNING constant naming?**
+   - **Use ENEMY_SPAWNING.** Replace all WAVE_SPAWNER references with the new ENEMY_SPAWNING constant group.
+   - Old WAVE_SPAWNER is removed from the codebase.
+
+## Implementation Notes
+
+- Pemulis incorporated all three decisions into the combat system implementation.
+- All 384 tests pass; 139 combat .todo() tests await Steeply's test implementation.
+
+## Cross-Agent Updates
+
+- **Gately (UI):** Needs rendering for new creature types. Update HUD spawn buttons.
+- **Steeply (Testing):** 139 .todo() tests in combat modules.
+- **Hal (Lead):** Docs should reference ENEMY_SPAWNING (not WAVE_SPAWNER).
+
+# Decision: Combat System Implementation — Pemulis
+
+**Author:** Pemulis (Systems Dev)  
+**Date:** 2026-03-07  
+**Status:** IMPLEMENTED  
+**Closes:** #17 (Enemy Bases & Mobiles), #18 (Defender & Attacker Pawns)
+
+## Summary
+
+Implemented complete server-side combat system following Hal's architecture (steps 1-9). 5 new AI modules (enemyBaseAI, enemyMobileAI, combat, defenderAI, attackerAI). All 384 tests pass.
+
+## Design Decisions
+
+1. **WAVE_SPAWNER → ENEMY_SPAWNING** — Single constant group. Old WAVE_SPAWNER removed.
+2. **Base destruction awards resources** — Per-base-type amounts (fortress > hive > raider_camp).
+3. **Enemy bases spawn at night only** — `state.dayPhase !== DayPhase.Night` guard in tickEnemyBaseSpawning.
+4. **Combat cooldowns are module-level Maps** — In combat.ts (not schema fields). Cleaned up on creature death.
+5. **PAWN_TYPES registry** — Centralizes pawn config (builder, defender, attacker). Flat PAWN constants retained for backward compat.
+6. **isTileOpenForCreature updated** — Enemy mobiles + attackers can walk any tile; defenders restricted to own territory.
+
+## Deliverables
+
+**New modules (5):**
+- enemyBaseAI.ts — Base state machine, spawn scheduling, resource rewards
+- enemyMobileAI.ts — Mobile patrolling, targeting, movement
+- combat.ts — Combat resolution, damage, cooldown tracking
+- defenderAI.ts — Defender state machine, territory protection
+- attackerAI.ts — Attacker state machine, enemy hunting
+
+**Modified (8):**
+- GameRoom.ts, creatureAI.ts, visibility.ts
+- constants.ts, types.ts, messages.ts (and 2 test files)
+
+**Lines:** 1,311 across 13 files.
+
+**Test Status:** 384 pass, 0 fail, 139 .todo() (Steeply's work).
+
+## Cross-Agent Impact
+
+- **Gately (UI):** Render new creature types (icons/colors). Add defender/attacker spawn buttons to HUD.
+- **Steeply (Testing):** Implement 139 .todo() combat tests.
+- **Hal (Lead):** Update docs to reference ENEMY_SPAWNING.
+
+## Branch & Merge
+
+- **Branch:** squad/17-18-combat-system
+- **Status:** Pushed to origin. Ready for Gately & Steeply review before merging to dev.
+# Decision: Registry-Driven Rendering for Combat Entities
+
+**Author:** Gately (Game Dev)
+**Date:** 2026-03-05
+**Scope:** Client rendering, all future entity types
+
+## Decision
+
+All combat entity rendering (icons, colors, HP bar max values, costs) is driven by the shared type registries (`ENEMY_BASE_TYPES`, `ENEMY_MOBILE_TYPES`, `PAWN_TYPES`) rather than hardcoded client-side constants. The renderer uses `isEnemyBase()`, `isEnemyMobile()`, and `isPlayerPawn()` type helpers from shared to dispatch rendering logic.
+
+## Rationale
+
+- Adding a new enemy type or pawn type only requires updating the shared registry — the renderer automatically picks up the icon, color, and health values.
+- Reduces risk of client/server drift on display values.
+- Follows the existing pattern where `CREATURE_TYPES` drives wildlife rendering.
+
+## Impact
+
+- **Pemulis:** If you add new enemy/pawn types to the registries, the renderer will handle them automatically as long as they follow the `enemy_base_*`, `enemy_*`, or `pawn_*` naming conventions.
+- **Hal:** Future entity types should include `icon` and `color` fields in their registry definitions.
+
+# Decision: Grave Marker System Architecture
+
+**Author:** Pemulis (Systems Dev)
+**Date:** 2026-03-12
+**Affects:** Steeply (client rendering), Gately (creature AI), all agents
+
+## Context
+
+Grave markers needed a server-side representation so the client can render death locations and they decay over time.
+
+## Decision
+
+Grave markers are **CreatureState entities** (not a new schema type). This lets the existing Colyseus sync pipeline deliver them to clients with zero protocol changes.
+
+### Key Design Choices
+
+1. **`creatureType = "grave_marker"`** — New type guard `isGraveMarker()` in `shared/src/types.ts`. All combat/AI loops now explicitly skip this type.
+2. **`pawnType` stores original creature type** — e.g. `"enemy_raider"`, `"pawn_defender"`. Client can use this to render type-specific grave icons.
+3. **`spawnTick` field on CreatureState** — New schema field. Used for decay timing. Available for any future time-since-spawn logic.
+4. **`nextMoveTick = Number.MAX_SAFE_INTEGER`** — Natural exclusion from creature AI without special-casing the AI loop.
+5. **`tickCombat` now takes `nextCreatureId` counter** — Same mutable `{ value: number }` pattern used by `tickCreatureAI`. Tests updated.
+6. **Enemy bases excluded** — They're structures, not creatures. No grave marker on base destruction.
+
+### For Steeply (Client)
+
+- Filter for `creatureType === "grave_marker"` in creature rendering
+- Use `pawnType` field to determine which icon/sprite to show
+- Grave markers are stationary (`nextMoveTick = MAX`) and have `currentState = "idle"`
+- They auto-remove server-side after ~2 minutes (480 ticks)
+
+### Constants
+
+- `GRAVE_MARKER.DECAY_TICKS = 480` in `shared/src/constants.ts`
+
+# Decision: Combat Visual Feedback — Client Architecture
+
+**Author:** Gately (Game Dev)
+**Date:** 2026-03-07
+**Status:** IMPLEMENTED
+**Affects:** Client rendering, CreatureRenderer, main.ts
+
+## Context
+
+Combat system exists server-side but had no visual feedback on the client. Players couldn't see damage being dealt or identify dead units.
+
+## Decision
+
+1. **CombatEffects as standalone manager** — HP delta detection lives in a separate class (`CombatEffects.ts`), not baked into CreatureRenderer. Injected via `setCombatEffects()`.
+
+2. **HP delta detection** — No explicit damage events from server. CombatEffects tracks previous HP per creature ID and triggers effects when `current < previous`.
+
+3. **Z-ordering** — Effects container layered above creatures in grid container: `grid → creatures → effects`. Ensures floating numbers render on top.
+
+4. **Grave markers via PixiJS Graphics** — No emoji for tombstones. Uses rounded rect + cross etching + shadow for a clean, non-emoji visual. Fades in to alpha 0.65. Skips all living-creature logic (no HP bar, no indicator, no health opacity).
+
+## Rationale
+
+- Standalone effects manager keeps CreatureRenderer focused on creature lifecycle. Easy to extend with new effects (shield flashes, heal numbers, etc.) without touching creature code.
+- HP delta detection is reliable since Colyseus state sync guarantees health updates arrive.
+- Graphics-based tombstones avoid cross-platform emoji rendering inconsistencies and look more game-like.
+
+## Impact
+
+- **Pemulis (Server):** No server changes required. Grave markers already use `creatureType: 'grave_marker'` in shared types.
+- **Future work:** CombatEffects can be extended for heal effects (green `+N`), shield indicators, or area-of-effect visuals.
+
+# Decision: Grave Marker Test Coverage & Combat Helper Fix
+
+**Author:** Steeply (Tester)
+**Date:** 2026-03-10
+**Status:** Active
+
+## Context
+
+Grave marker system was implemented by Pemulis/Gately (combat.ts Phase 3, graveDecay.ts). Tests were needed to validate spawning, properties, decay, and inertness.
+
+## Decision
+
+1. **Separate test file** for grave markers: `server/src/__tests__/grave-marker.test.ts` (25 tests) rather than appending to the 2200+ line combat-system.test.ts.
+2. **Fixed `runCombat` helper** in existing combat-system.test.ts — `tickCombat` signature changed to 4 args (added `nextCreatureId`). All 111 existing combat tests were broken by this change; now fixed.
+3. **No client-side tests** for CombatEffects — only `camera-zoom.test.ts` exists as client test infrastructure. CombatEffects HP delta rendering would require heavy PixiJS mocking. Recommend adding client test infrastructure if visual regression testing becomes a priority.
+
+## Impact
+
+- All team members: `tickCombat` now requires a `{ value: number }` counter as 4th argument. Any new tests calling it directly must pass this.
+- `EnemyBaseTracker` mock must use `spawnedMobileIds` (not `spawnedMobiles`).
+
+# Decision: Combat Test Patterns — Steeply
+
+**Date:** 2026-03-10
+**Affects:** All agents writing combat-related tests
+
+## Combat Cooldown Tick Values
+
+Tests calling `tickCombat()` must set `room.state.tick` to at least:
+- `ATTACK_COOLDOWN_TICKS` (4) for creature-vs-creature combat
+- `TILE_ATTACK_COOLDOWN_TICKS` (8) for mobile tile attacks
+
+The cooldown system uses module-level Maps with `?? 0` default, so tick=0 always fails the cooldown check. Use `FIRST_COMBAT_TICK` and `FIRST_TILE_TICK` helper constants.
+
+## Room Mock Initialization
+
+Any test using `tickEnemyBaseSpawning()`, `tickCreatureAI()`, or `tickCombat()` via the GameRoom must initialize:
+```typescript
+(room as any).nextCreatureId = 0;
+(room as any).creatureIdCounter = { value: 0 };
+(room as any).enemyBaseState = new Map();
+(room as any).attackerState = new Map();
+```
+
+## Pair-Based Combat
+
+Combat resolution is pair-based, not AoE. A single defender adjacent to 3 mobs will exchange damage with ALL three in the same tick (each as a separate pair). Tests should not assume 1:1 engagement per tick.
+
+# Decision: Issue Closure — Directive Rescinded
+
+**Author:** dkirby-ms (via Copilot)
+**Date:** 2026-03-07
+**Status:** RESCINDED
+**Affected Decision:** "Issue Closure — master Merge Only"
+
+## Update
+
+The previous directive **"Only close GitHub issues when merged to master, not dev or uat"** is hereby **rescinded**.
+
+## New Guidance
+
+Issues may be closed at any time based on project workflow needs. No waiting required for master merge. The rule was creating confusion and friction.
+
+## Impact
+
+- **All agents:** Issues can be closed on `dev`, `uat`, or `master` merges as appropriate
+- **Commit messages:** "Closes #N" syntax is valid on any branch merge
+- **Release discipline:** If master-only closure is needed for a specific workflow, re-open the issue explicitly
+# Decision: Dev Mode via URL Parameter
+
+**Author:** Pemulis
+**Date:** 2026-03-12
+**Status:** Implemented
+
+## Context
+
+Need a quick way to disable fog of war during development/debugging without UI changes.
+
+## Decision
+
+- `?dev=1` or `?devmode=1` URL parameter activates dev mode.
+- Client passes `{ devMode: true }` in Colyseus join options.
+- Server stores `devMode` flag per-player in the `playerViews` map and bypasses fog-of-war filtering — all tiles and creatures are added to the player's StateView.
+- No client-side fog rendering changes needed; the fog system is purely server-driven via StateView.
+
+## Impact
+
+- **Gately (client):** No fog rendering changes needed, but be aware that `?dev=1` will show the full map with no fog overlays.
+- **Steeply (tests):** The `onJoin` signature now accepts an optional `options` parameter. Existing tests that call `onJoin(client)` without options are unaffected (devMode defaults to false).
+- **Not a production feature** — no auth or validation. Purely a dev tool.
+
+
+# Decision: Enemy Base Spawn Interval Alignment Bug
+
+**By:** Pemulis (Systems Dev)  
+**Date:** 2026-03-12  
+**Status:** BUG REPORT — needs fix  
+
+## Problem
+
+`ENEMY_SPAWNING.BASE_SPAWN_INTERVAL_TICKS` (480) is identical to `DAY_NIGHT.CYCLE_LENGTH_TICKS` (480). The base spawn check uses `tick % 480 === 0`, which always fires when `dayTick` is 0 — the start of the **dawn** phase (0%). Since `tickEnemyBaseSpawning` gates on `dayPhase === DayPhase.Night` (65–100%), the two conditions **never overlap**. Enemy bases can never spawn.
+
+## Recommended Fix
+
+Change `BASE_SPAWN_INTERVAL_TICKS` to a value that doesn't divide evenly into the cycle length. For example:
+- `120` (check 4x per cycle, guaranteeing a night-phase hit)
+- `200` (check ~2.4x per cycle, staggered)
+
+Alternatively, decouple the spawn check from modulo arithmetic entirely — use a `nextBaseSpawnTick` counter that only advances during night ticks.
+
+## Impact
+
+This explains why no enemy bases (and therefore no enemy mobiles) appear at night.
+
+## Affected Agents
+
+- **Pemulis (Systems Dev):** Fix BASE_SPAWN_INTERVAL_TICKS
+- **Gately (Game Dev):** Be aware of spawn behavior once fixed
+- **Steeply (Tester):** Add regression tests for base spawns in night phase once fix is deployed
+# Decision: Enemy entities bail out of generic creature AI immediately
+
+**Date:** 2026-03-08
+**Author:** Pemulis (Systems Dev)
+**Status:** Implemented
+
+## Context
+
+Enemy bases and enemy mobiles were being processed through the generic creature AI pipeline (hunger, stamina, exhaustion recovery) before reaching their specialized step functions. This caused a bug where exhausted enemy bases stopped spawning mobiles.
+
+## Decision
+
+Enemy entities (`isEnemyBase`, `isEnemyMobile`) now exit the `tickCreatureAI()` loop at the very top — immediately after the `nextMoveTick` timer check. They call their own step functions (`stepEnemyBase`, `stepEnemyMobile`) and return. No generic creature logic (hunger, stamina, exhaustion, FSM routing) ever runs for them.
+
+The client-side renderer also guards against showing the 💤 exhausted indicator for enemy entities.
+
+## Rationale
+
+Enemy entities are a fundamentally different AI domain. Mixing them into the generic creature pipeline creates ordering bugs (like exhaustion blocking spawning) and makes the code harder to reason about. Early bailout is the cleanest separation.
+
+## Impact
+
+- `creatureAI.ts`: Enemy base/mobile processing moved to top of loop
+- `CreatureRenderer.ts`: Exhausted indicator guarded for enemy types
+- If new enemy entity types are added, they must also be routed early in `tickCreatureAI()`
+
+
+# Decision: Enemy entities bail out of generic creature AI immediately
+
+**Date:** 2026-03-08
+**Author:** Pemulis (Systems Dev)
+**Status:** Implemented
+
+## Context
+
+Enemy bases and enemy mobiles were being processed through the generic creature AI pipeline (hunger, stamina, exhaustion recovery) before reaching their specialized step functions. This caused a bug where exhausted enemy bases stopped spawning mobiles.
+
+## Decision
+
+Enemy entities (`isEnemyBase`, `isEnemyMobile`) now exit the `tickCreatureAI()` loop at the very top — immediately after the `nextMoveTick` timer check. They call their own step functions (`stepEnemyBase`, `stepEnemyMobile`) and return. No generic creature logic (hunger, stamina, exhaustion, FSM routing) ever runs for them.
+
+The client-side renderer also guards against showing the 💤 exhausted indicator for enemy entities.
+
+## Rationale
+
+Enemy entities are a fundamentally different AI domain. Mixing them into the generic creature pipeline creates ordering bugs (like exhaustion blocking spawning) and makes the code harder to reason about. Early bailout is the cleanest separation.
+
+## Impact
+
+- `creatureAI.ts`: Enemy base/mobile processing moved to top of loop
+- `CreatureRenderer.ts`: Exhausted indicator guarded for enemy types
+- If new enemy entity types are added, they must also be routed early in `tickCreatureAI()`

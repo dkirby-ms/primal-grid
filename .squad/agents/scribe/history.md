@@ -35,3 +35,24 @@ Scribe processed 3-agent parallel research on resource display UX:
 **Git status:** `.squad/` staged and committed (94 lines additions, 0 deletions)
 
 **Cross-agent context:** All three decisions depend on dkirby-ms's preference (bars vs. pie). Pemulis's confirmation that all approaches are viable removes data as a blocker. Awaiting stakeholder decision to proceed with implementation by winning agent (Hal's bars or Gately's pie).
+
+### 2026-03-07 Enemy Spawn Interval Bug Fix — Pemulis Session Logging
+
+Scribe processed single-agent fix by Pemulis (Systems Dev) on enemy base spawn interval bug:
+
+**Tasks completed:**
+1. Wrote orchestration log (2026-03-07T21-33-26Z-pemulis.md)
+2. Wrote session log (2026-03-07T21-33-26Z-enemy-spawn-fix.md)
+3. No decision inbox files to merge
+4. Pemulis history.md already documented the fix across multiple sessions
+5. Committed .squad/ changes to git
+
+**What was fixed:**
+- `shared/src/constants.ts`: `BASE_SPAWN_INTERVAL_TICKS` 480 → 120
+- Root cause: Old value aligned with full cycle length, breaking spawn gate logic (modulo check only fired at dawn; night phase blocked it)
+- Solution: New interval hits 4× per cycle; dayTick 360 (75%) lands in night phase (65–100%)
+- All 520 tests pass
+
+**Cross-agent impact:** None — constant change is purely systems-level and doesn't break other agents' contracts.
+
+**Git status:** `.squad/` staged and committed (new logs only, no substantial changes)
