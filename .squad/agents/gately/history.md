@@ -1052,3 +1052,13 @@ Test suite validates your architectural assumptions about tile addition/removal 
 2. Add spawn UI for defender/attacker
 3. Verify rendering on localhost with squad/17-18-combat-system branch checked out
 4. Approve PR when ready; merge to dev after Steeply completes test coverage
+
+### Combat Entity Rendering & HUD (2026-03-05)
+
+- **CreatureRenderer extended for 8 new combat types:** Enemy bases render with diamond-shaped backgrounds at 1.5× emoji size using colors from `ENEMY_BASE_TYPES` registry. Enemy mobiles render with circle backgrounds using `ENEMY_MOBILE_TYPES` registry colors. Defender/attacker pawns use square backgrounds (blue/orange respectively) matching builder pattern.
+- **HP bars for combat entities:** All combat entities (bases, mobiles, defenders, attackers) get HP bars above them. Color thresholds: green (>50%), yellow (25-50%), red (<25%). Max health looked up from type registries.
+- **State indicators:** Combat pawns show ⚔ (engage/attack), 👁 (patrol), ↩ (return). Enemy mobiles show 💥 (attack), ! (seek). Follows existing indicator pattern.
+- **HUD combat section:** Added to index.html below builders. Shows enemy base threat count, defender/attacker counts with max caps from PAWN_TYPES registry, spawn buttons with cost/affordability validation.
+- **Pattern: registry-driven rendering.** All colors, icons, health values, and costs come from shared type registries (ENEMY_BASE_TYPES, ENEMY_MOBILE_TYPES, PAWN_TYPES) rather than hardcoded constants. If registries change, rendering updates automatically.
+- **Key files modified:** `client/src/renderer/CreatureRenderer.ts`, `client/src/ui/HudDOM.ts`, `client/index.html`.
+- **No test breakage:** All 384 tests pass. Client typechecks clean.
