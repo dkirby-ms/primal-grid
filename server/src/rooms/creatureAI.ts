@@ -35,7 +35,6 @@ export function tickCreatureAI(
     // Per-creature movement timer — skip if not ready
     if (currentTick < creature.nextMoveTick) return;
 
-<<<<<<< HEAD
     // Enemy bases skip ALL generic creature logic — straight to their own AI.
     // They must never be subject to stamina, hunger, or exhaustion.
     if (isEnemyBase(creature.creatureType)) {
@@ -54,12 +53,6 @@ export function tickCreatureAI(
 
     // Schedule next AI step for remaining (non-enemy) creatures
     creature.nextMoveTick = currentTick + CREATURE_AI.TICK_INTERVAL;
-=======
-    // Schedule next AI step for non-base creatures; enemy bases manage their own timing
-    if (!isEnemyBase(creature.creatureType)) {
-      creature.nextMoveTick = currentTick + CREATURE_AI.TICK_INTERVAL;
-    }
->>>>>>> 8f065f224bdf1ca5b32475a6b8e321abbc5e33f4
 
     // Pawns don't have hunger mechanics
     if (creature.pawnType === "") {
