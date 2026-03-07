@@ -176,6 +176,36 @@ export const WATER_GENERATION = {
   SHALLOW_RADIUS: 2,
 } as const;
 
+/** Fog of war visibility constants. */
+export const FOG_OF_WAR = {
+  /** Ticks between visibility recomputation (2 ticks = 0.5s at 4 ticks/sec). */
+  TICK_INTERVAL: 2,
+  /** Vision radius from territory edge tiles. */
+  TERRITORY_EDGE_RADIUS: 3,
+  /** Vision radius from HQ center. */
+  HQ_RADIUS: 5,
+  /** Vision radius from builder pawns. */
+  PAWN_RADIUS: 4,
+  /** Effective radius modifier per day/night phase. */
+  DAY_NIGHT_MODIFIERS: { dawn: -1, day: 0, dusk: -1, night: -2 } as Record<string, number>,
+  /** Minimum vision radius after day/night modifiers. */
+  MIN_RADIUS: 1,
+} as const;
+
+/** Watchtower structure constants. */
+export const WATCHTOWER = {
+  /** Vision radius from watchtower. */
+  RADIUS: 8,
+  /** Wood cost to build a watchtower. */
+  COST_WOOD: 15,
+  /** Stone cost to build a watchtower. */
+  COST_STONE: 10,
+  /** Maximum watchtowers per player. */
+  MAX_PER_PLAYER: 3,
+  /** Ticks to complete watchtower construction. */
+  BUILD_TICKS: 24,
+} as const;
+
 /** Day/night cycle constants (Phase 1 — visual only). */
 export const DAY_NIGHT = {
   /** Total ticks for one full day/night cycle (480 ticks = 2 minutes at 4 ticks/sec). */

@@ -73,6 +73,13 @@ export interface ICreatureState {
   stamina: number;
 }
 
+/** Fog of war tile visibility states. */
+export enum FogState {
+  Unexplored = 0,
+  Explored = 1,
+  Visible = 2,
+}
+
 /** Day/night cycle phase identifiers. */
 export enum DayPhase {
   Dawn = "dawn",

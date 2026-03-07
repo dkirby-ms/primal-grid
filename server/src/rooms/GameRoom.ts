@@ -1,7 +1,9 @@
 import { Room, Client, CloseCode } from "colyseus";
+import { StateView } from "@colyseus/schema";
 import { GameState, PlayerState, CreatureState } from "./GameState.js";
 import { generateProceduralMap } from "./mapGenerator.js";
 import { tickCreatureAI } from "./creatureAI.js";
+import { computeVisibleTiles } from "./visibility.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
   SPAWN_PAWN, SET_NAME,
@@ -10,7 +12,7 @@ import {
   CREATURE_AI, CREATURE_RESPAWN, TERRITORY,
   STRUCTURE_INCOME, SHAPE,
   PROGRESSION, getLevelForXP,
-  PAWN, DAY_NIGHT,
+  PAWN, DAY_NIGHT, FOG_OF_WAR,
 } from "@primal-grid/shared";
 import type { SpawnPawnPayload, SetNamePayload } from "@primal-grid/shared";
 import { spawnHQ } from "./territory.js";
@@ -24,6 +26,8 @@ const PLAYER_COLORS = [
 export class GameRoom extends Room {
   state = new GameState();
   private nextCreatureId = 0;
+  /** Per-player StateView and cached visible tile indices for fog of war. */
+  playerViews = new Map<string, { view: StateView; visibleIndices: Set<number> }>();
 
   override onCreate(options: Record<string, unknown>) {
     const seed = typeof options?.seed === "number" ? options.seed : DEFAULT_MAP_SEED;
@@ -39,6 +43,7 @@ export class GameRoom extends Room {
       this.tickCreatureRespawn();
       this.tickStructureIncome();
       this.tickPawnUpkeep();
+      this.tickFogOfWar();
     }, 1000 / TICK_RATE);
 
     this.onMessage(SPAWN_PAWN, (client, message: SpawnPawnPayload) => {
@@ -63,11 +68,17 @@ export class GameRoom extends Room {
     const hqPos = this.findHQSpawnLocation();
     spawnHQ(this.state, player, hqPos.x, hqPos.y);
 
+    // Initialize per-player StateView for fog of war
+    this.initPlayerView(client, player);
+
     console.log(`[GameRoom] Client joined: ${client.sessionId}, HQ at (${hqPos.x}, ${hqPos.y})`);
     client.send("game_log", { message: "Welcome to Primal Grid!", type: "info" });
   }
 
   override onLeave(client: Client, code: number) {
+    // Clean up fog of war StateView
+    this.cleanupPlayerView(client.sessionId);
+
     this.state.players.delete(client.sessionId);
     const consented = code === CloseCode.CONSENTED;
     console.log(
@@ -449,5 +460,78 @@ export class GameRoom extends Room {
       }
     }
     return { x: 0, y: 0 };
+  }
+
+  /** Create a StateView for the joining player and add initial visible tiles. */
+  private initPlayerView(client: Client, player: PlayerState): void {
+    if (!this.playerViews) {
+      this.playerViews = new Map();
+    }
+    const view = new StateView();
+    client.view = view;
+
+    // Compute initial visibility (HQ + surrounding territory)
+    const visibleIndices = computeVisibleTiles(this.state, player.id);
+
+    // Add all initially visible tiles to the view
+    for (const idx of visibleIndices) {
+      const tile = this.state.tiles.at(idx);
+      if (tile) {
+        view.add(tile);
+      }
+    }
+
+    this.playerViews.set(client.sessionId, { view, visibleIndices });
+  }
+
+  /** Remove all tiles from a player's view and clean up tracking state. */
+  private cleanupPlayerView(sessionId: string): void {
+    if (!this.playerViews) return;
+    const entry = this.playerViews.get(sessionId);
+    if (!entry) return;
+
+    const { view, visibleIndices } = entry;
+    for (const idx of visibleIndices) {
+      const tile = this.state.tiles.at(idx);
+      if (tile) {
+        view.remove(tile);
+      }
+    }
+
+    this.playerViews.delete(sessionId);
+  }
+
+  /** Recompute fog of war per player — runs every FOG_OF_WAR.TICK_INTERVAL ticks.
+   *  Runs last in the tick loop so all movement/claiming has resolved. */
+  private tickFogOfWar(): void {
+    if (this.state.tick % FOG_OF_WAR.TICK_INTERVAL !== 0) return;
+    if (!this.playerViews) return;
+
+    for (const [sessionId, entry] of this.playerViews) {
+      const { view, visibleIndices: oldIndices } = entry;
+      const newIndices = computeVisibleTiles(this.state, sessionId);
+
+      // Add newly visible tiles
+      for (const idx of newIndices) {
+        if (!oldIndices.has(idx)) {
+          const tile = this.state.tiles.at(idx);
+          if (tile) {
+            view.add(tile);
+          }
+        }
+      }
+
+      // Remove tiles no longer visible
+      for (const idx of oldIndices) {
+        if (!newIndices.has(idx)) {
+          const tile = this.state.tiles.at(idx);
+          if (tile) {
+            view.remove(tile);
+          }
+        }
+      }
+
+      entry.visibleIndices = newIndices;
+    }
   }
 }
