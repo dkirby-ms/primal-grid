@@ -1415,3 +1415,17 @@ Fixed two AI bugs identified in PR #43 review:
 
 Scribe orchestration: PR #43 review fixes for territory movement and detection radius bugs. Both fixes committed to dev, 520/520 tests passing.
 
+
+---
+
+## Learnings
+
+### ESLint Cleanup Patterns (2026-03-08)
+
+1. **TestableGameRoom pattern for test mocks:** When tests use `Object.create(GameRoom.prototype)` and need to access private members, define a `TestableGameRoom = GameRoom & { ... }` intersection type that exposes the private methods/properties. This eliminates all `(room as any).` casts while keeping type safety. The intersection preserves Room assignability so the mock can still be passed to functions expecting `Room`.
+
+2. **Unused test variables:** Many test helpers like `joinPlayer()` or `addEnemyMobile()` are called for side effects only (creating state). When the return value isn't referenced, prefix with `_` rather than removing the assignment — the function call must stay for its side effects.
+
+3. **`as unknown as Type` over `as any`:** For test mock casting (e.g., `room.broadcast = (() => {}) as unknown as GameRoom['broadcast']`), the double-cast through `unknown` satisfies `no-explicit-any` while still being explicit about the target type.
+
+4. **Line-specific fixes over regex for unused vars:** When fixing `no-unused-vars`, avoid global regex replacements on variable names like `player`, `def`, `mob` — these names appear both as unused assignments AND as actively-used references. Always target the specific error line numbers from ESLint output.
