@@ -1,4 +1,4 @@
-import { Schema, type, ArraySchema, MapSchema } from "@colyseus/schema";
+import { Schema, type, view, ArraySchema, MapSchema } from "@colyseus/schema";
 import { TileType, DayPhase, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED, isWaterTile } from "@primal-grid/shared";
 
 export class TileState extends Schema {
@@ -131,6 +131,9 @@ export class GameState extends Schema {
   @type("string")
   roundPhase: string = "playing";
 
+  // @view() enables per-element StateView filtering so each client only
+  // receives tiles within their fog-of-war visibility radius.
+  @view()
   @type([TileState])
   tiles = new ArraySchema<TileState>();
 
