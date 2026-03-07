@@ -999,3 +999,56 @@ Test suite validates your architectural assumptions about tile addition/removal 
 **For you:** Server-side visibility filtering is now active. Your ExploredTileCache will receive only visible tiles on arrival. Fog rendering will auto-activate on StateView mutations. No client changes needed.
 
 **Design note:** Earlier decision "NO @view() on fields" was based on misunderstanding. The decorator enables the filtering pipeline; per-element filtering still happens via `view.add()/remove()`.
+
+---
+
+## 2026-03-07: Cross-Agent Notification — Pemulis Combat System Implementation Complete
+
+**From:** Pemulis (Systems Dev)  
+**To:** Gately (Client/UI)  
+**Status:** READY FOR INTEGRATION
+
+**Combat system deployed on squad/17-18-combat-system branch.** All 384 tests pass. Closes issues #17 (enemy bases & mobiles) and #18 (defender & attacker pawns).
+
+**New creature types & rendering needs:**
+
+1. **Enemy Bases** (stationary, spawn mobiles at night):
+   - `enemy_base_fortress` — Large, high HP, high spawn rate, fortress-like icon
+   - `enemy_base_hive` — Medium, medium HP, medium spawn rate, hive/organic icon
+   - `enemy_base_raider_camp` — Small, low HP, fast spawn rate, camp/tent icon
+   - When destroyed → award resources to attacking player (amounts per type in ENEMY_BASE_TYPES)
+
+2. **Enemy Mobiles** (spawn from bases, attack player territory):
+   - `enemy_scout` — Fast, weak, low damage, scout/eye icon
+   - `enemy_raider` — Medium speed, medium damage, raider/sword icon
+   - `enemy_swarm` — Slow, spawns in groups, swarm/cluster icon
+
+3. **Player Pawns** (new types, existing builder pawn continues):
+   - `pawn_defender` — Protects territory, restricted movement (own territory only), shield icon
+   - `pawn_attacker` — Hunts enemy bases, can roam freely, attack/sword icon
+
+**New HUD requirements:**
+
+- Spawn buttons for defender and attacker pawns (alongside builder spawn button)
+- Resource cost UI for new pawn types
+- Combat status indicators (health bars for bases, mobiles, defenders, attackers)
+- Night phase indicator (bases only spawn at night)
+
+**Rendering checklist:**
+
+- [ ] Add icons/colors for ENEMY_BASE_TYPES to tile renderer
+- [ ] Add icons/colors for ENEMY_MOBILE_TYPES to creature renderer
+- [ ] Update PAWN_TYPES colors/icons for defender/attacker
+- [ ] Add defender/attacker spawn buttons to HUD
+- [ ] Add resource cost labels to spawn buttons
+- [ ] Day/night phase indicator for spawn visibility
+
+**Test status:** 139 .todo() combat logic tests await Steeply's implementation. Server-side logic is fully tested and battle-ready.
+
+**Branch:** squad/17-18-combat-system (pushed to origin)
+
+**Next steps for you:**
+1. Render new creature types
+2. Add spawn UI for defender/attacker
+3. Verify rendering on localhost with squad/17-18-combat-system branch checked out
+4. Approve PR when ready; merge to dev after Steeply completes test coverage

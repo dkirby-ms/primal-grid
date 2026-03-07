@@ -4308,3 +4308,131 @@ The earlier "no @view" decision was based on a misunderstanding — `@view()` on
 ## Future Considerations
 
 If creatures or players need per-client filtering (e.g., hiding enemy pawns in fog), add `@view()` to `creatures` MapSchema and manage creature visibility in the StateView alongside tiles.
+
+# Decision: Issue Closure — master Merge Only
+
+**Author:** dkirby-ms (via Copilot)  
+**Date:** 2026-03-07  
+**Status:** Active  
+**Affects:** All squad agents, issue workflow
+
+## Summary
+
+Issues are closed only when merged to `master`, not when merged to `dev` or `uat`.
+
+## Rationale
+
+- `dev` is for integration testing
+- `uat` is for user acceptance testing
+- `master` is production-ready (or ready for release)
+- Early closure gives false confidence
+
+## Impact
+
+- **All agents:** Do not auto-close issues on `dev`/`uat` merges
+- **Merge commits:** When merging to `master`, use "Closes #N" in commit message
+- **Release discipline:** Issues map to production deployments
+
+# Decision: Branching Strategy — dev as Top-Line Integration
+
+**Author:** dkirby-ms (via Copilot)  
+**Date:** 2026-03-07  
+**Status:** Active  
+**Affects:** All squad agents, PR workflow
+
+## Summary
+
+Added `dev` branch as the top-line development integration point. Feature branches now merge into `dev` first, then `dev` merges into `uat` for staging before `master`.
+
+## Changes
+
+- Feature branches target `dev` (not `uat` directly)
+- `dev` is the primary integration branch for squad work
+- After `dev` stabilization, merge to `uat` for staging validation
+- Only merge to `master` after `uat` validation
+
+## Impact
+
+- **All agents:** Update PR base branch to `dev` for feature work
+- **Copilot:** Route PRs to `dev` by default
+- **Merge timing:** Issues are closed only when merged to `master` (see next decision)
+
+# Decision: Combat System Open Questions — Resolved
+
+**Author:** dkirby-ms (via Copilot)  
+**Date:** 2026-03-07  
+**Status:** Resolved  
+**Affects:** Pemulis (combat implementation), Issues #17, #18
+
+## Questions & Answers
+
+1. **Should destroying an enemy base award resources?**
+   - **YES.** Base destruction grants resources to the attacking player.
+   - Amounts are per-base-type in ENEMY_BASE_TYPES registry (fortress > hive > raider_camp).
+
+2. **When do enemy bases spawn?**
+   - **Night phase only.** Enemy bases spawn during the night phase of the day/night cycle.
+   - Server guard: `state.dayPhase !== DayPhase.Night` in tickEnemyBaseSpawning.
+
+3. **WAVE_SPAWNER vs. ENEMY_SPAWNING constant naming?**
+   - **Use ENEMY_SPAWNING.** Replace all WAVE_SPAWNER references with the new ENEMY_SPAWNING constant group.
+   - Old WAVE_SPAWNER is removed from the codebase.
+
+## Implementation Notes
+
+- Pemulis incorporated all three decisions into the combat system implementation.
+- All 384 tests pass; 139 combat .todo() tests await Steeply's test implementation.
+
+## Cross-Agent Updates
+
+- **Gately (UI):** Needs rendering for new creature types. Update HUD spawn buttons.
+- **Steeply (Testing):** 139 .todo() tests in combat modules.
+- **Hal (Lead):** Docs should reference ENEMY_SPAWNING (not WAVE_SPAWNER).
+
+# Decision: Combat System Implementation — Pemulis
+
+**Author:** Pemulis (Systems Dev)  
+**Date:** 2026-03-07  
+**Status:** IMPLEMENTED  
+**Closes:** #17 (Enemy Bases & Mobiles), #18 (Defender & Attacker Pawns)
+
+## Summary
+
+Implemented complete server-side combat system following Hal's architecture (steps 1-9). 5 new AI modules (enemyBaseAI, enemyMobileAI, combat, defenderAI, attackerAI). All 384 tests pass.
+
+## Design Decisions
+
+1. **WAVE_SPAWNER → ENEMY_SPAWNING** — Single constant group. Old WAVE_SPAWNER removed.
+2. **Base destruction awards resources** — Per-base-type amounts (fortress > hive > raider_camp).
+3. **Enemy bases spawn at night only** — `state.dayPhase !== DayPhase.Night` guard in tickEnemyBaseSpawning.
+4. **Combat cooldowns are module-level Maps** — In combat.ts (not schema fields). Cleaned up on creature death.
+5. **PAWN_TYPES registry** — Centralizes pawn config (builder, defender, attacker). Flat PAWN constants retained for backward compat.
+6. **isTileOpenForCreature updated** — Enemy mobiles + attackers can walk any tile; defenders restricted to own territory.
+
+## Deliverables
+
+**New modules (5):**
+- enemyBaseAI.ts — Base state machine, spawn scheduling, resource rewards
+- enemyMobileAI.ts — Mobile patrolling, targeting, movement
+- combat.ts — Combat resolution, damage, cooldown tracking
+- defenderAI.ts — Defender state machine, territory protection
+- attackerAI.ts — Attacker state machine, enemy hunting
+
+**Modified (8):**
+- GameRoom.ts, creatureAI.ts, visibility.ts
+- constants.ts, types.ts, messages.ts (and 2 test files)
+
+**Lines:** 1,311 across 13 files.
+
+**Test Status:** 384 pass, 0 fail, 139 .todo() (Steeply's work).
+
+## Cross-Agent Impact
+
+- **Gately (UI):** Render new creature types (icons/colors). Add defender/attacker spawn buttons to HUD.
+- **Steeply (Testing):** Implement 139 .todo() combat tests.
+- **Hal (Lead):** Update docs to reference ENEMY_SPAWNING.
+
+## Branch & Merge
+
+- **Branch:** squad/17-18-combat-system
+- **Status:** Pushed to origin. Ready for Gately & Steeply review before merging to dev.
