@@ -1089,3 +1089,86 @@ Hal (Lead) architected pawn-based territory expansion system per same user direc
 - Test suite uses Manhattan distance for circle fill checks, matching the `addCircleFill` implementation. The `euclidean` helper in tests is unused.
 - Manhattan circle fill: `|dx| + |dy| <= radius`. Produces diamond-shaped vision areas. Corner edge tiles at Manhattan distance 4 from HQ center (half=2, diagonal) with edge radius 3 can reach Manhattan 7, extending well beyond HQ radius 5.
 - `FOG_OF_WAR.DAY_NIGHT_MODIFIERS` needs `as Record<string, number>` cast to allow string-keyed access from `state.dayPhase`.
+
+---
+
+## Session 2026-03-07 — Fog of War Phase A Server Implementation Complete
+
+**Status:** SUCCESS  
+**Output:** `server/src/rooms/visibility.ts`, FOG_OF_WAR/WATCHTOWER constants, StateView integration in GameRoom  
+**Tests:** 372 total passing (26 new fog tests)
+
+### What Was Built
+
+- **visibility.ts** — Pure `computeVisibleTiles(state, playerId): Set<number>` function with Manhattan distance visibility calculation
+  - Three vision sources: HQ (radius 5), territory edges (radius 3), pawn builders (radius 4)
+  - Edge detection via Moore neighborhood unowned/out-of-bounds checks
+  - Day/night modifiers applied (dawn/dusk -1, night -2, day 0)
+  - MIN_RADIUS=1 floor prevents zero-radius collapse
+  
+- **GameRoom integration**
+  - `playerViews: Map<string, { view: StateView, visibleIndices: Set<number> }>`
+  - `initPlayerView(client, playerId)` in onJoin() after spawnHQ() — creates StateView, populates initial tiles
+  - `cleanupPlayerView(playerId)` in onLeave() — removes all tiles, deletes map entry
+  - `tickFogOfWar()` every 2 ticks — diffs old/new visibility, calls view.add/remove for deltas
+  
+- **Constants & Types**
+  - `shared/src/constants.ts`: FOG_OF_WAR block (radii, modifiers, MIN_RADIUS, TICK_INTERVAL), WATCHTOWER block
+  - `shared/src/types.ts`: FogState enum (Unexplored=0, Explored=1, Visible=2)
+
+### Key Learnings for Steeply
+
+- StateView.add() requires object already in parent ChangeTree (tiles in state.tiles ArraySchema have parents)
+- Manhattan distance `|dx| + |dy| <= radius` produces diamond vision shapes, not circles
+- Corner edge tiles (Manhattan distance 4 from HQ) needed to prove edge vision extends beyond HQ radius 5
+- Object.create(GameRoom.prototype) test pattern skips constructor — playerViews manual init needed in test setup
+- onRemove callback fires synchronously during patch application; tile fields readable for data capture
+
+### Integration Notes from Gately
+
+- StateView filters tiles per player; client receives only visible + explored tiles
+- No client changes needed until StateView filtering lands — fog rendering automatically activates once tiles are filtered
+- ExploredTileCache preserves last-known terrain data after visibility loss (fog semantics)
+- Camera bounds accessible via grid.exploredCache for HUD integration (explored tile count, etc.)
+
+### Integration Notes from Steeply
+
+- All 26 fog tests passing validates visibility computation correctness
+- Manhattan distance matching implemented correctly
+- StateView lifecycle (add/remove) validated in integration tests
+- Multi-player visibility independence verified (per-player views don't contaminate each other)
+- Edge case validation: no-territory player, tile removal, destroyed watchtower scenarios all pass
+
+### Open Questions for Phase B
+
+- Owned-tile cache for 128×128 optimization (not critical for Phase A 64×64 maps)
+- Alliance/shared vision union semantics (would multiply StateView mutations by alliance size)
+- Destructible watchtower vision loss mechanics (structure type approved, destruction deferred)
+
+---
+
+## 2026-03-07: Cross-Agent Notification — Steeply Fog Tests Complete
+
+**From:** Steeply (QA)  
+**To:** Pemulis  
+**Key Finding:** All 26 fog tests passing. Manhattan distance implementation correct. StateView integration validated.
+
+**Must-verify before Phase B:**
+1. Owned-tile cache critical for 128×128 (not included in Phase A)
+2. Alliance shared vision would require visibility union logic (3 extra tests planned)
+3. Watchtower destruction needs vision loss validation (additional test coverage pending)
+
+**Test infrastructure note:** Object.create() pattern requires manual playerViews initialization in tests — this is a quirk of the class field initializer pattern, not a bug. All future tests of GameRoom mutations should manually initialize new class fields.
+
+---
+
+## 2026-03-07: Cross-Agent Notification — Gately Client Rendering Ready
+
+**From:** Gately (Client Dev)  
+**To:** Pemulis  
+**Integration Point:** ExploredTileCache + fog overlay auto-activate once StateView filters tiles
+
+**No server changes needed** — fog rendering is purely reactive to which tiles exist in Colyseus state.
+
+**Camera bounds API:** grid.exploredCache.getExploredBounds() and camera.setExploredBounds(bounds) — use for HUD features.
+

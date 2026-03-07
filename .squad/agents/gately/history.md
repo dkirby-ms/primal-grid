@@ -889,3 +889,97 @@ Implemented full fog of war MVP rendering on `feature/fog-of-war` branch. All re
 - **Zero changes** to `CreatureRenderer.ts` or `InputHandler.ts`.
 - **Pattern**: Fog overlays follow the same pre-allocated Graphics-per-tile pattern as territory overlays. Structure silhouettes use PixiJS Text with emoji icons (same pattern as HQ markers).
 - **Compatibility**: Until Pemulis's server-side StateView filtering lands, all tiles arrive as visible → no fog effect. But all rendering code is ready for filtered state.
+
+---
+
+## Session 2026-03-07 — Fog of War Phase A Client Implementation Complete
+
+**Status:** SUCCESS  
+**Output:** `client/src/renderer/ExploredTileCache.ts`, fog overlay in GridRenderer, camera bounds clamping  
+**Tests:** Builds clean, zero lint errors
+
+### What Was Built
+
+- **ExploredTileCache** (`client/src/renderer/ExploredTileCache.ts`)
+  - Cache-on-onAdd pattern (captures tileType + structureType when tiles enter StateView)
+  - Retains terrain memory after tiles removed (fog semantics: shows last-known state)
+  - Tracks explored bounding box with dirty flag
+  - O(1) lookup by tile index; O(1) iteration for camera bounds calculation
+  - ~655 KB max footprint (full 128×128 map)
+  
+- **GridRenderer Fog Layer**
+  - Pre-allocated Graphics per tile in fogContainer
+  - Three visual states: unexplored (black), explored (alpha 0.6 dim + structure silhouettes), visible (transparent)
+  - Container ordering: fog above territory, below creatures (via main.ts)
+  - Fog state updates per tick via StateView mutation diffs
+  
+- **Camera Bounds Clamping**
+  - Constrained to explored bounding box + 2-tile padding
+  - Minimum 10-tile extent (prevents claustrophobic 5×5 HQ UX)
+  - Smooth lerp at 0.08/frame for viewport expansion
+  - Falls back to full map bounds when no explored area
+
+### Zero Changes To
+
+- CreatureRenderer.ts — creature rendering unaffected by fog
+- InputHandler.ts — input handling unaffected by camera clamping
+- Any message handlers or network logic
+
+### Integration Notes from Pemulis
+
+- StateView server-side filtering sends only visible tiles to client
+- No server-side changes needed before Phase B — integration is purely reactive
+- Visibility computation uses Manhattan distance (not Euclidean) for circle fill
+- Day/night modifiers affect vision radii; visibility updates every 2 ticks
+
+### Integration Notes from Steeply
+
+- ExploredTileCache must cache structureType from day one (validated in tests)
+- Cache-on-onAdd pattern prevents data loss (onRemove would lose data if tile removed before capture)
+- Structure silhouettes match existing HQ marker pattern (Text emoji icons)
+- Fog overlay follows same Graphics-per-tile architecture as territory overlays
+
+### Performance Notes
+
+- Memory: ~655 KB max for full map — negligible
+- Graphics objects: ~16K fog + 32K existing = 48K total — within budget
+- CPU: No per-frame allocations; fog state O(delta tile count) per tick
+- Future: Batch rendering (single Graphics vs per-tile) for draw call efficiency
+
+### Known Limitations
+
+- No client-side unit tests exist (pure logic could be tested separately)
+- Explored bounds clamping assumes non-zero bounds (falls back to full map)
+- Structure silhouettes use emoji icons (future: could use sprite sheet for polish)
+
+---
+
+## 2026-03-07: Cross-Agent Notification — Pemulis Server Visibility Ready
+
+**From:** Pemulis (Backend)  
+**To:** Gately  
+**Integration Point:** StateView filtering automatically makes fog rendering activate
+
+**Visibility sources deployed:**
+1. HQ center (radius 5)
+2. Territory edge tiles (radius 3)
+3. Pawn builders (radius 4)
+
+**Day/night modifiers applied:** dawn/dusk -1, night -2, day 0
+
+**Server sends only visible tiles to each player.** Your ExploredTileCache will cache them on arrival, fog rendering will auto-activate on StateView tile mutations. No client changes needed.
+
+---
+
+## 2026-03-07: Cross-Agent Notification — Steeply Fog Tests Confirm Client Design
+
+**From:** Steeply (QA)  
+**To:** Gately  
+**Validation:** All 26 tests pass. Edge cases confirmed:
+- Camera bounds padding (10-tile minimum) prevents degenerate UX
+- ExploredTileCache cache-on-onAdd prevents data loss ✅
+- structureType cached from day one ✅
+- Structure silhouettes rendering ready ✅
+
+Test suite validates your architectural assumptions about tile addition/removal timing.
+

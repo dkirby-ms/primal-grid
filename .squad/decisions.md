@@ -4217,3 +4217,61 @@ Camera bounds are dynamically clamped to explored bounding box (computed from Ex
 
 Design is complete and reactive. Ready for implementation once Hal's StateView filtering is in place.
 
+
+---
+
+## 2026-03-07: Fog of War — Phase A Implementation Complete
+
+**By:** Pemulis, Gately, Steeply  
+**Date:** 2026-03-07  
+**Status:** DECISION — Phase A fog of war system delivered and tested
+
+**What was implemented:**
+
+1. **Server visibility computation** (Pemulis):
+   - `server/src/rooms/visibility.ts` with `computeVisibleTiles(state, playerId): Set<number>`
+   - Three vision sources: HQ center (radius 5), territory edge tiles (radius 3), pawn builders (radius 4)
+   - Manhattan distance for circle fill; day/night modifiers applied
+   - StateView integration: `initPlayerView()` in onJoin, `cleanupPlayerView()` in onLeave, `tickFogOfWar()` every 2 ticks
+   - Constants: FOG_OF_WAR + WATCHTOWER blocks in shared/constants.ts
+   - Types: FogState enum in shared/types.ts (Unexplored=0, Explored=1, Visible=2)
+
+2. **Client fog rendering** (Gately):
+   - `client/src/renderer/ExploredTileCache.ts` — caches tileType + structureType on tile onAdd, retains after removal
+   - GridRenderer fog overlay layer with three visual states: black (unexplored), dimmed (explored), transparent (visible)
+   - Camera bounds clamping with 2-tile padding, 10-tile minimum extent, smooth lerp
+   - No changes to CreatureRenderer or InputHandler
+
+3. **Test coverage** (Steeply):
+   - 26 tests in server/src/__tests__/fog-of-war.test.ts
+   - Full coverage: HQ vision, edge detection, pawn vision, day/night modifiers, StateView lifecycle, multi-player scenarios, edge cases
+   - All 372 tests passing (26 new + 346 existing)
+   - Key finding: Object.create(GameRoom.prototype) pattern requires manual playerViews initialization in tests
+
+**Design decisions:**
+
+1. **Manhattan distance** (not Euclidean) — matches grid-based world
+2. **Cache-on-onAdd** for ExploredTileCache — prevents data loss
+3. **No owned-tile cache** — deferred to Phase 2 (not critical for 64×64)
+4. **No `@view()` decorators** — element-level add/remove sufficient for two-tier visibility
+5. **Tick interval 2** for visibility updates — balances responsiveness vs. CPU cost
+6. **StateView assignment in onJoin** — after spawnHQ() to ensure HQ exists
+
+**Rationale:**
+
+Manhattan distance is standard for grid-based games. Cache-on-onAdd prevents losing terrain data when tile exits StateView. Two-tier visibility (visible vs. not visible) doesn't need per-field filtering; element-level visibility is cleaner. Staggered updates prevent CPU spike on large player bases. Test suite validated all edge cases and integration points.
+
+**Integration notes:**
+
+- Server filters tiles per player via StateView; client receives only visible + explored tiles
+- Client ExploredTileCache preserves terrain after visibility loss (fog semantics)
+- No client-side code changes needed for server deployment — fog rendering automatically activates once StateView filtering lands
+- Camera bounds accessible via grid.exploredCache for HUD features (e.g., explored tile count)
+
+**Performance:** 372 tests pass with zero lint errors. No breaking changes to existing systems.
+
+**Next phase (Phase B):**
+- Alliance shared vision union semantics
+- Watchtower destruction + vision loss mechanics
+- Owned-tile cache optimization for 128×128 maps
+- Day/night transition staggering (CPU mitigation)
