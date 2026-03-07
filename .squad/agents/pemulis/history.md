@@ -998,3 +998,40 @@ Hal (Lead) architected pawn-based territory expansion system per same user direc
 - Added `IPlayerState.displayName` to `shared/src/types.ts` interface.
 - Added `handleSetName` handler in `GameRoom.ts`: validates non-empty, trims whitespace, caps at 20 chars, broadcasts join message.
 - This is the server-side portion; client scoreboard UI is a separate task.
+
+---
+
+## Session 2026-03-12 — StateView Filter Design Review
+
+**Status:** Complete
+**Output:** `.squad/decisions/inbox/pemulis-filter-review.md`
+**Verdict:** APPROVE WITH NOTES
+
+## Learnings
+
+- Colyseus `@colyseus/schema@4.0.16` StateView API: `view.add(obj)`, `view.remove(obj)`, `view.has(obj)` use a `WeakSet<ChangeTree>` for O(1) visibility checks. Adding `@view()` to ANY field in ANY schema class sets `hasFilters=true` globally, activating `$filter` on ALL `ArraySchema`/`MapSchema` instances.
+- ArraySchema `$filter` with `hasFilters=true` uses `OPERATION.ADD_BY_REFID`/`DELETE_BY_REFID` instead of index-based operations. This means client-side array indices do NOT correspond to server-side indices. Any code using `tiles.at(y * mapWidth + x)` on the client will break when filtering is active.
+- `view.add(obj)` on a previously-removed Schema re-sends ALL current field values as ADD operations via `encodeView()`. No stale state — client always gets current truth when an object re-enters visibility.
+- `view.remove(obj)` on an ArraySchema/MapSchema child sends a DELETE operation to the client (not just field removals). The child is fully removed from the client's collection.
+- MapSchema handles deletion of filtered elements via `deletedItems[index]` fallback in `$filter` — deleted creatures are properly sent as DELETE only to clients that had them in their view.
+- Schema `$filter` always sends non-tagged fields (`!Metadata.hasViewTagAtIndex(...)` → true) regardless of view membership. Root-level GameState scalar fields (tick, mapWidth, dayPhase) are always sent to all clients.
+- `@view()` (default tag = -1) on TileState fields is inert in two-tier visibility — `view.add(tile)` sends ALL fields (tagged and untagged). The field-level tag distinction only matters for three-tier with explicit `@view(1)` + `view.add(tile, 1)`.
+- `room.broadcast()` messages bypass schema filtering entirely — useful for game log events that should reach all players regardless of visibility.
+
+---
+
+## 2026-03-07: Per-Player State Filtering Review
+
+**Delivered:** Comprehensive technical review of Hal's StateView + @view() design.
+
+**Key Findings:**
+- ✅ Colyseus API accuracy verified against @colyseus/schema@4.0.16 source
+- ✅ Creature AI compatibility confirmed (no race conditions; tick ordering correct)
+- ⚠️ Issue #1: Merge owned-tile cache into Phase 2 (performance optimization)
+- ⚠️ Issue #2: Add immediate view.add() for player-spawned pawns (UX improvement)
+- ⚠️ Issue #3: ArraySchema index-based access will break (client breaking change; communicate to Gately)
+
+**Status:** APPROVE WITH NOTES
+
+**Impact:** Filter design approved for implementation. Three issues are refinements, not blockers. Issue #3 (client breaking change) is highest priority to surface to client team.
+

@@ -669,3 +669,43 @@ Hal proposed three redesign options for the hollow core gameplay loop. This will
 - **Tests cover:** `PlayerState.displayName` default (""), set/read, `handleSetName` validation (empty rejected, whitespace-only rejected, >20 chars truncated, whitespace trimmed, multiple updates), edge cases (emoji, unicode, tab+spaces, interior spaces preserved, trim-before-truncate ordering).
 - **Pattern:** Tests call `room.handleSetName(client, { name })` directly — same pattern as `handleSpawnPawn`. Pemulis's implementation matched expectations exactly for displayName field and handler method.
 - **Waiting on Pemulis** to add `SET_NAME = "set_name"` to `shared/src/messages.ts` and export from barrel. Once that lands, 15/15 should pass.
+
+### StateView Filter Design Review — Issue #32 (2026-03-09)
+
+- **Reviewed** Hal's design for per-player state filtering via Colyseus `StateView` + `@view()` API. Verdict: **APPROVE WITH NOTES**.
+- **Testability confirmed** — `StateView` can be created standalone (`new StateView()`) in the `Object.create(GameRoom.prototype)` test context. `view.has()`, `view.add()`, `view.remove()` operate on ChangeTree WeakSets, no encoder dependency. Tiles in `state.tiles` have valid ChangeTrees from ArraySchema assignment.
+- **No existing `tickVisibility()`** — despite design referencing "existing system," nothing exists. Building from scratch. Current tick loop has 8 functions; this adds the 9th.
+- **Adding `@view()` to TileState sets `hasFilters = true` globally** on the TypeContext. This activates `$filter` on ALL ArraySchema/MapSchema during encoding. Existing tests don't use encoding, so 318 tests should be unaffected — but must verify empirically before proceeding.
+- **Key edge cases flagged:** (1) No reconnection handling — visibility state destroyed on leave. (2) Creature spawn gap — new creatures invisible for up to 4 ticks. (3) Night→Day CPU spike — bulk view.add for all 8 players simultaneously. (4) Rapid territory expansion — claimer blind to own claim progress for up to 1 second.
+- **Test plan drafted:** 30 tests across Phase 1 (8 tests: wiring, view lifecycle) and Phase 2 (22 tests: visibility radius, creatures, day/night, multi-player, timing).
+- **New test helpers needed:** `createRoomWithVisibility(seed)` and `addPlayer(room, sessionId)` to set up StateView + playerViews maps without Colyseus client.
+- **Decision written** to `.squad/decisions/inbox/steeply-filter-review.md`.
+
+---
+
+## 2026-03-07: Per-Player State Filtering Review (Testability & Edge Cases)
+
+**Delivered:** Comprehensive testability assessment and edge-case analysis of Hal's StateView design.
+
+**Key Findings:**
+- ✅ Existing 318 tests should not break (StateView only affects encoding, not schema access)
+- ✅ Object.create(GameRoom.prototype) pattern continues to work
+- ✅ Architecture is testable without full Colyseus server
+- ⚠️ 11 unlisted risks identified (reconnection handling, creature spawn visibility, tick ordering fragility, etc.)
+
+**Test Plan:** 30+ new tests recommended for Phases 1-2:
+- Phase 1: 8 tests (decorator compatibility, view.add/remove, player management)
+- Phase 2: 18+ tests (territory visibility, creatures, day/night, multi-player, timing)
+
+**Must-Fix Before Implementation:**
+1. Add R10 (tick ordering fragility) as code comment
+2. Document reconnection handling stance explicitly
+3. Show `computeInitialVisibility()` implementation
+
+**Should-Fix During Implementation:**
+4. Add creature to views on spawn if on visible tile
+5. Add tile to claimer's view immediately on ownership change
+6. Run full 318-test suite as regression gate after @view() decorators
+
+**Status:** APPROVE WITH NOTES. Design is sound; edge case analysis complete. Test infrastructure ready.
+

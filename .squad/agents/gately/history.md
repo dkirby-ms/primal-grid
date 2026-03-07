@@ -762,3 +762,43 @@ Added a scrolling game log panel below the main game area:
 - **InputHandler:** Added `setScoreboard()` method and Tab key handler with `preventDefault()` to suppress browser tab cycling.
 - **Message constant:** Added `SET_NAME = "set_name"` and `SetNamePayload` interface to `shared/src/messages.ts`.
 - **Pattern:** Scoreboard only refreshes tile counts when visible (perf optimization — skips `onStateChange` iteration when hidden). Uses same duck-typed forEach pattern as HudDOM for Colyseus schema compatibility.
+
+### Fog of War — Client Rendering & Camera System Design (2026-03-07)
+
+Designed the complete client-side fog of war system covering rendering, camera bounds, and Colyseus StateView integration. Key architectural decisions:
+
+- **Three visual states:** Unexplored (solid black overlay, alpha 1.0), Explored (dimmed overlay, alpha 0.55), Visible (overlay hidden — full brightness). Implemented as pre-allocated per-tile `Graphics` overlays in a `FogManager` class, matching the existing `territoryOverlays` pattern in GridRenderer.
+- **ExploredTileCache:** Client-side `Map<tileIndex, CachedTile>` that persists terrain data (type, x, y, fertility, moisture) for every tile the client has ever received. When the server removes a tile from StateView (`onRemove`), the cache preserves its terrain for dimmed rendering. ~655 KB worst case for full 128×128 map — no eviction needed.
+- **Dynamic camera bounds:** Camera is restricted to the bounding box of explored tiles + 2-tile margin (implementing user directive). Bounds recompute lazily on tile discovery (O(exploredTileCount), triggered by `boundsDirty` flag). Smooth expansion via lerp (0.08/frame) prevents jarring jumps when new tiles are discovered. At game start with 9×9 HQ + 3-tile radius, explored area is ~15×15 tiles — camera is nearly locked, forcing intimate starting view.
+- **Camera.ts changes:** `clamp()` method updated to use FogManager's smoothed pixel bounds instead of fixed map-size bounds. Auto-centers when explored area is smaller than viewport. Falls back to full-map bounds when FogManager is not set (backward compatible).
+- **Colyseus integration:** Uses `tiles.onAdd` / `tiles.onRemove` callbacks to drive fog state transitions. Zero server changes beyond Hal's StateView filtering. CreatureRenderer needs no changes — StateView already controls which creatures the client receives.
+- **Fog transitions:** Visible→Explored fades in (0.1 lerp factor, ~15 frames). Explored→Visible is instant reveal (discovery feels impactful). Unexplored→Visible is also instant.
+- **Layer order:** Fog overlay container sits inside `grid.container` above territory overlays and day/night overlay, but below creature container. Visible creatures are never dimmed.
+- **New files planned:** `client/src/fog/ExploredTileCache.ts`, `client/src/fog/FogManager.ts`, `client/src/fog/index.ts`. Modified files: Camera.ts, GridRenderer.ts, main.ts. No InputHandler changes needed — bounds enforcement lives entirely in Camera.clamp().
+- **Viewport culling deferred:** Full fog works without culling at 64×64 map size. Culling architecture designed for future 128×128 maps if frame rate drops below 50 FPS.
+- **Open questions raised:** Map size increase timing, three-tier @view() tag support, spectator mode, team visibility sharing.
+
+Design written to `.squad/decisions/inbox/gately-fog-camera-design.md`.
+
+---
+
+## 2026-03-07: Fog of War Client Rendering & Camera Design
+
+**Delivered:** Comprehensive client-side architecture for fog rendering, tile visibility tracking, and dynamic camera bounds.
+
+**Key Components:**
+1. **ExploredTileCache** — Client-side terrain memory (665 KB max for full map)
+2. **FogManager** — Central coordinator for tile visibility, fog overlays, dynamic camera bounds
+3. **Per-tile fog overlays** — Black (unexplored) / dimmed (explored) / normal (visible)
+4. **Camera bounds restriction** — Addresses user directive (dkirby-ms 2026-03-07T01:03)
+
+**Design Characteristics:**
+- Zero new server APIs beyond Hal's StateView filtering
+- Reactive to Colyseus sync lifecycle (onAdd/onRemove)
+- Graceful handling of tile appearance/disappearance
+- Smooth camera bounds expansion with lerp
+
+**Critical Note:** Pemulis review identified tile access pattern breaking change. Client must switch from index-based (`state.tiles.at(y * mapWidth + x)`) to coordinate-based access. Affects GridRenderer, InputHandler, CreatureRenderer.
+
+**Status:** COMPLETE. Ready for implementation once server-side filtering (Hal/Pemulis/Steeply) is in place.
+
