@@ -1267,3 +1267,30 @@ Gately has completed steps 10-11 of Hal's architecture: client-side combat entit
 - Ensure Steeply's combat tests verify that adding a new type to the registry auto-renders (no client changes needed).
 
 **All 384 tests pass; branch ready for review.**
+
+### Grave Marker System (2026-03-12)
+
+- **Feature:** Grave markers spawn at death positions when creatures/pawns die in combat, then decay after GRAVE_MARKER.DECAY_TICKS (480 ticks ≈ 2 minutes).
+- **Architecture:** Grave markers are CreatureState entities with `creatureType="grave_marker"` and `pawnType` storing the original creature type (for client rendering). `spawnTick` field added to CreatureState schema for decay timing.
+- **Inertness guarantees:** `nextMoveTick = Number.MAX_SAFE_INTEGER` naturally excludes grave markers from creature AI (timer gate). `isGraveMarker()` guard added to combat Phase 1 and `findAdjacentHostile()` so they can't attack or be targeted. Not in `PAWN_TYPES` registry so pawn upkeep ignores them. Not in `CREATURE_TYPES` so respawn logic ignores them.
+- **Exclusion:** Enemy bases don't spawn grave markers (they're structures, not living entities).
+- **tickCombat signature change:** Added `nextCreatureId: { value: number }` parameter (same mutable counter pattern used by `tickCreatureAI`). Updated both GameRoom.ts call site and test helper.
+- **New file:** `server/src/rooms/graveDecay.ts` — `tickGraveDecay()` runs every tick, removes markers past their decay lifetime.
+- **Key files:** `shared/src/constants.ts` (GRAVE_MARKER), `shared/src/types.ts` (isGraveMarker), `server/src/rooms/GameState.ts` (spawnTick), `server/src/rooms/combat.ts`, `server/src/rooms/graveDecay.ts`, `server/src/rooms/GameRoom.ts`.
+- **Tests:** 495/495 pass, 31/31 test files.
+
+### Cross-Agent Coordination (2026-03-07)
+
+**Grave Markers & Combat VFX — Team Delivery**
+
+Coordinated work with Gately (Game Dev) and Steeply (Tester) on grave marker system (server + client) and combat visual effects.
+
+- **Pemulis contribution:** Server-side grave spawning (Phase 3 of combat.ts), decay module, type guards, `spawnTick` schema field, `GRAVE_MARKER.DECAY_TICKS` constant, `tickCombat` signature change to add `nextCreatureId` counter.
+- **Gately contribution:** Client-side CombatEffects manager (HP delta detection, floating damage numbers, hit flashes), grave marker PixiJS Graphics rendering (tombstone with rounded rect + cross).
+- **Steeply contribution:** 25 grave marker tests, 111 combat test fixes (tickCombat signature), documented combat test patterns (cooldown ticks, room mocks, pair-based resolution).
+
+**Cross-Impact:** Pemulis's signature change (tickCombat now requires `nextCreatureId` counter) broke 111 existing tests, which Steeply fixed. All agents' history.md updated with cross-references.
+
+**Test Status:** 520 total tests, all passing.
+**Branch:** squad/17-18-combat-system (ready for review)
+**Decisions Merged:** pemulis-grave-markers.md, gately-combat-visuals.md, steeply-grave-tests.md, steeply-combat-test-patterns.md, copilot-directive-2026-03-07T20-55-45Z.md (rescind "close only on master" rule).

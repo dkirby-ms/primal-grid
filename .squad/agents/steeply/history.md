@@ -935,3 +935,33 @@ Gately has completed steps 10-11 of Hal's architecture: client-side combat entit
 - **Defenders are territory-locked:** `moveTowardInTerritory` only moves onto tiles where `tile.ownerID === creature.ownerID`. `wanderInTerritory` uses the same constraint. Defenders in `returning` state use unrestricted `moveToward` to get back.
 - **Attacker sortie timeout:** When `returnTick` expires, attacker transitions to "returning" then walks home. If already at home tile (dist ≤ 1), it immediately transitions to "seek_target" — tests must place attacker far from home to verify the returning state.
 - **Test file:** `server/src/__tests__/combat-system.test.ts` — 2100+ lines covering enemy bases, mobiles, defenders, attackers, combat resolution, upkeep, and edge cases.
+
+### Grave Marker System — Tests
+
+- **25 new tests** in `server/src/__tests__/grave-marker.test.ts`. Total suite: **520 tests, all passing.**
+- **Grave marker spawning:** `tickCombat` Phase 3 now spawns a `grave_marker` CreatureState at the death position for all non-base creatures. `creatureType='grave_marker'`, `pawnType` stores the original creature's type.
+- **Grave marker properties:** `health=1`, `nextMoveTick=Number.MAX_SAFE_INTEGER` (immobile), `spawnTick=currentTick`.
+- **Grave marker decay:** `tickGraveDecay(state, currentTick)` in `server/src/rooms/graveDecay.ts` removes markers when `currentTick - spawnTick >= GRAVE_MARKER.DECAY_TICKS` (480 ticks ≈ 2 minutes).
+- **Grave marker inertness:** `isGraveMarker()` guard in `findAdjacentHostile` and Phase 1 iteration skips grave markers entirely. `getCreatureDamage` returns 0 for grave markers (no mobileDef, no pawnDef match). `areHostile` returns false for grave markers.
+- **`tickCombat` signature changed:** Now takes 4 args — `(state, room, enemyBaseState, nextCreatureId: { value: number })`. Fixed existing `runCombat` helper in `combat-system.test.ts` to pass a `_combatIdCounter`.
+- **`CreatureState.spawnTick`** added to schema (`@type("number")`, default 0). Used by grave decay logic.
+- **`EnemyBaseTracker.spawnedMobileIds`** (not `spawnedMobiles`) — mock must use correct property name.
+- **Client tests:** Only `camera-zoom.test.ts` exists. No CombatEffects test infrastructure. `CombatEffects.ts` and `CreatureRenderer.ts` have HP delta logic but would require PixiJS canvas mocking to test — skipped.
+- **`GRAVE_MARKER` constant** in `shared/src/constants.ts`: `{ DECAY_TICKS: 480 }`.
+- **`isGraveMarker()`** in `shared/src/types.ts`: checks `creatureType === "grave_marker"`.
+
+### Cross-Agent Coordination (2026-03-07)
+
+**Grave Markers & Combat VFX — Team Delivery**
+
+Coordinated work with Pemulis (Systems Dev) and Gately (Game Dev) on grave marker system (server + client) and combat visual effects.
+
+- **Steeply contribution:** 25 new grave marker tests in grave-marker.test.ts (spawning, properties, decay, inertness), 111 existing combat test fixes for `tickCombat` signature change (added `nextCreatureId` counter), documented combat test patterns (cooldown tick values, room mocks, pair-based combat resolution).
+- **Pemulis contribution:** Server-side grave spawning, decay module, type guards, `spawnTick` field, constants, signature change to tickCombat.
+- **Gately contribution:** Client-side CombatEffects manager, grave marker PixiJS rendering, HP delta detection, floating damage numbers, hit flashes.
+
+**Cross-Impact:** Pemulis's tickCombat signature change initially broke 111 tests (required adding nextCreatureId counter). Steeply fixed all 111 existing tests and created new grave marker test suite. Gately's client rendering depends on Pemulis's creatureType="grave_marker" data model (no test changes needed on client).
+
+**Test Status:** 520 total tests (384 existing + 111 combat + 25 grave), all passing, 31 test files.
+**Branch:** squad/17-18-combat-system (ready for review)
+**Decisions Merged:** pemulis-grave-markers.md, gately-combat-visuals.md, steeply-grave-tests.md, steeply-combat-test-patterns.md, copilot-directive-2026-03-07T20-55-45Z.md.

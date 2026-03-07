@@ -1062,3 +1062,28 @@ Test suite validates your architectural assumptions about tile addition/removal 
 - **Pattern: registry-driven rendering.** All colors, icons, health values, and costs come from shared type registries (ENEMY_BASE_TYPES, ENEMY_MOBILE_TYPES, PAWN_TYPES) rather than hardcoded constants. If registries change, rendering updates automatically.
 - **Key files modified:** `client/src/renderer/CreatureRenderer.ts`, `client/src/ui/HudDOM.ts`, `client/index.html`.
 - **No test breakage:** All 384 tests pass. Client typechecks clean.
+
+### Combat Visual Feedback & Grave Markers (2026-03-07)
+
+- **CombatEffects system:** New standalone effects manager at `client/src/renderer/CombatEffects.ts`. Tracks previous HP per creature ID to detect damage events (HP delta detection). Spawns floating red `-N` damage numbers that rise 30px with ease-out fade over 1s. Hit flash tints creature container red (0xff4444) for 250ms with smooth decay to white.
+- **Layering:** CombatEffects container is added to grid.container ABOVE creatures container for correct z-order (grid → creatures → effects). Wired in `main.ts`.
+- **Grave marker rendering:** When `creatureType === 'grave_marker'`, CreatureRenderer creates a PixiJS Graphics tombstone (rounded rect headstone, rectangular base, cross etching, shadow ellipse). No emoji, no HP bar, no indicator. Fades in from alpha 0 → 0.65. Visually distinct from living creatures.
+- **Integration pattern:** `CreatureRenderer.setCombatEffects(effects)` injection. CombatEffects.update() driven from CreatureRenderer.tick(). Clean separation — CombatEffects knows nothing about creature types.
+- **Key files:** `client/src/renderer/CombatEffects.ts` (new), `client/src/renderer/CreatureRenderer.ts` (modified), `client/src/main.ts` (modified).
+- **All 495 tests pass.** No server or shared changes needed.
+
+### Cross-Agent Coordination (2026-03-07)
+
+**Grave Markers & Combat VFX — Team Delivery**
+
+Coordinated work with Pemulis (Systems Dev) and Steeply (Tester) on grave marker system (server + client) and combat visual effects.
+
+- **Gately contribution:** Client-side CombatEffects manager with HP delta detection (no explicit damage events from server), floating red `-N` damage numbers, hit flash effects (red tint 250ms decay), grave marker PixiJS Graphics rendering (rounded rect tombstone, base, cross etching, shadow ellipse, 0.65 alpha fade-in).
+- **Pemulis contribution:** Server-side grave spawning in combat Phase 3, decay module (tickGraveDecay), type guards (isGraveMarker), `spawnTick` schema field, `GRAVE_MARKER.DECAY_TICKS=480` constant.
+- **Steeply contribution:** 25 grave marker tests, 111 existing combat test fixes for `tickCombat` signature change, documented combat test patterns.
+
+**Cross-Impact:** Pemulis's grave marker system provides the data model (creatureType, spawnTick, pawnType) that Gately renders. No server changes needed for client VFX. All agents' history.md updated.
+
+**Test Status:** 520 total tests, all passing (495 existing + 25 new).
+**Branch:** squad/17-18-combat-system (ready for review)
+**Decisions Merged:** pemulis-grave-markers.md, gately-combat-visuals.md, steeply-grave-tests.md, steeply-combat-test-patterns.md, copilot-directive-2026-03-07T20-55-45Z.md.

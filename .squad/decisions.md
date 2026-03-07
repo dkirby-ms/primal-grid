@@ -4456,3 +4456,138 @@ All combat entity rendering (icons, colors, HP bar max values, costs) is driven 
 
 - **Pemulis:** If you add new enemy/pawn types to the registries, the renderer will handle them automatically as long as they follow the `enemy_base_*`, `enemy_*`, or `pawn_*` naming conventions.
 - **Hal:** Future entity types should include `icon` and `color` fields in their registry definitions.
+
+# Decision: Grave Marker System Architecture
+
+**Author:** Pemulis (Systems Dev)
+**Date:** 2026-03-12
+**Affects:** Steeply (client rendering), Gately (creature AI), all agents
+
+## Context
+
+Grave markers needed a server-side representation so the client can render death locations and they decay over time.
+
+## Decision
+
+Grave markers are **CreatureState entities** (not a new schema type). This lets the existing Colyseus sync pipeline deliver them to clients with zero protocol changes.
+
+### Key Design Choices
+
+1. **`creatureType = "grave_marker"`** — New type guard `isGraveMarker()` in `shared/src/types.ts`. All combat/AI loops now explicitly skip this type.
+2. **`pawnType` stores original creature type** — e.g. `"enemy_raider"`, `"pawn_defender"`. Client can use this to render type-specific grave icons.
+3. **`spawnTick` field on CreatureState** — New schema field. Used for decay timing. Available for any future time-since-spawn logic.
+4. **`nextMoveTick = Number.MAX_SAFE_INTEGER`** — Natural exclusion from creature AI without special-casing the AI loop.
+5. **`tickCombat` now takes `nextCreatureId` counter** — Same mutable `{ value: number }` pattern used by `tickCreatureAI`. Tests updated.
+6. **Enemy bases excluded** — They're structures, not creatures. No grave marker on base destruction.
+
+### For Steeply (Client)
+
+- Filter for `creatureType === "grave_marker"` in creature rendering
+- Use `pawnType` field to determine which icon/sprite to show
+- Grave markers are stationary (`nextMoveTick = MAX`) and have `currentState = "idle"`
+- They auto-remove server-side after ~2 minutes (480 ticks)
+
+### Constants
+
+- `GRAVE_MARKER.DECAY_TICKS = 480` in `shared/src/constants.ts`
+
+# Decision: Combat Visual Feedback — Client Architecture
+
+**Author:** Gately (Game Dev)
+**Date:** 2026-03-07
+**Status:** IMPLEMENTED
+**Affects:** Client rendering, CreatureRenderer, main.ts
+
+## Context
+
+Combat system exists server-side but had no visual feedback on the client. Players couldn't see damage being dealt or identify dead units.
+
+## Decision
+
+1. **CombatEffects as standalone manager** — HP delta detection lives in a separate class (`CombatEffects.ts`), not baked into CreatureRenderer. Injected via `setCombatEffects()`.
+
+2. **HP delta detection** — No explicit damage events from server. CombatEffects tracks previous HP per creature ID and triggers effects when `current < previous`.
+
+3. **Z-ordering** — Effects container layered above creatures in grid container: `grid → creatures → effects`. Ensures floating numbers render on top.
+
+4. **Grave markers via PixiJS Graphics** — No emoji for tombstones. Uses rounded rect + cross etching + shadow for a clean, non-emoji visual. Fades in to alpha 0.65. Skips all living-creature logic (no HP bar, no indicator, no health opacity).
+
+## Rationale
+
+- Standalone effects manager keeps CreatureRenderer focused on creature lifecycle. Easy to extend with new effects (shield flashes, heal numbers, etc.) without touching creature code.
+- HP delta detection is reliable since Colyseus state sync guarantees health updates arrive.
+- Graphics-based tombstones avoid cross-platform emoji rendering inconsistencies and look more game-like.
+
+## Impact
+
+- **Pemulis (Server):** No server changes required. Grave markers already use `creatureType: 'grave_marker'` in shared types.
+- **Future work:** CombatEffects can be extended for heal effects (green `+N`), shield indicators, or area-of-effect visuals.
+
+# Decision: Grave Marker Test Coverage & Combat Helper Fix
+
+**Author:** Steeply (Tester)
+**Date:** 2026-03-10
+**Status:** Active
+
+## Context
+
+Grave marker system was implemented by Pemulis/Gately (combat.ts Phase 3, graveDecay.ts). Tests were needed to validate spawning, properties, decay, and inertness.
+
+## Decision
+
+1. **Separate test file** for grave markers: `server/src/__tests__/grave-marker.test.ts` (25 tests) rather than appending to the 2200+ line combat-system.test.ts.
+2. **Fixed `runCombat` helper** in existing combat-system.test.ts — `tickCombat` signature changed to 4 args (added `nextCreatureId`). All 111 existing combat tests were broken by this change; now fixed.
+3. **No client-side tests** for CombatEffects — only `camera-zoom.test.ts` exists as client test infrastructure. CombatEffects HP delta rendering would require heavy PixiJS mocking. Recommend adding client test infrastructure if visual regression testing becomes a priority.
+
+## Impact
+
+- All team members: `tickCombat` now requires a `{ value: number }` counter as 4th argument. Any new tests calling it directly must pass this.
+- `EnemyBaseTracker` mock must use `spawnedMobileIds` (not `spawnedMobiles`).
+
+# Decision: Combat Test Patterns — Steeply
+
+**Date:** 2026-03-10
+**Affects:** All agents writing combat-related tests
+
+## Combat Cooldown Tick Values
+
+Tests calling `tickCombat()` must set `room.state.tick` to at least:
+- `ATTACK_COOLDOWN_TICKS` (4) for creature-vs-creature combat
+- `TILE_ATTACK_COOLDOWN_TICKS` (8) for mobile tile attacks
+
+The cooldown system uses module-level Maps with `?? 0` default, so tick=0 always fails the cooldown check. Use `FIRST_COMBAT_TICK` and `FIRST_TILE_TICK` helper constants.
+
+## Room Mock Initialization
+
+Any test using `tickEnemyBaseSpawning()`, `tickCreatureAI()`, or `tickCombat()` via the GameRoom must initialize:
+```typescript
+(room as any).nextCreatureId = 0;
+(room as any).creatureIdCounter = { value: 0 };
+(room as any).enemyBaseState = new Map();
+(room as any).attackerState = new Map();
+```
+
+## Pair-Based Combat
+
+Combat resolution is pair-based, not AoE. A single defender adjacent to 3 mobs will exchange damage with ALL three in the same tick (each as a separate pair). Tests should not assume 1:1 engagement per tick.
+
+# Decision: Issue Closure — Directive Rescinded
+
+**Author:** dkirby-ms (via Copilot)
+**Date:** 2026-03-07
+**Status:** RESCINDED
+**Affected Decision:** "Issue Closure — master Merge Only"
+
+## Update
+
+The previous directive **"Only close GitHub issues when merged to master, not dev or uat"** is hereby **rescinded**.
+
+## New Guidance
+
+Issues may be closed at any time based on project workflow needs. No waiting required for master merge. The rule was creating confusion and friction.
+
+## Impact
+
+- **All agents:** Issues can be closed on `dev`, `uat`, or `master` merges as appropriate
+- **Commit messages:** "Closes #N" syntax is valid on any branch merge
+- **Release discipline:** If master-only closure is needed for a specific workflow, re-open the issue explicitly
