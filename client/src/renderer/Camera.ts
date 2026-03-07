@@ -56,18 +56,29 @@ export class Camera {
 
   private onWheel(e: WheelEvent): void {
     e.preventDefault();
-    const cur = this.target.scale.x;
+    const oldScale = this.target.scale.x;
     // Find the current index (nearest level)
     let idx = 0;
-    let minDist = Math.abs(ZOOM_LEVELS[0] - cur);
+    let minDist = Math.abs(ZOOM_LEVELS[0] - oldScale);
     for (let i = 1; i < ZOOM_LEVELS.length; i++) {
-      const dist = Math.abs(ZOOM_LEVELS[i] - cur);
+      const dist = Math.abs(ZOOM_LEVELS[i] - oldScale);
       if (dist < minDist) { minDist = dist; idx = i; }
     }
     // Step to next/previous level
     const dir = e.deltaY < 0 ? 1 : -1;
     const nextIdx = Math.min(ZOOM_LEVELS.length - 1, Math.max(0, idx + dir));
-    this.target.scale.set(ZOOM_LEVELS[nextIdx], ZOOM_LEVELS[nextIdx]);
+    const newScale = ZOOM_LEVELS[nextIdx];
+
+    // Anchor zoom to the mouse cursor position so the world point under
+    // the cursor stays fixed after the scale change.
+    const anchorX = e.clientX;
+    const anchorY = e.clientY;
+    const worldX = (anchorX - this.target.position.x) / oldScale;
+    const worldY = (anchorY - this.target.position.y) / oldScale;
+    this.target.scale.set(newScale, newScale);
+    this.target.position.x = anchorX - worldX * newScale;
+    this.target.position.y = anchorY - worldY * newScale;
+
     this.clamp();
   }
 
