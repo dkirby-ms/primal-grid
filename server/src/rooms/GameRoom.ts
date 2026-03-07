@@ -4,6 +4,9 @@ import { GameState, PlayerState, CreatureState } from "./GameState.js";
 import { generateProceduralMap } from "./mapGenerator.js";
 import { tickCreatureAI } from "./creatureAI.js";
 import { computeVisibleTiles } from "./visibility.js";
+import { tickCombat } from "./combat.js";
+import type { EnemyBaseTracker } from "./enemyBaseAI.js";
+import type { AttackerTracker } from "./attackerAI.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
   SPAWN_PAWN, SET_NAME,
@@ -12,7 +15,10 @@ import {
   CREATURE_AI, CREATURE_RESPAWN, TERRITORY,
   STRUCTURE_INCOME, SHAPE,
   PROGRESSION, getLevelForXP,
-  PAWN, DAY_NIGHT, FOG_OF_WAR,
+  PAWN, PAWN_TYPES, DAY_NIGHT, FOG_OF_WAR,
+  ENEMY_SPAWNING, ENEMY_BASE_TYPES,
+  DayPhase,
+  isEnemyBase, isEnemyMobile, isPlayerPawn,
 } from "@primal-grid/shared";
 import type { SpawnPawnPayload, SetNamePayload } from "@primal-grid/shared";
 import { spawnHQ } from "./territory.js";
@@ -28,6 +34,12 @@ export class GameRoom extends Room {
   private nextCreatureId = 0;
   /** Per-player StateView, cached visible tile indices, and visible creature IDs for fog of war. */
   playerViews = new Map<string, { view: StateView; visibleIndices: Set<number>; visibleCreatureIds: Set<string> }>();
+  /** Server-side tracking for enemy bases (mobile ownership). */
+  private enemyBaseState = new Map<string, EnemyBaseTracker>();
+  /** Server-side tracking for attacker pawns (sortie timer, home tile). */
+  private attackerState = new Map<string, AttackerTracker>();
+  /** Shared mutable counter for creature IDs (passed to AI functions). */
+  private creatureIdCounter = { value: 0 };
 
   override onCreate(options: Record<string, unknown>) {
     const seed = typeof options?.seed === "number" ? options.seed : DEFAULT_MAP_SEED;
@@ -43,6 +55,8 @@ export class GameRoom extends Room {
       this.tickCreatureRespawn();
       this.tickStructureIncome();
       this.tickPawnUpkeep();
+      this.tickEnemyBaseSpawning();
+      this.tickCombat();
       this.tickFogOfWar();
     }, 1000 / TICK_RATE);
 
@@ -118,47 +132,54 @@ export class GameRoom extends Room {
   private handleSpawnPawn(client: Client, message: SpawnPawnPayload) {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
-    if (message.pawnType !== "builder") return;
+
+    const pawnDef = PAWN_TYPES[message.pawnType];
+    if (!pawnDef) return;
 
     // Validate resources
-    if (player.wood < PAWN.BUILDER_COST_WOOD || player.stone < PAWN.BUILDER_COST_STONE) return;
+    if (player.wood < pawnDef.cost.wood || player.stone < pawnDef.cost.stone) return;
 
-    // Validate pawn cap
+    // Validate pawn cap (per pawn type)
     let pawnCount = 0;
     this.state.creatures.forEach((c) => {
-      if (c.ownerID === client.sessionId && c.pawnType === "builder") pawnCount++;
+      if (c.ownerID === client.sessionId && c.pawnType === message.pawnType) pawnCount++;
     });
-    if (pawnCount >= PAWN.MAX_PER_PLAYER) return;
+    if (pawnCount >= pawnDef.maxCount) return;
 
     // Find walkable tile within HQ zone
     const spawnPos = this.findHQWalkableTile(player);
     if (!spawnPos) return;
 
     // Deduct cost
-    player.wood -= PAWN.BUILDER_COST_WOOD;
-    player.stone -= PAWN.BUILDER_COST_STONE;
+    player.wood -= pawnDef.cost.wood;
+    player.stone -= pawnDef.cost.stone;
 
-    // Spawn builder
+    // Spawn pawn
     if (this.nextCreatureId == null) this.nextCreatureId = 0;
     const creature = new CreatureState();
     creature.id = `pawn_${this.nextCreatureId++}`;
-    creature.creatureType = "pawn_builder";
+    creature.creatureType = pawnDef.creatureType;
     creature.x = spawnPos.x;
     creature.y = spawnPos.y;
-    creature.health = PAWN.BUILDER_HEALTH;
+    creature.health = pawnDef.health;
     creature.hunger = 100;
     creature.currentState = "idle";
     creature.ownerID = client.sessionId;
-    creature.pawnType = "builder";
-    creature.buildMode = message.buildMode === "farm" ? "farm" : "outpost";
+    creature.pawnType = message.pawnType;
+    creature.buildMode = message.pawnType === "builder" ? (message.buildMode === "farm" ? "farm" : "outpost") : "";
     creature.targetX = -1;
     creature.targetY = -1;
     creature.buildProgress = 0;
-    creature.stamina = PAWN.BUILDER_MAX_STAMINA;
+    creature.stamina = pawnDef.maxStamina;
     // Stagger so pawns don't all step on the same tick
     creature.nextMoveTick = this.state.tick + 1 + ((this.nextCreatureId - 1) % CREATURE_AI.TICK_INTERVAL);
     this.state.creatures.set(creature.id, creature);
-    this.broadcast("game_log", { message: "Builder spawned", type: "spawn" });
+
+    // Keep creatureIdCounter in sync
+    if (!this.creatureIdCounter) this.creatureIdCounter = { value: 0 };
+    this.creatureIdCounter.value = this.nextCreatureId;
+
+    this.broadcast("game_log", { message: `${pawnDef.name} spawned`, type: "spawn" });
   }
 
   /** Find a random walkable tile within the player's HQ zone. */
@@ -184,22 +205,25 @@ export class GameRoom extends Room {
     const toRemove: string[] = [];
 
     this.state.creatures.forEach((creature) => {
-      if (creature.pawnType !== "builder") return;
+      if (!creature.pawnType || creature.pawnType === "") return;
+      const pawnDef = PAWN_TYPES[creature.pawnType];
+      if (!pawnDef) return;
+
       const owner = this.state.players.get(creature.ownerID);
       if (!owner) {
         toRemove.push(creature.id);
         return;
       }
 
-      if (owner.wood >= PAWN.BUILDER_UPKEEP_WOOD) {
-        owner.wood -= PAWN.BUILDER_UPKEEP_WOOD;
+      if (owner.wood >= pawnDef.upkeep.wood) {
+        owner.wood -= pawnDef.upkeep.wood;
       } else {
         creature.health -= PAWN.UPKEEP_DAMAGE;
         if (creature.health <= 0) {
           toRemove.push(creature.id);
-          this.broadcast("game_log", { message: "Builder starved (no wood for upkeep)", type: "death" });
+          this.broadcast("game_log", { message: `${pawnDef.name} starved (no wood for upkeep)`, type: "death" });
         } else {
-          this.broadcast("game_log", { message: "Builder taking damage — need wood!", type: "upkeep" });
+          this.broadcast("game_log", { message: `${pawnDef.name} taking damage — need wood!`, type: "upkeep" });
         }
       }
     });
@@ -318,8 +342,115 @@ export class GameRoom extends Room {
     }
   }
 
+  /** Periodically spawn enemy bases on the map (night-only). */
+  private tickEnemyBaseSpawning() {
+    // Lazy-initialize for test compatibility
+    if (!this.enemyBaseState) this.enemyBaseState = new Map();
+
+    // Only spawn during night phase
+    if (this.state.dayPhase !== DayPhase.Night) return;
+
+    // Grace period at start
+    if (this.state.tick < ENEMY_SPAWNING.FIRST_BASE_DELAY_TICKS) return;
+
+    // Check spawn interval
+    if (this.state.tick % ENEMY_SPAWNING.BASE_SPAWN_INTERVAL_TICKS !== 0) return;
+
+    // Count existing bases
+    let baseCount = 0;
+    this.state.creatures.forEach((c) => {
+      if (isEnemyBase(c.creatureType)) baseCount++;
+    });
+    if (baseCount >= ENEMY_SPAWNING.MAX_BASES) return;
+
+    // Pick a random base type
+    const baseTypeKeys = Object.keys(ENEMY_BASE_TYPES);
+    const baseTypeKey = baseTypeKeys[Math.floor(Math.random() * baseTypeKeys.length)];
+    const baseDef = ENEMY_BASE_TYPES[baseTypeKey];
+    if (!baseDef) return;
+
+    // Find valid spawn location
+    const pos = this.findEnemyBaseSpawnLocation();
+    if (!pos) return;
+
+    if (this.nextCreatureId == null) this.nextCreatureId = 0;
+    const base = new CreatureState();
+    base.id = `enemy_base_${this.nextCreatureId++}`;
+    base.creatureType = baseTypeKey;
+    base.x = pos.x;
+    base.y = pos.y;
+    base.health = baseDef.health;
+    base.hunger = 100;
+    base.currentState = "active";
+    base.ownerID = "";
+    base.pawnType = "";
+    base.targetX = -1;
+    base.targetY = -1;
+    base.stamina = 0;
+    base.nextMoveTick = this.state.tick + baseDef.spawnInterval;
+    this.state.creatures.set(base.id, base);
+
+    this.creatureIdCounter.value = this.nextCreatureId;
+
+    this.broadcast("game_log", { message: `${baseDef.name} appeared!`, type: "spawn" });
+  }
+
+  /** Find a valid spawn location for an enemy base. */
+  private findEnemyBaseSpawnLocation(): { x: number; y: number } | null {
+    const w = this.state.mapWidth;
+    const h = this.state.mapHeight;
+
+    // Collect HQ positions and existing base positions
+    const hqs: { x: number; y: number }[] = [];
+    this.state.players.forEach((p) => {
+      if (p.hqX >= 0 && p.hqY >= 0) hqs.push({ x: p.hqX, y: p.hqY });
+    });
+
+    const bases: { x: number; y: number }[] = [];
+    this.state.creatures.forEach((c) => {
+      if (isEnemyBase(c.creatureType)) bases.push({ x: c.x, y: c.y });
+    });
+
+    for (let attempts = 0; attempts < 100; attempts++) {
+      const x = Math.floor(Math.random() * w);
+      const y = Math.floor(Math.random() * h);
+      const tile = this.state.getTile(x, y);
+      if (!tile || !this.state.isWalkable(x, y)) continue;
+      if (tile.ownerID !== "") continue;
+
+      // Min distance from HQs
+      const tooCloseToHQ = hqs.some(
+        (hq) => Math.abs(hq.x - x) + Math.abs(hq.y - y) < ENEMY_SPAWNING.MIN_DISTANCE_FROM_HQ,
+      );
+      if (tooCloseToHQ) continue;
+
+      // Min distance between bases
+      const tooCloseToBase = bases.some(
+        (b) => Math.abs(b.x - x) + Math.abs(b.y - y) < ENEMY_SPAWNING.MIN_DISTANCE_BETWEEN_BASES,
+      );
+      if (tooCloseToBase) continue;
+
+      return { x, y };
+    }
+    return null;
+  }
+
+  /** Resolve combat interactions. */
+  private tickCombat() {
+    if (!this.enemyBaseState) this.enemyBaseState = new Map();
+    tickCombat(this.state, this, this.enemyBaseState);
+  }
+
   private tickCreatureAI() {
-    tickCreatureAI(this.state, this);
+    // Lazy-initialize server-side state for test compatibility
+    if (!this.enemyBaseState) this.enemyBaseState = new Map();
+    if (!this.attackerState) this.attackerState = new Map();
+    if (!this.creatureIdCounter) this.creatureIdCounter = { value: this.nextCreatureId ?? 0 };
+
+    // Keep counter in sync
+    this.creatureIdCounter.value = this.nextCreatureId;
+    tickCreatureAI(this.state, this, this.enemyBaseState, this.attackerState, this.creatureIdCounter);
+    this.nextCreatureId = this.creatureIdCounter.value;
   }
 
   /** Biome-to-resource mapping for regeneration. */

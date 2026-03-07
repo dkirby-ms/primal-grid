@@ -6,7 +6,7 @@ export const SET_NAME = "set_name" as const;
 // --- Message payload interfaces ---
 
 export interface SpawnPawnPayload {
-  pawnType: "builder";
+  pawnType: "builder" | "defender" | "attacker";
   /** What the builder should build: "outpost" (default) or "farm". */
   buildMode?: "outpost" | "farm";
 }
