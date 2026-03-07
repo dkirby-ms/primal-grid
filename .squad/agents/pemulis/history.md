@@ -1052,3 +1052,40 @@ Hal (Lead) architected pawn-based territory expansion system per same user direc
 - Alliance/shared vision multiplies StateView mutation churn by alliance size. For N-player alliances, compute a shared visible set once and apply to all allies rather than re-computing per ally.
 - Camera bounds clamped to explored bounding box need a minimum padding to avoid degenerate UX when explored area is small (5×5 HQ = 160px). Recommend minimum 20×20 tile bounds or viewport-proportional padding.
 - `DEFAULT_MAP_SIZE` is 128 (not 64 as mentioned in some docs). Full tile scan for 128×128 = 16,384 tiles × 8 players = 131K iterations per tick — must use owned-tile cache to keep visibility computation sub-millisecond.
+
+---
+
+## Session 2026-03-12 — Fog of War Phase A Server Implementation
+
+**Status:** Complete
+**Output:** `server/src/rooms/visibility.ts`, constants + types in shared, GameRoom integration
+**Branch:** `feature/fog-of-war`
+
+### What was built
+
+1. **shared/src/constants.ts** — Added `FOG_OF_WAR` (tick interval, radii, day/night modifiers, min radius) and `WATCHTOWER` (radius, costs, cap, build ticks) constant blocks.
+2. **shared/src/types.ts** — Added `FogState` enum (Unexplored=0, Explored=1, Visible=2). Auto-exported via barrel.
+3. **server/src/rooms/visibility.ts** — Pure visibility computation module:
+   - `computeVisibleTiles(state, playerId): Set<number>` returns flat tile indices visible to a player
+   - Three vision sources: HQ center (radius 5), territory edge tiles (radius 3), pawn builders (radius 4)
+   - Edge detection: Moore neighbor check (8-directional) for unowned/out-of-bounds neighbors
+   - Manhattan distance circle fill, clamped to map bounds
+   - Day/night modifier applied: `effectiveRadius = max(MIN_RADIUS, base + modifier)`
+4. **server/src/rooms/GameRoom.ts** — Full integration:
+   - `playerViews: Map<string, { view: StateView, visibleIndices: Set<number> }>` tracks per-player state
+   - `initPlayerView()` called in `onJoin()` after `spawnHQ()` — creates StateView, computes initial visibility, adds tiles
+   - `cleanupPlayerView()` called in `onLeave()` — removes all tiles from view, deletes map entry
+   - `tickFogOfWar()` runs every 2 ticks, diffs old/new visible sets, calls view.add/remove
+   - Runs last in tick loop (after all movement/claiming resolves)
+
+### Design decisions respected
+- No `@view()` decorators — element-level `view.add/remove` is sufficient for two-tier visibility
+- No owned-tile cache — deferred to Phase 2 performance optimization
+- Lazy `playerViews` initialization guards for `Object.create()` test pattern
+
+## Learnings
+- `StateView` from `@colyseus/schema` v4.0.16: `view.add(obj)` / `view.remove(obj)` / `view.has(obj)`. Assign to `client.view` in `onJoin()`.
+- `Object.create(GameRoom.prototype)` test pattern skips class field initializers — any new class fields need lazy `??` or `if (!this.x)` guards in methods.
+- Test suite uses Manhattan distance for circle fill checks, matching the `addCircleFill` implementation. The `euclidean` helper in tests is unused.
+- Manhattan circle fill: `|dx| + |dy| <= radius`. Produces diamond-shaped vision areas. Corner edge tiles at Manhattan distance 4 from HQ center (half=2, diagonal) with edge radius 3 can reach Manhattan 7, extending well beyond HQ radius 5.
+- `FOG_OF_WAR.DAY_NIGHT_MODIFIERS` needs `as Record<string, number>` cast to allow string-keyed access from `state.dayPhase`.
