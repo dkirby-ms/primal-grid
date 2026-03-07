@@ -895,3 +895,17 @@ Your tests confirm the client-side implementation assumptions are correct. No re
 **For you:** Server-side visibility filtering is now live. Your 26 fog tests validate client-side assumptions. No server-side changes break your test suite; integration is purely reactive on the client side.
 
 **Design note:** `@view()` on the parent collection field IS needed (earlier understanding was incorrect). Per-element filtering still via `view.add()/remove()`.
+
+### Combat System Test Specifications — Issues #17 & #18 (anticipatory)
+
+- **139 test specs** written in `server/src/__tests__/combat-system.test.ts` using `it.todo()` pattern.
+- **Coverage:** 4 major areas across 19 describe blocks:
+  1. Enemy Bases (spawning, properties, destruction/rewards) — 27 specs
+  2. Enemy Mobiles (spawning from bases, pathfinding AI, territory attack, lifecycle) — 24 specs
+  3. Defenders & Attackers (spawning, patrol AI, combat engagement, seek & destroy, upkeep) — 37 specs
+  4. Combat Resolution & Integration (defender vs mobile, attacker vs base, multi-unit) — 16 specs
+  5. Edge Cases (base destroyed mid-combat, multiple enemies, target destroyed en route, territory changes, resource boundaries, map boundaries, tick ordering) — 35 specs
+- **Key edge cases identified:** orphan mobiles after base destruction, defender overwhelm scenarios, attacker re-targeting when target destroyed mid-path, territory shrinking under defender's feet, zombie damage on death tick, fog of war for newly spawned bases.
+- **Pattern:** All specs use `it.todo()` — zero implementation, pure behavioral contracts from issue requirements. Will need helpers (addEnemyBase, addMobile, addDefender, addAttacker) once architecture lands.
+- **Pre-existing failure:** `water-depth.test.ts` "water tiles exist on map" — unrelated to combat work, was failing before.
+- **Suite status:** 383 passing + 139 todo + 1 pre-existing failure = no regressions.
