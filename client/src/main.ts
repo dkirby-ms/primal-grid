@@ -42,6 +42,14 @@ async function bootstrap(): Promise<void> {
   app.ticker.add(() => {
     camera.update();
     grid.tick();
+
+    // Push explored bounds to camera each frame for smooth lerp
+    const cache = grid.exploredCache;
+    if (cache.size > 0 && cache.hasBoundsChanged) {
+      const b = cache.bounds;
+      camera.setExploredBounds(b.minX, b.minY, b.maxX, b.maxY);
+      cache.acknowledgeBoundsChange();
+    }
   });
 
   // --- Connect to Colyseus (non-blocking) ---

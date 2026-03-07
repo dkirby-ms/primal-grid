@@ -1,6 +1,7 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { TileType, ResourceType, DEFAULT_MAP_SIZE } from '@primal-grid/shared';
 import type { Room } from '@colyseus/sdk';
+import { ExploredTileCache } from './ExploredTileCache.js';
 
 export const TILE_SIZE = 32;
 
@@ -37,12 +38,22 @@ function parseColor(color: string): number {
   return parseInt(color, 16) || 0xffffff;
 }
 
+/** Structure type → silhouette icon for explored fog tiles. */
+const STRUCTURE_ICONS: Record<string, string> = {
+  hq: '🏰',
+  outpost: '🗼',
+  farm: '🌾',
+};
+
 export class GridRenderer {
   public readonly container: Container;
   private tiles: Graphics[][] = [];
   private territoryOverlays: Graphics[][] = [];
   private territoryContainer: Container;
   private hqContainer: Container;
+  private fogContainer: Container;
+  private fogOverlays: Graphics[][] = [];
+  private fogStructureIcons: Map<number, Text> = new Map();
   private hqMarkers: Map<string, Container> = new Map();
   private hqNameLabels: Map<string, Text> = new Map();
   private mapSize: number;
@@ -54,14 +65,23 @@ export class GridRenderer {
   private claimingTiles: Map<string, { x: number; y: number }> = new Map();
   private localPlayerId: string = '';
 
+  /** Tracks which tiles the server has currently synced to us. */
+  private visibleTiles = new Set<number>();
+  /** Client-side terrain memory for explored-but-not-visible tiles. */
+  public readonly exploredCache: ExploredTileCache;
+
   constructor(mapSize: number = DEFAULT_MAP_SIZE) {
     this.container = new Container();
     this.territoryContainer = new Container();
     this.hqContainer = new Container();
+    this.fogContainer = new Container();
     this.mapSize = mapSize;
+    this.exploredCache = new ExploredTileCache(mapSize);
     this.buildGrid();
     this.container.addChild(this.territoryContainer);
     this.container.addChild(this.hqContainer);
+    // Fog renders ABOVE terrain/territory but BELOW creatures (added before creatures in main.ts)
+    this.container.addChild(this.fogContainer);
   }
 
   /** Create the initial grid with all-grassland tiles. */
@@ -69,6 +89,7 @@ export class GridRenderer {
     for (let y = 0; y < this.mapSize; y++) {
       this.tiles[y] = [];
       this.territoryOverlays[y] = [];
+      this.fogOverlays[y] = [];
       this.lastOwnerIDs[y] = [];
       this.lastShapeHPs[y] = [];
       this.lastClaiming[y] = [];
@@ -91,6 +112,14 @@ export class GridRenderer {
         this.lastShapeHPs[y][x] = 0;
         this.lastClaiming[y][x] = false;
         this.lastIsHQTerritory[y][x] = false;
+
+        // Fog overlay — starts as solid black (unexplored)
+        const fog = new Graphics();
+        fog.rect(0, 0, TILE_SIZE, TILE_SIZE);
+        fog.fill(0x000000);
+        fog.position.set(x * TILE_SIZE, y * TILE_SIZE);
+        this.fogContainer.addChild(fog);
+        this.fogOverlays[y][x] = fog;
       }
     }
   }
@@ -269,6 +298,9 @@ export class GridRenderer {
       const tiles = s['tiles'];
       if (!tiles || typeof (tiles as { forEach?: unknown }).forEach !== 'function') return;
 
+      // Track which tiles the server sent this frame
+      const currentVisible = new Set<number>();
+
       // forEach must be called directly on tiles — extracting loses ArraySchema 'this' binding
       const changedTiles: { x: number; y: number }[] = [];
       (tiles as { forEach: (cb: (tile: unknown, key: unknown) => void) => void })
@@ -278,10 +310,19 @@ export class GridRenderer {
         const tx = (tile['x'] as number) ?? idx % this.mapSize;
         const ty = (tile['y'] as number) ?? Math.floor(idx / this.mapSize);
         const type = (tile['type'] as TileType) ?? TileType.Grassland;
+        const structureType = (tile['structureType'] as string) ?? '';
         // Resource info passed to updateTile for background tinting
         const resType = tile['resourceType'] as number | undefined;
         const resAmount = tile['resourceAmount'] as number | undefined;
         this.updateTile(tx, ty, type, resType, resAmount);
+
+        // Cache-on-add: store terrain info when tile enters the StateView
+        this.exploredCache.cacheTile(tx, ty, type, structureType);
+        const tileIdx = ty * this.mapSize + tx;
+        currentVisible.add(tileIdx);
+
+        // Clear fog for visible tiles
+        this.setFogState(tx, ty, 'visible');
 
         // Territory overlay
         const ownerID = (tile['ownerID'] as string) ?? '';
@@ -299,11 +340,75 @@ export class GridRenderer {
         this.updateTerritoryOverlay(tx, ty, ownerID, shapeHP, claimingPlayerID, claimProgress, isHQTerritory);
       });
 
+      // Tiles that were visible last frame but aren't now → explored fog
+      for (const prevIdx of this.visibleTiles) {
+        if (!currentVisible.has(prevIdx)) {
+          const px = prevIdx % this.mapSize;
+          const py = Math.floor(prevIdx / this.mapSize);
+          this.setFogState(px, py, 'explored');
+        }
+      }
+      this.visibleTiles = currentVisible;
+
       // Refresh neighbor borders for tiles whose ownership changed
       for (const { x: cx, y: cy } of changedTiles) {
         this.refreshTerritoryBorders(cx, cy);
       }
     });
+  }
+
+  /**
+   * Set the fog visual state for a single tile.
+   * - 'visible': no overlay (full clarity)
+   * - 'explored': semi-transparent dark overlay with cached terrain color underneath
+   * - 'unexplored': solid black (default state from buildGrid)
+   */
+  private setFogState(x: number, y: number, state: 'visible' | 'explored' | 'unexplored'): void {
+    if (y < 0 || y >= this.mapSize || x < 0 || x >= this.mapSize) return;
+    const fog = this.fogOverlays[y][x];
+    const idx = y * this.mapSize + x;
+
+    if (state === 'visible') {
+      fog.visible = false;
+      // Remove structure silhouette icon if present
+      const icon = this.fogStructureIcons.get(idx);
+      if (icon) icon.visible = false;
+    } else if (state === 'explored') {
+      fog.clear();
+      fog.rect(0, 0, TILE_SIZE, TILE_SIZE);
+      fog.fill({ color: 0x000000, alpha: 0.6 });
+      fog.visible = true;
+
+      // Show faded structure silhouette if the cached tile had a structure
+      const cached = this.exploredCache.get(x, y);
+      if (cached && cached.structureType && cached.structureType in STRUCTURE_ICONS) {
+        let icon = this.fogStructureIcons.get(idx);
+        if (!icon) {
+          icon = new Text({
+            text: STRUCTURE_ICONS[cached.structureType],
+            style: { fontSize: 14, fontFamily: 'sans-serif' },
+          });
+          icon.anchor?.set?.(0.5, 0.5);
+          icon.position.set(x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE / 2);
+          icon.alpha = 0.4;
+          this.fogContainer.addChild(icon);
+          this.fogStructureIcons.set(idx, icon);
+        } else {
+          // Update icon if structure type changed
+          const expected = STRUCTURE_ICONS[cached.structureType];
+          if (icon.text !== expected) icon.text = expected;
+        }
+        icon.visible = true;
+      }
+    } else {
+      // Unexplored — solid black
+      fog.clear();
+      fog.rect(0, 0, TILE_SIZE, TILE_SIZE);
+      fog.fill(0x000000);
+      fog.visible = true;
+      const icon = this.fogStructureIcons.get(idx);
+      if (icon) icon.visible = false;
+    }
   }
 
   /** Show an optimistic claiming overlay immediately (before server confirms). */
