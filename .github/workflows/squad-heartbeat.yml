@@ -2,7 +2,7 @@ name: Squad Heartbeat (Ralph)
 # ⚠️ SYNC: This workflow is maintained in 4 locations. Changes must be applied to all:
 #   - templates/workflows/squad-heartbeat.yml (source template)
 #   - packages/squad-cli/templates/workflows/squad-heartbeat.yml (CLI package)
-#   - .squad-templates/workflows/squad-heartbeat.yml (installed template)
+#   - .squad/templates/workflows/squad-heartbeat.yml (installed template)
 #   - .github/workflows/squad-heartbeat.yml (active workflow)
 # Run 'squad upgrade' to sync installed copies from source templates.
 
@@ -35,7 +35,7 @@ jobs:
       - name: Check triage script
         id: check-script
         run: |
-          if [ -f ".squad-templates/ralph-triage.js" ]; then
+          if [ -f ".squad/templates/ralph-triage.js" ]; then
             echo "has_script=true" >> $GITHUB_OUTPUT
           else
             echo "has_script=false" >> $GITHUB_OUTPUT
@@ -47,7 +47,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          node .squad-templates/ralph-triage.js \
+          node .squad/templates/ralph-triage.js \
             --squad-dir .squad \
             --output triage-results.json
 
