@@ -258,7 +258,7 @@ export const COMBAT = {
 
 /** Enemy spawning constants (replaces WAVE_SPAWNER). */
 export const ENEMY_SPAWNING = {
-  BASE_SPAWN_INTERVAL_TICKS: 480,
+  BASE_SPAWN_INTERVAL_TICKS: 120,
   MAX_BASES: 8,
   MIN_DISTANCE_FROM_HQ: 15,
   MIN_DISTANCE_BETWEEN_BASES: 10,
