@@ -4642,3 +4642,55 @@ This explains why no enemy bases (and therefore no enemy mobiles) appear at nigh
 - **Pemulis (Systems Dev):** Fix BASE_SPAWN_INTERVAL_TICKS
 - **Gately (Game Dev):** Be aware of spawn behavior once fixed
 - **Steeply (Tester):** Add regression tests for base spawns in night phase once fix is deployed
+# Decision: Enemy entities bail out of generic creature AI immediately
+
+**Date:** 2026-03-08
+**Author:** Pemulis (Systems Dev)
+**Status:** Implemented
+
+## Context
+
+Enemy bases and enemy mobiles were being processed through the generic creature AI pipeline (hunger, stamina, exhaustion recovery) before reaching their specialized step functions. This caused a bug where exhausted enemy bases stopped spawning mobiles.
+
+## Decision
+
+Enemy entities (`isEnemyBase`, `isEnemyMobile`) now exit the `tickCreatureAI()` loop at the very top — immediately after the `nextMoveTick` timer check. They call their own step functions (`stepEnemyBase`, `stepEnemyMobile`) and return. No generic creature logic (hunger, stamina, exhaustion, FSM routing) ever runs for them.
+
+The client-side renderer also guards against showing the 💤 exhausted indicator for enemy entities.
+
+## Rationale
+
+Enemy entities are a fundamentally different AI domain. Mixing them into the generic creature pipeline creates ordering bugs (like exhaustion blocking spawning) and makes the code harder to reason about. Early bailout is the cleanest separation.
+
+## Impact
+
+- `creatureAI.ts`: Enemy base/mobile processing moved to top of loop
+- `CreatureRenderer.ts`: Exhausted indicator guarded for enemy types
+- If new enemy entity types are added, they must also be routed early in `tickCreatureAI()`
+
+
+# Decision: Enemy entities bail out of generic creature AI immediately
+
+**Date:** 2026-03-08
+**Author:** Pemulis (Systems Dev)
+**Status:** Implemented
+
+## Context
+
+Enemy bases and enemy mobiles were being processed through the generic creature AI pipeline (hunger, stamina, exhaustion recovery) before reaching their specialized step functions. This caused a bug where exhausted enemy bases stopped spawning mobiles.
+
+## Decision
+
+Enemy entities (`isEnemyBase`, `isEnemyMobile`) now exit the `tickCreatureAI()` loop at the very top — immediately after the `nextMoveTick` timer check. They call their own step functions (`stepEnemyBase`, `stepEnemyMobile`) and return. No generic creature logic (hunger, stamina, exhaustion, FSM routing) ever runs for them.
+
+The client-side renderer also guards against showing the 💤 exhausted indicator for enemy entities.
+
+## Rationale
+
+Enemy entities are a fundamentally different AI domain. Mixing them into the generic creature pipeline creates ordering bugs (like exhaustion blocking spawning) and makes the code harder to reason about. Early bailout is the cleanest separation.
+
+## Impact
+
+- `creatureAI.ts`: Enemy base/mobile processing moved to top of loop
+- `CreatureRenderer.ts`: Exhausted indicator guarded for enemy types
+- If new enemy entity types are added, they must also be routed early in `tickCreatureAI()`

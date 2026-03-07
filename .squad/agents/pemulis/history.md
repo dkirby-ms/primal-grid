@@ -1359,3 +1359,28 @@ Coordinated work with Gately (Game Dev) and Steeply (Tester) on grave marker sys
 - **Consolidation note:** The timer conflict fix from the previous session proved stable. No additional adjustments needed. Enemy mobile spawning now fully functional.
 - **Test status:** 520/520 tests pass.
 - **Requested by:** saitcho
+
+### Enemy Base Exhaustion Bug Fix (2026-03-08)
+
+- **Bug:** Enemy bases showed 💤 (exhausted) status in-game and stopped spawning mobiles entirely.
+- **Root cause:** In `tickCreatureAI()`, the exhaustion recovery check (`creature.currentState === "exhausted"` at ~line 67) ran BEFORE the `isEnemyBase` routing at ~line 80. If a base ever entered "exhausted" state (stamina=0 triggering the post-move exhaustion check), the early `return` prevented `stepEnemyBase()` from ever being called.
+- **Fix (2 files, 3 changes):**
+  1. `creatureAI.ts`: Moved `isEnemyBase` and `isEnemyMobile` checks to the TOP of the creature loop (right after `nextMoveTick` skip). Enemy entities now bail out immediately to their own AI — they never touch stamina, hunger, exhaustion, or any generic creature logic. Also resets `currentState` from "exhausted" to "idle" if somehow corrupted.
+  2. `creatureAI.ts`: Removed the now-redundant `isEnemyBase`/`isEnemyMobile` branches from the FSM routing block and the hunger guard.
+  3. `CreatureRenderer.ts`: Added guard so enemy bases and enemy mobiles skip the 💤 exhausted indicator in `updateIndicator()`.
+- **Pattern:** Enemy entities are a completely separate AI domain. They should exit the generic creature processing loop as early as possible — no shared stamina/hunger/exhaustion logic should ever apply to them. Defense-in-depth: even the client-side renderer now refuses to show exhaustion visuals for enemy types.
+- **Test status:** 520/520 tests pass.
+- **Requested by:** saitcho
+
+## 2026-03-07 — Fixed Enemy Base Exhaustion Bug
+
+**Session:** 2026-03-07T22:29:32Z  
+**Status:** ✅ Complete  
+
+Fixed order-of-operations bug in `tickCreatureAI()` where enemy bases/mobiles were processed through generic creature logic before reaching their specialized step functions. This caused exhausted bases to return early and never spawn mobiles.
+
+**Solution:** Moved `isEnemyBase` / `isEnemyMobile` checks to top of loop — enemy entities now skip generic creature AI entirely. Also added client-side guard to prevent 💤 indicator on enemies.
+
+**Tests:** All 520 pass.
+
+**Decision:** Documented in decisions.md — enemy entities are a separate AI domain and should not mix into generic creature pipeline.
