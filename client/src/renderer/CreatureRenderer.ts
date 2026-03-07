@@ -111,7 +111,6 @@ export class CreatureRenderer {
         if (isEnemyBase(creatureType)) enemyBases++;
 
         const isBuilder = creatureType === 'pawn_builder';
-        const isLocalPawn = isPlayerPawn(creatureType) && ownerID === this.localSessionId;
         const isLocalBuilder = isBuilder && ownerID === this.localSessionId;
         const isCombatEntity = !isGrave && (isEnemyBase(creatureType) || isEnemyMobile(creatureType) || creatureType === 'pawn_defender' || creatureType === 'pawn_attacker');
 

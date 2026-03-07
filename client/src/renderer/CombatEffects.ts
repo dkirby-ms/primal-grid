@@ -1,4 +1,4 @@
-import { Container, Graphics, Text } from 'pixi.js';
+import { Container, Text } from 'pixi.js';
 import { TILE_SIZE } from './GridRenderer.js';
 
 /** Duration (ms) for floating damage number animation. */

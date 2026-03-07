@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { xpForNextLevel, PAWN_TYPES, isEnemyBase, isEnemyMobile } from '@primal-grid/shared';
+import { xpForNextLevel, PAWN_TYPES, isEnemyBase } from '@primal-grid/shared';
 
 /** Cost to spawn a builder pawn. */
 const BUILDER_COST_WOOD = 10;

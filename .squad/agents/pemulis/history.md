@@ -1415,3 +1415,40 @@ Fixed two AI bugs identified in PR #43 review:
 
 Scribe orchestration: PR #43 review fixes for territory movement and detection radius bugs. Both fixes committed to dev, 520/520 tests passing.
 
+
+---
+
+## Learnings
+
+### ESLint Cleanup Patterns (2026-03-08)
+
+1. **TestableGameRoom pattern for test mocks:** When tests use `Object.create(GameRoom.prototype)` and need to access private members, define a `TestableGameRoom = GameRoom & { ... }` intersection type that exposes the private methods/properties. This eliminates all `(room as any).` casts while keeping type safety. The intersection preserves Room assignability so the mock can still be passed to functions expecting `Room`.
+
+2. **Unused test variables:** Many test helpers like `joinPlayer()` or `addEnemyMobile()` are called for side effects only (creating state). When the return value isn't referenced, prefix with `_` rather than removing the assignment — the function call must stay for its side effects.
+
+3. **`as unknown as Type` over `as any`:** For test mock casting (e.g., `room.broadcast = (() => {}) as unknown as GameRoom['broadcast']`), the double-cast through `unknown` satisfies `no-explicit-any` while still being explicit about the target type.
+
+4. **Line-specific fixes over regex for unused vars:** When fixing `no-unused-vars`, avoid global regex replacements on variable names like `player`, `def`, `mob` — these names appear both as unused assignments AND as actively-used references. Always target the specific error line numbers from ESLint output.
+
+---
+
+## 2026-03-07 — Server ESLint Cleanup (202 Errors Fixed)
+
+**Session:** 2026-03-07T23:12:21Z  
+**Status:** ✅ Complete  
+
+Resolved all 202 ESLint errors across 7 server files in parallel with Gately's client-side fixes (3 errors).
+
+**Total Lint Effort:** 205 errors eliminated team-wide.
+
+**Server-Side Fixes (Pemulis):**
+- **Type safety:** Replaced `as any` casts with TestableGameRoom intersection type
+- **Imports:** Removed unused imports throughout codebase
+- **Variables:** Applied underscore prefix convention to unused test variables
+- **Files:** GameRoom.ts, GameRoomManager.ts, ActionHandler.ts, CombatHandler.ts, TrapHandler.ts, server.test.ts, integration.test.ts
+
+**Test Status:** 520/520 passing.
+
+**Pattern:** TestableGameRoom = GameRoom & { ... } intersection type eliminates type casting while maintaining type safety for test mocks.
+
+**Cross-Agent:** Gately handled client-side lint (CombatEffects.ts, CreatureRenderer.ts, HudDOM.ts). Both agents spawned in parallel, logs merged by Scribe.

@@ -4,8 +4,7 @@ import { GameRoom } from "../rooms/GameRoom.js";
 import { spawnHQ } from "../rooms/territory.js";
 import { computeVisibleTiles } from "../rooms/visibility.js";
 import {
-  TileType, isWaterTile,
-  DEFAULT_MAP_SIZE, TERRITORY, PAWN, DAY_NIGHT, FOG_OF_WAR,
+  TERRITORY, PAWN, DAY_NIGHT, FOG_OF_WAR,
   CREATURE_TYPES,
 } from "@primal-grid/shared";
 
@@ -690,7 +689,7 @@ describe("Fog of War — Phase A", () => {
 
     it("enemy pawn builders outside fog are NOT visible", () => {
       const room = createRoomWithMap(42);
-      const { player } = joinPlayer(room, "p1");
+      const { player: _player } = joinPlayer(room, "p1");
       joinPlayer(room, "p2");
       setDayPhase(room, "day");
 
@@ -757,7 +756,7 @@ describe("Fog of War — Phase A", () => {
       const midY = Math.floor(room.state.mapHeight / 2);
       addWildlife(room, "pre-herb", "herbivore", midX, midY);
 
-      const { player } = joinPlayer(room, "p1");
+      const { player: _player } = joinPlayer(room, "p1");
       setDayPhase(room, "day");
 
       const entry = room.playerViews.get("p1")!;
