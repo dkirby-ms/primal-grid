@@ -3787,3 +3787,69 @@ Players' 5×5 starting territory could contain Water or Rock tiles, which were s
 
 **Risk Mitigation:** Small window for concurrent pushes; `--force-with-lease` detects and fails. GitHub Actions notifications alert on workflow failure. Manual override via `workflow_dispatch` available.
 
+
+---
+
+## 2026-03-11: Player Display Names & Scoreboard (Issue #9)
+
+### Decision 1: Player Display Name Schema & Message Protocol (Pemulis)
+
+**By:** Pemulis (Systems Dev)  
+**Date:** 2026-03-11  
+**Issue:** #9  
+**Status:** IMPLEMENTED  
+
+**What:**
+- `PlayerState.displayName` is a `@type("string")` Colyseus schema field, default `""`. Synced to all clients automatically.
+- `SET_NAME` message (`"set_name"`) with `SetNamePayload { name: string }` is the client→server protocol for setting names.
+- Server validates: trims whitespace, caps at 20 characters, rejects empty strings.
+- Server broadcasts `game_log` with `"{name} has joined"` on successful name set.
+
+**Why:**
+- Schema field (not a side-channel) so scoreboard/nameplate rendering on any client can read `player.displayName` directly from synced state.
+- 20-char limit prevents layout-breaking names in UI. Trim + empty-check prevents blank names.
+- Broadcast on name-set gives all players feedback when someone identifies themselves.
+
+**Impact:**
+- Client team needs to: (1) send `SET_NAME` message after joining, (2) read `player.displayName` from schema for scoreboard/nameplates.
+- Any future rename feature reuses the same message — handler is idempotent.
+
+---
+
+### Decision 2: Scoreboard UI Pattern (Gately)
+
+**Date:** 2026-03-11  
+**Author:** Gately (Game Dev)  
+**Status:** IMPLEMENTED  
+
+**What:**
+Client-side player display names + scoreboard overlay for Issue #9.
+
+**Components Added:**
+1. **Name prompt modal** — DOM overlay after connect, sends `SET_NAME` to server
+2. **HQ name labels** — PixiJS Text under each player's HQ marker (all players visible)
+3. **Scoreboard overlay** — Tab key toggle, DOM table showing Name/Score/Territory
+4. **`SET_NAME` message constant** — Added to `shared/src/messages.ts`
+
+**Design Choices:**
+- **Scoreboard is DOM-based** (not PixiJS) — follows HudDOM pattern, easier to style, no canvas z-ordering issues
+- **Territory count computed client-side** by iterating tiles where `ownerID === player.id` — no new server field needed
+- **Scoreboard skips refresh when hidden** — only iterates state on `onStateChange` when panel is visible
+- **Name label uses stroke outline** (`stroke: { color: '#000000', width: 3 }`) for readability against any biome
+
+**Server Dependency:**
+- Server handles `SET_NAME` message and sets `displayName` on `PlayerState` schema
+- `SET_NAME` and `SetNamePayload` exported from shared — server imports directly
+
+**Files Changed:**
+- `shared/src/messages.ts` — `SET_NAME` constant + `SetNamePayload` interface
+- `server/src/rooms/GameState.ts` — `displayName` field on `PlayerState`
+- `server/src/rooms/GameRoom.ts` — `SET_NAME` message handler
+- `shared/src/types.ts` — Type definitions
+- `client/index.html` — Name prompt modal + scoreboard overlay HTML/CSS
+- `client/src/main.ts` — Name prompt flow, scoreboard wiring
+- `client/src/ui/HudDOM.ts` — Scoreboard component
+- `client/src/input/InputHandler.ts` — Tab key handler + `setScoreboard()`
+- `client/src/renderer/GridRenderer.ts` — HQ name labels
+- `server/src/__tests__/player-names.test.ts` — Integration tests (15 tests, all pass)
+
