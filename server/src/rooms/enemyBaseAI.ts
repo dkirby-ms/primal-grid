@@ -1,8 +1,7 @@
 import { GameState, CreatureState } from "./GameState.js";
 import {
-  ENEMY_BASE_TYPES, ENEMY_MOBILE_TYPES, ENEMY_SPAWNING,
+  ENEMY_BASE_TYPES, ENEMY_MOBILE_TYPES,
   CREATURE_AI, DayPhase,
-  isEnemyBase,
 } from "@primal-grid/shared";
 import type { Room } from "colyseus";
 

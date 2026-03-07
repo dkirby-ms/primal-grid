@@ -7,8 +7,8 @@ import { stepEnemyBase } from "./enemyBaseAI.js";
 import type { EnemyBaseTracker } from "./enemyBaseAI.js";
 import { stepEnemyMobile } from "./enemyMobileAI.js";
 import {
-  CREATURE_AI, CREATURE_TYPES, PAWN, PAWN_TYPES,
-  isEnemyBase, isEnemyMobile, isPlayerPawn,
+  CREATURE_AI, CREATURE_TYPES, PAWN_TYPES,
+  isEnemyBase, isEnemyMobile,
 } from "@primal-grid/shared";
 import type { CreatureTypeDef } from "@primal-grid/shared";
 import type { Room } from "colyseus";

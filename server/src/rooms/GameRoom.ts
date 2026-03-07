@@ -19,7 +19,7 @@ import {
   PAWN, PAWN_TYPES, DAY_NIGHT, FOG_OF_WAR,
   ENEMY_SPAWNING, ENEMY_BASE_TYPES,
   DayPhase,
-  isEnemyBase, isEnemyMobile, isPlayerPawn,
+  isEnemyBase,
 } from "@primal-grid/shared";
 import type { SpawnPawnPayload, SetNamePayload } from "@primal-grid/shared";
 import { spawnHQ } from "./territory.js";

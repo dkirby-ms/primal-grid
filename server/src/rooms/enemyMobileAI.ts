@@ -1,6 +1,6 @@
 import { GameState, CreatureState } from "./GameState.js";
 import { moveToward } from "./creatureAI.js";
-import { ENEMY_MOBILE_TYPES, isEnemyMobile } from "@primal-grid/shared";
+import { ENEMY_MOBILE_TYPES } from "@primal-grid/shared";
 
 /**
  * Enemy Mobile FSM: seek_territory → move_to_target → attacking_tile → loop

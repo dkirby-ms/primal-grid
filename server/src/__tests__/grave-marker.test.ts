@@ -17,12 +17,22 @@ import { GameRoom } from "../rooms/GameRoom.js";
 import { tickCombat } from "../rooms/combat.js";
 import { tickGraveDecay } from "../rooms/graveDecay.js";
 import type { EnemyBaseTracker } from "../rooms/enemyBaseAI.js";
+import type { AttackerTracker } from "../rooms/attackerAI.js";
 import {
   ENEMY_BASE_TYPES, ENEMY_MOBILE_TYPES, PAWN_TYPES,
-  COMBAT, GRAVE_MARKER, SHAPE,
-  isEnemyBase, isGraveMarker,
+  COMBAT, GRAVE_MARKER,
+  isGraveMarker,
 } from "@primal-grid/shared";
 import { spawnHQ } from "../rooms/territory.js";
+
+/** Expose private GameRoom members for testing. */
+type TestableGameRoom = GameRoom & {
+  generateMap(seed?: number): void;
+  nextCreatureId: number;
+  creatureIdCounter: { value: number };
+  enemyBaseState: Map<string, EnemyBaseTracker>;
+  attackerState: Map<string, AttackerTracker>;
+};
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -32,15 +42,15 @@ const FIRST_COMBAT_TICK =
 
 const idCounter = { value: 50000 };
 
-function createRoom(seed: number = 42): GameRoom {
-  const room = Object.create(GameRoom.prototype) as GameRoom;
+function createRoom(seed: number = 42): TestableGameRoom {
+  const room = Object.create(GameRoom.prototype) as TestableGameRoom;
   room.state = new GameState();
-  (room as any).generateMap(seed);
-  room.broadcast = (() => {}) as any;
-  (room as any).nextCreatureId = 0;
-  (room as any).creatureIdCounter = { value: 0 };
-  (room as any).enemyBaseState = new Map();
-  (room as any).attackerState = new Map();
+  room.generateMap(seed);
+  room.broadcast = (() => {}) as unknown as GameRoom['broadcast'];
+  room.nextCreatureId = 0;
+  room.creatureIdCounter = { value: 0 };
+  room.enemyBaseState = new Map();
+  room.attackerState = new Map();
   return room;
 }
 
@@ -191,7 +201,7 @@ function addGraveMarker(
 }
 
 function runCombat(room: GameRoom, ebState: Map<string, EnemyBaseTracker>, counter = idCounter) {
-  tickCombat(room.state, room as any, ebState, counter);
+  tickCombat(room.state, room, ebState, counter);
 }
 
 /** Collect all grave markers currently in state. */
@@ -210,7 +220,7 @@ function findGraveMarkers(state: GameState): CreatureState[] {
 describe("Grave Markers — Spawning on Death", () => {
   it("spawns a grave marker when an enemy mobile dies in combat", () => {
     const room = createRoom();
-    const player = joinPlayer(room, "p1");
+    const _player = joinPlayer(room, "p1");
     const pair = findAdjacentWalkable(room);
 
     addDefender(room, "def1", "p1", pair.ax, pair.ay);
@@ -228,7 +238,7 @@ describe("Grave Markers — Spawning on Death", () => {
 
   it("spawns a grave marker when a player pawn dies in combat", () => {
     const room = createRoom();
-    const player = joinPlayer(room, "p1");
+    const _player = joinPlayer(room, "p1");
     const pair = findAdjacentWalkable(room);
 
     addDefender(room, "def1", "p1", pair.ax, pair.ay, { health: 1 });
@@ -245,7 +255,7 @@ describe("Grave Markers — Spawning on Death", () => {
 
   it("spawns grave markers for BOTH combatants when both die simultaneously", () => {
     const room = createRoom();
-    const player = joinPlayer(room, "p1");
+    const _player = joinPlayer(room, "p1");
     const pair = findAdjacentWalkable(room);
 
     addDefender(room, "def1", "p1", pair.ax, pair.ay, { health: 1 });
@@ -265,7 +275,7 @@ describe("Grave Markers — Spawning on Death", () => {
 
   it("does NOT spawn a grave marker when an enemy base is destroyed", () => {
     const room = createRoom();
-    const player = joinPlayer(room, "p1");
+    const _player = joinPlayer(room, "p1");
     const pair = findAdjacentWalkable(room);
 
     addEnemyBase(room, "base1", "enemy_base_raider", pair.bx, pair.by);
@@ -276,7 +286,7 @@ describe("Grave Markers — Spawning on Death", () => {
 
     room.state.tick = FIRST_COMBAT_TICK;
     const ebState = new Map<string, EnemyBaseTracker>();
-    ebState.set("base1", { spawnedMobileIds: [], lastSpawnTick: 0 } as any);
+    ebState.set("base1", { spawnedMobileIds: new Set<string>() } as EnemyBaseTracker);
     runCombat(room, ebState);
 
     expect(room.state.creatures.has("base1")).toBe(false);
@@ -293,7 +303,7 @@ describe("Grave Markers — Spawning on Death", () => {
 describe("Grave Markers — Properties", () => {
   it("has creatureType='grave_marker'", () => {
     const room = createRoom();
-    const player = joinPlayer(room, "p1");
+    const _player = joinPlayer(room, "p1");
     const pair = findAdjacentWalkable(room);
 
     addDefender(room, "def1", "p1", pair.ax, pair.ay);
@@ -309,7 +319,7 @@ describe("Grave Markers — Properties", () => {
 
   it("stores original creature type in pawnType field", () => {
     const room = createRoom();
-    const player = joinPlayer(room, "p1");
+    const _player = joinPlayer(room, "p1");
     const pair = findAdjacentWalkable(room);
 
     addDefender(room, "def1", "p1", pair.ax, pair.ay);
@@ -325,7 +335,7 @@ describe("Grave Markers — Properties", () => {
 
   it("stores player pawn's creatureType in pawnType when pawn dies", () => {
     const room = createRoom();
-    const player = joinPlayer(room, "p1");
+    const _player = joinPlayer(room, "p1");
     const pair = findAdjacentWalkable(room);
 
     addDefender(room, "def1", "p1", pair.ax, pair.ay, { health: 1 });
@@ -355,7 +365,7 @@ describe("Grave Markers — Properties", () => {
 
   it("has spawnTick = current tick when spawned via combat death", () => {
     const room = createRoom();
-    const player = joinPlayer(room, "p1");
+    const _player = joinPlayer(room, "p1");
     const pair = findAdjacentWalkable(room);
 
     addDefender(room, "def1", "p1", pair.ax, pair.ay);
@@ -372,7 +382,7 @@ describe("Grave Markers — Properties", () => {
 
   it("grave marker position matches death position", () => {
     const room = createRoom();
-    const player = joinPlayer(room, "p1");
+    const _player = joinPlayer(room, "p1");
     const pair = findAdjacentWalkable(room);
 
     addDefender(room, "def1", "p1", pair.ax, pair.ay);
@@ -466,7 +476,7 @@ describe("Grave Markers — Decay", () => {
 describe("Grave Markers — Inertness", () => {
   it("grave markers are skipped during combat Phase 1 (not attacked by enemies)", () => {
     const room = createRoom();
-    const player = joinPlayer(room, "p1");
+    const _player = joinPlayer(room, "p1");
     const pair = findAdjacentWalkable(room);
 
     // Place a grave marker adjacent to an enemy mobile
@@ -483,7 +493,7 @@ describe("Grave Markers — Inertness", () => {
 
   it("grave markers are skipped during combat Phase 1 (not attacked by player pawns)", () => {
     const room = createRoom();
-    const player = joinPlayer(room, "p1");
+    const _player = joinPlayer(room, "p1");
     const pair = findAdjacentWalkable(room);
 
     // Place a grave marker (of enemy type) adjacent to a defender
@@ -500,7 +510,7 @@ describe("Grave Markers — Inertness", () => {
 
   it("enemy mobile ignores grave marker and does not target it", () => {
     const room = createRoom();
-    const player = joinPlayer(room, "p1");
+    const _player = joinPlayer(room, "p1");
     const pair = findAdjacentWalkable(room);
 
     // Grave marker is the ONLY creature adjacent to the mobile — should not engage
@@ -517,7 +527,7 @@ describe("Grave Markers — Inertness", () => {
 
   it("grave marker does not deal damage (getCreatureDamage returns 0)", () => {
     const room = createRoom();
-    const player = joinPlayer(room, "p1");
+    const _player = joinPlayer(room, "p1");
     const pair = findAdjacentWalkable(room);
 
     addGraveMarker(room, "g1", "enemy_raider", pair.ax, pair.ay, 0);
@@ -548,7 +558,7 @@ describe("Grave Markers — Inertness", () => {
 describe("Grave Markers — Integration", () => {
   it("full lifecycle: combat → death → grave spawn → persist → decay → removal", () => {
     const room = createRoom();
-    const player = joinPlayer(room, "p1");
+    const _player = joinPlayer(room, "p1");
     const pair = findAdjacentWalkable(room);
     const counter = { value: 90000 };
 
@@ -579,7 +589,7 @@ describe("Grave Markers — Integration", () => {
 
   it("grave marker from combat does not interfere with subsequent combat", () => {
     const room = createRoom();
-    const player = joinPlayer(room, "p1");
+    const _player = joinPlayer(room, "p1");
     const pair = findAdjacentWalkable(room);
     const counter = { value: 80000 };
 
@@ -616,7 +626,7 @@ describe("Grave Markers — Integration", () => {
 
   it("multiple deaths in same tick produce multiple grave markers", () => {
     const room = createRoom();
-    const player = joinPlayer(room, "p1");
+    const _player = joinPlayer(room, "p1");
     const counter = { value: 70000 };
 
     // Find two separate adjacent pairs
