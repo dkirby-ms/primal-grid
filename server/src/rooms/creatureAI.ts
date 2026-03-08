@@ -392,7 +392,16 @@ function findNearestResource(
  * - Wildlife (herbivores, carnivores) cannot enter owned tiles
  */
 export function isTileOpenForCreature(state: GameState, creature: CreatureState, x: number, y: number): boolean {
-  if (!state.isWalkable(x, y)) return false;
+  if (!state.isWalkable(x, y)) {
+    // Builders can traverse their own structures (outposts, farms)
+    if (creature.creatureType === "pawn_builder") {
+      const tile = state.getTile(x, y);
+      if (tile && tile.shapeHP > 0 && tile.ownerID === creature.ownerID) {
+        return true;
+      }
+    }
+    return false;
+  }
   const tile = state.getTile(x, y);
   if (!tile) return false;
 

@@ -37,7 +37,13 @@ export function stepBuilder(creature: CreatureState, state: GameState): void {
         creature.currentState = "building";
         creature.buildProgress = 0;
       } else {
-        moveToward(creature, creature.targetX, creature.targetY, state);
+        const moved = moveToward(creature, creature.targetX, creature.targetY, state);
+        if (!moved) {
+          // Path blocked — abandon target and re-scan next tick
+          creature.targetX = -1;
+          creature.targetY = -1;
+          creature.currentState = "idle";
+        }
       }
       break;
     }
@@ -112,16 +118,19 @@ function isValidBuildTile(tile: { type: number; shapeHP: number }): boolean {
 }
 
 /**
- * Find the nearest unclaimed walkable tile adjacent to the builder's owner's territory.
+ * Find the best unclaimed walkable tile adjacent to the builder's owner's territory.
  * Scans within BUILD_SITE_SCAN_RADIUS.
+ * Prefers closest tiles, with a tiebreaker favoring outward expansion (further from HQ).
  */
 function findBuildSite(
   creature: CreatureState,
   state: GameState,
 ): { x: number; y: number } | null {
   const radius = PAWN.BUILD_SITE_SCAN_RADIUS;
+  const player = state.players.get(creature.ownerID);
   let best: { x: number; y: number } | null = null;
   let bestDist = Infinity;
+  let bestHqDist = -1;
 
   for (let dy = -radius; dy <= radius; dy++) {
     for (let dx = -radius; dx <= radius; dx++) {
@@ -134,8 +143,16 @@ function findBuildSite(
       if (!isAdjacentToTerritory(state, creature.ownerID, tx, ty)) continue;
 
       const dist = Math.abs(dx) + Math.abs(dy);
-      if (dist > 0 && dist < bestDist) {
+      if (dist === 0) continue;
+
+      // Among equal-distance candidates, prefer tiles further from HQ (outward expansion)
+      const hqDist = player
+        ? Math.abs(tx - player.hqX) + Math.abs(ty - player.hqY)
+        : 0;
+
+      if (dist < bestDist || (dist === bestDist && hqDist > bestHqDist)) {
         bestDist = dist;
+        bestHqDist = hqDist;
         best = { x: tx, y: ty };
       }
     }

@@ -1613,3 +1613,28 @@ Prevention (write clean first) > Cleanup (fix lint errors post-merge).
 Valid exceptions (e.g., E2E browser-context code) require documented decision in decisions.md.
 
 See: 2026-03-08: ESLint Override for E2E Browser Context Code
+
+---
+
+### Session: Fix Builder Pathing Oscillation (#39)
+
+**Date:** 2026-07-25
+**PR:** #55 (squad/39-fix-builder-pathing → dev)
+**Issue:** #39
+
+**Root Cause:** Built tiles get `shapeHP = BLOCK_HP` (100), and `isWalkable()` returns `false` for `shapeHP > 0`. Builders' own outposts became walls for the greedy `moveToward()` pathfinder, causing oscillation when targets were behind a wall of structures.
+
+**Fix (3 parts):**
+1. `isTileOpenForCreature` — builders can now traverse structures on their own territory
+2. `findBuildSite` — outward expansion bias (prefer tiles further from HQ among equal-distance candidates)
+3. `move_to_site` — if `moveToward()` fails, abandon target and re-scan (stuck detection)
+
+**Key Files:**
+- `server/src/rooms/builderAI.ts` — Builder FSM and site selection
+- `server/src/rooms/creatureAI.ts` — Movement and tile access checks
+- `server/src/rooms/GameState.ts` — `isWalkable()` blocks on `shapeHP > 0`
+
+**Learnings:**
+4. **shapeHP blocks movement** — Any tile with `shapeHP > 0` is unwalkable via `isWalkable()`. Builder-created structures (outposts, farms) get `BLOCK_HP`. This creates implicit walls. Any new structure type must consider pathfinding impact.
+5. **Greedy pathfinder limitation** — `moveToward()` is a 1-step greedy Manhattan mover with no memory. It oscillates when blocked by walls. A* (Phase 5) will fix this properly, but until then, creature-specific traversal rules and stuck detection are the mitigation.
+6. **findBuildSite scan order bias** — The nested dy/dx loop in `findBuildSite` creates a top-left bias for equal-distance candidates. The HQ-distance tiebreaker now overrides this to prefer outward expansion.
