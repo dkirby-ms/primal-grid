@@ -3,8 +3,6 @@ name: E2E Tests
 on:
   push:
     branches: [uat, master]
-  pull_request:
-    branches: [uat, master]
 
 permissions:
   contents: read
@@ -39,39 +37,8 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
-  deploy-report:
-    needs: e2e
-    if: always() && (github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/master')
-    runs-on: ubuntu-latest
-    concurrency:
-      group: "pages-${{ github.ref }}"
-      cancel-in-progress: false
-    permissions:
-      pages: write
-      id-token: write
-    outputs:
-      page_url: ${{ steps.deployment.outputs.page_url }}
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: playwright-report
-          path: playwright-report
-
-      - uses: actions/configure-pages@v5
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: playwright-report/
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-
   discord-notify:
-    needs: [e2e, deploy-report]
+    needs: e2e
     if: always()
     runs-on: ubuntu-latest
     env:
@@ -81,8 +48,6 @@ jobs:
         if: env.DISCORD_WEBHOOK_URL != ''
         env:
           E2E_RESULT: ${{ needs.e2e.result }}
-          DEPLOY_RESULT: ${{ needs.deploy-report.result }}
-          PAGES_URL: ${{ needs.deploy-report.outputs.page_url }}
           EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_TITLE: ${{ github.event.pull_request.title }}
@@ -105,11 +70,6 @@ jobs:
           # Build fields array with jq for safe JSON escaping
           FIELDS=$(jq -n --arg url "$ARTIFACT_URL" \
             '[{"name": "📦 Artifact", "value": "[View Run](\($url))", "inline": true}]')
-
-          if [ -n "$PAGES_URL" ] && [ "$DEPLOY_RESULT" = "success" ]; then
-            FIELDS=$(echo "$FIELDS" | jq --arg url "$PAGES_URL" \
-              '. + [{"name": "📊 Report", "value": "[GitHub Pages](\($url))", "inline": true}]')
-          fi
 
           if [ "$EVENT_NAME" = "pull_request" ]; then
             PR_URL="https://github.com/${REPOSITORY}/pull/${PR_NUMBER}"
