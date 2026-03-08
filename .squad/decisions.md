@@ -4716,3 +4716,75 @@ Enemy entities are a fundamentally different AI domain. Mixing them into the gen
 
 **Convention Going Forward:** Combat-related per-creature state Maps must be passed to `tickCombat()` and cleaned up in Phase 3 death handling.
 
+
+---
+
+## 2026-03-10: Playwright E2E Testing Framework for Multiplayer
+
+**By:** Steeply (Tester)  
+**Date:** 2026-03-10  
+**Status:** IMPLEMENTED (PR #52, draft) — Phase 1 complete
+
+### Summary
+
+Established the Playwright E2E testing framework at `e2e/` with custom fixtures, state helpers, and CI workflow for multiplayer Canvas-based testing.
+
+### Implementation Details
+
+#### 1. Browser Contexts for Multi-Player Simulation
+
+- One browser, multiple contexts (not separate browser instances)
+- Each context = one player with isolated session
+- Custom Playwright fixtures for `playerOne` / `playerTwo` with automatic join flow
+- `workers: 1` — all tests share a single Colyseus server to prevent race conditions
+
+#### 2. State-Based Assertions (Primary Strategy)
+
+- Expose `window.__ROOM__` in dev mode for `page.evaluate()` access to Colyseus `room.state`
+- Assert on deserialized game state (players, creatures, tiles), not pixels
+- Use `page.waitForFunction()` to wait for server state sync before asserting
+- DOM selectors: HUD/scoreboard/prompt (20%), visual regression sparingly (10%)
+
+#### 3. Client Code Changes (Complete)
+
+Added to `client/src/network.ts` after room join:
+```typescript
+if (import.meta.env.DEV || new URLSearchParams(window.location.search).has('dev')) {
+  (window as any).__ROOM__ = room;
+}
+```
+Also gated `window.__PIXI_APP__` in `client/src/main.ts` for renderer access.
+
+#### 4. Dual webServer Config
+
+Playwright config starts both Colyseus server (port 2567) and Vite dev client (port 3000). All test URLs use `?dev=1` to disable fog of war.
+
+#### 5. CI Workflow
+
+New `.github/workflows/e2e.yml` triggers on push/PR to `dev` branch. Runs alongside Vitest, no failures.
+
+#### 6. Phase 1 Tests (Complete)
+
+- ✅ `join-flow.spec.ts` — 4 P0 tests (join, two-player room, spawn pawn)
+- ✅ Custom fixture at `e2e/fixtures/game.fixture.ts`
+- ✅ State helper at `e2e/helpers/state.helper.ts`
+- ✅ Player helper at `e2e/helpers/player.helper.ts`
+- ✅ All 520 unit tests pass
+- ✅ All 4 E2E tests pass
+
+### Team Impact
+
+- **Gately/Pemulis:** Code changes done — `window.__ROOM__` and `window.__PIXI_APP__` now dev-mode accessible
+- **Hal:** Can implement Phase 2 tests (P1/P2 mechanics) — use `e2e/fixtures/game.fixture.ts`
+- **CI/CD:** E2E workflow integrated, runs on every dev push
+- **Test Performance:** Serial execution by design — slower than unit tests but reliable for multiplayer
+
+### Files Modified
+
+- `client/src/main.ts` — gated `window.__PIXI_APP__`
+- `client/src/network.ts` — gated `window.__ROOM__`
+- `package.json`, `package-lock.json` — Playwright + dependencies
+
+### Next Phase
+
+Phase 2: Territory, resource income, day/night (P1 tests). Phase 3: Conflict/combat (P2 tests).

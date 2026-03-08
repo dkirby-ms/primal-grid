@@ -43,6 +43,11 @@ export async function connect(): Promise<Room> {
     console.log('[network] Joined room:', room.roomId);
     statusCallback?.('connected');
 
+    // Expose room reference for Playwright E2E testing (dev mode only)
+    if (import.meta.env.DEV || new URLSearchParams(window.location.search).has('dev')) {
+      (window as any).__ROOM__ = room;
+    }
+
     room.onLeave(() => {
       console.log('[network] Left room');
       statusCallback?.('disconnected');

@@ -1461,3 +1461,36 @@ jobs:
 - CI/CD pipeline (GitHub Actions)
 - P3 tests: enemy spawning, disconnect/reconnect
 - Documentation and test maintenance guide
+
+### Phase 1 E2E Framework Implementation (2026-03-10)
+
+**Requested by:** dkirby-ms
+**PR:** #52 (draft, against `dev`)
+
+#### What was built
+- Full Phase 1 Playwright E2E testing framework: config, fixtures, helpers, 4 tests, CI workflow
+- Exposed `window.__ROOM__` (network.ts) and `window.__PIXI_APP__` (main.ts) for test assertions — dev-mode gated
+
+#### Key file paths
+- `e2e/playwright.config.ts` — dual webServer (server:2567 + client:3000), serial workers
+- `e2e/fixtures/game.fixture.ts` — playerOne/playerTwo fixtures with joinGame()
+- `e2e/helpers/player.helper.ts` — waitForPlayerCount, waitForPlayerOnScoreboard, getGameState
+- `e2e/helpers/state.helper.ts` — waitForStateChange, getPlayerState
+- `e2e/tests/join-flow.spec.ts` — 4 tests: single join, HUD, two-player join, scoreboard
+- `.github/workflows/e2e.yml` — CI pipeline
+
+#### Architecture decisions
+- **State-based assertions primary:** `page.evaluate()` reading `window.__ROOM__` is the reliable path for canvas games. DOM assertions only for HUD/overlay.
+- **Browser contexts for multi-player:** Separate BrowserContext per player (not separate browser instances) — fast, isolated, single browser process.
+- **Serial execution mandatory:** `workers: 1` + `fullyParallel: false` because all tests share one Colyseus server. Parallel workers = race conditions.
+- **Scoreboard toggled by Tab key:** Tests must press Tab to open/close the `#scoreboard-overlay`.
+
+#### Verified selectors (from actual codebase)
+- Name prompt: `#name-prompt-overlay` (`.visible` class), `#name-prompt-input`, `#name-prompt-submit`
+- Canvas: `#app canvas`
+- Scoreboard: `#scoreboard-overlay`, `#scoreboard-body tr`
+- HUD: `#hud-panel`, `#territory-count-val`, `#inv-wood`, `#inv-stone`
+- Dev mode: `?dev=1` or `?devmode=1` query param
+
+#### Default branch
+- Repo uses `dev` as default branch, not `main`. CI workflow targets `dev`.

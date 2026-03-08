@@ -29,6 +29,11 @@ async function bootstrap(): Promise<void> {
   if (!el) throw new Error('Could not find #app element');
   el.appendChild(app.canvas);
 
+  // Expose PixiJS app for Playwright E2E testing (dev mode only)
+  if (import.meta.env.DEV || new URLSearchParams(window.location.search).has('dev')) {
+    (window as any).__PIXI_APP__ = app;
+  }
+
   // --- Grid (renders immediately with default grass) ---
   const grid = new GridRenderer();
   app.stage.addChild(grid.container);
