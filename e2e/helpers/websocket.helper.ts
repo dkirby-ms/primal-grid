@@ -23,11 +23,12 @@ export async function installMessageRecorder(page: Page): Promise<void> {
     };
 
     if (win.__WS_RECORDER_INSTALLED__) return;
-    win.__WS_MESSAGES__ = [];
-    win.__WS_RECORDER_INSTALLED__ = true;
 
     const room = win.__ROOM__;
     if (!room) return;
+
+    win.__WS_MESSAGES__ = [];
+    win.__WS_RECORDER_INSTALLED__ = true;
 
     // Intercept outgoing messages by wrapping room.send
     const originalSend = room.send.bind(room);

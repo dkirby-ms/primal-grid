@@ -9,7 +9,7 @@ import { HudDOM } from './ui/HudDOM.js';
 import { GameLog } from './ui/GameLog.js';
 import { HelpScreen } from './ui/HelpScreen.js';
 import { Scoreboard } from './ui/Scoreboard.js';
-import { connect, disconnect, onConnectionStatus } from './network.js';
+import { connect, disconnect, onConnectionStatus, isDevMode } from './network.js';
 import { SET_NAME } from '@primal-grid/shared';
 
 const WIDTH = 600;
@@ -30,7 +30,7 @@ async function bootstrap(): Promise<void> {
   el.appendChild(app.canvas);
 
   // Expose PixiJS app for Playwright E2E testing (dev mode only)
-  if (import.meta.env.DEV || new URLSearchParams(window.location.search).has('dev')) {
+  if (import.meta.env.DEV || isDevMode()) {
     (window as unknown as Record<string, unknown>).__PIXI_APP__ = app;
   }
 

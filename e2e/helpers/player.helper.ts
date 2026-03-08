@@ -66,8 +66,9 @@ export async function waitForPlayerOnScoreboard(
     { timeout },
   );
 
-  // Close scoreboard
+  // Close scoreboard and wait for it to hide
   await page.keyboard.press('Tab');
+  await page.waitForSelector('#scoreboard-overlay:not(.visible)', { timeout: 5_000 });
 }
 
 /**

@@ -123,7 +123,7 @@ test.describe('Tile State Queries', () => {
     // Scan a large region for resource tiles
     const resources = await getResourceTilesInArea(page, 0, 0, 63, 63);
     // A 64x64 quadrant should have some resource tiles on a 128x128 map
-    expect(resources.length).toBeGreaterThanOrEqual(0);
+    expect(resources.length).toBeGreaterThan(0);
 
     for (const tile of resources) {
       expect(tile.resourceType).not.toBe(-1);
@@ -207,7 +207,7 @@ test.describe('Game State Snapshots', () => {
       diff.creaturesRemoved.length;
 
     // With 96 creatures and 8 ticks, at least some should have changed
-    expect(totalChanges).toBeGreaterThanOrEqual(0);
+    expect(totalChanges).toBeGreaterThan(0);
   });
 });
 
@@ -297,11 +297,20 @@ test.describe('Multiplayer State Assertions', () => {
     await waitForPlayerCount(p1, 2);
     await waitForPlayerCount(p2, 2);
 
+    // Wait for both player names to be set (SET_NAME is async)
+    await expect
+      .poll(
+        async () => {
+          const snap = await takeSnapshot(p1);
+          const names = snap.players.map((p) => p.displayName).filter(n => n).sort();
+          return names;
+        },
+        { timeout: 10_000 },
+      )
+      .toEqual(['Alice', 'Bob']);
+
     const snap = await takeSnapshot(p1);
     expect(snap.players.length).toBe(2);
-
-    const names = snap.players.map((p) => p.displayName).sort();
-    expect(names).toEqual(['Alice', 'Bob']);
   });
 
   test('snapshots from both players agree on tick range', async ({

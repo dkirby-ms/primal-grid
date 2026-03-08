@@ -22,7 +22,7 @@ function getServerUrl(): string {
   return `ws://localhost:${SERVER_PORT}`;
 }
 
-function isDevMode(): boolean {
+export function isDevMode(): boolean {
   const params = new URLSearchParams(window.location.search);
   return params.get('dev') === '1' || params.get('devmode') === '1';
 }
@@ -44,7 +44,7 @@ export async function connect(): Promise<Room> {
     statusCallback?.('connected');
 
     // Expose room reference for Playwright E2E testing (dev mode only)
-    if (import.meta.env.DEV || new URLSearchParams(window.location.search).has('dev')) {
+    if (import.meta.env.DEV || isDevMode()) {
       (window as unknown as Record<string, unknown>).__ROOM__ = room;
     }
 
