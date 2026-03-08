@@ -34,14 +34,14 @@ export default defineConfig({
       cwd: rootDir,
       url: 'http://localhost:2567',
       reuseExistingServer: !process.env.CI,
-      timeout: 30_000,
+      timeout: 60_000,
     },
     {
       command: 'npm run dev -w client',
       cwd: rootDir,
       url: 'http://localhost:3000',
       reuseExistingServer: !process.env.CI,
-      timeout: 30_000,
+      timeout: 60_000,
     },
   ],
 });
