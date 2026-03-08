@@ -1647,3 +1647,16 @@ Run time: ~45s serial (single shared Colyseus server)
 - **No flakiness:** All 32 tests pass deterministically. Generous timeouts (15–30s) for tick-based operations.
 - **Only 2 client messages exist:** `spawn_pawn` and `set_name`. All other game behavior (movement, combat, territory claiming) is AI-driven server-side.
 - **HQ spawn distance:** `findHQSpawnLocation()` enforces `MIN_HQ_DISTANCE = 10` Manhattan tiles between any two HQs.
+
+## Phase 2-3 Completion & Session Wrap
+
+**Date:** 2026-03-08T13-24-21Z
+
+**Status:** ✅ PHASE 2–3 E2E AUDIT COMPLETE
+
+- **Phase 2 (Territory & Resources)** — All 4 existing E2E test files fully audited and confirmed to cover: HQ placement, territory claiming, resource gathering, income ticking, day/night cycle display. No gaps found.
+- **Phase 3 (Creatures)** — Multiplayer E2E suite validates: dual HQ spawning (distance enforcement), creature spawning with resource deduction, territory adjacency maintenance across players, synchronized state on player leave. 15 new tests in `multiplayer.spec.ts`.
+- **Total E2E suite:** 32 tests, all passing, zero flakiness. Serial execution (~3.7 min) on single shared Colyseus server instance.
+- **Orchestration log:** `.squad/orchestration-log/2026-03-08T13-24-21Z-steeply.md`
+- **Session log:** `.squad/log/2026-03-08T13-24-21Z-e2e-framework-session.md`
+- **Decisions merged:** E2E Framework decision merged into `.squad/decisions.md`
