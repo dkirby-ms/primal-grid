@@ -1,3 +1,44 @@
 {
-  "agents": {}
+  "agents": {
+    "hal": {
+      "persistent_name": "Hal",
+      "universe": "infinite-jest",
+      "role": "Lead",
+      "created_at": "2026-02-25T00:45:00Z",
+      "legacy_named": true,
+      "status": "active"
+    },
+    "gately": {
+      "persistent_name": "Gately",
+      "universe": "infinite-jest",
+      "role": "Game Dev",
+      "created_at": "2026-02-25T00:45:00Z",
+      "legacy_named": true,
+      "status": "active"
+    },
+    "pemulis": {
+      "persistent_name": "Pemulis",
+      "universe": "infinite-jest",
+      "role": "Systems Dev",
+      "created_at": "2026-02-25T00:45:00Z",
+      "legacy_named": true,
+      "status": "active"
+    },
+    "steeply": {
+      "persistent_name": "Steeply",
+      "universe": "infinite-jest",
+      "role": "Tester",
+      "created_at": "2026-02-25T00:45:00Z",
+      "legacy_named": true,
+      "status": "active"
+    },
+    "marathe": {
+      "persistent_name": "Marathe",
+      "universe": "infinite-jest",
+      "role": "DevOps / CI-CD",
+      "created_at": "2026-03-08T02:20:00Z",
+      "legacy_named": false,
+      "status": "active"
+    }
+  }
 }

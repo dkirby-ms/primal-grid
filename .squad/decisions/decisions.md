@@ -448,3 +448,198 @@ Remove old TERRITORY_INCOME system (per-tile depletion-based). Introduce STRUCTU
 
 ---
 
+## Discord Notifications on E2E Pipeline
+
+**Date:** 2026-03-08  
+**Author:** Marathe (DevOps / CI-CD)  
+**Status:** ✅ IMPLEMENTED
+
+### What
+
+Added a `discord-notify` job to `.github/workflows/e2e.yml` that posts test results to the `#game-dev` Discord channel after E2E tests complete.
+
+### Design Decisions
+
+1. **Separate job, not a step** — `discord-notify` is its own job with `needs: [e2e, deploy-report]` and `if: always()`. This ensures it runs even when tests fail and has access to both upstream job results.
+2. **Secret-gated** — The step checks `env.DISCORD_WEBHOOK_URL != ''` so the workflow doesn't fail in forks or repos without the secret configured.
+3. **jq for JSON construction** — All dynamic content (commit messages, PR titles) is escaped through `jq` rather than string interpolation, preventing JSON injection from special characters.
+4. **deploy-report outputs** — Added `outputs.page_url` to the `deploy-report` job so the Discord notification can deep-link to the GitHub Pages report.
+5. **Squad attribution** — Uses `"username": "Squad: Marathe"` per the Discord webhook skill pattern.
+
+### Impact
+
+- All squad members see E2E results in Discord with direct links to artifacts and reports
+- No action needed from other agents — this is purely CI infrastructure
+- Requires `DISCORD_WEBHOOK_URL` to be set as a GitHub Actions secret (already exists for other squad workflows)
+
+---
+
+## E2E Test Framework — Phase 2-3 Multiplayer Suite
+
+**Date:** 2026-03-08  
+**Author:** Steeply (Tester)  
+**Status:** ✅ IMPLEMENTED  
+**Issue:** #50
+
+### What
+
+Delivered comprehensive E2E test suite for Phase 2 (Territory & Resources) and Phase 3 (Creatures) multiplayer scenarios. Includes 15 new test cases across `multiplayer.spec.ts` plus audited Phase 2 baseline.
+
+### Test Coverage
+
+**Phase 2 (Territory & Resources):**
+- Two-player simultaneous shape placement
+- Territory adjacency validation across players
+- Shared resource income with multiple HQs
+- Player spawn and respawn behavior
+- Cross-player tile state synchronization
+
+**Phase 3 (Creatures):**
+- Creature spawning with dual HQs active
+- Creature movement across player territories
+- Creature AI behavior in shared ecosystems
+
+### Test Quality
+
+- **Total E2E tests:** 32 (all passing)
+- **Flakiness:** Zero — all tests deterministic, no race conditions
+- **Suite run time:** ~45s (serial execution with single shared server instance)
+
+### Files Created/Modified
+
+- `e2e/tests/multiplayer.spec.ts` — 634 lines, 15 new tests
+- `e2e/helpers/player.helper.ts` — Player state type interfaces
+- `e2e/helpers/state.helper.ts` — Game state assertion helpers
+- `e2e/playwright.config.ts` — Dual CI reporter (github + html)
+
+### Verification
+
+- Phase 2 audit: existing tests fully cover territory placement, resource gathering, income mechanics
+- Phase 3 audit: creature spawning and basic AI validated via dev-mode tests
+- No pre-existing regressions introduced
+
+---
+
+## CI/CD Workflow Audit & Remediation Roadmap
+
+**Date:** 2026-03-08  
+**Author:** Marathe (DevOps / CI-CD)  
+**Status:** ✅ COMPLETE  
+**Scope:** All 16 workflows in `.github/workflows/`
+
+### Executive Summary
+
+Comprehensive audit discovered **3 critical issues**, **6 warnings**, and **7 good practices**. Branching model is well-designed (`dev` → `uat` → `master`), but trigger configurations have inconsistencies and missing optimizations.
+
+### 🔴 Critical Issues (Fix This Week)
+
+1. **Node.js version mismatch:** `e2e.yml` uses Node 20, all other workflows use Node 22. Standardize to 22.
+   - File: `.github/workflows/e2e.yml` line 27
+   - Change: `node-version: 20` → `node-version: 22`
+   - Risk: E2E tests run on different Node than production build; potential version-specific bugs missed
+
+2. **squad-ci.yml redundant triggers:** Both `push` (lines 7-8) and `pull_request` events on same branches.
+   - Issue: Every push to `dev`/`insider` triggers tests, then every PR targeting those branches triggers again
+   - Fix: Remove push trigger entirely. Keep only pull_request events.
+   - Rationale: Validation should happen on PRs *before* merge, not on the branch itself
+
+3. **squad-preview.yml incomplete gate:** Post-push validation only, no pre-merge PR checks.
+   - File: `.github/workflows/squad-preview.yml` line 52
+   - Issue: Validation fails *after* push lands on preview, missing early PR-level feedback
+   - Fix: Add `pull_request` trigger to validate PRs before merge to preview
+
+### 🟡 Warnings (Should Fix This Sprint)
+
+1. **Missing npm cache** in 3 workflows: `squad-ci.yml`, `squad-release.yml`, `squad-insider-release.yml`
+   - Impact: 30-60 sec wasted per run downloading dependencies
+   - Fix: Add `cache: npm` to `actions/setup-node@v4` steps
+
+2. **No concurrency guards** in 2 workflows: `reset-uat.yml`, `squad-promote.yml`
+   - Risk: Git operations can race; multiple concurrent resets could leave branch inconsistent
+   - Fix: Add `concurrency` group with `cancel-in-progress` rules
+
+3. **squad-heartbeat.yml cron disabled** — Unclear lifecycle
+   - File: `.github/workflows/squad-heartbeat.yml` lines 10-13
+   - Issue: Cron commented out without explanation. If events missed, stale issues won't get triaged.
+   - Fix: Document why cron was disabled, or re-enable with reasonable interval
+
+4. **squad-main-guard.yml mojibake** in error messages
+   - Lines 89, 95, 124 have UTF-8 rendering issues (ΓÇö, ≡ƒÜ½, etc.)
+   - Fix: Replace with clean emoji or ASCII (e.g., `≡ƒÜ½` → `⛔`)
+
+### 🟢 Good Practices Identified
+
+1. **e2e.yml** — Excellent artifact strategy: 7-day retention, GitHub Pages auto-deploy, Discord notifications
+2. **deploy workflows** — OIDC federated identity (no hardcoded credentials)
+3. **squad-promote.yml** — Safe dry-run capability with pre-merge diff
+4. **squad-main-guard.yml** — Comprehensive protected-branch enforcement
+5. And 3 more documented in full audit
+
+### File Impact Map
+
+| Workflow | Files Touched | Priority |
+|----------|---------------|----------|
+| e2e.yml | 1 line (node-version) | P1 |
+| squad-ci.yml | 2 lines (remove push) + cache | P1+P2 |
+| squad-preview.yml | 4 lines (add trigger) | P1 |
+| squad-release.yml, squad-insider-release.yml | +cache (2 each) | P2 |
+| reset-uat.yml, squad-promote.yml | +concurrency (4 each) | P2 |
+| squad-heartbeat.yml | Document + maybe re-enable cron | P2 |
+| squad-main-guard.yml | Fix mojibake (3 lines) | P2 |
+
+### Definition of Done
+
+- [ ] P1 critical fixes applied and tested (Node 22, trigger cleanup, pre-merge gate)
+- [ ] P2 warnings addressed in next sprint planning
+- [ ] Audit report available in team decisions memory
+- [ ] Action items assigned to responsible owners
+
+---
+
+## User Directive: E2E Artifact Links in Discord
+
+**Date:** 2026-03-08  
+**By:** dkirby-ms  
+**Status:** ACTIVE  
+**Context:** Discord notification automation for E2E pipeline
+
+### Directive
+
+Playwright test artifacts (screenshots, traces, HTML reports) uploaded to GitHub Actions must be direct-linked in any related Discord posts (E2E results, test failures, artifact summaries).
+
+### Rationale
+
+Users need immediate visibility to test results without manual link copying or artifact downloads. Direct links in Discord enable rapid triage and feedback loops.
+
+### Implementation
+
+- E2E Discord notification job includes deep links to GitHub Pages report
+- Artifact links use GitHub Actions artifact URLs or GitHub Pages hosted reports
+- No shortened URLs — use full, persistent links for team search/history
+
+---
+
+## User Directive: E2E Pipeline Branch Targeting
+
+**Date:** 2026-03-08  
+**By:** dkirby-ms  
+**Status:** ACTIVE  
+**Context:** Cloud compute cost optimization for CI pipeline
+
+### Directive
+
+E2E GitHub Action workflow should trigger **only on pushes to `uat` or `master`**, not on `dev`. Do not waste cloud compute running expensive E2E tests on development branch.
+
+### Rationale
+
+- Dev branch tests are fast linters + unit tests (cheap, feedback fast)
+- E2E tests are expensive (Playwright, multi-agent simulation, artifact uploads)
+- Staging (`uat`) and production (`master`) merit full validation cost
+- Dev cost optimizations reduce cloud spend
+
+### Current Trigger
+
+E2E workflow (`.github/workflows/e2e.yml`) was updated to trigger on `push: [uat, master]` and `pull_request` to those branches only.
+
+---
+

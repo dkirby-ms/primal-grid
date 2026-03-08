@@ -4716,3 +4716,245 @@ Enemy entities are a fundamentally different AI domain. Mixing them into the gen
 
 **Convention Going Forward:** Combat-related per-creature state Maps must be passed to `tickCombat()` and cleaned up in Phase 3 death handling.
 
+
+---
+
+## 2026-03-10: Playwright E2E Testing Framework for Multiplayer
+
+**By:** Steeply (Tester)  
+**Date:** 2026-03-10  
+**Status:** IMPLEMENTED (PR #52, draft) — Phase 1 complete
+
+### Summary
+
+Established the Playwright E2E testing framework at `e2e/` with custom fixtures, state helpers, and CI workflow for multiplayer Canvas-based testing.
+
+### Implementation Details
+
+#### 1. Browser Contexts for Multi-Player Simulation
+
+- One browser, multiple contexts (not separate browser instances)
+- Each context = one player with isolated session
+- Custom Playwright fixtures for `playerOne` / `playerTwo` with automatic join flow
+- `workers: 1` — all tests share a single Colyseus server to prevent race conditions
+
+#### 2. State-Based Assertions (Primary Strategy)
+
+- Expose `window.__ROOM__` in dev mode for `page.evaluate()` access to Colyseus `room.state`
+- Assert on deserialized game state (players, creatures, tiles), not pixels
+- Use `page.waitForFunction()` to wait for server state sync before asserting
+- DOM selectors: HUD/scoreboard/prompt (20%), visual regression sparingly (10%)
+
+#### 3. Client Code Changes (Complete)
+
+Added to `client/src/network.ts` after room join:
+```typescript
+if (import.meta.env.DEV || new URLSearchParams(window.location.search).has('dev')) {
+  (window as any).__ROOM__ = room;
+}
+```
+Also gated `window.__PIXI_APP__` in `client/src/main.ts` for renderer access.
+
+#### 4. Dual webServer Config
+
+Playwright config starts both Colyseus server (port 2567) and Vite dev client (port 3000). All test URLs use `?dev=1` to disable fog of war.
+
+#### 5. CI Workflow
+
+New `.github/workflows/e2e.yml` triggers on push/PR to `uat` and `master` branches. Runs alongside Vitest, no failures.
+
+#### 6. Phase 1 Tests (Complete)
+
+- ✅ `join-flow.spec.ts` — 4 P0 tests (join, two-player room, spawn pawn)
+- ✅ Custom fixture at `e2e/fixtures/game.fixture.ts`
+- ✅ State helper at `e2e/helpers/state.helper.ts`
+- ✅ Player helper at `e2e/helpers/player.helper.ts`
+- ✅ All 520 unit tests pass
+- ✅ All 4 E2E tests pass
+
+### Team Impact
+
+- **Gately/Pemulis:** Code changes done — `window.__ROOM__` and `window.__PIXI_APP__` now dev-mode accessible
+- **Hal:** Can implement Phase 2 tests (P1/P2 mechanics) — use `e2e/fixtures/game.fixture.ts`
+- **CI/CD:** E2E workflow integrated, runs on every `uat` and `master` push
+- **Test Performance:** Serial execution by design — slower than unit tests but reliable for multiplayer
+
+### Files Modified
+
+- `client/src/main.ts` — gated `window.__PIXI_APP__`
+- `client/src/network.ts` — gated `window.__ROOM__`
+- `package.json`, `package-lock.json` — Playwright + dependencies
+
+### Next Phase
+
+Phase 2: Territory, resource income, day/night (P1 tests). Phase 3: Conflict/combat (P2 tests).
+
+---
+
+# Decision: E2E helper type interfaces for `window.__ROOM__`
+
+**Author:** Pemulis  
+**Date:** 2026-03-08  
+**Scope:** e2e/helpers/
+
+## Context
+
+Fixed all 8 `@typescript-eslint/no-explicit-any` lint errors across 4 files. The E2E helpers (`player.helper.ts`, `state.helper.ts`) access `window.__ROOM__` inside Playwright's `page.evaluate` / `page.waitForFunction` callbacks. These need TypeScript types for the Colyseus room state shape as exposed on `window`.
+
+## Decision
+
+- **Client files** (`main.ts`, `network.ts`): Used `(window as unknown as Record<string, unknown>)` for assigning dev-mode globals (`__PIXI_APP__`, `__ROOM__`). These are write-only contexts so a generic record type is sufficient.
+- **E2E helpers**: Defined local `E2ERoom` and `E2EPlayerData` interfaces in each helper file to type the `window.__ROOM__` shape. These are lightweight compile-time-only types that mirror the fields actually accessed by the test helpers.
+- Chose **file-local interfaces** over a shared type file because there are only 2 consumers and the types are minimal. If more E2E helpers emerge that access `__ROOM__`, consolidate into `e2e/helpers/e2e-types.ts`.
+
+## Impact
+
+Parker and Dallas should be aware: if new E2E helpers need `window.__ROOM__`, reuse the `E2ERoom`/`E2EPlayerData` pattern or factor into a shared type.
+
+---
+
+# Decision: GitHub Pages for Playwright E2E Reports
+
+**Date:** 2026-03-08
+**Author:** Pemulis (Systems Dev)
+**Status:** Accepted
+
+## Context
+
+E2E test reports were only available as workflow artifacts, which expire after 7 days and require downloading a zip to view. We needed a more accessible way to review test results, especially for failing tests on the `dev` branch.
+
+## Decision
+
+- Configured the Playwright reporter in CI to emit both `github` (for inline annotations) and `html` (for the full report).
+- Added a `deploy-report` job to `.github/workflows/e2e.yml` that publishes the HTML report to GitHub Pages on every push to `dev`.
+- The deploy job uses `if: always()` so reports are published even when tests fail — seeing failing reports is the primary use case.
+- The existing artifact upload is preserved for PR runs where Pages deployment is skipped.
+
+## Consequences
+
+- The repo's GitHub Pages must be configured to use GitHub Actions as the source (Settings → Pages → Source → GitHub Actions).
+- Pages deployments are scoped to pushes to `dev` only; PR runs still get artifact uploads.
+- A `concurrency` group prevents overlapping Pages deployments.
+
+---
+
+# Decision: Colyseus Client-Side State Access Patterns in E2E Tests
+
+**Author:** Steeply (Tester)
+**Date:** 2026-03-08
+**Context:** Phase 2 E2E smoke tests (Issue #50)
+
+## Decision
+
+When accessing Colyseus room state in `page.evaluate()` calls within Playwright tests:
+
+- **Players** (MapSchema): Use `.forEach((player, key) => ...)` and `.size` — NOT bracket access
+- **Tiles** (ArraySchema): Use bracket notation `tiles[index]` — NOT `.get()` or `.at()`
+- **Scalar fields** (tick, dayPhase, mapWidth): Direct property access `room.state.tick`
+
+## Rationale
+
+Colyseus deserializes state differently on the client vs server. The server-side `ArraySchema.at()` method is not available on the client-side deserialized object. The `.get()` method also doesn't exist. Only bracket notation works for array-type schemas on the client.
+
+## Impact
+
+All future E2E tests that read tile data must use this pattern. This is not obvious from the server-side test code, which exclusively uses `.at()`.
+
+---
+
+## 2026-03-08: CI/CD Audit Remediation Complete
+
+**Author:** Marathe (DevOps/CI-CD)  
+**Date:** 2026-03-08  
+**Status:** Implemented  
+
+### Context
+
+A comprehensive audit of all 16 GitHub Actions workflows identified 3 critical issues and 6 warnings. All 9 findings have been fixed.
+
+### Decisions Made
+
+#### Standards established (all team members should follow):
+
+1. **Node 22 is the standard** — all workflows must use `node-version: 22`. No exceptions.
+2. **Always cache npm** — every `setup-node` step should include `cache: npm`.
+3. **Pre-merge validation required** — any workflow that validates a branch must have a `pull_request` trigger, not just `push`. Validation after push is too late.
+4. **Concurrency guards on git operations** — workflows that push, merge, or reset branches must use concurrency groups to prevent race conditions.
+5. **ASCII-safe output** — workflow scripts should use ASCII or well-supported emoji (✅, ❌, ⛔, ⚠️). Avoid special Unicode that may render as mojibake in different environments.
+
+### Files Changed
+
+- `.github/workflows/e2e.yml` — Node 20→22
+- `.github/workflows/squad-ci.yml` — removed push trigger, added workflow_dispatch, added npm cache
+- `.github/workflows/squad-preview.yml` — added pull_request trigger
+- `.github/workflows/squad-release.yml` — added npm cache
+- `.github/workflows/squad-insider-release.yml` — added npm cache
+- `.github/workflows/reset-uat.yml` — added concurrency guard
+- `.github/workflows/squad-promote.yml` — added concurrency guard
+- `.github/workflows/squad-main-guard.yml` — fixed mojibake
+- `.github/workflows/squad-heartbeat.yml` — documented disabled cron
+
+### Impact
+
+- Faster CI runs (npm caching)
+- No more wasted compute (redundant push triggers removed)
+- Safer git operations (concurrency guards)
+- Pre-merge validation on preview branch (catches issues before they land)
+- Readable error messages in squad-main-guard
+
+---
+
+## 2026-03-08: User Directive — E2E Should NOT Trigger on Dev
+
+**By:** saitcho (via Copilot)  
+**Date:** 2026-03-08T14:05:00Z  
+**Status:** DECISION — Confirmed user intent  
+
+**What:** E2E workflow should NOT trigger on push/PR to `dev` branch. Only trigger on `uat` and `master`.
+
+**Why:** Intentional cost optimization. E2E test suite consumes significant cloud compute. Running on every dev push wastes resources. Dev is for feature iteration, not full validation.
+
+**Implementation:** `.github/workflows/e2e.yml` branch triggers set to `[uat, master]` only.
+
+---
+
+## 2026-03-08: E2E Workflow Permissions Scoping (Least-Privilege Pattern)
+
+**By:** Marathe (DevOps/CI-CD)  
+**Date:** 2026-03-08  
+**Status:** IMPLEMENTED  
+
+**What:** Workflow permissions in `.github/workflows/e2e.yml` scoped to job-level (least-privilege) instead of workflow-level.
+
+**Before:**
+```yaml
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+```
+All jobs had all three permissions.
+
+**After:**
+```yaml
+permissions:
+  contents: read
+```
+Workflow-level baseline. Job-level `permissions:` added to `deploy-report` only:
+```yaml
+deploy-report:
+  permissions:
+    pages: write
+    id-token: write
+```
+
+**Rationale:**
+- `contents: read` — all jobs need this (checkout, downloads)
+- `pages: write` — ONLY `deploy-report` needs this (publishes to GitHub Pages)
+- `id-token: write` — ONLY `deploy-report` needs this (OIDC token for Pages)
+
+The `e2e` job (tests, artifacts) and `discord-notify` job (webhook) don't need elevated perms.
+
+**Pattern:** Going forward, ALL GitHub Actions workflows should grant only baseline `contents: read` at workflow level and add job-level `permissions:` blocks for jobs that need elevated access. Reduces blast radius if a job is compromised.
+
+**Decisions.md Correction:** Also updated lines documenting E2E branch triggers to reflect `uat`/`master`, not `dev`.

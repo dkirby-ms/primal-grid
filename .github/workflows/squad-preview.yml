@@ -3,6 +3,9 @@ name: Squad Preview Validation
 on:
   push:
     branches: [preview]
+  pull_request:
+    branches: [preview]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read

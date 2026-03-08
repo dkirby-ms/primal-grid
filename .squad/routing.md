@@ -10,6 +10,7 @@ How to decide who handles what.
 | Rendering & UI | Gately | Canvas rendering, game loop, input handling, UI panels, HUD |
 | Game systems | Pemulis | Ecosystem simulation, creature AI, world generation, tile systems, combat |
 | Code review | Hal | Review PRs, check quality, suggest improvements |
+| CI/CD & DevOps | Marathe | GitHub Actions, workflows, deployment, Docker, build pipelines, test reporting |
 | Testing | Steeply | Write tests, find edge cases, verify fixes, performance checks |
 | Scope & priorities | Hal | What to build next, trade-offs, decisions |
 | Session logging | Scribe | Automatic — never needs routing |
@@ -23,6 +24,7 @@ How to decide who handles what.
 | `squad:gately` | Rendering, UI, game loop work | Gately |
 | `squad:pemulis` | Game systems, simulation, AI work | Pemulis |
 | `squad:steeply` | Testing, quality work | Steeply |
+| `squad:marathe` | CI/CD, workflows, deployment, infrastructure | Marathe |
 | `squad:copilot` | Single-file fixes, test writing, scoped implementation | @copilot |
 
 ## Rules

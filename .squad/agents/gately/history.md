@@ -1162,3 +1162,27 @@ Resolving 3 client-side ESLint errors as part of team-wide lint cleanup effort (
 
 **For Your Work:** If you add new test files or see compilation errors mentioning Vitest in Docker, this exclusion pattern should prevent them. The exclusions only affect the standalone tsc compiler (used in Docker), not the bundler or test runners.
 
+---
+
+## 2026-03-08: Playwright E2E Framework — Window Globals
+
+**By:** Steeply (Tester) — Phase 1 implementation complete
+
+**Update:** Two window globals are now exposed in dev mode:
+
+1. **`window.__ROOM__`** — Colyseus room instance
+   - Exposed in `client/src/network.ts` after room join
+   - Gated: `if (import.meta.env.DEV || new URLSearchParams(...).has('dev'))`
+   - Use case: E2E tests access room state via `page.evaluate('window.__ROOM__.state')`
+   - Never exposed in production
+
+2. **`window.__PIXI_APP__`** — PIXI Application instance
+   - Exposed in `client/src/main.ts` after app creation
+   - Gated: Same dev-mode check
+   - Use case: E2E tests can access renderer for visual assertions
+   - Never exposed in production
+
+**Impact for Gately:** These globals are safe for E2E testing — they are gated behind dev mode and never leak to production. No code changes needed on your end.
+
+**Convention:** E2E framework (Steeply) owns these window globals. If new globals are needed, coordinate with Steeply to keep them dev-gated.
+

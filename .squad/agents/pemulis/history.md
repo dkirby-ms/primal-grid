@@ -1496,3 +1496,101 @@ Resolved all 202 ESLint errors across 7 server files in parallel with Gately's c
 
 **Impact on Gately:** If combat testing patterns in your test helpers reference tickCombat() directly, they now require the 5th parameter. Use the room's internal attackerState map from the test double.
 
+
+---
+
+### Session: Discord Webhook Skills & Scribe Charter Update
+
+**Date:** 2026-03-08  
+**Context:** Background orchestration task (spawned with Steeply Playwright research)
+
+**Work:**
+
+1. **Discord Webhook Announcements Skill Update**
+   - File: `.squad/skills/discord-webhook-announcements/SKILL.md`
+   - Added: `username` parameter for agent/team member name tagging
+   - Added: `avatarURL` parameter for custom Discord avatars
+   - Enables: Posts like "Agent Pemulis says: System updated" with proper attribution
+   - Change: Minimal — added two optional parameters to existing webhook POST
+
+2. **Created Discord Scribe Summaries Skill**
+   - File: `.squad/skills/discord-scribe-summaries/SKILL.md` (NEW)
+   - Purpose: Post session summaries after Scribe commits orchestration work
+   - Parameters: webhook_url, username, agents_summary, outcomes, decisions
+   - Color codes: `5763719` (green/normal), `16776960` (yellow/blockers)
+   - Trigger: Scribe reads this skill for multi-agent sessions
+
+3. **Scribe Charter Update**
+   - File: `.squad/agents/scribe/charter.md`
+   - Added: Step 6 — "Post Discord summary" using discord-scribe-summaries skill
+   - Trigger condition: Substantial work (2+ agents OR decisions OR issues closed)
+   - Attribution: `"username": "Squad: Scribe"`
+   - Filter: Skip trivial single-agent sessions
+
+**Impact:** Scribe now has charter permission and skill reference to post team summaries to Discord channel. Improves team visibility on coordinated work.
+
+**Convention:** Always use `"username": "Squad: {Role}"` for attribution (e.g., "Squad: Scribe", "Squad: Tester").
+
+---
+
+## 2026-03-08: Playwright E2E Framework — Room State Exposure
+
+**By:** Steeply (Tester) — Phase 1 implementation complete
+
+**Update:** `window.__ROOM__` is now exposed in dev mode for E2E state assertions.
+
+- Exposed in `client/src/network.ts` after room join
+- Gated: `if (import.meta.env.DEV || new URLSearchParams(...).has('dev'))`
+- E2E tests access room state via `page.evaluate('window.__ROOM__.state')`
+- Binary protocol consideration: Colyseus state is deserialized, so JSON inspection is not useful — always read state through `window.__ROOM__.state` directly
+
+**Impact for Pemulis:** No code changes needed. The room instance is only exposed in dev mode and never reaches production. Safe to use in tests.
+
+**Convention:** Room state is read-only in tests. If you add new room properties or handlers, they are automatically available to E2E via `window.__ROOM__`.
+
+---
+
+## 2026-03-08: Lint Fixes & GitHub Pages E2E Reports
+
+**By:** Pemulis (Systems Dev)
+
+### 1. Fixed 8 no-explicit-any Lint Errors
+
+**Files touched:**
+- `client/src/main.ts` — gated `window.__PIXI_APP__` with `Record<string, unknown>` type assertion
+- `client/src/network.ts` — gated `window.__ROOM__` with `Record<string, unknown>` type assertion
+- `e2e/helpers/player.helper.ts` — defined `E2ERoom` and `E2EPlayerData` interfaces
+- `e2e/helpers/state.helper.ts` — defined `E2ERoom` and `E2EPlayerData` interfaces
+
+**Approach:** File-local type interfaces instead of a shared type file, since only 2 consumers and minimal types. Future consolidation point if more E2E helpers emerge.
+
+**Outcome:** All 8 errors fixed. Lint passes clean.
+
+### 2. Added GitHub Pages Publishing for Playwright Reports
+
+**Changes:**
+- Updated `.github/workflows/e2e.yml` with `deploy-report` job
+- Configured `e2e/playwright.config.ts` dual reporters: `[['github'], ['html']]`
+- Deploy job publishes HTML report to GitHub Pages on every `dev` push
+- Uses `if: always()` to publish even on test failures (primary use case)
+- Concurrency group prevents overlapping deployments
+- PR runs still use artifact uploads (no Pages deployment)
+
+**Handoff to Marathe:** CI/CD ownership now with Marathe. Repo Settings → Pages must be configured to use GitHub Actions as source.
+
+### 3. Key Decisions Logged
+
+1. **E2E helper type interfaces** — File-local approach, consolidation path documented
+2. **GitHub Pages for reports** — Dual reporters, dev-only deployments, always-on even for failures
+
+**Impact:** Steeply can now run Phase 2 E2E tests against dual reporters. Reports are persistent (not 7-day artifact expiry). Marathe owns Pages settings and deployment monitoring.
+
+## 2026-03-08T15:55:37Z: Dev Mode Gating Consistency (PR #52 Review)
+
+**Task:** Fix dev mode gating inconsistency in network.ts and main.ts  
+**Status:** ✅ Completed  
+**Files:** `client/src/network.ts`, `client/src/main.ts`
+
+Exported `isDevMode()` utility and replaced all loose `.has('dev')` checks with consistent pattern. Dev mode checks now standardized across codebase.
+
+**Related:** Scribe merge of PR #52 review feedback batch (Pemulis + Steeply + Marathe).
