@@ -119,7 +119,7 @@ jobs:
             --arg env "🎮 Production" \
             --arg url "https://${DEPLOY_URL}" \
             '[{"name": "Environment", "value": $env, "inline": true},
-              {"name": "Deployed URL", "value": $url, "inline": false}]')
+              {"name": "🌐 Deployed URL", "value": "[Open App](\($url))", "inline": false}]')
 
           # Add changelog field
           FIELDS=$(echo "$FIELDS" | jq --arg changelog "$CHANGELOG" \
