@@ -1757,3 +1757,23 @@ Prevention (write clean first) > Cleanup (fix lint errors post-merge).
 Valid exceptions (e.g., E2E browser-context code) require documented decision in decisions.md.
 
 See: 2026-03-08: ESLint Override for E2E Browser Context Code
+
+---
+
+## 2025-07-25: Fix 2 E2E Test Failures from CI
+
+**By:** Steeply (Tester)
+
+### Summary
+
+Fixed two E2E test failures caught in CI:
+
+1. **Scoreboard close selector** (`player.helper.ts:71`): `waitForSelector('#scoreboard-overlay:not(.visible)')` defaulted to `state: 'visible'`, creating a contradictory wait (element must be both not-visible-class AND visible-in-viewport). Replaced with `page.locator('#scoreboard-overlay').waitFor({ state: 'hidden' })`.
+
+2. **Day phase race condition** (`multiplayer.spec.ts:82-87`): Sequential reads from two players created a window where the day phase could transition between reads. Replaced with `expect.poll()` to retry until both players report the same phase.
+
+### Learnings
+
+1. **`waitForSelector` defaults to `state: 'visible'`** — when waiting for an element to disappear, use `locator.waitFor({ state: 'hidden' })` instead of `waitForSelector(':not(.class)')`. The latter still requires DOM visibility.
+
+2. **Sequential state reads across players cause race conditions** — server ticks can advance between `getGameState(p1)` and `getGameState(p2)`. Use `expect.poll()` to retry assertions that depend on synchronized server state.
