@@ -68,7 +68,7 @@ export async function waitForPlayerOnScoreboard(
 
   // Close scoreboard and wait for it to hide
   await page.keyboard.press('Tab');
-  await page.waitForSelector('#scoreboard-overlay:not(.visible)', { timeout: 5_000 });
+  await page.locator('#scoreboard-overlay').waitFor({ state: 'hidden', timeout: 5_000 });
 }
 
 /**

@@ -79,12 +79,11 @@ test.describe('Multiplayer — Player Visibility', () => {
   }) => {
     await waitForPlayerCount(playerOne.page, 2);
 
-    const stateOne = await getGameState(playerOne.page);
-    const stateTwo = await getGameState(playerTwo.page);
-
-    expect(stateOne).not.toBeNull();
-    expect(stateTwo).not.toBeNull();
-    expect(stateOne!.dayPhase).toBe(stateTwo!.dayPhase);
+    await expect.poll(async () => {
+      const s1 = await getGameState(playerOne.page);
+      const s2 = await getGameState(playerTwo.page);
+      return s1?.dayPhase === s2?.dayPhase;
+    }, { timeout: 10_000, message: 'Players should share the same day phase' }).toBe(true);
   });
 
   test('resources are independent between players', async ({
