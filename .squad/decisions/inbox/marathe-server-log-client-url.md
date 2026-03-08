@@ -1,7 +1,7 @@
 # Decision: Add Client URL to Server Startup Log
 
 **Made by:** Marathe (DevOps Engineer)  
-**Date:** $(date)  
+**Date:** 2026-03-08  
 **Issue:** QoL improvement for developer startup experience
 
 ## Decision
@@ -19,7 +19,7 @@ This provides immediate clarity on where to access the application without requi
 ## Implementation
 
 - Modified `server/src/index.ts` to log both URLs in the startup output
-- Client URL is hardcoded as `http://localhost:3000` (matches Playwright config and client dev server)
+- Client URL is configurable via `CLIENT_URL` env var, defaults to `http://localhost:3000` (matches Playwright config and client dev server)
 - Server port remains configurable via `PORT` env var, defaults to 2567
 
 ## Files Changed
