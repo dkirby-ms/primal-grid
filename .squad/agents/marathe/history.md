@@ -277,3 +277,39 @@ See: 2026-03-08: ESLint Override for E2E Browser Context Code
 **Commit:** 1d63354 on dev branch
 
 **Decision documented:** In decisions.md as "Server Startup Log — Client URL Configuration"
+
+---
+
+## 2026-03-08: Discord Notifications for Deployment Workflows
+
+**Task:** Add Discord notifications with changelog to UAT and production deployment workflows  
+**Status:** ✅ Completed  
+**Commit:** 984daef on dev branch
+
+**Changes:**
+- Added `discord-notify` job to `.github/workflows/deploy-uat.yml` (UAT environment)
+- Added `discord-notify` job to `.github/workflows/deploy.yml` (production environment)
+- Both jobs run with `if: always()` after deploy job completes (notify on success and failure)
+- Jobs guarded with `if: ${{ env.DISCORD_WEBHOOK_URL != '' }}` for fork safety
+
+**Notification Features:**
+- Environment indicator: 🧪 UAT or 🎮 Production
+- Deploy status: ✅ success (green 3066993) or ❌ failure (red 15158332)
+- Changelog: Last 10 commits using `git log --pretty=format:'• %h %s (%an)'`
+- Deployed URL: Azure Container App FQDN passed via job outputs
+- Commit link: Short SHA with GitHub commit URL
+- Actions run link: Direct link to workflow run for debugging
+
+**Technical Implementation:**
+- Pattern matches existing e2e.yml discord-notify (lines 73-153)
+- Uses `jq` for safe JSON escaping of dynamic content (commit messages, URLs)
+- Added job-level outputs to deploy job to pass FQDN to discord-notify job
+- Changelog truncated to 1000 chars if too long (Discord embed field limit ~1024 chars)
+- Uses `git clone --depth 50` in notification step for changelog generation
+- Username: "Squad: Marathe" for Discord webhook attribution
+
+**Patterns Established:**
+- All deployment workflows should notify Discord on completion (success or failure)
+- Changelogs provide valuable context about what changed in each deployment
+- Job outputs pattern: Add `id:` to step, expose via `outputs:` at job level, consume in dependent job
+- Always use `jq` for JSON construction in CI to avoid shell escaping issues

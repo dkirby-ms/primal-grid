@@ -5165,3 +5165,95 @@ Wood upkeep for pawns (builders, defenders, attackers) has been completely remov
 - **Tests:** 515 tests passing after removal.
 
 ---
+# Discord Notifications for Deployment Workflows
+
+**Date:** 2026-03-08  
+**Author:** Marathe (DevOps/CI-CD)  
+**Status:** Implemented
+
+## Decision
+
+Add Discord notifications with changelog to both UAT and production deployment workflows to provide immediate visibility into deployment status and changes.
+
+## Context
+
+Previously, deployment workflows (`.github/workflows/deploy-uat.yml` and `.github/workflows/deploy.yml`) completed silently without team notification. This made it difficult to track:
+- When deployments occurred
+- Whether deployments succeeded or failed
+- What changes were included in each deployment
+- Where to access the deployed application
+
+The E2E workflow already had excellent Discord notifications (lines 73-153 in e2e.yml) that could serve as a pattern.
+
+## Implementation
+
+Added `discord-notify` job to both deployment workflows with the following features:
+
+### Notification Content
+- **Environment indicator:** 🧪 UAT or 🎮 Production
+- **Deploy status:** ✅ success (green 3066993) or ❌ failure (red 15158332)
+- **Changelog:** Last 10 commits with format `• <hash> <message> (<author>)`
+- **Deployed URL:** Azure Container App FQDN
+- **Commit info:** Short SHA with GitHub commit link
+- **Actions run link:** Direct link to workflow run
+
+### Technical Details
+- Runs with `if: always()` to notify on both success and failure
+- Guarded with `if: ${{ env.DISCORD_WEBHOOK_URL != '' }}` for fork safety
+- Uses `jq` for safe JSON escaping of dynamic content
+- Changelog generated via `git log --pretty=format:'• %h %s (%an)' HEAD~10..HEAD`
+- Changelog truncated to 1000 chars if too long (Discord field limit ~1024 chars)
+- FQDN passed from deploy job to discord-notify job via job outputs
+- Username: "Squad: Marathe" for webhook attribution
+
+### Code Pattern
+```yaml
+outputs:
+  fqdn: ${{ steps.get-url.outputs.fqdn }}
+
+discord-notify:
+  needs: deploy
+  runs-on: ubuntu-latest
+  if: always()
+  env:
+    DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+    DEPLOY_RESULT: ${{ needs.deploy.result }}
+    DEPLOY_URL: ${{ needs.deploy.outputs.fqdn }}
+```
+
+## Consequences
+
+### Positive
+- Immediate visibility into all deployments (UAT and production)
+- Clear changelog helps team understand what changed in each deployment
+- Failure notifications ensure rapid response to deployment issues
+- Consistent notification pattern across E2E, UAT, and production workflows
+
+### Neutral
+- Adds ~10 seconds to workflow runtime for git clone and notification posting
+- Requires `DISCORD_WEBHOOK_URL` secret to be configured (already exists in repo)
+
+### Negative
+- None identified
+
+## Alternatives Considered
+
+1. **No changelog** — Simpler but provides less context about what was deployed
+2. **Full git diff** — Too verbose for Discord, would exceed field limits
+3. **Email notifications** — Less immediate and harder to integrate with team chat workflow
+4. **Slack instead of Discord** — Team already uses Discord; no reason to change
+
+## Related Decisions
+
+- E2E Discord Notifications (2026-03-08T13:24:21Z) — Established the pattern used here
+- Direct Artifact Links in Discord Notifications (2025-01-20) — Deep-linking pattern
+
+## Files Modified
+
+- `.github/workflows/deploy-uat.yml` — Added discord-notify job
+- `.github/workflows/deploy.yml` — Added discord-notify job
+- `.squad/agents/marathe/history.md` — Documented learnings
+
+## Commit
+
+984daef — "Add Discord notifications with changelog to deployment workflows"
