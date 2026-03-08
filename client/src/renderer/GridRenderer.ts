@@ -65,6 +65,9 @@ export class GridRenderer {
   private claimingTiles: Map<string, { x: number; y: number }> = new Map();
   private localPlayerId: string = '';
 
+  // Viewport culling: tracks the last visible tile range to diff updates
+  private lastCullBounds = { minX: 0, minY: 0, maxX: -1, maxY: -1 };
+
   /** Tracks which tiles the server has currently synced to us. */
   private visibleTiles = new Set<number>();
   /** Client-side terrain memory for explored-but-not-visible tiles. */
@@ -99,6 +102,7 @@ export class GridRenderer {
         g.rect(0, 0, TILE_SIZE, TILE_SIZE);
         g.fill(TILE_COLORS[TileType.Grassland]);
         g.position.set(x * TILE_SIZE, y * TILE_SIZE);
+        g.visible = false;
         this.container.addChild(g);
         this.tiles[y][x] = g;
 
@@ -113,11 +117,12 @@ export class GridRenderer {
         this.lastClaiming[y][x] = false;
         this.lastIsHQTerritory[y][x] = false;
 
-        // Fog overlay — starts as solid black (unexplored)
+        // Fog overlay — starts as solid black (unexplored), hidden until culled in
         const fog = new Graphics();
         fog.rect(0, 0, TILE_SIZE, TILE_SIZE);
         fog.fill(0x000000);
         fog.position.set(x * TILE_SIZE, y * TILE_SIZE);
+        fog.visible = false;
         this.fogContainer.addChild(fog);
         this.fogOverlays[y][x] = fog;
       }
@@ -434,6 +439,84 @@ export class GridRenderer {
     const pulse = 0.3 + 0.7 * Math.abs(Math.sin(Date.now() * 0.006));
     for (const { x, y } of this.claimingTiles.values()) {
       this.territoryOverlays[y][x].alpha = pulse;
+    }
+  }
+
+  /**
+   * Viewport culling: show only tiles within the given bounds, hide the rest.
+   * Uses differential updates — only changes tiles entering/leaving the viewport.
+   */
+  public updateCulling(minX: number, minY: number, maxX: number, maxY: number): void {
+    const prev = this.lastCullBounds;
+
+    // Skip if bounds haven't changed
+    if (prev.minX === minX && prev.minY === minY && prev.maxX === maxX && prev.maxY === maxY) {
+      return;
+    }
+
+    const mapSize = this.mapSize;
+
+    // Clamp bounds to map
+    const cMinX = Math.max(0, minX);
+    const cMinY = Math.max(0, minY);
+    const cMaxX = Math.min(mapSize - 1, maxX);
+    const cMaxY = Math.min(mapSize - 1, maxY);
+
+    const pMinX = Math.max(0, prev.minX);
+    const pMinY = Math.max(0, prev.minY);
+    const pMaxX = Math.min(mapSize - 1, prev.maxX);
+    const pMaxY = Math.min(mapSize - 1, prev.maxY);
+
+    // First cull: if no previous bounds, show everything in new range
+    if (prev.maxX < prev.minX) {
+      for (let y = cMinY; y <= cMaxY; y++) {
+        for (let x = cMinX; x <= cMaxX; x++) {
+          this.setTileCullVisible(x, y, true);
+        }
+      }
+      this.lastCullBounds = { minX, minY, maxX, maxY };
+      return;
+    }
+
+    // Hide tiles that left the viewport (were in prev but not in current)
+    for (let y = pMinY; y <= pMaxY; y++) {
+      for (let x = pMinX; x <= pMaxX; x++) {
+        if (x < cMinX || x > cMaxX || y < cMinY || y > cMaxY) {
+          this.setTileCullVisible(x, y, false);
+        }
+      }
+    }
+
+    // Show tiles that entered the viewport (are in current but not in prev)
+    for (let y = cMinY; y <= cMaxY; y++) {
+      for (let x = cMinX; x <= cMaxX; x++) {
+        if (x < pMinX || x > pMaxX || y < pMinY || y > pMaxY) {
+          this.setTileCullVisible(x, y, true);
+        }
+      }
+    }
+
+    this.lastCullBounds = { minX, minY, maxX, maxY };
+  }
+
+  /** Toggle visibility of a tile and its fog overlay for culling. */
+  private setTileCullVisible(x: number, y: number, visible: boolean): void {
+    this.tiles[y][x].visible = visible;
+    // Fog overlay visibility is managed by setFogState; culling wraps it.
+    // When culled out, hide fog. When culled in, restore fog's logical state.
+    const fog = this.fogOverlays[y][x];
+    if (!visible) {
+      fog.visible = false;
+    } else {
+      // Restore fog based on whether this tile is currently server-visible,
+      // explored, or unexplored. Fog is visible unless the tile is server-visible.
+      const tileIdx = y * this.mapSize + x;
+      if (this.visibleTiles.has(tileIdx)) {
+        fog.visible = false;
+      } else {
+        // Explored or unexplored tiles should show fog
+        fog.visible = true;
+      }
     }
   }
 

@@ -1817,3 +1817,13 @@ Added 3 tests requested by Copilot code review on PR #57 (dev → uat), covering
 **Result:** 528 tests passing, lint clean. PR #57 review feedback fully addressed.
 
 **Decision documented:** In decisions.md as "Builder Traversal — Builders Walk Through Own Structures"
+
+### Camera Panning Performance — Issue #29 (Viewport Culling)
+
+- **Root cause:** All 49,152 Graphics objects (16,384 tiles × 3 layers: terrain, territory, fog) were permanently visible in the PixiJS stage tree, forcing the renderer to process every object every frame even when off-screen.
+- **Fix:** Implemented differential viewport culling in `GridRenderer.updateCulling()`. Only tiles within the camera viewport (plus 2-tile padding) have `visible = true`. At 1× zoom, ~400 objects are rendered instead of ~49,152.
+- **Key files:** `client/src/renderer/Camera.ts` (added `getViewportTileBounds()`), `client/src/renderer/GridRenderer.ts` (added `updateCulling()` + `setTileCullVisible()`), `client/src/main.ts` (wired culling into ticker).
+- **Differential approach:** Instead of iterating all 16,384 tiles per frame, only tiles that cross the viewport boundary are toggled (~80 tiles per pan frame). Uses `lastCullBounds` cache to detect changes.
+- **Fog visibility restoration:** When a tile is culled back in, fog visibility is restored based on `visibleTiles` set (server-visible tiles get no fog, others get fog overlay).
+- **No test changes required:** Existing 514 tests all pass. The 1 pre-existing timeout failure in water-depth.test.ts is unrelated.
+- **PR:** #60, branch `squad/29-fix-laggy-scrolling`.
