@@ -42,7 +42,7 @@ jobs:
 
   discord-notify:
     needs: e2e
-    if: always()
+    if: always() && needs.e2e.result != 'cancelled' && needs.e2e.result != 'skipped'
     runs-on: ubuntu-latest
     env:
       DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
