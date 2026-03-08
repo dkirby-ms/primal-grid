@@ -224,3 +224,25 @@ Prevention (write clean first) > Cleanup (fix lint errors post-merge).
 Valid exceptions (e.g., E2E browser-context code) require documented decision in decisions.md.
 
 See: 2026-03-08: ESLint Override for E2E Browser Context Code
+
+### 2025-01-20: E2E Workflow Simplification
+- **Changed:** Simplified `.github/workflows/e2e.yml` to run only on push to uat/master branches, removed PR trigger
+- **Removed:** `deploy-report` job that deployed Playwright reports to GitHub Pages (user feedback: Pages deployment not needed)
+- **Kept:** Artifact upload in `e2e` job — reports still available as workflow artifacts for manual download
+- **Updated:** `discord-notify` job now depends only on `e2e` job, removed all deploy-report references (DEPLOY_RESULT, PAGES_URL, Pages URL field logic)
+- **Rationale:** Team prefers simpler workflow that doesn't auto-deploy reports to Pages; artifact download is sufficient for debugging
+- **Validation:** YAML validated with Python yaml module before committing
+
+### 2025-01-20: Direct Artifact Links in Discord Notifications
+- **Task:** Added direct artifact download links to Discord notifications from E2E workflow
+- **Changes made:**
+  - Added `id: upload-report` to the `upload-artifact` step in the `e2e` job (line 36)
+  - Exposed artifact ID as job-level output: `outputs.artifact-id: ${{ steps.upload-report.outputs.artifact-id }}`
+  - Added `ARTIFACT_ID` env var to `discord-notify` job from job outputs
+  - Replaced generic "📦 Artifact" link with "📊 Test Report" direct download link using format: `https://github.com/{REPOSITORY}/actions/runs/{RUN_ID}/artifacts/{ARTIFACT_ID}`
+  - Added separate "🔗 Run" field linking to Actions run page for context
+  - Removed dead PR event handling code (lines 74-78) since workflow now only triggers on push events
+  - Removed unused env vars: `PR_NUMBER`, `PR_TITLE`, `EVENT_NAME`
+- **Pattern:** GitHub Actions `upload-artifact@v4` exposes `artifact-id` output that can be used to construct direct download links
+- **User benefit:** One-click artifact download from Discord without navigating through Actions UI
+- **Commit:** e1cc5b6
