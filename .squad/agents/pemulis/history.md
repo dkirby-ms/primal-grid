@@ -1496,3 +1496,37 @@ Resolved all 202 ESLint errors across 7 server files in parallel with Gately's c
 
 **Impact on Gately:** If combat testing patterns in your test helpers reference tickCombat() directly, they now require the 5th parameter. Use the room's internal attackerState map from the test double.
 
+
+---
+
+### Session: Discord Webhook Skills & Scribe Charter Update
+
+**Date:** 2026-03-08  
+**Context:** Background orchestration task (spawned with Steeply Playwright research)
+
+**Work:**
+
+1. **Discord Webhook Announcements Skill Update**
+   - File: `.squad/skills/discord-webhook-announcements/SKILL.md`
+   - Added: `username` parameter for agent/team member name tagging
+   - Added: `avatarURL` parameter for custom Discord avatars
+   - Enables: Posts like "Agent Pemulis says: System updated" with proper attribution
+   - Change: Minimal — added two optional parameters to existing webhook POST
+
+2. **Created Discord Scribe Summaries Skill**
+   - File: `.squad/skills/discord-scribe-summaries/SKILL.md` (NEW)
+   - Purpose: Post session summaries after Scribe commits orchestration work
+   - Parameters: webhook_url, username, agents_summary, outcomes, decisions
+   - Color codes: `5763719` (green/normal), `16776960` (yellow/blockers)
+   - Trigger: Scribe reads this skill for multi-agent sessions
+
+3. **Scribe Charter Update**
+   - File: `.squad/agents/scribe/charter.md`
+   - Added: Step 6 — "Post Discord summary" using discord-scribe-summaries skill
+   - Trigger condition: Substantial work (2+ agents OR decisions OR issues closed)
+   - Attribution: `"username": "Squad: Scribe"`
+   - Filter: Skip trivial single-agent sessions
+
+**Impact:** Scribe now has charter permission and skill reference to post team summaries to Discord channel. Improves team visibility on coordinated work.
+
+**Convention:** Always use `"username": "Squad: {Role}"` for attribution (e.g., "Squad: Scribe", "Squad: Tester").

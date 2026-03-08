@@ -4716,3 +4716,74 @@ Enemy entities are a fundamentally different AI domain. Mixing them into the gen
 
 **Convention Going Forward:** Combat-related per-creature state Maps must be passed to `tickCombat()` and cleaned up in Phase 3 death handling.
 
+
+---
+
+## 2026-03-10: Playwright E2E Testing Framework for Multiplayer
+
+**By:** Steeply (Tester)  
+**Date:** 2026-03-10  
+**Status:** PROPOSAL — Research complete, ready for team review
+
+### Summary
+
+Recommended approach for Primal Grid's E2E testing framework using Playwright for Canvas-based multiplayer WebSocket games.
+
+### Key Recommendations
+
+#### 1. Use Browser Contexts for Multi-Player Simulation
+
+- One browser, multiple contexts (not separate browser instances)
+- Each context = one player with isolated session
+- Custom Playwright fixtures for `playerOne` / `playerTwo` with automatic join flow
+- `workers: 1` is mandatory — all tests share a single Colyseus server
+
+#### 2. State-Based Assertions (70% of tests)
+
+- Expose `window.__ROOM__` in dev mode for `page.evaluate()` access to Colyseus `room.state`
+- Assert on deserialized game state (players, creatures, tiles), not pixels
+- Use `page.waitForFunction()` to wait for server state sync before asserting
+- DOM selectors: HUD/scoreboard/prompt (20%), visual regression sparingly (10%)
+
+#### 3. Required Client Code Change
+
+Add to `client/src/network.ts` after room join:
+```typescript
+if (import.meta.env.DEV || new URLSearchParams(window.location.search).has('dev')) {
+  (window as any).__ROOM__ = room;
+}
+```
+Gated behind dev mode — never exposed in production.
+
+#### 4. Dual webServer Config
+
+Playwright config starts both Colyseus server (port 2567) and Vite dev client (port 3000). All test URLs use `?dev=1` to disable fog of war.
+
+#### 5. Binary Protocol Caveat
+
+Colyseus uses `@colyseus/schema` binary encoding. WebSocket frame inspection NOT useful — frames are binary, not JSON. Always read state via `page.evaluate()`.
+
+#### 6. Test Priority
+
+- **P0 (must-have):** Join flow, two-player room, spawn pawn
+- **P1 (important):** Territory expansion, resource income, day/night
+- **P2 (valuable):** Territory contests, combat, pawn limits
+- **P3 (nice-to-have):** Enemy spawning, disconnect, visual regression
+
+#### 7. Implementation Estimate
+
+- Phase 1 (Foundation): ~2 days — install, config, P0 tests
+- Phase 2 (Game Mechanics): ~3 days — state helpers, P1 tests
+- Phase 3 (Multiplayer): ~3 days — P2 conflict tests
+- Phase 4 (Polish): ~2 days — CI/CD, visual regression, P3 tests
+
+### Team Impact
+
+- **Pemulis/Gately:** Single code change (5 lines) in `client/src/network.ts`
+- **Hal:** Can implement P0 tests once decision approved
+- **CI/CD:** New GitHub Actions workflow needed, runs alongside Vitest
+- **Test Performance:** Serially executed (single worker) — slower than unit tests but catches real multiplayer bugs
+
+### Full Research
+
+Complete analysis with code examples, architecture diagrams, gotchas, and comparisons in `.squad/agents/steeply/history.md`.
