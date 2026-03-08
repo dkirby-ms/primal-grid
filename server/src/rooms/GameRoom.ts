@@ -16,7 +16,7 @@ import {
   CREATURE_AI, CREATURE_RESPAWN, TERRITORY,
   STRUCTURE_INCOME, SHAPE,
   PROGRESSION, getLevelForXP,
-  PAWN, PAWN_TYPES, DAY_NIGHT, FOG_OF_WAR,
+  PAWN_TYPES, DAY_NIGHT, FOG_OF_WAR,
   ENEMY_SPAWNING, ENEMY_BASE_TYPES,
   DayPhase,
   isEnemyBase,
@@ -55,7 +55,6 @@ export class GameRoom extends Room {
       this.tickCreatureAI();
       this.tickCreatureRespawn();
       this.tickStructureIncome();
-      this.tickPawnUpkeep();
       this.tickEnemyBaseSpawning();
       this.tickCombat();
       this.tickGraveDecay();
@@ -203,41 +202,6 @@ export class GameRoom extends Room {
     return candidates[Math.floor(Math.random() * candidates.length)];
   }
 
-  private tickPawnUpkeep() {
-    if (this.state.tick % PAWN.UPKEEP_INTERVAL_TICKS !== 0) return;
-
-    const toRemove: string[] = [];
-
-    this.state.creatures.forEach((creature) => {
-      if (!creature.pawnType || creature.pawnType === "") return;
-      const pawnDef = PAWN_TYPES[creature.pawnType];
-      if (!pawnDef) return;
-
-      const owner = this.state.players.get(creature.ownerID);
-      if (!owner) {
-        toRemove.push(creature.id);
-        return;
-      }
-
-      if (owner.wood >= pawnDef.upkeep.wood) {
-        owner.wood -= pawnDef.upkeep.wood;
-      } else {
-        creature.health -= PAWN.UPKEEP_DAMAGE;
-        if (creature.health <= 0) {
-          toRemove.push(creature.id);
-          this.broadcast("game_log", { message: `${pawnDef.name} starved (no wood for upkeep)`, type: "death" });
-        } else {
-          this.broadcast("game_log", { message: `${pawnDef.name} taking damage — need wood!`, type: "upkeep" });
-        }
-      }
-    });
-
-    for (const id of toRemove) {
-      this.state.creatures.delete(id);
-    }
-  }
-
-  /** Count Water/Rock tiles in the NxN starting zone around (cx, cy). */
   private countNonWalkableInZone(cx: number, cy: number): number {
     const half = Math.floor(TERRITORY.STARTING_SIZE / 2);
     let count = 0;
@@ -424,6 +388,18 @@ export class GameRoom extends Room {
       const tile = this.state.getTile(x, y);
       if (!tile || !this.state.isWalkable(x, y)) continue;
       if (tile.ownerID !== "") continue;
+
+      // Territorial radius check: reject if ANY tile within Manhattan distance 5 is player-owned
+      const territoryRadius = 5;
+      let nearTerritory = false;
+      for (let ry = -territoryRadius; ry <= territoryRadius && !nearTerritory; ry++) {
+        for (let rx = -territoryRadius; rx <= territoryRadius && !nearTerritory; rx++) {
+          if (Math.abs(rx) + Math.abs(ry) > territoryRadius) continue;
+          const nearby = this.state.getTile(x + rx, y + ry);
+          if (nearby && nearby.ownerID !== "") nearTerritory = true;
+        }
+      }
+      if (nearTerritory) continue;
 
       // Min distance from HQs
       const tooCloseToHQ = hqs.some(
