@@ -1,5 +1,24 @@
 import type { Page } from '@playwright/test';
 
+interface E2EPlayerData {
+  displayName: string;
+  wood: number;
+  stone: number;
+  hqX: number;
+  hqY: number;
+  score: number;
+  level: number;
+}
+
+interface E2ERoom {
+  state?: {
+    players?: {
+      size: number;
+      forEach: (fn: (p: E2EPlayerData, key: string) => void) => void;
+    };
+  };
+}
+
 /**
  * Wait until a JavaScript predicate evaluates to true inside the page.
  * The predicate string is evaluated with access to `window.__ROOM__`.
@@ -26,11 +45,11 @@ export async function waitForStateChange(
  */
 export async function getPlayerState(page: Page, playerName: string) {
   return page.evaluate((name: string) => {
-    const room = (window as any).__ROOM__;
+    const room = (window as unknown as { __ROOM__?: E2ERoom }).__ROOM__;
     if (!room?.state?.players) return null;
 
-    let found: any = null;
-    room.state.players.forEach((p: any) => {
+    let found: E2EPlayerData | null = null;
+    room.state.players.forEach((p: E2EPlayerData) => {
       if (p.displayName === name) {
         found = {
           displayName: p.displayName,

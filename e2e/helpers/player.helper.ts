@@ -1,5 +1,27 @@
 import type { Page } from '@playwright/test';
 
+interface E2EPlayerData {
+  displayName: string;
+  wood: number;
+  stone: number;
+  hqX: number;
+  hqY: number;
+  score: number;
+  level: number;
+}
+
+interface E2ERoom {
+  state?: {
+    players?: {
+      size: number;
+      forEach: (fn: (p: E2EPlayerData, key: string) => void) => void;
+    };
+    tick?: number;
+    dayPhase?: string;
+    mapWidth?: number;
+  };
+}
+
 /**
  * Wait until at least `count` players are present in the Colyseus room state.
  * Reads the deserialized room.state.players map exposed via window.__ROOM__.
@@ -11,7 +33,7 @@ export async function waitForPlayerCount(
 ): Promise<void> {
   await page.waitForFunction(
     (expected: number) => {
-      const room = (window as any).__ROOM__;
+      const room = (window as unknown as { __ROOM__?: E2ERoom }).__ROOM__;
       if (!room?.state?.players) return false;
       return room.state.players.size >= expected;
     },
@@ -54,7 +76,7 @@ export async function waitForPlayerOnScoreboard(
  */
 export async function getGameState(page: Page) {
   return page.evaluate(() => {
-    const room = (window as any).__ROOM__;
+    const room = (window as unknown as { __ROOM__?: E2ERoom }).__ROOM__;
     if (!room?.state) return null;
 
     const players: Array<{
@@ -68,7 +90,7 @@ export async function getGameState(page: Page) {
       level: number;
     }> = [];
 
-    room.state.players.forEach((p: any, key: string) => {
+    room.state.players?.forEach((p: E2EPlayerData, key: string) => {
       players.push({
         id: key,
         displayName: p.displayName,
