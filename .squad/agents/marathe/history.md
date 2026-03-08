@@ -45,6 +45,29 @@ Full audit report written to `.squad/decisions/inbox/marathe-cicd-audit.md`
 - Used `jq` for JSON payload construction in CI to safely escape dynamic content (commit messages, PR titles)
 - Discord webhook skill: color 5763719 = green, 15548997 = red; HTTP 204 = success; use `"username": "Squad: Marathe"` for attribution
 
+## CI/CD Audit Remediation (2024-01-29)
+
+**All 9 audit findings fixed in commit ac0e2e8:**
+
+Critical fixes applied:
+1. e2e.yml: Node 20→22, standardizing all workflows on Node 22
+2. squad-ci.yml: Removed redundant `push` trigger on dev/insider; added `workflow_dispatch` for ad-hoc runs
+3. squad-preview.yml: Added `pull_request` trigger so validation runs pre-merge, not just post-push
+
+Warning fixes applied:
+4. squad-ci.yml, squad-release.yml, squad-insider-release.yml: Added `cache: npm` to `setup-node` steps
+5. reset-uat.yml: Added concurrency group `uat-reset` with `cancel-in-progress: true`
+6. squad-promote.yml: Added concurrency group `promotion` with `cancel-in-progress: false` (never cancel mid-promotion)
+7. squad-main-guard.yml: Replaced all mojibake Unicode (ΓÇö, ≡ƒÜ½, Γ£à, ΓÜá∩╕Å) with proper ASCII/emoji
+8. squad-heartbeat.yml: Added clear documentation explaining cron was disabled during migration to event-driven triage, with guidance on re-enabling
+
+**Patterns established:**
+- All workflows must use Node 22 — no exceptions
+- All `setup-node` steps should include `cache: npm`
+- Workflows performing git push/merge operations must have concurrency guards
+- Validation workflows should always have `pull_request` triggers for pre-merge gating
+- Avoid special Unicode in workflow scripts — use ASCII or well-supported emoji only
+
 ## CI/CD Audit & Discord Notifications — Session Completion
 
 **Date:** 2026-03-08T13-24-21Z
