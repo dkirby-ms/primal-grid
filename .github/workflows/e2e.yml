@@ -11,6 +11,8 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      artifact-id: ${{ steps.upload-report.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v4
 
@@ -31,6 +33,7 @@ jobs:
         run: npm run test:e2e
 
       - uses: actions/upload-artifact@v4
+        id: upload-report
         if: always()
         with:
           name: playwright-report
@@ -48,9 +51,7 @@ jobs:
         if: env.DISCORD_WEBHOOK_URL != ''
         env:
           E2E_RESULT: ${{ needs.e2e.result }}
-          EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
+          ARTIFACT_ID: ${{ needs.e2e.outputs.artifact-id }}
           COMMIT_SHA: ${{ github.sha }}
           COMMIT_MSG: ${{ github.event.head_commit.message }}
           RUN_ID: ${{ github.run_id }}
@@ -65,25 +66,22 @@ jobs:
             COLOR=15548997
           fi
 
-          ARTIFACT_URL="https://github.com/${REPOSITORY}/actions/runs/${RUN_ID}"
+          # Build artifact and run URLs
+          REPORT_URL="https://github.com/${REPOSITORY}/actions/runs/${RUN_ID}/artifacts/${ARTIFACT_ID}"
+          RUN_URL="https://github.com/${REPOSITORY}/actions/runs/${RUN_ID}"
 
           # Build fields array with jq for safe JSON escaping
-          FIELDS=$(jq -n --arg url "$ARTIFACT_URL" \
-            '[{"name": "📦 Artifact", "value": "[View Run](\($url))", "inline": true}]')
+          FIELDS=$(jq -n --arg report_url "$REPORT_URL" --arg run_url "$RUN_URL" \
+            '[{"name": "📊 Test Report", "value": "[Download Report](\($report_url))", "inline": true},
+              {"name": "🔗 Run", "value": "[View Actions Run](\($run_url))", "inline": true}]')
 
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            PR_URL="https://github.com/${REPOSITORY}/pull/${PR_NUMBER}"
-            FIELDS=$(echo "$FIELDS" | jq \
-              --arg num "$PR_NUMBER" --arg title "$PR_TITLE" --arg url "$PR_URL" \
-              '. + [{"name": "🔀 Pull Request", "value": "[#\($num): \($title)](\($url))"}]')
-          else
-            SHORT_SHA="${COMMIT_SHA:0:7}"
-            COMMIT_URL="https://github.com/${REPOSITORY}/commit/${COMMIT_SHA}"
-            SAFE_MSG=$(echo "$COMMIT_MSG" | head -1)
-            FIELDS=$(echo "$FIELDS" | jq \
-              --arg sha "$SHORT_SHA" --arg msg "$SAFE_MSG" --arg url "$COMMIT_URL" \
-              '. + [{"name": "📝 Commit", "value": "[`\($sha)`](\($url)) \($msg)"}]')
-          fi
+          # Add commit info
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          COMMIT_URL="https://github.com/${REPOSITORY}/commit/${COMMIT_SHA}"
+          SAFE_MSG=$(echo "$COMMIT_MSG" | head -1)
+          FIELDS=$(echo "$FIELDS" | jq \
+            --arg sha "$SHORT_SHA" --arg msg "$SAFE_MSG" --arg url "$COMMIT_URL" \
+            '. + [{"name": "📝 Commit", "value": "[`\($sha)`](\($url)) \($msg)"}]')
 
           PAYLOAD=$(jq -n \
             --arg title "$STATUS" \
