@@ -1,14 +1,14 @@
 import { test, expect } from '../fixtures/game.fixture.js';
-import { waitForPlayerCount, getGameState } from '../helpers/player.helper.js';
-import { getPlayerState, waitForStateChange } from '../helpers/state.helper.js';
-import { getCreatures, getCreatureCount, getPlayerPawns, waitForCreature } from '../helpers/creature.helper.js';
+import { waitForPlayerCount } from '../helpers/player.helper.js';
+import { getPlayerState } from '../helpers/state.helper.js';
+import { getCreatures, getCreatureCount, getPlayerPawns } from '../helpers/creature.helper.js';
 import { getTile, getTilesWhere, getOwnedTileCount, getTerritoryStats, getResourceTilesInArea } from '../helpers/tile.helper.js';
-import { takeSnapshot, diffSnapshots, waitTicksAndSnapshot, snapshotAndDiff } from '../helpers/snapshot.helper.js';
-import { installMessageRecorder, getRecordedMessages, clearRecordedMessages, waitForMessage, sendAndRecord, getMessageCount } from '../helpers/websocket.helper.js';
+import { takeSnapshot, waitTicksAndSnapshot, snapshotAndDiff } from '../helpers/snapshot.helper.js';
+import { installMessageRecorder, getRecordedMessages, clearRecordedMessages, sendAndRecord, getMessageCount } from '../helpers/websocket.helper.js';
 
 test.describe('Creature State Queries', () => {
   test('can query wildlife creatures on the map', async ({ playerOne }) => {
-    const { page, playerName } = playerOne;
+    const { page } = playerOne;
     await waitForPlayerCount(page, 1);
 
     const allCreatures = await getCreatures(page);

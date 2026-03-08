@@ -127,7 +127,7 @@ test.describe('Multiplayer — HQ Proximity', () => {
 
   test('each player HQ occupies a 5x5 territory zone', async ({
     playerOne,
-    playerTwo,
+    _playerTwo,
   }) => {
     await waitForPlayerCount(playerOne.page, 2);
 
@@ -170,7 +170,7 @@ test.describe('Multiplayer — HQ Proximity', () => {
     }
   });
 
-  test('player HQ tiles do not overlap', async ({ playerOne, playerTwo }) => {
+  test('player HQ tiles do not overlap', async ({ playerOne, _playerTwo }) => {
     await waitForPlayerCount(playerOne.page, 2);
 
     const overlap = await playerOne.page.evaluate(() => {
@@ -229,7 +229,7 @@ test.describe('Multiplayer — Pawn Spawning', () => {
 
     // Wait for a creature with this owner and pawnType to appear
     await page.waitForFunction(
-      (name: string) => {
+      (_name: string) => {
         const room = (window as unknown as {
           __ROOM__?: {
             state?: {
@@ -428,7 +428,7 @@ test.describe('Multiplayer — Pawn Spawning', () => {
 
 test.describe('Multiplayer — Territory Claiming', () => {
   test('builder pawn claims territory over time', async ({ playerOne }) => {
-    const { page, playerName } = playerOne;
+    const { page } = playerOne;
 
     // Count initial territory
     const initialTerritory = await page.evaluate(() => {
