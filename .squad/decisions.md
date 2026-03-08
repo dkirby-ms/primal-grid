@@ -4958,3 +4958,97 @@ The `e2e` job (tests, artifacts) and `discord-notify` job (webhook) don't need e
 **Pattern:** Going forward, ALL GitHub Actions workflows should grant only baseline `contents: read` at workflow level and add job-level `permissions:` blocks for jobs that need elevated access. Reduces blast radius if a job is compromised.
 
 **Decisions.md Correction:** Also updated lines documenting E2E branch triggers to reflect `uat`/`master`, not `dev`.
+
+---
+
+## 2026-03-08T16:58: User Directive — Lint-Clean Code from the Start
+
+**By:** saitcho (via Copilot)  
+**Status:** BINDING DIRECTIVE — All Agents  
+
+**What:** Agents must write lint-clean code from the start. No exceptions:
+- **No `@typescript-eslint/no-explicit-any`** — Use proper types (`unknown`, interfaces, generics, or relax rules with documented rationale)
+- **No `@typescript-eslint/no-unused-vars`** — Don't import or declare things you don't use
+- **Run the linter before committing** — `npm run lint` is mandatory in the commit workflow
+
+**Why:** User request. The team keeps shipping `no-explicit-any` and `no-unused-vars` errors in every PR. This is a recurring problem and must stop. Prevention (write clean code first) is far better than cleanup (fixing lint errors post-merge).
+
+**Scope:** Applies to all agents (Copilot, Hal, Gately, Pemulis, Steeply, Marathe).
+
+**Note:** Valid exceptions (e.g., E2E tests with browser-context type erasure) require documented decision in decisions.md. See 2026-03-08: ESLint Override for E2E Browser Context Code.
+
+---
+
+## 2026-03-08: ESLint Override for E2E Browser Context Code
+
+**Author:** Steeply (Tester)  
+**Date:** 2026-03-08  
+**Status:** Implemented  
+
+### Problem
+
+E2E test helpers use Playwright's `page.evaluate()` to extract game state from the browser's runtime context. The Colyseus state objects in the browser don't have compile-time TypeScript types, so helper functions that process this data must use `any` types.
+
+34 of 47 lint errors were `@typescript-eslint/no-explicit-any` violations in:
+- `e2e/helpers/creature.helper.ts` (13 errors)
+- `e2e/helpers/snapshot.helper.ts` (5 errors)
+- `e2e/helpers/tile.helper.ts` (8 errors)
+- `e2e/helpers/websocket.helper.ts` (8 errors)
+
+### Decision
+
+**Add an ESLint override for `e2e/**/*.ts` that disables `@typescript-eslint/no-explicit-any`.**
+
+```javascript
+overrides: [
+  {
+    files: ['e2e/**/*.ts'],
+    rules: {
+      // E2E tests use page.evaluate() which returns untyped browser-context data
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+]
+```
+
+### Rationale
+
+1. **Inherent Type Erasure:** Browser runtime state has no compile-time types. TypeScript cannot infer types for data extracted from `page.evaluate()`.
+2. **Standard Practice:** Relaxing `no-explicit-any` for E2E test code is industry-standard. The helpers are isolated to `e2e/` and don't affect production code quality.
+3. **Pragmatic:** Alternative would be to add hundreds of type assertions (`as SomeType`) throughout helpers, which provides no safety benefit and clutters the code.
+
+### Impact
+
+- **Scope:** Only affects `e2e/` directory. Production code in `client/`, `server/`, `shared/` still enforces strict `no-explicit-any`.
+- **Developer Experience:** Removes friction for writing E2E helpers that extract browser-context state.
+- **Code Quality:** No degradation. The helpers already use defensive checks (null guards, property existence checks) to handle untyped data safely.
+
+### Result
+
+Zero ESLint errors. E2E tests continue to pass unchanged.
+
+---
+
+## 2026-03-08: Tick-Tolerant E2E Assertions
+
+**Author:** Steeply (Tester)  
+**Date:** 2026-03-08  
+**Status:** STANDARD PATTERN — All E2E Tests  
+
+### Decision
+
+E2E tests must not use exact equality (`toBe`) for resource values that can be modified by game ticks (HQ income, pawn upkeep). Use inequality checks (`toBeLessThan`, `toBeGreaterThan`) or tolerance ranges instead.
+
+When testing negative outcomes (e.g., "spawn should fail"), always verify the precondition (e.g., "resources are actually insufficient") before sending the command.
+
+Replace all `waitForTimeout()` usage with `expect.poll()` or `waitForFunction()` — fixed-duration waits are inherently nondeterministic.
+
+### Rationale
+
+HQ income fires every 40 ticks and pawn upkeep every 60 ticks. A spawn happening near those boundaries shifts resource values, making exact assertions flaky. Inequality checks assert the game invariant (resources decreased) without coupling to tick timing.
+
+### Scope
+
+Applies to all E2E tests in `e2e/tests/`. See pattern in `e2e/tests/multiplayer.spec.ts` (spawn resource assertions).
+
+---

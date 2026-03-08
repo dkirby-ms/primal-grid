@@ -1594,3 +1594,22 @@ Resolved all 202 ESLint errors across 7 server files in parallel with Gately's c
 Exported `isDevMode()` utility and replaced all loose `.has('dev')` checks with consistent pattern. Dev mode checks now standardized across codebase.
 
 **Related:** Scribe merge of PR #52 review feedback batch (Pemulis + Steeply + Marathe).
+
+
+---
+
+## 2026-03-08: Lint Discipline Directive — Write Clean Code from the Start
+
+**From:** saitcho (via Copilot)  
+**Status:** BINDING — All agents must follow
+
+Write lint-clean code from the start. No exceptions:
+- **No `@typescript-eslint/no-explicit-any`** — Use proper types (`unknown`, interfaces, generics, or document exceptions)
+- **No `@typescript-eslint/no-unused-vars`** — Don't import or declare unused things
+- **Run linter before committing** — `npm run lint` is mandatory
+
+Prevention (write clean first) > Cleanup (fix lint errors post-merge).
+
+Valid exceptions (e.g., E2E browser-context code) require documented decision in decisions.md.
+
+See: 2026-03-08: ESLint Override for E2E Browser Context Code

@@ -1186,3 +1186,22 @@ Resolving 3 client-side ESLint errors as part of team-wide lint cleanup effort (
 
 **Convention:** E2E framework (Steeply) owns these window globals. If new globals are needed, coordinate with Steeply to keep them dev-gated.
 
+
+
+---
+
+## 2026-03-08: Lint Discipline Directive — Write Clean Code from the Start
+
+**From:** saitcho (via Copilot)  
+**Status:** BINDING — All agents must follow
+
+Write lint-clean code from the start. No exceptions:
+- **No `@typescript-eslint/no-explicit-any`** — Use proper types (`unknown`, interfaces, generics, or document exceptions)
+- **No `@typescript-eslint/no-unused-vars`** — Don't import or declare unused things
+- **Run linter before committing** — `npm run lint` is mandatory
+
+Prevention (write clean first) > Cleanup (fix lint errors post-merge).
+
+Valid exceptions (e.g., E2E browser-context code) require documented decision in decisions.md.
+
+See: 2026-03-08: ESLint Override for E2E Browser Context Code

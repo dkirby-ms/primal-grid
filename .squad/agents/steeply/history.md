@@ -1715,3 +1715,45 @@ Tests now more deterministic and properly assert expected behaviors.
 - **Never use exact equality for resource assertions in E2E tests.** HQ income ticks (every 40 ticks) and pawn upkeep (every 60 ticks) can fire between the "before" and "after" snapshots, shifting resource values by ±5 or more. Use inequality checks (`toBeLessThan`) to assert the invariant (resources decreased) without coupling to exact tick timing.
 - **Verify preconditions before negative tests.** When testing "spawn rejected due to insufficient resources," explicitly assert that resources are below the cost threshold *before* sending the spawn command. This prevents false passes when HQ income has silently replenished resources.
 - **Replace `waitForTimeout` with `expect.poll()`.** Fixed-duration waits are nondeterministic — `expect.poll()` with explicit intervals retries the check multiple times, making the test both faster on success and more reliable under load.
+
+### ESLint Override for E2E Browser Context — Fix 47 Lint Errors (2026-03-10)
+
+**Task:** Fix all 47 ESLint errors introduced in e2e/ after PR #52 merge  
+**Status:** ✅ Completed  
+**Files:** `.eslintrc.cjs`, `e2e/tests/multiplayer.spec.ts`, `e2e/tests/state-assertions.spec.ts`
+
+**The Problem:**
+- 34 `no-explicit-any` errors in e2e/helpers (creature, snapshot, tile, websocket)
+- 7 `no-unused-vars` errors in test files
+- 1 `no-explicit-any` in test file
+- 2 `no-empty-object-type` errors in generated playwright.config.d.ts
+
+**The Fix:**
+1. **Added ESLint override for e2e/**: `page.evaluate()` returns data from browser context where Colyseus state is inherently untyped. Standard practice is to relax `no-explicit-any` for E2E code that interfaces with browser-context untyped data.
+2. **Removed unused imports**: Cleaned up `getGameState`, `waitForStateChange`, `waitForCreature`, `diffSnapshots`, `waitForMessage` from state-assertions.spec.ts.
+3. **Prefixed unused destructured vars with `_`**: Changed `playerTwo` to `_playerTwo` in multiplayer.spec.ts where fixture returns both players but test only needs one. Changed unused `name` param to `_name`.
+4. **Removed unused assigned vars**: `playerName` in state-assertions.spec.ts and multiplayer.spec.ts.
+5. **Deleted generated .d.ts file**: `e2e/playwright.config.d.ts` is a TypeScript declaration output, already covered by `.gitignore` pattern `e2e/**/*.d.ts`.
+
+**Key Learning:** E2E test helpers that use `page.evaluate()` legitimately need `any` types because they extract data from the browser's runtime context where Colyseus state objects don't have compile-time types. The right fix is an ESLint override, not sprinkling type assertions throughout helper functions.
+
+**Result:** Zero ESLint errors. Tests unchanged in behavior.
+
+
+---
+
+## 2026-03-08: Lint Discipline Directive — Write Clean Code from the Start
+
+**From:** saitcho (via Copilot)  
+**Status:** BINDING — All agents must follow
+
+Write lint-clean code from the start. No exceptions:
+- **No `@typescript-eslint/no-explicit-any`** — Use proper types (`unknown`, interfaces, generics, or document exceptions)
+- **No `@typescript-eslint/no-unused-vars`** — Don't import or declare unused things
+- **Run linter before committing** — `npm run lint` is mandatory
+
+Prevention (write clean first) > Cleanup (fix lint errors post-merge).
+
+Valid exceptions (e.g., E2E browser-context code) require documented decision in decisions.md.
+
+See: 2026-03-08: ESLint Override for E2E Browser Context Code
