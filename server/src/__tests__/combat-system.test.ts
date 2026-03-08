@@ -36,7 +36,7 @@ type TestableGameRoom = GameRoom & {
   attackerState: Map<string, AttackerTracker>;
   tickEnemyBaseSpawning(): void;
   handleSpawnPawn(client: { sessionId: string; send: (...args: unknown[]) => void }, message: { pawnType: string }): void;
-  tickPawnUpkeep(): void;
+
 };
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -902,11 +902,10 @@ describe("Pawn Types — Constants & Registry", () => {
     expect(PAWN_TYPES["attacker"].cost.stone).toBeGreaterThan(PAWN_TYPES["defender"].cost.stone);
   });
 
-  it("each pawn type has damage, HP, maxCount, and upkeep defined", () => {
+  it("each pawn type has damage, HP, and maxCount defined", () => {
     for (const [_key, def] of Object.entries(PAWN_TYPES)) {
       expect(def.health).toBeGreaterThan(0);
       expect(def.maxCount).toBeGreaterThan(0);
-      expect(def.upkeep).toBeDefined();
       expect(typeof def.damage).toBe("number");
     }
   });

@@ -1641,7 +1641,7 @@ See: 2026-03-08: ESLint Override for E2E Browser Context Code
 
 ### Session: UAT Gameplay Fixes — Enemy Camps, Builder Gaps, Upkeep Removal
 
-**Date:** $(date +%Y-%m-%d)
+**Date:** 2026-03-08
 **Branch:** dev
 **Issues:** 3 UAT-reported gameplay bugs
 

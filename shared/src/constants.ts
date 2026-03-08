@@ -265,6 +265,8 @@ export const ENEMY_SPAWNING = {
   MIN_DISTANCE_FROM_HQ: 15,
   MIN_DISTANCE_BETWEEN_BASES: 10,
   FIRST_BASE_DELAY_TICKS: 240,
+  /** Manhattan radius around player territory that rejects enemy base spawns. */
+  MIN_DISTANCE_FROM_TERRITORY: 5,
   /** Maximum ticks an attacker stays on sortie before returning. */
   ATTACKER_SORTIE_TICKS: 200,
 } as const;

@@ -390,7 +390,7 @@ export class GameRoom extends Room {
       if (tile.ownerID !== "") continue;
 
       // Territorial radius check: reject if ANY tile within Manhattan distance 5 is player-owned
-      const territoryRadius = 5;
+      const territoryRadius = ENEMY_SPAWNING.MIN_DISTANCE_FROM_TERRITORY;
       let nearTerritory = false;
       for (let ry = -territoryRadius; ry <= territoryRadius && !nearTerritory; ry++) {
         for (let rx = -territoryRadius; rx <= territoryRadius && !nearTerritory; rx++) {
