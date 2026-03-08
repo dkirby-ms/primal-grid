@@ -13,6 +13,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: "promotion"
+  cancel-in-progress: false
+
 jobs:
   dev-to-preview:
     name: Promote dev → preview
