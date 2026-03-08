@@ -1677,3 +1677,35 @@ Run time: ~45s serial (single shared Colyseus server)
   - All helpers accept optional owner/filter parameters; default to `room.sessionId` when omitted.
 - **Test coverage:** Creature queries (4 tests), tile queries (5 tests), snapshots (5 tests), WebSocket recording (4 tests), multiplayer snapshot assertions (2 tests).
 - **Zero flakiness:** All 52 tests pass deterministically in serial mode (~5.5 min on single worker).
+
+### Test Quality Fixes from PR #52 Review (2026-03-10)
+
+Fixed 5 test quality issues flagged by @Copilot code review:
+
+1. **Vacuous resource assertion fixed** — `e2e/tests/state-assertions.spec.ts:126`: Changed `expect(resources.length).toBeGreaterThanOrEqual(0)` to `toBeGreaterThan(0)`. A 64×64 map quadrant should always have *some* resource tiles, not just ≥ 0 which is vacuous for any array.
+
+2. **Vacuous creature change assertion fixed** — `e2e/tests/state-assertions.spec.ts:210`: Changed `expect(totalChanges).toBeGreaterThanOrEqual(0)` to `toBeGreaterThan(0)`. With 96 creatures and 8 ticks (4 AI cycles), some creatures must change position or state—0 changes would indicate broken simulation.
+
+3. **Multiplayer displayName race fixed** — `e2e/tests/state-assertions.spec.ts:303-304`: Used `expect.poll()` to retry until both player names populate before asserting exact names. The `SET_NAME` message is async; snapshot can be taken before server processes it. Now waits for names to appear before strict equality check.
+
+4. **Scoreboard close flakiness fixed** — `e2e/helpers/player.helper.ts:70`: Added `await page.waitForSelector('#scoreboard-overlay:not(.visible)', { timeout: 5_000 })` after Tab key press. Previously returned immediately without verifying overlay actually closed, causing downstream assertions on hidden UI to race.
+
+5. **WebSocket recorder installation race fixed** — `e2e/helpers/websocket.helper.ts:25-30`: Moved `__WS_RECORDER_INSTALLED__ = true` flag assignment to *after* `__ROOM__` existence check. Previously, if `__ROOM__` wasn't ready, the function would return early but leave the flag set, preventing future retries even after the room connected.
+
+**Pattern learned:** Vacuous assertions (always-true conditions like `≥ 0` on array lengths or counts) are technical debt—they pass but don't validate anything. Prefer strict bounds based on simulation invariants. For async state (WebSocket messages, UI updates), always wait for the condition before asserting—snapshots lie.
+
+## 2026-03-08T15:55:37Z: Test Quality Fixes (PR #52 Review)
+
+**Task:** Fix 5 test quality issues from @Copilot review  
+**Status:** ✅ Completed  
+**Files:** `e2e/tests/state-assertions.spec.ts`, `e2e/helpers/player.helper.ts`, `e2e/helpers/websocket.helper.ts`
+
+Fixed:
+1. Vacuous assertions in state-assertions.spec.ts
+2. WebSocket recorder race condition
+3. Multiplayer displayName race condition
+4. Scoreboard close flakiness
+
+Tests now more deterministic and properly assert expected behaviors.
+
+**Related:** Scribe merge of PR #52 review feedback batch (Pemulis + Steeply + Marathe).

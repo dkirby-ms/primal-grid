@@ -188,3 +188,20 @@ All agents should follow these going forward:
 - **Documentation accuracy** — decisions.md must reflect actual implementation, not aspirational/outdated state
 - **Intentional compute optimization** — E2E tests are expensive; run them only on pre-production (uat) and production (master) branches
 
+
+## 2026-03-08T15:55:37Z: E2E Workflow Permissions & Docs (PR #52 Review)
+
+**Task:** Fix workflow permissions scope and decisions.md documentation mismatch  
+**Status:** ✅ Completed  
+**Files:** `.github/workflows/e2e.yml`, `.squad/decisions.md`
+
+**Changes:**
+- Scoped `pages:write` and `id-token:write` to `deploy-report` job only (least-privilege)
+- Updated branch trigger documentation to reflect uat/master (not dev)
+- Documented decision in decisions.md
+
+**Key Pattern:** All GitHub Actions workflows should grant baseline `contents: read` at workflow level and add job-level `permissions:` blocks for jobs requiring elevated access.
+
+**User Directive Captured:** E2E intentionally does NOT trigger on `dev` branch (cost optimization).
+
+**Related:** Scribe merge of PR #52 review feedback batch (Pemulis + Steeply + Marathe).

@@ -4901,3 +4901,60 @@ A comprehensive audit of all 16 GitHub Actions workflows identified 3 critical i
 - Safer git operations (concurrency guards)
 - Pre-merge validation on preview branch (catches issues before they land)
 - Readable error messages in squad-main-guard
+
+---
+
+## 2026-03-08: User Directive — E2E Should NOT Trigger on Dev
+
+**By:** saitcho (via Copilot)  
+**Date:** 2026-03-08T14:05:00Z  
+**Status:** DECISION — Confirmed user intent  
+
+**What:** E2E workflow should NOT trigger on push/PR to `dev` branch. Only trigger on `uat` and `master`.
+
+**Why:** Intentional cost optimization. E2E test suite consumes significant cloud compute. Running on every dev push wastes resources. Dev is for feature iteration, not full validation.
+
+**Implementation:** `.github/workflows/e2e.yml` branch triggers set to `[uat, master]` only.
+
+---
+
+## 2026-03-08: E2E Workflow Permissions Scoping (Least-Privilege Pattern)
+
+**By:** Marathe (DevOps/CI-CD)  
+**Date:** 2026-03-08  
+**Status:** IMPLEMENTED  
+
+**What:** Workflow permissions in `.github/workflows/e2e.yml` scoped to job-level (least-privilege) instead of workflow-level.
+
+**Before:**
+```yaml
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+```
+All jobs had all three permissions.
+
+**After:**
+```yaml
+permissions:
+  contents: read
+```
+Workflow-level baseline. Job-level `permissions:` added to `deploy-report` only:
+```yaml
+deploy-report:
+  permissions:
+    pages: write
+    id-token: write
+```
+
+**Rationale:**
+- `contents: read` — all jobs need this (checkout, downloads)
+- `pages: write` — ONLY `deploy-report` needs this (publishes to GitHub Pages)
+- `id-token: write` — ONLY `deploy-report` needs this (OIDC token for Pages)
+
+The `e2e` job (tests, artifacts) and `discord-notify` job (webhook) don't need elevated perms.
+
+**Pattern:** Going forward, ALL GitHub Actions workflows should grant only baseline `contents: read` at workflow level and add job-level `permissions:` blocks for jobs that need elevated access. Reduces blast radius if a job is compromised.
+
+**Decisions.md Correction:** Also updated lines documenting E2E branch triggers to reflect `uat`/`master`, not `dev`.

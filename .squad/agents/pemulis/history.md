@@ -1584,3 +1584,13 @@ Resolved all 202 ESLint errors across 7 server files in parallel with Gately's c
 2. **GitHub Pages for reports** — Dual reporters, dev-only deployments, always-on even for failures
 
 **Impact:** Steeply can now run Phase 2 E2E tests against dual reporters. Reports are persistent (not 7-day artifact expiry). Marathe owns Pages settings and deployment monitoring.
+
+## 2026-03-08T15:55:37Z: Dev Mode Gating Consistency (PR #52 Review)
+
+**Task:** Fix dev mode gating inconsistency in network.ts and main.ts  
+**Status:** ✅ Completed  
+**Files:** `client/src/network.ts`, `client/src/main.ts`
+
+Exported `isDevMode()` utility and replaced all loose `.has('dev')` checks with consistent pattern. Dev mode checks now standardized across codebase.
+
+**Related:** Scribe merge of PR #52 review feedback batch (Pemulis + Steeply + Marathe).
