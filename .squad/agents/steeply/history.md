@@ -1626,3 +1626,24 @@ Run time: ~45s serial (single shared Colyseus server)
 - Gately/Hal: Review state transition coverage and game logic validation
 - Marathe: Monitor E2E Pages deployments on dev branch
 - Phase 3: Creature combat and pack AI tests (follow same Colyseus pattern)
+
+### Phase 3 — Multiplayer E2E Tests (Issue #50)
+
+- **15 new E2E tests** in `e2e/tests/multiplayer.spec.ts`. Total E2E suite: **32 tests, all passing** (3.7 min serial).
+- **Phase 2 audit:** All 4 existing test files (join-flow, state-init, dev-mode, day-night) already cover Phase 2 requirements comprehensively. HQ placement, connection flow, state init, day/night cycle, dev mode — all present. No gaps found.
+- **Phase 3 coverage:** 5 test groups:
+  1. **Player Visibility** (6 tests): Independent room state, cross-player name lookup, HQ coordinate visibility, synchronized tick/day phase, independent resources.
+  2. **HQ Proximity** (3 tests): 10-tile Manhattan minimum distance, 5×5 HQ zone per player (25 tiles), no HQ overlap (2 owners × 25 = 50 total).
+  3. **Pawn Spawning** (3 tests): Builder spawn with resource deduction (10W/5S), insufficient resource rejection (cap at 2 builders from 25W/15S), independent spawning across 2 players.
+  4. **Territory Claiming** (2 tests): Builder auto-claims territory over time (waitForStateChange with 30s timeout), claimed tiles maintain adjacency invariant.
+  5. **Synchronized State** (1 test): Player leaving removes them from other player's state view.
+- **Key patterns:**
+  - `room.send('spawn_pawn', { pawnType: 'builder' })` via `page.evaluate` on `window.__ROOM__`
+  - `room.sessionId` to filter own creatures/tiles
+  - `creatures.forEach()` for MapSchema iteration (not `.get()`)
+  - `tiles[index]` bracket notation for ArraySchema
+  - `waitForStateChange` with JS predicate strings for tick-based waits
+  - Territory adjacency verified by scanning all owned tiles for cardinal neighbor connectivity
+- **No flakiness:** All 32 tests pass deterministically. Generous timeouts (15–30s) for tick-based operations.
+- **Only 2 client messages exist:** `spawn_pawn` and `set_name`. All other game behavior (movement, combat, territory claiming) is AI-driven server-side.
+- **HQ spawn distance:** `findHQSpawnLocation()` enforces `MIN_HQ_DISTANCE = 10` Manhattan tiles between any two HQs.
