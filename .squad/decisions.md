@@ -5052,3 +5052,84 @@ HQ income fires every 40 ticks and pawn upkeep every 60 ticks. A spawn happening
 Applies to all E2E tests in `e2e/tests/`. See pattern in `e2e/tests/multiplayer.spec.ts` (spawn resource assertions).
 
 ---
+
+## 2026-03-08T18:09Z: User Directive — E2E Workflow Trigger Restriction
+
+**By:** saitcho (via Copilot)  
+**Date:** 2026-03-08  
+**Status:** CAPTURED — Awaiting implementation
+
+### Decision
+
+E2E GitHub Actions workflow should only trigger on pushes to `uat` and `master` branches. Remove `pull_request` event trigger entirely.
+
+### Rationale
+
+E2E tests are comprehensive but resource-intensive. Running on every PR is unnecessary overhead. Testing should focus on deployment branches (uat/master) where integration is complete. Development testing happens via unit/integration suites.
+
+### Implementation Notes
+
+- Workflow: `.github/workflows/e2e.yml`
+- Related: 2026-01-20 E2E Workflow Simplification and Direct Artifact Links decisions (already implemented)
+
+---
+
+## 2026-03-08: Builder Traversal — Builders Walk Through Own Structures
+
+**Date:** 2026-03-08  
+**Author:** Pemulis (Systems Dev)  
+**Status:** IMPLEMENTED (PR #55, Pemulis) + TESTED (PR #57, Steeply)
+
+### Decision
+
+Builders (pawn_builder creatures) can traverse structures on their owner's territory without pathfinding obstruction. Implementation in `isTileOpenForCreature()` checks both `creature.creatureType === "pawn_builder"` AND `tile.ownerID === creature.ownerID`.
+
+### Rationale
+
+Built outpost/farm tiles receive `shapeHP = BLOCK_HP` (100), making them unwalkable to standard pathing. When builders construct outposts in sequence, they wall themselves off and oscillate. Allowing builder traversal of own structures is gameplay-appropriate (construction units navigate their own constructions) and combat-safe (attackers/defenders still blocked).
+
+### Scope
+
+- Only builders get traversal privilege
+- Enemy structures remain blocking
+- Defenders, attackers, wildlife, carnivores unaffected
+
+### Testing
+
+Validated by Steeply in PR #57:
+1. `isTileOpenForCreature` builder structure traversal test
+2. `move_to_site` FSM blocked-path reset (prevents oscillation)
+3. `findBuildSite` HQ-distance tiebreaker (outward expansion bias)
+
+Result: 528 tests passing.
+
+---
+
+## 2026-03-08: Server Startup Log — Client URL Configuration
+
+**Date:** 2026-03-08  
+**Author:** Marathe (DevOps Engineer)  
+**Status:** IMPLEMENTED (commit 1d63354)
+
+### Decision
+
+Server startup log now includes the client application URL (e.g., `http://localhost:3000`) for developer convenience. Client URL is configurable via `CLIENT_URL` environment variable; defaults to `http://localhost:3000`.
+
+### Rationale
+
+When developers start the server, they immediately see where to access the application without referencing config files. Configurability via env var allows production deployments to override default (e.g., DNS name, port mapping).
+
+### Implementation
+
+File: `server/src/index.ts`
+- Reads `process.env.CLIENT_URL` with fallback to `http://localhost:3000`
+- Logged alongside Colyseus server address on startup
+- No behavioral changes; purely informational
+
+### Impact
+
+- **Scope:** Startup logging only
+- **Backward Compatible:** Yes (default preserves existing behavior)
+- **Testing:** No new tests required (logging enhancement)
+
+---

@@ -1793,3 +1793,27 @@ Added 3 tests requested by Copilot code review on PR #57 (dev → uat), covering
 **Suite:** 528 tests, all passing. Lint clean.
 
 **Key pattern:** The builder traversal exception in `isTileOpenForCreature` (line 397-401) checks `creature.creatureType === "pawn_builder"` AND `tile.ownerID === creature.ownerID` — both conditions must hold. Enemy structures still block builders.
+
+---
+
+## 2026-03-08: PR #57 Review Feedback — Builder Tests
+
+**Task:** Write 3 missing builder tests for Copilot code review on PR #57 (dev → uat)
+
+**Added Tests:**
+1. `isTileOpenForCreature` builder structure traversal (`creature-ai.test.ts`)
+   - Builders can walk through structures on own territory (shapeHP > 0)
+   - Other creatures (herbivores, carnivores) remain blocked
+   - Validates both creatureType and ownerID conditions
+
+2. `move_to_site` FSM blocked-path reset (`pawnBuilder.test.ts`)
+   - When all neighbors blocked by enemy structures, builder resets targetX/targetY to -1
+   - currentState resets to idle, preventing oscillation
+
+3. `findBuildSite` HQ-distance tiebreaker (`pawnBuilder.test.ts`)
+   - Among equal-distance candidates, furthest from HQ is selected
+   - Outward expansion bias verified via exhaustive tile scan
+
+**Result:** 528 tests passing, lint clean. PR #57 review feedback fully addressed.
+
+**Decision documented:** In decisions.md as "Builder Traversal — Builders Walk Through Own Structures"

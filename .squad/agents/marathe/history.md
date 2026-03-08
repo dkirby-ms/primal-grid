@@ -246,3 +246,34 @@ See: 2026-03-08: ESLint Override for E2E Browser Context Code
 - **Pattern:** GitHub Actions `upload-artifact@v4` exposes `artifact-id` output that can be used to construct direct download links
 - **User benefit:** One-click artifact download from Discord without navigating through Actions UI
 - **Commit:** e1cc5b6
+
+### 2026-03-08: PR #57 Review Feedback — Date Placeholder & Configurable clientUrl
+- **Task:** Address Copilot code review feedback on PR #57 (dev → uat)
+- **Fix 1:** Replaced unexpanded `$(date)` shell expression in decision doc with actual ISO date `2026-03-08`
+- **Fix 2:** Made `clientUrl` in `server/src/index.ts` configurable via `CLIENT_URL` env var, keeping `http://localhost:3000` as default for dev parity
+- **Rationale:** Dev runs client on port 3000 (separate from server port 2567), so default stays as-is; production can override via env var
+- **Validation:** `npx tsc --noEmit` passed clean
+- **Commit:** 1d63354
+
+---
+
+## 2026-03-08: PR #57 Review Feedback — Date Placeholder & CLIENT_URL Configuration
+
+**Task:** Address Copilot code review feedback on PR #57 (dev → uat)
+
+**Fix 1: Decision Doc Date Placeholder**
+- File: `.squad/decisions/inbox/marathe-server-log-client-url.md`
+- Issue: Contained unexpanded shell expression `$(date)` instead of literal date
+- Fixed: Replaced with actual ISO date `2026-03-08`
+- Rationale: Decision docs are stored artifacts and must contain literal values, not expressions
+
+**Fix 2: Configurable CLIENT_URL Environment Variable**
+- File: `server/src/index.ts`
+- Change: `clientUrl` in startup log now reads from `CLIENT_URL` env var
+- Default: `http://localhost:3000` (preserves dev parity with client server port)
+- Benefit: Production deployments can override via environment configuration
+- Validation: `npx tsc --noEmit` passed, no type errors, backward compatible
+
+**Commit:** 1d63354 on dev branch
+
+**Decision documented:** In decisions.md as "Server Startup Log — Client URL Configuration"
