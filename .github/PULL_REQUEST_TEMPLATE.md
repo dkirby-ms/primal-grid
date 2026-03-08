@@ -12,7 +12,7 @@ Key implementation details or architectural decisions.
 
 ## Testing
 
-- [ ] Tests pass (`npx vitest run`)
+- [ ] Tests pass (`npm run test`)
 - [ ] Lint passes (`npm run lint`)
 - [ ] Manually tested in-game (if applicable)
 
