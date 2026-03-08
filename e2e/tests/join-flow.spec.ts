@@ -46,15 +46,17 @@ test.describe('Join Flow', () => {
     // Read full game state from player one's perspective
     const stateFromOne = await getGameState(playerOne.page);
     expect(stateFromOne).not.toBeNull();
-    expect(stateFromOne!.players).toHaveLength(2);
 
-    // Verify both names are present
+    // Verify both names are present (other sessions may leave unnamed players)
     const names = stateFromOne!.players.map((p) => p.displayName);
     expect(names).toContain(playerOne.playerName);
     expect(names).toContain(playerTwo.playerName);
 
-    // Each player should have a unique HQ position
-    const hqs = stateFromOne!.players.map((p) => `${p.hqX},${p.hqY}`);
+    // Each named player should have a unique HQ position
+    const hqs = stateFromOne!.players
+      .filter((p) => [playerOne.playerName, playerTwo.playerName].includes(p.displayName))
+      .map((p) => `${p.hqX},${p.hqY}`);
+    expect(hqs).toHaveLength(2);
     expect(hqs[0]).not.toBe(hqs[1]);
   });
 

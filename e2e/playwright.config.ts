@@ -32,7 +32,7 @@ export default defineConfig({
     {
       command: 'npm run build -w shared && npm run dev -w server',
       cwd: rootDir,
-      url: 'http://localhost:2567',
+      url: 'http://localhost:2567/health',
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
     },

@@ -43,8 +43,8 @@ async function joinGame(page: Page, name: string): Promise<void> {
   await page.fill('#name-prompt-input', name);
   await page.click('#name-prompt-submit');
 
-  // Wait for overlay to disappear (game has loaded)
-  await page.waitForSelector('#name-prompt-overlay:not(.visible)', { timeout: 10_000 });
+  // Wait for overlay to disappear (becomes display:none when .visible is removed)
+  await page.waitForSelector('#name-prompt-overlay.visible', { state: 'hidden', timeout: 10_000 });
 
   // Wait for canvas to render inside #app
   await page.waitForSelector('#app canvas', { timeout: 10_000 });
