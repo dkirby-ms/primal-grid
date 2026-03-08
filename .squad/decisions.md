@@ -4788,3 +4788,74 @@ New `.github/workflows/e2e.yml` triggers on push/PR to `dev` branch. Runs alongs
 ### Next Phase
 
 Phase 2: Territory, resource income, day/night (P1 tests). Phase 3: Conflict/combat (P2 tests).
+
+---
+
+# Decision: E2E helper type interfaces for `window.__ROOM__`
+
+**Author:** Pemulis  
+**Date:** 2026-03-08  
+**Scope:** e2e/helpers/
+
+## Context
+
+Fixed all 8 `@typescript-eslint/no-explicit-any` lint errors across 4 files. The E2E helpers (`player.helper.ts`, `state.helper.ts`) access `window.__ROOM__` inside Playwright's `page.evaluate` / `page.waitForFunction` callbacks. These need TypeScript types for the Colyseus room state shape as exposed on `window`.
+
+## Decision
+
+- **Client files** (`main.ts`, `network.ts`): Used `(window as unknown as Record<string, unknown>)` for assigning dev-mode globals (`__PIXI_APP__`, `__ROOM__`). These are write-only contexts so a generic record type is sufficient.
+- **E2E helpers**: Defined local `E2ERoom` and `E2EPlayerData` interfaces in each helper file to type the `window.__ROOM__` shape. These are lightweight compile-time-only types that mirror the fields actually accessed by the test helpers.
+- Chose **file-local interfaces** over a shared type file because there are only 2 consumers and the types are minimal. If more E2E helpers emerge that access `__ROOM__`, consolidate into `e2e/helpers/e2e-types.ts`.
+
+## Impact
+
+Parker and Dallas should be aware: if new E2E helpers need `window.__ROOM__`, reuse the `E2ERoom`/`E2EPlayerData` pattern or factor into a shared type.
+
+---
+
+# Decision: GitHub Pages for Playwright E2E Reports
+
+**Date:** 2026-03-08
+**Author:** Pemulis (Systems Dev)
+**Status:** Accepted
+
+## Context
+
+E2E test reports were only available as workflow artifacts, which expire after 7 days and require downloading a zip to view. We needed a more accessible way to review test results, especially for failing tests on the `dev` branch.
+
+## Decision
+
+- Configured the Playwright reporter in CI to emit both `github` (for inline annotations) and `html` (for the full report).
+- Added a `deploy-report` job to `.github/workflows/e2e.yml` that publishes the HTML report to GitHub Pages on every push to `dev`.
+- The deploy job uses `if: always()` so reports are published even when tests fail — seeing failing reports is the primary use case.
+- The existing artifact upload is preserved for PR runs where Pages deployment is skipped.
+
+## Consequences
+
+- The repo's GitHub Pages must be configured to use GitHub Actions as the source (Settings → Pages → Source → GitHub Actions).
+- Pages deployments are scoped to pushes to `dev` only; PR runs still get artifact uploads.
+- A `concurrency` group prevents overlapping Pages deployments.
+
+---
+
+# Decision: Colyseus Client-Side State Access Patterns in E2E Tests
+
+**Author:** Steeply (Tester)
+**Date:** 2026-03-08
+**Context:** Phase 2 E2E smoke tests (Issue #50)
+
+## Decision
+
+When accessing Colyseus room state in `page.evaluate()` calls within Playwright tests:
+
+- **Players** (MapSchema): Use `.forEach((player, key) => ...)` and `.size` — NOT bracket access
+- **Tiles** (ArraySchema): Use bracket notation `tiles[index]` — NOT `.get()` or `.at()`
+- **Scalar fields** (tick, dayPhase, mapWidth): Direct property access `room.state.tick`
+
+## Rationale
+
+Colyseus deserializes state differently on the client vs server. The server-side `ArraySchema.at()` method is not available on the client-side deserialized object. The `.get()` method also doesn't exist. Only bracket notation works for array-type schemas on the client.
+
+## Impact
+
+All future E2E tests that read tile data must use this pattern. This is not obvious from the server-side test code, which exclusively uses `.at()`.

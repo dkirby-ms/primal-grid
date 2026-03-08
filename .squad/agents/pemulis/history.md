@@ -1547,3 +1547,40 @@ Resolved all 202 ESLint errors across 7 server files in parallel with Gately's c
 **Impact for Pemulis:** No code changes needed. The room instance is only exposed in dev mode and never reaches production. Safe to use in tests.
 
 **Convention:** Room state is read-only in tests. If you add new room properties or handlers, they are automatically available to E2E via `window.__ROOM__`.
+
+---
+
+## 2026-03-08: Lint Fixes & GitHub Pages E2E Reports
+
+**By:** Pemulis (Systems Dev)
+
+### 1. Fixed 8 no-explicit-any Lint Errors
+
+**Files touched:**
+- `client/src/main.ts` — gated `window.__PIXI_APP__` with `Record<string, unknown>` type assertion
+- `client/src/network.ts` — gated `window.__ROOM__` with `Record<string, unknown>` type assertion
+- `e2e/helpers/player.helper.ts` — defined `E2ERoom` and `E2EPlayerData` interfaces
+- `e2e/helpers/state.helper.ts` — defined `E2ERoom` and `E2EPlayerData` interfaces
+
+**Approach:** File-local type interfaces instead of a shared type file, since only 2 consumers and minimal types. Future consolidation point if more E2E helpers emerge.
+
+**Outcome:** All 8 errors fixed. Lint passes clean.
+
+### 2. Added GitHub Pages Publishing for Playwright Reports
+
+**Changes:**
+- Updated `.github/workflows/e2e.yml` with `deploy-report` job
+- Configured `e2e/playwright.config.ts` dual reporters: `[['github'], ['html']]`
+- Deploy job publishes HTML report to GitHub Pages on every `dev` push
+- Uses `if: always()` to publish even on test failures (primary use case)
+- Concurrency group prevents overlapping deployments
+- PR runs still use artifact uploads (no Pages deployment)
+
+**Handoff to Marathe:** CI/CD ownership now with Marathe. Repo Settings → Pages must be configured to use GitHub Actions as source.
+
+### 3. Key Decisions Logged
+
+1. **E2E helper type interfaces** — File-local approach, consolidation path documented
+2. **GitHub Pages for reports** — Dual reporters, dev-only deployments, always-on even for failures
+
+**Impact:** Steeply can now run Phase 2 E2E tests against dual reporters. Reports are persistent (not 7-day artifact expiry). Marathe owns Pages settings and deployment monitoring.

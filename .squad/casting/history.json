@@ -1,0 +1,18 @@
+{
+  "assignments": [
+    {
+      "assignment_id": "primal-grid-ij-001",
+      "universe": "infinite-jest",
+      "created_at": "2026-02-25T00:45:00Z",
+      "agents": ["hal", "gately", "pemulis", "steeply"],
+      "note": "Initial squad — legacy named, casting system initialized retroactively"
+    },
+    {
+      "assignment_id": "primal-grid-ij-002",
+      "universe": "infinite-jest",
+      "created_at": "2026-03-08T02:20:00Z",
+      "agents": ["marathe"],
+      "note": "Added CI/CD specialist"
+    }
+  ]
+}
