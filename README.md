@@ -153,9 +153,8 @@ The `uat` branch is protected:
 
 | Workflow | File | Trigger | What it does |
 |----------|------|---------|--------------|
-| CI | `ci.yml` | PR to `main` | Lint, typecheck, build, test |
-| Deploy Prod | `deploy.yml` | Push to `master` | Build image → push to ACR (tag: `{sha}`) → deploy to `primal-grid` |
-| Deploy UAT | `deploy-uat.yml` | Push to `uat` / workflow_dispatch | Build image → push to ACR (tag: `uat-{branch}-{sha}`) → deploy to `primal-grid-uat` |
+| Deploy Prod | `deploy.yml` | Push to `master` | Build + test → push image to ACR (tag: `{sha}`) → deploy to `primal-grid` |
+| Deploy UAT | `deploy-uat.yml` | Push to `uat` / workflow_dispatch | Build + test → push image to ACR (tag: `uat-{branch}-{sha}`) → deploy to `primal-grid-uat` |
 
 ### Emergency UAT Override
 
@@ -187,7 +186,7 @@ All game logic is server-authoritative. The client is a thin rendering layer tha
 3. Renders the world each frame using PixiJS
 4. Sends player actions as messages (e.g., `spawn_pawn`)
 
-The server runs the full simulation — creature AI, territory claiming, resource management, combat — and automatically syncs state to all connected clients via Colyseus schema replication.
+The server runs the full simulation — creature AI, territory claiming, resource management — and automatically syncs state to all connected clients via Colyseus schema replication.
 
 ### Colyseus Rooms & State Sync
 
@@ -203,12 +202,14 @@ State changes on the server are automatically delta-compressed and broadcast to 
 ### Simulation Tick
 
 The server runs at 4 ticks/second and processes these systems each tick:
-1. Territory claiming
-2. Resource regeneration
-3. Creature AI (per-creature timers)
-4. Creature respawning
-5. Structure income
-6. Pawn upkeep
+1. Day/night cycle
+2. Territory claiming
+3. Resource regeneration
+4. Creature AI (per-creature timers)
+5. Creature respawning
+6. Structure income
+7. Pawn upkeep
+8. Fog of war
 
 ## 🤝 Contributing
 
