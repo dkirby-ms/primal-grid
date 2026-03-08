@@ -126,7 +126,8 @@ test.describe('Multiplayer — HQ Proximity', () => {
 
   test('each player HQ occupies a 5x5 territory zone', async ({
     playerOne,
-    _playerTwo,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    playerTwo,
   }) => {
     await waitForPlayerCount(playerOne.page, 2);
 
@@ -169,7 +170,11 @@ test.describe('Multiplayer — HQ Proximity', () => {
     }
   });
 
-  test('player HQ tiles do not overlap', async ({ playerOne, _playerTwo }) => {
+  test('player HQ tiles do not overlap', async ({
+    playerOne,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    playerTwo,
+  }) => {
     await waitForPlayerCount(playerOne.page, 2);
 
     const overlap = await playerOne.page.evaluate(() => {
