@@ -27,6 +27,8 @@ const server = new Server({ transport });
 server.define("game", GameRoom);
 
 const port = Number(process.env.PORT) || SERVER_PORT;
+const clientUrl = "http://localhost:3000";
 server.listen(port).then(() => {
   console.log(`[Primal Grid] Colyseus server listening on port ${port}`);
+  console.log(`[Primal Grid] Client available at ${clientUrl}`);
 });
