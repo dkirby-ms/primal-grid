@@ -49,6 +49,10 @@ async function bootstrap(): Promise<void> {
     camera.update();
     grid.tick();
 
+    // Viewport culling: only render tiles visible in the camera
+    const vp = camera.getViewportTileBounds();
+    grid.updateCulling(vp.minX, vp.minY, vp.maxX, vp.maxY);
+
     // Push explored bounds to camera each frame for smooth lerp
     const cache = grid.exploredCache;
     if (cache.size > 0 && cache.hasBoundsChanged) {

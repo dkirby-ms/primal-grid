@@ -212,6 +212,29 @@ export class Camera {
     this.clamp();
   }
 
+  /**
+   * Return the visible tile range for viewport culling.
+   * Adds a small padding so tiles entering the edge render before they pop in.
+   */
+  public getViewportTileBounds(padding = 2): { minX: number; minY: number; maxX: number; maxY: number } {
+    const scale = this.target.scale.x;
+    const mapTiles = this.mapPixelSize / TILE_SIZE;
+
+    // Camera position is the translation of the grid container.
+    // A negative position.x means the grid is shifted left (we're looking further right).
+    const worldMinX = -this.target.position.x / scale;
+    const worldMinY = -this.target.position.y / scale;
+    const worldMaxX = worldMinX + this.viewWidth / scale;
+    const worldMaxY = worldMinY + this.viewHeight / scale;
+
+    return {
+      minX: Math.max(0, Math.floor(worldMinX / TILE_SIZE) - padding),
+      minY: Math.max(0, Math.floor(worldMinY / TILE_SIZE) - padding),
+      maxX: Math.min(mapTiles - 1, Math.ceil(worldMaxX / TILE_SIZE) + padding),
+      maxY: Math.min(mapTiles - 1, Math.ceil(worldMaxY / TILE_SIZE) + padding),
+    };
+  }
+
   /** Center the viewport on a tile position. */
   public centerOn(tileX: number, tileY: number): void {
     const scale = this.target.scale.x;
