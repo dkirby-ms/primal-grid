@@ -2,7 +2,7 @@ name: E2E Tests
 
 on:
   push:
-    branches: [uat, master]
+    branches: [uat]
 
 permissions:
   contents: read
