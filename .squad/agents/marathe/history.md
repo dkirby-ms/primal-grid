@@ -108,3 +108,52 @@ Two user directives from dkirby-ms merged into decisions.md:
 - **Decisions merged:** 4 inbox files deduplicated and integrated into team memory
 - **Cross-agent context:** Decisions + directives now available to all team members for future work
 
+## CI/CD Audit Remediation — Session Completion
+
+**Date:** 2026-03-08T13:27:49Z  
+**Status:** ✅ ALL 9 ISSUES FIXED + COMMITTED
+
+### Critical Issues Fixed
+
+1. **Node version mismatch** — e2e.yml upgraded from Node 20 → 22 (standardize all workflows on Node 22)
+2. **Redundant push triggers** — squad-ci.yml removed duplicate `push` trigger; kept `pull_request` + added `workflow_dispatch`
+3. **Missing pre-merge gate** — squad-preview.yml added `pull_request` trigger (validation now runs on PR, not just post-push)
+
+### Warning Issues Fixed
+
+4. **Missing npm caching** — Added `cache: npm` to squad-ci.yml, squad-release.yml, squad-insider-release.yml
+5. **Missing concurrency guard** — reset-uat.yml: added concurrency group `uat-reset` with `cancel-in-progress: true`
+6. **Missing concurrency guard** — squad-promote.yml: added concurrency group `promotion` with `cancel-in-progress: false` (never cancel mid-promotion)
+7. **Mojibake in output** — squad-main-guard.yml: replaced all Unicode corruption (ΓÇö, ≡ƒÜ½, Γ£à, ΓÜá∩╕Å) with proper ASCII/emoji
+8. **Undocumented cron disable** — squad-heartbeat.yml: added clear comment explaining why cron was disabled (migration to event-driven triage)
+9. (Summary decision consolidated into .squad/decisions.md)
+
+### Team Standards Established
+
+All agents should follow these going forward:
+- **Node 22 mandatory** — no version exceptions
+- **npm cache always** — add `cache: npm` to every `setup-node` step
+- **Pre-merge validation** — validation workflows must have `pull_request` trigger + `push` trigger (if needed for post-merge checks)
+- **Concurrency guards** — workflows performing git push/merge must have concurrency groups
+- **ASCII output only** — no special Unicode in workflow output (use emoji like ✅, ❌, ⛔, ⚠️)
+
+### Files Modified in Commit
+
+9 workflows modified + 1 decision merged:
+- `.github/workflows/e2e.yml`
+- `.github/workflows/squad-ci.yml`
+- `.github/workflows/squad-preview.yml`
+- `.github/workflows/squad-release.yml`
+- `.github/workflows/squad-insider-release.yml`
+- `.github/workflows/reset-uat.yml`
+- `.github/workflows/squad-promote.yml`
+- `.github/workflows/squad-main-guard.yml`
+- `.github/workflows/squad-heartbeat.yml`
+- `.squad/decisions.md` (merged)
+
+### Session Artifacts
+
+- **Orchestration log:** `.squad/orchestration-log/2026-03-08T13-27-49Z-marathe-cicd-fixes.md`
+- **Session log:** `.squad/log/2026-03-08T13-27-49Z-cicd-fixes.md`
+- **Decision:** Merged into `.squad/decisions.md` from inbox
+
