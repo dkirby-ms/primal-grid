@@ -1494,3 +1494,32 @@ jobs:
 
 #### Default branch
 - Repo uses `dev` as default branch, not `main`. CI workflow targets `dev`.
+
+### Phase 1 E2E Fixes — Copilot (2026-03-08)
+
+**Task:** Fix 3 blocking bugs in PR #52 preventing E2E tests from passing
+
+#### Gotchas Found (Critical for Phase 2)
+
+1. **Colyseus WebSocket requires explicit HTTP /health endpoint**
+   - Playwright's `webServer` health check makes HTTP GET to `https://localhost:PORT/`
+   - Colyseus only handles WebSocket; returns 404 on HTTP GET
+   - **Solution:** Add explicit `/health` endpoint returning `{ status: "ok" }`
+   - **Why it matters:** Phase 2 will run more tests; CI/CD depends on reliable server startup detection
+
+2. **Playwright CSS :not() selector fails with display:none**
+   - Using `page.waitForSelector("#overlay:not(.visible)")` doesn't work when element has `display:none`
+   - CSS pseudo-classes can't override display property suppression
+   - **Solution:** Use Playwright's `state:'hidden'` option instead: `page.locator("#overlay").isHidden()`
+   - **Why it matters:** Many HUD elements use display:none for hidden state; Phase 2 assertions must use state-based checks
+
+3. **Colyseus server persists player state with workers:1 + reuseExistingServer**
+   - With serial execution (`workers: 1`), server runs continuously across test suites
+   - Old player sessions remain active in room.clients
+   - **Solution:** Assertions must account for stale sessions (join-flow.spec.ts expects 2 players initially, not 1)
+   - **Why it matters:** Phase 2 tests (territory, combat) will add more players; must isolate state or reset rooms between tests. Consider adding room.clients.forEach(c => c.leave()) in fixtures.
+
+#### Outcome
+- All 4 E2E tests passing in 38s
+- Commit d95b771, PR #52
+- Framework ready for Phase 2 game mechanics tests
