@@ -981,3 +981,483 @@ Pemulis added game_log broadcasts for enemy spawn events and discovered a critic
 
 **Test Status:** 520/520 tests pass; no regressions.
 **Decision:** Pemulis filed detailed bug report at .squad/decisions.md with fix recommendations and impact assessment.
+
+### Playwright E2E Research — Multiplayer Canvas Testing (2026-03-10)
+
+**Requested by:** dkirby-ms
+**Scope:** Research how to build a Playwright-based client-side testing framework for simulating multiple users playing the game against each other.
+
+---
+
+#### 1. Recommended Architecture
+
+##### File Structure
+
+```
+e2e/
+├── playwright.config.ts          # Main config — webServer, projects, timeouts
+├── fixtures/
+│   ├── game.fixture.ts           # Custom Playwright fixture: launches player pages
+│   └── types.ts                  # Shared types for test helpers
+├── helpers/
+│   ├── player.helper.ts          # PlayerPage class — join game, wait for state, read state
+│   ├── grid.helper.ts            # Tile coordinate helpers — pixelForTile(), clickTile()
+│   ├── state.helper.ts           # State polling via page.evaluate() — waitForPlayers(), etc.
+│   └── ws.helper.ts              # WebSocket frame capture utilities
+├── tests/
+│   ├── join-flow.spec.ts         # Single-player: name prompt → canvas renders → HQ placed
+│   ├── two-player-join.spec.ts   # Two players join same room, see each other on scoreboard
+│   ├── builder-spawn.spec.ts     # Spawn builder pawn, verify state change
+│   ├── territory-contest.spec.ts # Two players expanding toward each other
+│   ├── combat.spec.ts            # Attacker vs defender across player territories
+│   ├── day-night.spec.ts         # Day/night cycle effects on multiple players
+│   └── visual/
+│       └── hud-snapshot.spec.ts  # Visual regression for HUD panel
+└── screenshots/                  # Baseline screenshots for visual regression
+```
+
+##### playwright.config.ts
+
+```typescript
+import { defineConfig, devices } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './tests',
+  fullyParallel: false,           // Multiplayer tests share server state — serialize
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  workers: 1,                     // Single worker — all tests share one game server
+  reporter: process.env.CI ? 'github' : 'html',
+  timeout: 60_000,                // 60s per test — multiplayer needs more time
+  expect: {
+    timeout: 10_000,              // 10s for assertions (state sync can be slow)
+  },
+  use: {
+    baseURL: 'http://localhost:3000',
+    trace: 'on-first-retry',
+    video: 'on-first-retry',
+    screenshot: 'only-on-failure',
+  },
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
+  webServer: [
+    {
+      command: 'npm run dev -w server',
+      url: 'http://localhost:2567',
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
+    {
+      command: 'npm run dev -w client',
+      url: 'http://localhost:3000',
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
+  ],
+});
+```
+
+**Key decisions:**
+- `workers: 1` because all multiplayer tests share a single Colyseus server instance. Parallel workers would create race conditions.
+- `fullyParallel: false` for the same reason — tests that check "2 players in the same room" need to run serially.
+- Dual `webServer` entries start both the Colyseus server (port 2567) and Vite dev server (port 3000).
+- `?dev=1` URL param should be appended to all test URLs to disable fog of war for predictable assertions.
+
+---
+
+#### 2. Multi-Browser Coordination Pattern
+
+**Use browser contexts, not separate browser instances.** Each context is an isolated session (no shared cookies/state) but shares a single browser process — much faster than launching multiple browsers.
+
+##### Custom Fixture: `game.fixture.ts`
+
+```typescript
+import { test as base, type BrowserContext, type Page } from '@playwright/test';
+
+export interface PlayerPage {
+  context: BrowserContext;
+  page: Page;
+  playerName: string;
+}
+
+type GameFixtures = {
+  playerOne: PlayerPage;
+  playerTwo: PlayerPage;
+};
+
+export const test = base.extend<GameFixtures>({
+  playerOne: async ({ browser }, use) => {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    await joinGame(page, 'Alice');
+    await use({ context: ctx, page, playerName: 'Alice' });
+    await ctx.close();
+  },
+  playerTwo: async ({ browser }, use) => {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    await joinGame(page, 'Bob');
+    await use({ context: ctx, page, playerName: 'Bob' });
+    await ctx.close();
+  },
+});
+
+async function joinGame(page: Page, name: string): Promise<void> {
+  await page.goto('http://localhost:3000/?dev=1');
+
+  // Wait for name prompt overlay to become visible
+  await page.waitForSelector('#name-prompt-overlay.visible', { timeout: 15_000 });
+
+  // Fill in name and submit
+  await page.fill('#name-prompt-input', name);
+  await page.click('#name-prompt-submit');
+
+  // Wait for overlay to disappear (game has loaded)
+  await page.waitForSelector('#name-prompt-overlay:not(.visible)', { timeout: 10_000 });
+
+  // Wait for canvas to render
+  await page.waitForSelector('#app canvas', { timeout: 10_000 });
+}
+
+export { expect } from '@playwright/test';
+```
+
+##### Synchronization Between Players
+
+```typescript
+// Wait for a specific number of players to appear in game state
+async function waitForPlayerCount(page: Page, count: number, timeout = 15_000): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const room = (window as any).__ROOM__;
+      if (!room?.state?.players) return false;
+      return room.state.players.size >= expected;
+    },
+    count,
+    { timeout }
+  );
+}
+
+// Wait for a specific player name to appear on the scoreboard
+async function waitForPlayerOnScoreboard(page: Page, name: string): Promise<void> {
+  await page.waitForFunction(
+    (playerName) => {
+      const rows = document.querySelectorAll('#scoreboard-body tr');
+      return Array.from(rows).some(r => r.textContent?.includes(playerName));
+    },
+    name,
+    { timeout: 10_000 }
+  );
+}
+```
+
+---
+
+#### 3. Canvas Interaction Strategy
+
+Since PixiJS renders to Canvas (not DOM), we need a coordinate mapping strategy.
+
+##### Pixel-to-Tile Mapping
+
+```typescript
+// Grid constants from codebase
+const TILE_SIZE = 32;  // Each tile is 32×32 pixels
+
+// Convert tile coordinates to canvas pixel coordinates
+function tileToPixel(tileX: number, tileY: number): { x: number; y: number } {
+  return {
+    x: tileX * TILE_SIZE + TILE_SIZE / 2,  // Center of tile
+    y: tileY * TILE_SIZE + TILE_SIZE / 2,
+  };
+}
+
+// Click a specific tile on the canvas (accounting for camera transform)
+async function clickTile(page: Page, tileX: number, tileY: number): Promise<void> {
+  // Get current camera transform from the PixiJS container
+  const transform = await page.evaluate(() => {
+    const app = (window as any).__PIXI_APP__;
+    const worldContainer = app.stage.children[0]; // GridRenderer container
+    return {
+      x: worldContainer.position.x,
+      y: worldContainer.position.y,
+      scale: worldContainer.scale.x,
+    };
+  });
+
+  // Convert tile coords to screen coords
+  const worldX = tileX * TILE_SIZE + TILE_SIZE / 2;
+  const worldY = tileY * TILE_SIZE + TILE_SIZE / 2;
+  const screenX = worldX * transform.scale + transform.x;
+  const screenY = worldY * transform.scale + transform.y;
+
+  const canvas = page.locator('#app canvas');
+  await canvas.click({ position: { x: screenX, y: screenY } });
+}
+```
+
+##### State Assertions (Primary Strategy)
+
+For a Canvas game, **state-based assertions are far more reliable than visual assertions**. Query game state directly:
+
+```typescript
+// Expose room reference for testing — add to client/src/network.ts
+// In dev/test mode: (window as any).__ROOM__ = room;
+
+async function getGameState(page: Page) {
+  return page.evaluate(() => {
+    const room = (window as any).__ROOM__;
+    if (!room?.state) return null;
+
+    const players: any[] = [];
+    room.state.players.forEach((p: any, key: string) => {
+      players.push({
+        id: key,
+        displayName: p.displayName,
+        wood: p.wood,
+        stone: p.stone,
+        hqX: p.hqX,
+        hqY: p.hqY,
+        score: p.score,
+        level: p.level,
+      });
+    });
+
+    const creatures: any[] = [];
+    room.state.creatures.forEach((c: any, key: string) => {
+      creatures.push({
+        id: key,
+        creatureType: c.creatureType,
+        x: c.x,
+        y: c.y,
+        health: c.health,
+        ownerID: c.ownerID,
+        pawnType: c.pawnType,
+        currentState: c.currentState,
+      });
+    });
+
+    return {
+      tick: room.state.tick,
+      dayPhase: room.state.dayPhase,
+      mapWidth: room.state.mapWidth,
+      players,
+      creatures,
+    };
+  });
+}
+```
+
+---
+
+#### 4. WebSocket Awareness
+
+##### Waiting for State Sync
+
+The critical pattern: **never assert immediately after an action — wait for the server state to propagate.**
+
+```typescript
+// Wait for state to update after an action
+async function waitForStateChange(
+  page: Page,
+  predicate: string,  // JS expression that returns boolean
+  timeout = 10_000
+): Promise<void> {
+  await page.waitForFunction(predicate, undefined, { timeout });
+}
+
+// Example: wait for builder to appear after spawning
+await page.click('#spawn-builder-btn');
+await waitForStateChange(page, `
+  (() => {
+    const room = window.__ROOM__;
+    if (!room?.state?.creatures) return false;
+    let found = false;
+    room.state.creatures.forEach(c => {
+      if (c.pawnType === 'builder' && c.ownerID === room.sessionId) found = true;
+    });
+    return found;
+  })()
+`);
+```
+
+##### WebSocket Frame Inspection
+
+```typescript
+// Capture WebSocket messages for debugging/assertion
+async function captureWSFrames(page: Page): Promise<string[]> {
+  const frames: string[] = [];
+  page.on('websocket', ws => {
+    ws.on('framereceived', frame => {
+      frames.push(frame.payload as string);
+    });
+    ws.on('framesent', frame => {
+      frames.push(`SENT: ${frame.payload}`);
+    });
+  });
+  return frames;
+}
+```
+
+**Colyseus-specific caveat:** Colyseus uses binary encoding (`@colyseus/schema`), not JSON, for state patches. WebSocket frame payloads will be binary `ArrayBuffer`, not readable JSON. This means:
+- Frame-level inspection is useful for detecting connection/disconnection, not for reading state.
+- For state assertions, always use `page.evaluate()` to read the deserialized `room.state`.
+- `room.onStateChange` fires after every state patch — the client-side state is always current.
+
+---
+
+#### 5. Prioritized Test Scenarios
+
+| Priority | Scenario | Complexity | Description |
+|----------|----------|------------|-------------|
+| **P0** | Single player join flow | Low | Navigate → name prompt → canvas renders → HQ visible |
+| **P0** | Two players in same room | Medium | Both join, both see 2 players on scoreboard, each has unique HQ |
+| **P0** | Spawn builder pawn | Low | Click spawn button → builder appears in state → creature on map |
+| **P1** | Builder territory expansion | Medium | Builder claims adjacent tiles → territory count increases |
+| **P1** | Resource accumulation | Medium | Wait for income tick → wood/stone increase per HQ/farm income |
+| **P1** | Day/night cycle | Low | Wait ~2 min → dayPhase transitions dawn→day→dusk→night |
+| **P2** | Two players territory contest | High | Two players expand toward each other → boundary forms |
+| **P2** | Combat: attacker vs defender | High | Player A spawns attacker near Player B's territory → combat resolves |
+| **P2** | Spawn all pawn types | Medium | Spawn builder, defender, attacker → verify max counts enforced |
+| **P2** | Resource cost validation | Low | Insufficient resources → spawn button disabled |
+| **P3** | Enemy base + mobile interactions | High | Wait for night → enemy base spawns → mobiles attack players |
+| **P3** | Player disconnect/reconnect | High | Player leaves → state updates → other player still functional |
+| **P3** | Camera zoom/pan during gameplay | Medium | Zoom in/out → game still responsive → HUD updates correctly |
+| **P3** | Visual regression: HUD panel | Medium | Screenshot comparison of HUD panel at known game state |
+
+**Estimated total:** ~14 test scenarios, ~40-60 individual test cases.
+**Initial milestone:** P0 tests (3 scenarios, ~10 test cases) — validates the framework works end-to-end.
+
+---
+
+#### 6. Infrastructure Setup
+
+##### Installation
+
+```bash
+# From project root
+npm install -D @playwright/test
+npx playwright install chromium   # Only chromium needed initially
+```
+
+##### Client Code Change Required
+
+The client must expose the Colyseus `room` reference for test assertions. Add to `client/src/network.ts` in the `connect()` function, after room is joined:
+
+```typescript
+// Expose for Playwright E2E testing
+if (import.meta.env.DEV || new URLSearchParams(window.location.search).has('dev')) {
+  (window as any).__ROOM__ = room;
+}
+```
+
+This is gated behind dev mode so it never leaks to production.
+
+##### CI/CD: GitHub Actions
+
+```yaml
+# .github/workflows/e2e.yml
+name: E2E Tests
+on: [push, pull_request]
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build -w shared
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+```
+
+**Docker consideration:** The current Dockerfile is for production deployment. For CI, running directly on ubuntu-latest with Playwright's `install --with-deps` is simpler and sufficient. Docker-based Playwright (using `mcr.microsoft.com/playwright:v1.x-jammy`) is only needed if visual regression screenshots must be pixel-identical across environments.
+
+---
+
+#### 7. State-Based vs Visual Testing — Recommendation
+
+| Approach | When to Use | % of Tests |
+|----------|-------------|------------|
+| **State assertions** (`page.evaluate`) | Game logic: resources, territory, creatures, player state | **70%** |
+| **DOM assertions** (selectors) | HUD panel, name prompt, scoreboard overlay, game log | **20%** |
+| **Visual regression** (screenshots) | HUD appearance, overall game board at known states | **10%** |
+
+**Rationale:**
+- Canvas games are fundamentally about state, not pixels. A tile being "owned" is a state fact, not a color fact.
+- DOM elements (HUD, scoreboard, name prompt) are testable with standard selectors — no need for visual testing.
+- Visual regression is valuable only for catching rendering bugs (wrong colors, missing sprites, layout breaks) — use sparingly because it's brittle with anti-aliasing, GPU differences, and animation timing.
+- WebSocket frame inspection is a debugging tool, not a primary assertion strategy, because Colyseus uses binary encoding.
+
+---
+
+#### 8. Gotchas and Pitfalls
+
+1. **Colyseus binary protocol:** `@colyseus/schema` sends binary patches, not JSON. You cannot `JSON.parse()` WebSocket frames. Always read deserialized state from `room.state`.
+
+2. **Fog of war:** Without `?dev=1`, each player only sees tiles near their territory. Tests must always use dev mode for full visibility, or assertions will fail because tiles aren't synced.
+
+3. **Server tick timing:** The server ticks at 4 Hz (250ms). After an action (e.g., spawn pawn), the state update arrives after the next tick + network latency. Use `page.waitForFunction()` with generous timeouts, not `setTimeout`.
+
+4. **HQ placement is random:** The server places each player's HQ at a random walkable position. Tests cannot assume fixed coordinates — always read `player.hqX`/`player.hqY` from state.
+
+5. **Canvas click coordinates depend on camera:** The camera can be panned/zoomed. To click a tile, you must account for `container.position` and `container.scale`. Use the helper function pattern above.
+
+6. **Name prompt is `{ once: true }`:** The name prompt's event listeners use `{ once: true }`. If a test accidentally triggers the handler twice, it'll silently fail. Always wait for the overlay to become visible before interacting.
+
+7. **Single Colyseus room instance:** All players joining `game` go into the same room (until it's full). Tests must account for leftover players from previous tests. Consider restarting the server between test files, or designing tests to be additive.
+
+8. **Animation timing:** PixiJS renders at 60fps. Creatures move smoothly between tiles over multiple frames. Assert on the server state (creature.x, creature.y), not on pixel positions of sprites.
+
+9. **`workers: 1` is mandatory:** Multiple Playwright workers would each create their own browser contexts connecting to the same server, creating unpredictable multiplayer state. Always run with a single worker.
+
+10. **Screenshot baseline management:** If using visual regression, baselines must be generated in the CI environment (Docker/ubuntu-latest), not locally on macOS/Windows. GPU rendering differences will cause false failures.
+
+---
+
+#### 9. Comparison of Approaches
+
+| Approach | Pros | Cons | Verdict |
+|----------|------|------|---------|
+| **Browser contexts** (recommended) | Fast, isolated sessions, one browser process | Shares GPU/CPU — can't test 10+ players easily | ✅ Use for 2-4 players |
+| **Separate browser instances** | True isolation | Slow, resource-heavy, complex orchestration | ❌ Overkill for our needs |
+| **page.evaluate() state assertions** | Precise, fast, deterministic, reads real game state | Requires exposing `room` on window | ✅ Primary assertion method |
+| **Visual regression screenshots** | Catches rendering bugs humans miss | Brittle with animations, GPU diffs, anti-aliasing | ⚠️ Use sparingly for HUD only |
+| **WebSocket frame inspection** | Can detect connection issues, message ordering | Colyseus uses binary — frames aren't human-readable | ⚠️ Debugging tool only |
+| **DOM selectors for HUD** | Standard Playwright approach, reliable | Only covers DOM elements, not canvas | ✅ Use for HUD, scoreboard, prompts |
+
+---
+
+#### 10. Implementation Roadmap
+
+**Phase 1 (Foundation):** ~2 days
+- Install Playwright, create `playwright.config.ts`
+- Add `window.__ROOM__` exposure to client
+- Write `game.fixture.ts` with `joinGame()` helper
+- Write P0 tests: join flow, two-player join, spawn builder
+
+**Phase 2 (Game Mechanics):** ~3 days
+- Write state helper utilities (waitForStateChange, getGameState)
+- Write P1 tests: territory expansion, resource accumulation, day/night
+- Add grid coordinate helpers for canvas interaction
+
+**Phase 3 (Multiplayer Conflicts):** ~3 days
+- Write P2 tests: territory contest, combat, max pawn counts
+- Handle timing-sensitive assertions for combat resolution
+
+**Phase 4 (Polish):** ~2 days
+- Visual regression for HUD
+- CI/CD pipeline (GitHub Actions)
+- P3 tests: enemy spawning, disconnect/reconnect
+- Documentation and test maintenance guide

@@ -2,8 +2,8 @@
 name: "discord-webhook-announcements"
 description: "Post announcements to the #game-dev Discord channel via webhook"
 domain: "communications"
-confidence: "low"
-source: "earned — first used 2026-03-08 to announce UAT combat build"
+confidence: "medium"
+source: "earned — first used 2026-03-08 to announce UAT combat build; extended 2026 for Scribe auto-posting"
 ---
 
 ## Context
@@ -36,6 +36,28 @@ curl -s -o /dev/null -w "%{http_code}" -X POST "$DISCORD_WEBHOOK_URL" \
 ```
 - HTTP 204 = success (no content returned)
 - Color `5763719` is green; `15548997` is red; `16776960` is yellow
+
+### Posting with squad member attribution
+Override the webhook's default name to attribute the post to a specific squad member:
+```bash
+source .env
+curl -s -o /dev/null -w "%{http_code}" -X POST "$DISCORD_WEBHOOK_URL" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "username": "Squad: {AgentName}",
+  "embeds": [{
+    "title": "...",
+    "description": "...",
+    "color": 5763719,
+    "fields": [
+      { "name": "Section", "value": "Content" }
+    ],
+    "footer": { "text": "..." }
+  }]
+}'
+```
+- Replace `{AgentName}` with the agent's name (e.g., "Squad: Scribe", "Squad: Steeply")
+- When no `username` is provided, Discord uses the webhook's default name
 
 ### Environment URLs
 - **UAT:** https://gridtest.kirbytoso.xyz
