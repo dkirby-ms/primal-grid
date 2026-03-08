@@ -5257,3 +5257,113 @@ discord-notify:
 ## Commit
 
 984daef — "Add Discord notifications with changelog to deployment workflows"
+
+---
+
+## 2026-03-10: GitHub Actions Secret Masking & Job Output Patterns
+
+**Date:** 2026-03-10  
+**Author:** Hal (Lead)  
+**Context:** Issue #65 / PR #66 review — Discord deploy notifications missing URLs due to secret redaction  
+**Status:** BINDING — All future CI/CD work must follow this pattern
+
+### Problem
+
+GitHub Actions secret masking is **overly aggressive**. When a job outputs a value that matches any substring of known secrets in the vault, the output is redacted from logs and becomes unusable downstream.
+
+In PR #66, the deploy job tried to output the Azure Container App FQDN via `${{ needs.deploy.outputs.fqdn }}`. GitHub's secret redaction detected this as a potential secret match and masked it, breaking the Discord notification's URL field.
+
+### Decision
+
+**For static infrastructure endpoints:** Hardcode the values directly in workflow YAML instead of relying on job outputs.
+
+#### When to Hardcode
+- Infrastructure endpoints (API URLs, CDN URLs, custom domains)
+- Environment names and flags (prod/uat/dev)
+- Build configuration that's known at workflow definition time
+
+#### When to Use Job Outputs
+- Generated values (commit SHA, build artifact paths, feature flags computed at runtime)
+- Values that are legitimately unknown until the job runs
+- Values that will never match secret patterns (e.g., short hashes, structured data)
+
+#### If You Need Dynamic URLs
+If a value must be truly dynamic:
+1. **Do NOT** try to pass it through job outputs (secret redaction will get you)
+2. **Instead:** Use GitHub repository variables or environment-level configuration as the source of truth
+3. Reference the variable directly in dependent jobs
+
+### Examples
+
+#### ✅ Correct: Hardcoded Infrastructure URLs
+```yaml
+env:
+  DEPLOY_URL: "https://gridwar.kirbytoso.xyz"  # Known at workflow definition time
+  API_ENDPOINT: "https://api.example.com"      # Static infrastructure
+```
+
+#### ❌ Wrong: Dynamic Output with Potential Masking
+```yaml
+- id: get-url
+  run: echo "fqdn=$AZURE_FQDN" >> $GITHUB_OUTPUT  # Will be masked if AZURE_FQDN is in secrets
+  
+# Later job:
+env:
+  DEPLOY_URL: ${{ needs.build.outputs.fqdn }}  # May be empty due to masking
+```
+
+#### ✅ Correct: Dynamic Value from Repository Variable
+```yaml
+env:
+  DEPLOY_URL: ${{ vars.PRODUCTION_DEPLOY_URL }}  # Set as repo variable, not secret
+```
+
+### Files Modified
+- `.github/workflows/deploy-uat.yml` — hardcoded UAT URL
+- `.github/workflows/deploy.yml` — hardcoded production URL
+
+### For Future Reference
+If another workflow needs to expose a runtime value:
+1. Evaluate whether it's actually needed downstream
+2. If yes, check if it could be a static value instead
+3. If it must be dynamic, use repository variables (vars.*, not secrets.*)
+4. Document why the dynamic approach is necessary
+
+### Related Issues
+- Issue #65: Discord deploy notifications showed `Deployed URL: https://` with no actual URL
+- PR #66: fix: include deployed URL in Discord notification (closes #65)
+
+---
+
+## 2026-03-10: Viewport Culling for Tile Rendering
+
+**Date:** 2026-03-10  
+**Author:** Steeply (Tester)  
+**Issue:** #29 — Bug: Scrolling around the map is laggy  
+**PR:** #60  
+**Status:** IMPLEMENTED
+
+### Context
+
+The 128×128 map creates 49,152 Graphics objects (3 per tile: terrain, territory overlay, fog overlay). All were permanently `visible = true` in the PixiJS stage tree, causing the renderer to process every object every frame regardless of whether they were on-screen.
+
+### Decision
+
+Implement **differential viewport culling** rather than PixiJS's built-in `cullable` property:
+
+- `Camera.getViewportTileBounds()` computes the visible tile range from camera position, scale, and viewport size (with 2-tile padding).
+- `GridRenderer.updateCulling()` uses a `lastCullBounds` cache to only toggle visibility on tiles entering/leaving the viewport boundary (~80 tiles per frame instead of scanning all 16,384).
+- Tiles start `visible = false` in `buildGrid()` and are shown by the first culling pass.
+
+### Why Not PixiJS `cullable`?
+
+PixiJS 8's built-in culling still iterates all objects each frame to check bounds. With 49,152 objects, the culling check itself is expensive. Manual differential culling is O(viewport_border) per frame, not O(all_tiles).
+
+### Impact
+
+- At 1× zoom: ~400 objects rendered per frame (was ~49,152)
+- Per-frame culling work: ~80 border tiles (differential), not 16,384
+
+### For Future Work
+
+If the map grows beyond 128×128, consider chunked containers (e.g., 16×16 tile chunks) where entire chunks can be culled as a unit, reducing even the border-tile overhead.

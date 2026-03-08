@@ -313,3 +313,44 @@ See: 2026-03-08: ESLint Override for E2E Browser Context Code
 - Changelogs provide valuable context about what changed in each deployment
 - Job outputs pattern: Add `id:` to step, expose via `outputs:` at job level, consume in dependent job
 - Always use `jq` for JSON construction in CI to avoid shell escaping issues
+
+---
+
+## 2026-03-08T23:49:23Z: PR #66 Merge — Deploy URL Fix (GitHub Actions Secret Masking)
+
+**Task:** Fix GitHub Actions secret masking breaking Discord deploy notifications  
+**Status:** ✅ MERGED to dev  
+**Issue:** #65 (Discord deploy notifications missing URL)  
+**PR:** #66
+
+### What Marathe Did
+- Identified root cause: GitHub Actions secret masking was stripping dynamic job output `FQDN` from workflows
+- Implemented fix: Hardcoded static custom domain URLs directly in workflow environments
+  - Production: `https://gridwar.kirbytoso.xyz`
+  - UAT: `https://gridtest.kirbytoso.xyz`
+- Updated `discord-notify` jobs in both deploy workflows to use hardcoded `DEPLOY_URL` env var
+- Improved Discord notification formatting (added emoji, fixed URL field)
+
+### Key Learnings
+- GitHub Actions secret masking is overly aggressive (blocks any job output matching known secrets)
+- Workaround: Hardcode static infrastructure values; use repo variables for dynamic configuration
+- Pattern established for CI/CD: Know when to hardcode vs. parameterize vs. use job outputs
+
+### Files Modified
+- `.github/workflows/deploy-uat.yml`
+- `.github/workflows/deploy.yml`
+
+### Decision Authored
+- "GitHub Actions Secret Masking & Job Output Patterns" merged to `.squad/decisions.md`
+- Binding for all future workflow changes
+
+### Approval Chain
+- Hal (Lead): Reviewed & approved
+- Coordinator (Ralph): Merged PR #66 squash-merge to dev
+- Issue #65: Closed as completed
+- Branch: Deleted
+
+### Related
+- Decision: `.squad/decisions.md` → "GitHub Actions Secret Masking & Job Output Patterns"
+- Orchestration log: `.squad/orchestration-log/2026-03-08T23-49-23Z-hal.md`
+- Session log: `.squad/log/2026-03-08T23-49-23Z-deploy-url-merged.md`
