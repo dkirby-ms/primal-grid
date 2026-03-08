@@ -118,9 +118,29 @@ function isValidBuildTile(tile: { type: number; shapeHP: number }): boolean {
 }
 
 /**
+ * Check if a tile is an interior gap: unowned but surrounded on 3+ cardinal
+ * sides by tiles owned by the same player.
+ */
+function isInteriorGap(
+  state: GameState,
+  ownerID: string,
+  x: number,
+  y: number,
+): boolean {
+  let ownedNeighbors = 0;
+  for (const [nx, ny] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]]) {
+    const neighbor = state.getTile(nx, ny);
+    if (neighbor && neighbor.ownerID === ownerID) ownedNeighbors++;
+  }
+  return ownedNeighbors >= 3;
+}
+
+/**
  * Find the best unclaimed walkable tile adjacent to the builder's owner's territory.
  * Scans within BUILD_SITE_SCAN_RADIUS.
- * Prefers closest tiles, with a tiebreaker favoring outward expansion (further from HQ).
+ * Prioritizes interior gaps (tiles surrounded on 3+ sides by owned territory)
+ * before expanding outward. Within each priority tier, prefers closest tiles
+ * with a tiebreaker favoring outward expansion (further from HQ).
  */
 function findBuildSite(
   creature: CreatureState,
@@ -131,6 +151,7 @@ function findBuildSite(
   let best: { x: number; y: number } | null = null;
   let bestDist = Infinity;
   let bestHqDist = -1;
+  let bestIsGap = false;
 
   for (let dy = -radius; dy <= radius; dy++) {
     for (let dx = -radius; dx <= radius; dx++) {
@@ -145,14 +166,21 @@ function findBuildSite(
       const dist = Math.abs(dx) + Math.abs(dy);
       if (dist === 0) continue;
 
-      // Among equal-distance candidates, prefer tiles further from HQ (outward expansion)
+      const gap = isInteriorGap(state, creature.ownerID, tx, ty);
       const hqDist = player
         ? Math.abs(tx - player.hqX) + Math.abs(ty - player.hqY)
         : 0;
 
-      if (dist < bestDist || (dist === bestDist && hqDist > bestHqDist)) {
+      // Interior gaps always beat non-gaps; within same tier, prefer closer,
+      // then further from HQ (outward expansion bias as secondary tiebreaker)
+      if (
+        (gap && !bestIsGap) ||
+        (gap === bestIsGap && dist < bestDist) ||
+        (gap === bestIsGap && dist === bestDist && hqDist > bestHqDist)
+      ) {
         bestDist = dist;
         bestHqDist = hqDist;
+        bestIsGap = gap;
         best = { x: tx, y: ty };
       }
     }

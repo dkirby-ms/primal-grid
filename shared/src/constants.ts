@@ -118,7 +118,6 @@ export interface PawnTypeDef {
   readonly creatureType: string;
   readonly health: number;
   readonly cost: { wood: number; stone: number };
-  readonly upkeep: { wood: number };
   readonly maxCount: number;
   readonly damage: number;
   readonly detectionRadius: number;
@@ -205,7 +204,6 @@ export const PAWN_TYPES: Record<string, PawnTypeDef> = {
     creatureType: "pawn_builder",
     health: 50,
     cost: { wood: 10, stone: 5 },
-    upkeep: { wood: 1 },
     maxCount: 5,
     damage: 0,
     detectionRadius: 0,
@@ -221,7 +219,6 @@ export const PAWN_TYPES: Record<string, PawnTypeDef> = {
     creatureType: "pawn_defender",
     health: 80,
     cost: { wood: 15, stone: 10 },
-    upkeep: { wood: 2 },
     maxCount: 3,
     damage: 20,
     detectionRadius: 5,
@@ -237,7 +234,6 @@ export const PAWN_TYPES: Record<string, PawnTypeDef> = {
     creatureType: "pawn_attacker",
     health: 60,
     cost: { wood: 20, stone: 15 },
-    upkeep: { wood: 3 },
     maxCount: 2,
     damage: 25,
     detectionRadius: 6,
@@ -269,6 +265,8 @@ export const ENEMY_SPAWNING = {
   MIN_DISTANCE_FROM_HQ: 15,
   MIN_DISTANCE_BETWEEN_BASES: 10,
   FIRST_BASE_DELAY_TICKS: 240,
+  /** Manhattan radius around player territory that rejects enemy base spawns. */
+  MIN_DISTANCE_FROM_TERRITORY: 5,
   /** Maximum ticks an attacker stays on sortie before returning. */
   ATTACKER_SORTIE_TICKS: 200,
 } as const;
@@ -323,12 +321,6 @@ export const PAWN = {
   BUILDER_HEALTH: 50,
   /** Ticks to complete a build (16 ticks = 4 seconds at 4 ticks/sec). */
   BUILD_TIME_TICKS: 16,
-  /** Wood upkeep cost per cycle. */
-  BUILDER_UPKEEP_WOOD: 1,
-  /** Ticks between upkeep deductions (60 ticks = 15 seconds at 4 ticks/sec). */
-  UPKEEP_INTERVAL_TICKS: 60,
-  /** Damage dealt when upkeep can't be paid. */
-  UPKEEP_DAMAGE: 10,
   /** Maximum builders per player. */
   MAX_PER_PLAYER: 5,
   /** Radius to scan for build sites. */

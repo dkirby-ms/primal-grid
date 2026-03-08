@@ -1638,3 +1638,44 @@ See: 2026-03-08: ESLint Override for E2E Browser Context Code
 4. **shapeHP blocks movement** — Any tile with `shapeHP > 0` is unwalkable via `isWalkable()`. Builder-created structures (outposts, farms) get `BLOCK_HP`. This creates implicit walls. Any new structure type must consider pathfinding impact.
 5. **Greedy pathfinder limitation** — `moveToward()` is a 1-step greedy Manhattan mover with no memory. It oscillates when blocked by walls. A* (Phase 5) will fix this properly, but until then, creature-specific traversal rules and stuck detection are the mitigation.
 6. **findBuildSite scan order bias** — The nested dy/dx loop in `findBuildSite` creates a top-left bias for equal-distance candidates. The HQ-distance tiebreaker now overrides this to prefer outward expansion.
+
+### Session: UAT Gameplay Fixes — Enemy Camps, Builder Gaps, Upkeep Removal
+
+**Date:** 2026-03-08
+**Branch:** dev
+**Issues:** 3 UAT-reported gameplay bugs
+
+**Fix 1 — Enemy Camps in Player Territory:**
+Added territorial radius check (Manhattan dist 5) to `findEnemyBaseSpawnLocation()`. Candidate tiles are now rejected if ANY tile within radius has an ownerID.
+
+**Fix 2 — Builder Interior Gaps:**
+`findBuildSite()` now detects interior gaps (unowned tiles with 3+ cardinal neighbors owned by player) and prioritizes filling those before outward expansion. Outward bias retained as secondary tiebreaker.
+
+**Fix 3 — Remove Pawn Wood Upkeep:**
+Removed `tickPawnUpkeep()` method, game loop call, `upkeep` field from `PawnTypeDef`/`PAWN_TYPES`, and upkeep constants (`BUILDER_UPKEEP_WOOD`, `UPKEEP_INTERVAL_TICKS`, `UPKEEP_DAMAGE`). Removed 8 upkeep tests across pawnBuilder, combat-system, and gameLog test files.
+
+**Learnings:**
+7. **Interior gap detection pattern** — Checking 3+ cardinal neighbors with same ownerID reliably identifies territory holes. This pattern can be reused for territory health/completeness scoring.
+8. **Territorial exclusion zones** — Manhattan-distance radius checks around spawn candidates are cheap and effective for keeping spawns away from player influence. Radius of 5 is a good baseline for 128x128 maps.
+
+---
+
+### Session: UAT Gameplay Fixes — Enemy Camps, Builder Gaps, Upkeep Removal (Completed)
+
+**Date:** 2026-03-08
+**Branch:** dev
+**Commits:**
+- 69c3f39: fix: add territorial radius check to enemy base spawn location
+- 7c443c4: fix: prioritize interior gaps over outward expansion in builder AI
+- c80d898: feat: remove wood upkeep system for all pawns
+
+**Status:** SUCCESS
+- 3 UAT-reported gameplay bugs fixed
+- 515 tests passing
+- Lint clean
+- All work committed to dev
+
+**Key Implementation Patterns Documented:**
+- Territorial exclusion zones via Manhattan-distance radius checks
+- Interior gap detection using cardinal neighbor counts
+- Systematic removal of deprecated game mechanics
