@@ -76,7 +76,7 @@ jobs:
     env:
       DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
       DEPLOY_RESULT: ${{ needs.deploy.result }}
-      DEPLOY_URL: ${{ needs.deploy.outputs.fqdn }}
+      DEPLOY_URL: "https://gridwar.kirbytoso.xyz"
       REPOSITORY: ${{ github.repository }}
       COMMIT_SHA: ${{ github.sha }}
       REF_NAME: ${{ github.ref_name }}
@@ -117,9 +117,9 @@ jobs:
 
           FIELDS=$(jq -n \
             --arg env "🎮 Production" \
-            --arg url "https://${DEPLOY_URL}" \
+            --arg url "${DEPLOY_URL}" \
             '[{"name": "Environment", "value": $env, "inline": true},
-              {"name": "Deployed URL", "value": $url, "inline": false}]')
+              {"name": "🌐 Deployed URL", "value": "[Open App](\($url))", "inline": false}]')
 
           # Add changelog field
           FIELDS=$(echo "$FIELDS" | jq --arg changelog "$CHANGELOG" \
