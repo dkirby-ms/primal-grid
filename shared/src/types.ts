@@ -46,6 +46,33 @@ export interface ITileState {
 /** Creature type identifiers. */
 export type CreatureType = 'herbivore' | 'carnivore';
 
+/** Check if a creature type is an enemy base. */
+export function isEnemyBase(creatureType: string): boolean {
+  return creatureType.startsWith("enemy_base_");
+}
+
+/** Check if a creature type is an enemy mobile. */
+export function isEnemyMobile(creatureType: string): boolean {
+  return creatureType === "enemy_scout"
+      || creatureType === "enemy_raider"
+      || creatureType === "enemy_swarm";
+}
+
+/** Check if a creature type is a player-owned pawn. */
+export function isPlayerPawn(creatureType: string): boolean {
+  return creatureType.startsWith("pawn_");
+}
+
+/** Check if a pawn type is a combat pawn (defender or attacker). */
+export function isCombatPawn(pawnType: string): boolean {
+  return pawnType === "defender" || pawnType === "attacker";
+}
+
+/** Check if a creature type is a grave marker (inert death remnant). */
+export function isGraveMarker(creatureType: string): boolean {
+  return creatureType === "grave_marker";
+}
+
 /** State of a creature in the game world. */
 export interface ICreatureState {
   id: string;

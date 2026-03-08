@@ -1,5 +1,5 @@
 import { GameState } from "./GameState.js";
-import { FOG_OF_WAR } from "@primal-grid/shared";
+import { FOG_OF_WAR, PAWN_TYPES, isPlayerPawn } from "@primal-grid/shared";
 
 /**
  * Collect tiles within Manhattan distance ≤ radius of (cx, cy),
@@ -92,10 +92,12 @@ export function computeVisibleTiles(state: GameState, playerId: string): Set<num
     }
   }
 
-  // 3. Pawn builder vision
-  const pawnRadius = effectiveRadius(FOG_OF_WAR.PAWN_RADIUS, dayPhase);
+  // 3. Pawn vision (all pawn types — builder, defender, attacker)
   state.creatures.forEach((creature) => {
-    if (creature.creatureType === "pawn_builder" && creature.ownerID === playerId) {
+    if (isPlayerPawn(creature.creatureType) && creature.ownerID === playerId) {
+      const pawnDef = PAWN_TYPES[creature.pawnType];
+      const baseRadius = pawnDef ? pawnDef.visionRadius : FOG_OF_WAR.PAWN_RADIUS;
+      const pawnRadius = effectiveRadius(baseRadius, dayPhase);
       addCircleFill(creature.x, creature.y, pawnRadius, w, h, visible);
     }
   });
