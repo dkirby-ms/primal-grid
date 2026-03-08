@@ -80,12 +80,14 @@ function promptForName(): Promise<string> {
     };
 
     btn.addEventListener('click', submit, { once: true });
-    input.addEventListener('keydown', (e) => {
+    const onKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Enter') {
         e.preventDefault();
+        input.removeEventListener('keydown', onKeydown);
         submit();
       }
-    }, { once: true });
+    };
+    input.addEventListener('keydown', onKeydown);
   });
 }
 
