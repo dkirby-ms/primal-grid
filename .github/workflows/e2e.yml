@@ -2,9 +2,18 @@ name: E2E Tests
 
 on:
   push:
-    branches: [dev]
+    branches: [uat, master]
   pull_request:
-    branches: [dev]
+    branches: [uat, master]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
   e2e:
@@ -35,3 +44,110 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  deploy-report:
+    needs: e2e
+    if: always() && (github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: playwright-report/
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  discord-notify:
+    needs: [e2e, deploy-report]
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+    steps:
+      - name: Send Discord notification
+        if: env.DISCORD_WEBHOOK_URL != ''
+        env:
+          E2E_RESULT: ${{ needs.e2e.result }}
+          DEPLOY_RESULT: ${{ needs.deploy-report.result }}
+          PAGES_URL: ${{ needs.deploy-report.outputs.page_url }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          RUN_ID: ${{ github.run_id }}
+          REPOSITORY: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$E2E_RESULT" = "success" ]; then
+            STATUS="✅ E2E Tests Passed"
+            COLOR=5763719
+          else
+            STATUS="❌ E2E Tests Failed"
+            COLOR=15548997
+          fi
+
+          ARTIFACT_URL="https://github.com/${REPOSITORY}/actions/runs/${RUN_ID}"
+
+          # Build fields array with jq for safe JSON escaping
+          FIELDS=$(jq -n --arg url "$ARTIFACT_URL" \
+            '[{"name": "📦 Artifact", "value": "[View Run](\($url))", "inline": true}]')
+
+          if [ -n "$PAGES_URL" ] && [ "$DEPLOY_RESULT" = "success" ]; then
+            FIELDS=$(echo "$FIELDS" | jq --arg url "$PAGES_URL" \
+              '. + [{"name": "📊 Report", "value": "[GitHub Pages](\($url))", "inline": true}]')
+          fi
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            PR_URL="https://github.com/${REPOSITORY}/pull/${PR_NUMBER}"
+            FIELDS=$(echo "$FIELDS" | jq \
+              --arg num "$PR_NUMBER" --arg title "$PR_TITLE" --arg url "$PR_URL" \
+              '. + [{"name": "🔀 Pull Request", "value": "[#\($num): \($title)](\($url))"}]')
+          else
+            SHORT_SHA="${COMMIT_SHA:0:7}"
+            COMMIT_URL="https://github.com/${REPOSITORY}/commit/${COMMIT_SHA}"
+            SAFE_MSG=$(echo "$COMMIT_MSG" | head -1)
+            FIELDS=$(echo "$FIELDS" | jq \
+              --arg sha "$SHORT_SHA" --arg msg "$SAFE_MSG" --arg url "$COMMIT_URL" \
+              '. + [{"name": "📝 Commit", "value": "[`\($sha)`](\($url)) \($msg)"}]')
+          fi
+
+          PAYLOAD=$(jq -n \
+            --arg title "$STATUS" \
+            --arg desc "E2E test results for \`${REF_NAME}\`" \
+            --argjson color "$COLOR" \
+            --argjson fields "$FIELDS" \
+            --arg footer "Primal Grid CI • ${REPOSITORY}" \
+            '{
+              "username": "Squad: Marathe",
+              "embeds": [{
+                "title": $title,
+                "description": $desc,
+                "color": $color,
+                "fields": $fields,
+                "footer": { "text": $footer }
+              }]
+            }')
+
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$DISCORD_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          if [ "$HTTP_STATUS" = "204" ] || [ "$HTTP_STATUS" = "200" ]; then
+            echo "Discord notification sent successfully (HTTP ${HTTP_STATUS})"
+          else
+            echo "::warning::Discord notification failed with HTTP ${HTTP_STATUS}"
+          fi
