@@ -313,3 +313,39 @@ See: 2026-03-08: ESLint Override for E2E Browser Context Code
 - Changelogs provide valuable context about what changed in each deployment
 - Job outputs pattern: Add `id:` to step, expose via `outputs:` at job level, consume in dependent job
 - Always use `jq` for JSON construction in CI to avoid shell escaping issues
+
+## 2026-03-08T23:42:16Z: Deployed URL as Markdown Link in Discord Notifications
+
+**Task:** Fix #65 — Include deployed URL in Discord deploy notification  
+**Status:** ✅ Completed  
+**Branch:** `squad/65-deploy-url-discord-notify`  
+**PR:** #66 (opened against dev)
+
+### Changes
+
+Reformatted deployed URL in Discord notifications as clickable markdown links:
+- Pattern: `[🌐 Deployed to {ENV}]({FQDN})`
+- Applied to both `.github/workflows/deploy-uat.yml` and `.github/workflows/deploy.yml`
+- Both workflows already had discord-notify jobs from prior work (commit 984daef)
+
+### Implementation
+
+Modified the deployed URL field in the Discord embed to use markdown link syntax:
+```
+[🌐 Deployed to UAT](https://myapp-uat.azurecontainerapps.io)
+[🌐 Deployed to Production](https://myapp.azurecontainerapps.io)
+```
+
+This enables one-click access to the deployed application directly from Discord without copy-pasting URLs.
+
+### Coordination
+
+Ralph (Work Monitor) simultaneously performed board hygiene on #65:
+- Removed stale labels: squad:steeply, go:needs-research
+- Created and applied go:in-progress label
+
+### Next Steps
+
+PR #66 pending review and merge into dev branch.
+
+---
