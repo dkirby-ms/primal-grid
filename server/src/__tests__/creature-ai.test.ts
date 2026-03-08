@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { GameState, CreatureState, TileState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
+import { isTileOpenForCreature } from "../rooms/creatureAI.js";
 import {
   TileType, isWaterTile,
   CREATURE_TYPES, CREATURE_AI,
   DEFAULT_MAP_SIZE,
+  SHAPE,
 } from "@primal-grid/shared";
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -623,5 +625,98 @@ describe("Phase 2.5 — Creature AI: Ecosystem Stability", () => {
     // This is a soft check — just verify the system didn't crash
     expect(finalCount).toBeGreaterThanOrEqual(0);
     expect(finalCount).toBeLessThanOrEqual(initialCount);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════
+// PR #57 review — Builder structure traversal exception
+// ═════════════════════════════════════════════════════════════════════
+
+describe("isTileOpenForCreature — builder structure traversal", () => {
+  function makeSmallState(width: number, height: number): GameState {
+    const state = new GameState();
+    state.mapWidth = width;
+    state.mapHeight = height;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const tile = new TileState();
+        tile.x = x;
+        tile.y = y;
+        tile.type = TileType.Grassland;
+        state.tiles.push(tile);
+      }
+    }
+    return state;
+  }
+
+  it("builder can traverse own structure tiles (shapeHP > 0, same owner)", () => {
+    const state = makeSmallState(4, 1);
+
+    // Place a structure on tile (2, 0) owned by player1
+    const structureTile = state.getTile(2, 0)!;
+    structureTile.shapeHP = SHAPE.BLOCK_HP;
+    structureTile.ownerID = "player1";
+
+    // isWalkable should reject this tile (shapeHP > 0)
+    expect(state.isWalkable(2, 0)).toBe(false);
+
+    // Builder owned by player1 should still be able to enter
+    const builder = new CreatureState();
+    builder.id = "b1";
+    builder.creatureType = "pawn_builder";
+    builder.ownerID = "player1";
+    builder.x = 1;
+    builder.y = 0;
+    builder.pawnType = "builder";
+    state.creatures.set("b1", builder);
+
+    expect(isTileOpenForCreature(state, builder, 2, 0)).toBe(true);
+  });
+
+  it("builder cannot traverse enemy structure tiles (shapeHP > 0, different owner)", () => {
+    const state = makeSmallState(4, 1);
+
+    const structureTile = state.getTile(2, 0)!;
+    structureTile.shapeHP = SHAPE.BLOCK_HP;
+    structureTile.ownerID = "enemy1";
+
+    const builder = new CreatureState();
+    builder.id = "b1";
+    builder.creatureType = "pawn_builder";
+    builder.ownerID = "player1";
+    builder.x = 1;
+    builder.y = 0;
+    builder.pawnType = "builder";
+    state.creatures.set("b1", builder);
+
+    expect(isTileOpenForCreature(state, builder, 2, 0)).toBe(false);
+  });
+
+  it("non-builder pawns are blocked by own structure tiles (shapeHP > 0)", () => {
+    const state = makeSmallState(4, 1);
+
+    const structureTile = state.getTile(2, 0)!;
+    structureTile.shapeHP = SHAPE.BLOCK_HP;
+    structureTile.ownerID = "player1";
+
+    // Herbivore
+    const herb = new CreatureState();
+    herb.id = "h1";
+    herb.creatureType = "herbivore";
+    herb.ownerID = "";
+    herb.x = 1;
+    herb.y = 0;
+    state.creatures.set("h1", herb);
+    expect(isTileOpenForCreature(state, herb, 2, 0)).toBe(false);
+
+    // Carnivore
+    const carn = new CreatureState();
+    carn.id = "c1";
+    carn.creatureType = "carnivore";
+    carn.ownerID = "";
+    carn.x = 1;
+    carn.y = 0;
+    state.creatures.set("c1", carn);
+    expect(isTileOpenForCreature(state, carn, 2, 0)).toBe(false);
   });
 });

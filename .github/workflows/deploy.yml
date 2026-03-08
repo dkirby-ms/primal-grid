@@ -57,6 +57,7 @@ jobs:
             --image ${{ secrets.ACR_NAME }}.azurecr.io/primal-grid:${{ github.sha }}
 
       - name: Output app URL
+        id: get-url
         run: |
           FQDN=$(az containerapp show \
             --name ${{ secrets.CONTAINER_APP_NAME }} \
@@ -64,3 +65,98 @@ jobs:
             --query "properties.configuration.ingress.fqdn" \
             --output tsv)
           echo "### 🎮 Deployed to https://$FQDN" >> "$GITHUB_STEP_SUMMARY"
+          echo "fqdn=$FQDN" >> "$GITHUB_OUTPUT"
+    outputs:
+      fqdn: ${{ steps.get-url.outputs.fqdn }}
+
+  discord-notify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: always()
+    env:
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      DEPLOY_RESULT: ${{ needs.deploy.result }}
+      DEPLOY_URL: ${{ needs.deploy.outputs.fqdn }}
+      REPOSITORY: ${{ github.repository }}
+      COMMIT_SHA: ${{ github.sha }}
+      REF_NAME: ${{ github.ref_name }}
+      RUN_ID: ${{ github.run_id }}
+    steps:
+      - name: Send Discord notification
+        if: ${{ env.DISCORD_WEBHOOK_URL != '' }}
+        run: |
+          # Set status and color based on deploy result
+          if [ "$DEPLOY_RESULT" = "success" ]; then
+            STATUS="✅ Production Deployment Successful"
+            COLOR=3066993
+          else
+            STATUS="❌ Production Deployment Failed"
+            COLOR=15158332
+          fi
+
+          # Checkout with full history for changelog
+          git clone --depth 50 https://github.com/${REPOSITORY}.git repo
+          cd repo
+          git fetch --depth 50 origin master
+
+          # Generate changelog (last 10 commits)
+          CHANGELOG=$(git log --pretty=format:'• %h %s (%an)' HEAD~10..HEAD 2>/dev/null | head -10)
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG="• No recent commits available"
+          fi
+
+          # Truncate changelog if too long (Discord field limit ~1024 chars)
+          if [ ${#CHANGELOG} -gt 1000 ]; then
+            CHANGELOG="${CHANGELOG:0:1000}..."
+          fi
+
+          # Build fields array with jq for safe JSON escaping
+          RUN_URL="https://github.com/${REPOSITORY}/actions/runs/${RUN_ID}"
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          COMMIT_URL="https://github.com/${REPOSITORY}/commit/${COMMIT_SHA}"
+
+          FIELDS=$(jq -n \
+            --arg env "🎮 Production" \
+            --arg url "https://${DEPLOY_URL}" \
+            '[{"name": "Environment", "value": $env, "inline": true},
+              {"name": "Deployed URL", "value": $url, "inline": false}]')
+
+          # Add changelog field
+          FIELDS=$(echo "$FIELDS" | jq --arg changelog "$CHANGELOG" \
+            '. + [{"name": "📜 Changelog", "value": $changelog, "inline": false}]')
+
+          # Add commit info
+          FIELDS=$(echo "$FIELDS" | jq \
+            --arg sha "$SHORT_SHA" --arg url "$COMMIT_URL" \
+            '. + [{"name": "📝 Commit", "value": "[`\($sha)`](\($url))", "inline": true}]')
+
+          # Add run link
+          FIELDS=$(echo "$FIELDS" | jq --arg run_url "$RUN_URL" \
+            '. + [{"name": "🔗 Actions Run", "value": "[View Run](\($run_url))", "inline": true}]')
+
+          PAYLOAD=$(jq -n \
+            --arg title "$STATUS" \
+            --arg desc "Production deployment for \`${REF_NAME}\`" \
+            --argjson color "$COLOR" \
+            --argjson fields "$FIELDS" \
+            --arg footer "Primal Grid CI • ${REPOSITORY}" \
+            '{
+              "username": "Squad: Marathe",
+              "embeds": [{
+                "title": $title,
+                "description": $desc,
+                "color": $color,
+                "fields": $fields,
+                "footer": { "text": $footer }
+              }]
+            }')
+
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$DISCORD_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          if [ "$HTTP_STATUS" = "204" ] || [ "$HTTP_STATUS" = "200" ]; then
+            echo "Discord notification sent successfully (HTTP ${HTTP_STATUS})"
+          else
+            echo "::warning::Discord notification failed with HTTP ${HTTP_STATUS}"
+          fi

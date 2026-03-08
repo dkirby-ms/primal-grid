@@ -37,7 +37,13 @@ export function stepBuilder(creature: CreatureState, state: GameState): void {
         creature.currentState = "building";
         creature.buildProgress = 0;
       } else {
-        moveToward(creature, creature.targetX, creature.targetY, state);
+        const moved = moveToward(creature, creature.targetX, creature.targetY, state);
+        if (!moved) {
+          // Path blocked — abandon target and re-scan next tick
+          creature.targetX = -1;
+          creature.targetY = -1;
+          creature.currentState = "idle";
+        }
       }
       break;
     }
@@ -112,16 +118,40 @@ function isValidBuildTile(tile: { type: number; shapeHP: number }): boolean {
 }
 
 /**
- * Find the nearest unclaimed walkable tile adjacent to the builder's owner's territory.
+ * Check if a tile is an interior gap: unowned but surrounded on 3+ cardinal
+ * sides by tiles owned by the same player.
+ */
+function isInteriorGap(
+  state: GameState,
+  ownerID: string,
+  x: number,
+  y: number,
+): boolean {
+  let ownedNeighbors = 0;
+  for (const [nx, ny] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]]) {
+    const neighbor = state.getTile(nx, ny);
+    if (neighbor && neighbor.ownerID === ownerID) ownedNeighbors++;
+  }
+  return ownedNeighbors >= 3;
+}
+
+/**
+ * Find the best unclaimed walkable tile adjacent to the builder's owner's territory.
  * Scans within BUILD_SITE_SCAN_RADIUS.
+ * Prioritizes interior gaps (tiles surrounded on 3+ sides by owned territory)
+ * before expanding outward. Within each priority tier, prefers closest tiles
+ * with a tiebreaker favoring outward expansion (further from HQ).
  */
 function findBuildSite(
   creature: CreatureState,
   state: GameState,
 ): { x: number; y: number } | null {
   const radius = PAWN.BUILD_SITE_SCAN_RADIUS;
+  const player = state.players.get(creature.ownerID);
   let best: { x: number; y: number } | null = null;
   let bestDist = Infinity;
+  let bestHqDist = -1;
+  let bestIsGap = false;
 
   for (let dy = -radius; dy <= radius; dy++) {
     for (let dx = -radius; dx <= radius; dx++) {
@@ -134,8 +164,23 @@ function findBuildSite(
       if (!isAdjacentToTerritory(state, creature.ownerID, tx, ty)) continue;
 
       const dist = Math.abs(dx) + Math.abs(dy);
-      if (dist > 0 && dist < bestDist) {
+      if (dist === 0) continue;
+
+      const gap = isInteriorGap(state, creature.ownerID, tx, ty);
+      const hqDist = player
+        ? Math.abs(tx - player.hqX) + Math.abs(ty - player.hqY)
+        : 0;
+
+      // Interior gaps always beat non-gaps; within same tier, prefer closer,
+      // then further from HQ (outward expansion bias as secondary tiebreaker)
+      if (
+        (gap && !bestIsGap) ||
+        (gap === bestIsGap && dist < bestDist) ||
+        (gap === bestIsGap && dist === bestDist && hqDist > bestHqDist)
+      ) {
         bestDist = dist;
+        bestHqDist = hqDist;
+        bestIsGap = gap;
         best = { x: tx, y: ty };
       }
     }

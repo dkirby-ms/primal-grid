@@ -5052,3 +5052,208 @@ HQ income fires every 40 ticks and pawn upkeep every 60 ticks. A spawn happening
 Applies to all E2E tests in `e2e/tests/`. See pattern in `e2e/tests/multiplayer.spec.ts` (spawn resource assertions).
 
 ---
+
+## 2026-03-08T18:09Z: User Directive — E2E Workflow Trigger Restriction
+
+**By:** saitcho (via Copilot)  
+**Date:** 2026-03-08  
+**Status:** CAPTURED — Awaiting implementation
+
+### Decision
+
+E2E GitHub Actions workflow should only trigger on pushes to `uat` and `master` branches. Remove `pull_request` event trigger entirely.
+
+### Rationale
+
+E2E tests are comprehensive but resource-intensive. Running on every PR is unnecessary overhead. Testing should focus on deployment branches (uat/master) where integration is complete. Development testing happens via unit/integration suites.
+
+### Implementation Notes
+
+- Workflow: `.github/workflows/e2e.yml`
+- Related: 2026-01-20 E2E Workflow Simplification and Direct Artifact Links decisions (already implemented)
+
+---
+
+## 2026-03-08: Builder Traversal — Builders Walk Through Own Structures
+
+**Date:** 2026-03-08  
+**Author:** Pemulis (Systems Dev)  
+**Status:** IMPLEMENTED (PR #55, Pemulis) + TESTED (PR #57, Steeply)
+
+### Decision
+
+Builders (pawn_builder creatures) can traverse structures on their owner's territory without pathfinding obstruction. Implementation in `isTileOpenForCreature()` checks both `creature.creatureType === "pawn_builder"` AND `tile.ownerID === creature.ownerID`.
+
+### Rationale
+
+Built outpost/farm tiles receive `shapeHP = BLOCK_HP` (100), making them unwalkable to standard pathing. When builders construct outposts in sequence, they wall themselves off and oscillate. Allowing builder traversal of own structures is gameplay-appropriate (construction units navigate their own constructions) and combat-safe (attackers/defenders still blocked).
+
+### Scope
+
+- Only builders get traversal privilege
+- Enemy structures remain blocking
+- Defenders, attackers, wildlife, carnivores unaffected
+
+### Testing
+
+Validated by Steeply in PR #57:
+1. `isTileOpenForCreature` builder structure traversal test
+2. `move_to_site` FSM blocked-path reset (prevents oscillation)
+3. `findBuildSite` HQ-distance tiebreaker (outward expansion bias)
+
+Result: 528 tests passing.
+
+---
+
+## 2026-03-08: Server Startup Log — Client URL Configuration
+
+**Date:** 2026-03-08  
+**Author:** Marathe (DevOps Engineer)  
+**Status:** IMPLEMENTED (commit 1d63354)
+
+### Decision
+
+Server startup log now includes the client application URL (e.g., `http://localhost:3000`) for developer convenience. Client URL is configurable via `CLIENT_URL` environment variable; defaults to `http://localhost:3000`.
+
+### Rationale
+
+When developers start the server, they immediately see where to access the application without referencing config files. Configurability via env var allows production deployments to override default (e.g., DNS name, port mapping).
+
+### Implementation
+
+File: `server/src/index.ts`
+- Reads `process.env.CLIENT_URL` with fallback to `http://localhost:3000`
+- Logged alongside Colyseus server address on startup
+- No behavioral changes; purely informational
+
+### Impact
+
+- **Scope:** Startup logging only
+- **Backward Compatible:** Yes (default preserves existing behavior)
+- **Testing:** No new tests required (logging enhancement)
+
+---
+
+## Remove Pawn Wood Upkeep System
+
+**Date:** 2026-03-08
+**Author:** Pemulis (Systems Dev)
+**Status:** IMPLEMENTED
+
+### Decision
+
+Wood upkeep for pawns (builders, defenders, attackers) has been completely removed as a gameplay mechanic. Pawns no longer consume wood to stay alive and no longer take damage or die from upkeep failure.
+
+### What Changed
+
+- `tickPawnUpkeep()` removed from GameRoom and game loop
+- `upkeep` field removed from `PawnTypeDef` interface and all `PAWN_TYPES` entries
+- `BUILDER_UPKEEP_WOOD`, `UPKEEP_INTERVAL_TICKS`, `UPKEEP_DAMAGE` constants removed from `PAWN`
+- 8 upkeep tests removed (pawnBuilder, combat-system, gameLog)
+- Client-side `upkeep` log type config left intact (harmless, no events sent)
+
+### What's NOT Affected
+
+- Wild creature hunger system (herbivores/carnivores)
+- Wood as building resource
+- Any other resource mechanics
+
+### Impact
+
+- **Balance:** Pawns are now permanent once spawned (until killed). Economy pressure from wood upkeep is gone — may need rebalancing elsewhere.
+- **Client:** `GameLog.ts` still has `upkeep` type styling — can be cleaned up later if desired.
+- **Tests:** 515 tests passing after removal.
+
+---
+# Discord Notifications for Deployment Workflows
+
+**Date:** 2026-03-08  
+**Author:** Marathe (DevOps/CI-CD)  
+**Status:** Implemented
+
+## Decision
+
+Add Discord notifications with changelog to both UAT and production deployment workflows to provide immediate visibility into deployment status and changes.
+
+## Context
+
+Previously, deployment workflows (`.github/workflows/deploy-uat.yml` and `.github/workflows/deploy.yml`) completed silently without team notification. This made it difficult to track:
+- When deployments occurred
+- Whether deployments succeeded or failed
+- What changes were included in each deployment
+- Where to access the deployed application
+
+The E2E workflow already had excellent Discord notifications (lines 73-153 in e2e.yml) that could serve as a pattern.
+
+## Implementation
+
+Added `discord-notify` job to both deployment workflows with the following features:
+
+### Notification Content
+- **Environment indicator:** 🧪 UAT or 🎮 Production
+- **Deploy status:** ✅ success (green 3066993) or ❌ failure (red 15158332)
+- **Changelog:** Last 10 commits with format `• <hash> <message> (<author>)`
+- **Deployed URL:** Azure Container App FQDN
+- **Commit info:** Short SHA with GitHub commit link
+- **Actions run link:** Direct link to workflow run
+
+### Technical Details
+- Runs with `if: always()` to notify on both success and failure
+- Guarded with `if: ${{ env.DISCORD_WEBHOOK_URL != '' }}` for fork safety
+- Uses `jq` for safe JSON escaping of dynamic content
+- Changelog generated via `git log --pretty=format:'• %h %s (%an)' HEAD~10..HEAD`
+- Changelog truncated to 1000 chars if too long (Discord field limit ~1024 chars)
+- FQDN passed from deploy job to discord-notify job via job outputs
+- Username: "Squad: Marathe" for webhook attribution
+
+### Code Pattern
+```yaml
+outputs:
+  fqdn: ${{ steps.get-url.outputs.fqdn }}
+
+discord-notify:
+  needs: deploy
+  runs-on: ubuntu-latest
+  if: always()
+  env:
+    DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+    DEPLOY_RESULT: ${{ needs.deploy.result }}
+    DEPLOY_URL: ${{ needs.deploy.outputs.fqdn }}
+```
+
+## Consequences
+
+### Positive
+- Immediate visibility into all deployments (UAT and production)
+- Clear changelog helps team understand what changed in each deployment
+- Failure notifications ensure rapid response to deployment issues
+- Consistent notification pattern across E2E, UAT, and production workflows
+
+### Neutral
+- Adds ~10 seconds to workflow runtime for git clone and notification posting
+- Requires `DISCORD_WEBHOOK_URL` secret to be configured (already exists in repo)
+
+### Negative
+- None identified
+
+## Alternatives Considered
+
+1. **No changelog** — Simpler but provides less context about what was deployed
+2. **Full git diff** — Too verbose for Discord, would exceed field limits
+3. **Email notifications** — Less immediate and harder to integrate with team chat workflow
+4. **Slack instead of Discord** — Team already uses Discord; no reason to change
+
+## Related Decisions
+
+- E2E Discord Notifications (2026-03-08T13:24:21Z) — Established the pattern used here
+- Direct Artifact Links in Discord Notifications (2025-01-20) — Deep-linking pattern
+
+## Files Modified
+
+- `.github/workflows/deploy-uat.yml` — Added discord-notify job
+- `.github/workflows/deploy.yml` — Added discord-notify job
+- `.squad/agents/marathe/history.md` — Documented learnings
+
+## Commit
+
+984daef — "Add Discord notifications with changelog to deployment workflows"

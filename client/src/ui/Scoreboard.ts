@@ -54,20 +54,6 @@ export class Scoreboard {
       | undefined;
     if (!players || typeof players.forEach !== 'function') return;
 
-    // Count territory tiles per player
-    const territoryCounts = new Map<string, number>();
-    const tiles = state['tiles'] as
-      | { forEach: (cb: (t: Record<string, unknown>) => void) => void }
-      | undefined;
-    if (tiles && typeof tiles.forEach === 'function') {
-      tiles.forEach((tile: Record<string, unknown>) => {
-        const ownerID = (tile['ownerID'] as string) ?? '';
-        if (ownerID !== '') {
-          territoryCounts.set(ownerID, (territoryCounts.get(ownerID) ?? 0) + 1);
-        }
-      });
-    }
-
     const rows: PlayerRow[] = [];
     players.forEach((player: Record<string, unknown>, key: string) => {
       const id = (player['id'] as string) ?? key;
@@ -94,20 +80,6 @@ export class Scoreboard {
       const tdScore = document.createElement('td');
       tdScore.textContent = String(row.score);
       tr.appendChild(tdScore);
-
-      // Look up territory count by finding the player's real ID (strip " (you)" suffix)
-      const cleanName = row.name.replace(' (you)', '');
-      let territory = 0;
-      players.forEach((player: Record<string, unknown>, key: string) => {
-        const id = (player['id'] as string) ?? key;
-        const pName = (player['displayName'] as string) || 'Player';
-        if (pName === cleanName || row.name === `${pName} (you)`) {
-          territory = territoryCounts.get(id) ?? 0;
-        }
-      });
-      const tdTerritory = document.createElement('td');
-      tdTerritory.textContent = String(territory);
-      tr.appendChild(tdTerritory);
 
       this.tbody.appendChild(tr);
     }

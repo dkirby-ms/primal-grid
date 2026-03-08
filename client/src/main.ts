@@ -49,6 +49,10 @@ async function bootstrap(): Promise<void> {
     camera.update();
     grid.tick();
 
+    // Viewport culling: only render tiles visible in the camera
+    const vp = camera.getViewportTileBounds();
+    grid.updateCulling(vp.minX, vp.minY, vp.maxX, vp.maxY);
+
     // Push explored bounds to camera each frame for smooth lerp
     const cache = grid.exploredCache;
     if (cache.size > 0 && cache.hasBoundsChanged) {
@@ -80,12 +84,14 @@ function promptForName(): Promise<string> {
     };
 
     btn.addEventListener('click', submit, { once: true });
-    input.addEventListener('keydown', (e) => {
+    const onKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Enter') {
         e.preventDefault();
+        input.removeEventListener('keydown', onKeydown);
         submit();
       }
-    }, { once: true });
+    };
+    input.addEventListener('keydown', onKeydown);
   });
 }
 

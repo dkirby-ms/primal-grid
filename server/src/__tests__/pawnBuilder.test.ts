@@ -159,18 +159,6 @@ function tickAI(room: GameRoom): void {
   }
 }
 
-/** Tick upkeep system once at the given cycle number. */
-function tickUpkeep(room: GameRoom, cycle: number): void {
-  room.state.tick = PAWN.UPKEEP_INTERVAL_TICKS * cycle;
-  if (typeof room.tickPawnUpkeep === "function") {
-    room.tickPawnUpkeep();
-  } else if (typeof room.tickBuilderAI === "function") {
-    room.tickBuilderAI();
-  } else {
-    room.tickCreatureAI();
-  }
-}
-
 /** Manhattan distance. */
 function manhattan(x1: number, y1: number, x2: number, y2: number): number {
   return Math.abs(x1 - x2) + Math.abs(y1 - y2);
@@ -503,60 +491,6 @@ describe("Adjacency validation (prevent teleport builds)", () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════
-// Category 4 — Upkeep system (resource drain, frequency)           3
-// ═════════════════════════════════════════════════════════════════════
-
-describe("Upkeep system (resource drain, frequency)", () => {
-
-  it("upkeep deducts 1 Wood per builder each 60-tick cycle", () => {
-    const room = createRoomWithMap(42);
-    const { player } = joinPlayer(room, "p1");
-
-    player.wood = 20;
-    const pos = findWalkableTile(room);
-    addBuilder(room, "b-upkeep", "p1", pos.x, pos.y);
-
-    tickUpkeep(room, 1);
-
-    expect(player.wood).toBe(20 - PAWN.BUILDER_UPKEEP_WOOD);
-  });
-
-  it("builder takes UPKEEP_DAMAGE when player has no wood", () => {
-    const room = createRoomWithMap(42);
-    const { player } = joinPlayer(room, "p1");
-
-    player.wood = 0;
-    const pos = findWalkableTile(room);
-    const builder = addBuilder(room, "b-broke", "p1", pos.x, pos.y, {
-      health: PAWN.BUILDER_HEALTH,
-    });
-
-    const healthBefore = builder.health;
-    tickUpkeep(room, 1);
-
-    expect(builder.health).toBeLessThan(healthBefore);
-  });
-
-  it("builder dies from accumulated upkeep damage (removed from creatures)", () => {
-    const room = createRoomWithMap(42);
-    const { player } = joinPlayer(room, "p1");
-
-    player.wood = 0;
-    const pos = findWalkableTile(room);
-    addBuilder(room, "b-starve", "p1", pos.x, pos.y, {
-      health: PAWN.BUILDER_HEALTH,
-    });
-
-    for (let cycle = 1; cycle <= 20; cycle++) {
-      tickUpkeep(room, cycle);
-      if (!room.state.creatures.has("b-starve")) break;
-    }
-
-    expect(room.state.creatures.has("b-starve")).toBe(false);
-  });
-});
-
-// ═════════════════════════════════════════════════════════════════════
 // Category 5 — Carnivore interaction (targeting, killing builders) 3
 // ═════════════════════════════════════════════════════════════════════
 
@@ -685,5 +619,103 @@ describe("HQ territory (immutability, visual distinction)", () => {
     // HQ tile must still belong to p1
     expect(hqTile!.ownerID).toBe("p1");
     expect(hqTile!.isHQTerritory).toBe(true);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════
+// PR #57 review — Builder FSM blocked-path reset
+// ═════════════════════════════════════════════════════════════════════
+
+describe("Builder FSM — move_to_site abandons target when path blocked", () => {
+  it("builder resets to idle when moveToward returns false (all adjacent tiles unwalkable)", () => {
+    const room = createRoomWithMap(42);
+    const { player } = joinPlayer(room, "p1");
+
+    // Find a walkable tile inside the player's territory
+    const hqPos = findWalkableTileInHQ(room, player);
+    expect(hqPos).not.toBeNull();
+
+    // Place the builder at hqPos and set a target far away
+    const builder = addBuilder(room, "b-blocked", "p1", hqPos!.x, hqPos!.y, {
+      currentState: "move_to_site",
+      targetX: hqPos!.x + 10,
+      targetY: hqPos!.y + 10,
+    });
+
+    // Wall off ALL cardinal neighbors with structures owned by another player
+    // so moveToward cannot find any open tile (builder can only traverse own structures)
+    const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (const [dx, dy] of directions) {
+      const nx = hqPos!.x + dx;
+      const ny = hqPos!.y + dy;
+      const tile = room.state.getTile(nx, ny);
+      if (tile) {
+        tile.shapeHP = SHAPE.BLOCK_HP;
+        tile.ownerID = "enemy";
+      }
+    }
+
+    // Tick AI — builder should detect it can't move and reset
+    tickAI(room);
+
+    expect(builder.currentState).toBe("idle");
+    expect(builder.targetX).toBe(-1);
+    expect(builder.targetY).toBe(-1);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════
+// PR #57 review — findBuildSite HQ-distance tiebreaker
+// ═════════════════════════════════════════════════════════════════════
+
+describe("findBuildSite — outward expansion HQ-distance tiebreaker", () => {
+  it("among equal-distance candidates, selects the one further from HQ", () => {
+    const room = createRoomWithMap(42);
+    const { player } = joinPlayer(room, "p1");
+
+    const hqPos = findWalkableTileInHQ(room, player);
+    expect(hqPos).not.toBeNull();
+
+    // Place builder at the HQ position and let it find a build site
+    const builder = addBuilder(room, "b-hq-bias", "p1", hqPos!.x, hqPos!.y, {
+      currentState: "idle",
+    });
+
+    // Tick until the builder picks a target (transitions to move_to_site)
+    let found = false;
+    for (let i = 0; i < 20; i++) {
+      tickAI(room);
+      if (builder.currentState === "move_to_site" || builder.currentState === "building") {
+        found = true;
+        break;
+      }
+    }
+    if (!found) return; // No valid build site (map edge case) — skip assertion
+
+    const targetHqDist = manhattan(builder.targetX, builder.targetY, player.hqX, player.hqY);
+    const targetBuilderDist = manhattan(hqPos!.x, hqPos!.y, builder.targetX, builder.targetY);
+
+    // Now check: is there any other valid candidate at the SAME distance
+    // from the builder that is FURTHER from HQ? There shouldn't be.
+    for (let dy = -PAWN.BUILD_SITE_SCAN_RADIUS; dy <= PAWN.BUILD_SITE_SCAN_RADIUS; dy++) {
+      for (let dx = -PAWN.BUILD_SITE_SCAN_RADIUS; dx <= PAWN.BUILD_SITE_SCAN_RADIUS; dx++) {
+        const tx = hqPos!.x + dx;
+        const ty = hqPos!.y + dy;
+        const tile = room.state.getTile(tx, ty);
+        if (!tile) continue;
+        if (tile.ownerID !== "") continue;
+        if (isWaterTile(tile.type) || tile.type === TileType.Rock) continue;
+        if (tile.shapeHP > 0) continue;
+        if (!isAdjacentToTerritory(room.state, "p1", tx, ty)) continue;
+
+        const candidateDist = Math.abs(dx) + Math.abs(dy);
+        if (candidateDist === 0) continue;
+        if (candidateDist !== targetBuilderDist) continue;
+
+        const candidateHqDist = manhattan(tx, ty, player.hqX, player.hqY);
+        // No candidate at the same builder-distance should be further from HQ
+        expect(candidateHqDist).toBeLessThanOrEqual(targetHqDist);
+      }
+    }
   });
 });

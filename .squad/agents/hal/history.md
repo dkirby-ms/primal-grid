@@ -513,3 +513,21 @@ Prevention (write clean first) > Cleanup (fix lint errors post-merge).
 Valid exceptions (e.g., E2E browser-context code) require documented decision in decisions.md.
 
 See: 2026-03-08: ESLint Override for E2E Browser Context Code
+
+### PR #60 Review — Viewport Culling for Camera Panning (Issue #29)
+
+- **Reviewed:** 2026-03-10. Approved. Differential viewport culling approach is correct and performant.
+- **Key architecture observation:** Manual differential culling is superior to PixiJS 8's built-in `cullable` property for this use case. Built-in culling iterates all objects per frame (O(n)); differential culling only mutates border tiles (O(viewport_border)) with O(viewport_area) comparisons.
+- **Gap noted:** Territory overlays (3rd layer) are not culled — only terrain tiles and fog overlays are toggled. Acceptable because territory overlays default to hidden and only owned tiles show them. Future optimization if profiling warrants.
+- **Fog structure icons** (emoji silhouettes) are also not culled but are harmless — off-screen when their tile is culled out.
+- **Interaction safety:** `setFogState` and culling can briefly disagree on fog.visible for off-screen tiles, but frame ordering (`camera.update → tick → updateCulling`) ensures consistency before render. No user-visible artifacts.
+- **Pattern:** For future rendering layers, remember to include them in `setTileCullVisible` or document why they're excluded.
+
+---
+
+## 2026-03-08: PR #60 Review — Viewport Culling Approved
+
+**Reviewed:** 2026-03-08T23:17:07Z  
+**Status:** APPROVED & MERGED
+
+Reviewed PR #60 differential viewport culling for camera panning performance fix. Culling approach is correct and performant. PR merged to dev. Non-blocking notes documented for future optimization of territory overlays and fog structure icons.
