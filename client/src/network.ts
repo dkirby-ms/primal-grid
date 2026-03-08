@@ -45,7 +45,7 @@ export async function connect(): Promise<Room> {
 
     // Expose room reference for Playwright E2E testing (dev mode only)
     if (import.meta.env.DEV || new URLSearchParams(window.location.search).has('dev')) {
-      (window as any).__ROOM__ = room;
+      (window as unknown as Record<string, unknown>).__ROOM__ = room;
     }
 
     room.onLeave(() => {

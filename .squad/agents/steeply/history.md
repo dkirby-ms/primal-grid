@@ -1660,3 +1660,20 @@ Run time: ~45s serial (single shared Colyseus server)
 - **Orchestration log:** `.squad/orchestration-log/2026-03-08T13-24-21Z-steeply.md`
 - **Session log:** `.squad/log/2026-03-08T13-24-21Z-e2e-framework-session.md`
 - **Decisions merged:** E2E Framework decision merged into `.squad/decisions.md`
+
+### Phase 4 — State-Based Assertions (Issue #50) (2026-03-10)
+
+- **20 new E2E tests** in `e2e/tests/state-assertions.spec.ts`. Total suite: **52 tests, all passing.**
+- **4 new helper modules** created:
+  - `e2e/helpers/creature.helper.ts` — getCreatures(), getCreatureById(), getCreatureCount(), getPlayerPawns(), waitForCreature(), waitForCreatureState(). Filterable by creatureType/ownerID/pawnType.
+  - `e2e/helpers/tile.helper.ts` — getTile(), getTilesWhere(), getOwnedTileCount(), getTerritoryStats(), waitForTileCount(), getResourceTilesInArea(). Supports arbitrary filter predicates on tile properties.
+  - `e2e/helpers/snapshot.helper.ts` — takeSnapshot(), diffSnapshots(), waitTicksAndSnapshot(), snapshotAndDiff(). Captures players, creatures, and aggregate tile stats. Diff tracks tick delta, player resource changes, creature adds/removes/moves, and tile stat changes.
+  - `e2e/helpers/websocket.helper.ts` — installMessageRecorder(), getRecordedMessages(), clearRecordedMessages(), waitForMessage(), sendAndRecord(), getMessageCount(). Hooks room.send() and room.onMessage('*') to capture all traffic.
+- **Key patterns:**
+  - Tile access uses bracket notation `tiles[idx]` with linear indexing `y * mapWidth + x` (ArraySchema requirement).
+  - Creature MapSchema uses `.forEach()` (not `.get()`).
+  - WebSocket recorder is idempotent (guard flag `__WS_RECORDER_INSTALLED__`).
+  - Snapshot comparison avoids full tile dumps (too large at 128×128); uses aggregate stats instead.
+  - All helpers accept optional owner/filter parameters; default to `room.sessionId` when omitted.
+- **Test coverage:** Creature queries (4 tests), tile queries (5 tests), snapshots (5 tests), WebSocket recording (4 tests), multiplayer snapshot assertions (2 tests).
+- **Zero flakiness:** All 52 tests pass deterministically in serial mode (~5.5 min on single worker).

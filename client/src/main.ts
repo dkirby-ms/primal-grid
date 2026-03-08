@@ -31,7 +31,7 @@ async function bootstrap(): Promise<void> {
 
   // Expose PixiJS app for Playwright E2E testing (dev mode only)
   if (import.meta.env.DEV || new URLSearchParams(window.location.search).has('dev')) {
-    (window as any).__PIXI_APP__ = app;
+    (window as unknown as Record<string, unknown>).__PIXI_APP__ = app;
   }
 
   // --- Grid (renders immediately with default grass) ---
