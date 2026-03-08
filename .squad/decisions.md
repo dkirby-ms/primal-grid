@@ -5133,3 +5133,35 @@ File: `server/src/index.ts`
 - **Testing:** No new tests required (logging enhancement)
 
 ---
+
+## Remove Pawn Wood Upkeep System
+
+**Date:** 2026-03-08
+**Author:** Pemulis (Systems Dev)
+**Status:** IMPLEMENTED
+
+### Decision
+
+Wood upkeep for pawns (builders, defenders, attackers) has been completely removed as a gameplay mechanic. Pawns no longer consume wood to stay alive and no longer take damage or die from upkeep failure.
+
+### What Changed
+
+- `tickPawnUpkeep()` removed from GameRoom and game loop
+- `upkeep` field removed from `PawnTypeDef` interface and all `PAWN_TYPES` entries
+- `BUILDER_UPKEEP_WOOD`, `UPKEEP_INTERVAL_TICKS`, `UPKEEP_DAMAGE` constants removed from `PAWN`
+- 8 upkeep tests removed (pawnBuilder, combat-system, gameLog)
+- Client-side `upkeep` log type config left intact (harmless, no events sent)
+
+### What's NOT Affected
+
+- Wild creature hunger system (herbivores/carnivores)
+- Wood as building resource
+- Any other resource mechanics
+
+### Impact
+
+- **Balance:** Pawns are now permanent once spawned (until killed). Economy pressure from wood upkeep is gone — may need rebalancing elsewhere.
+- **Client:** `GameLog.ts` still has `upkeep` type styling — can be cleaned up later if desired.
+- **Tests:** 515 tests passing after removal.
+
+---
