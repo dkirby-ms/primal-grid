@@ -17,6 +17,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use(express.static(path.join(__dirname, "../../public")));
 
+app.get("/health", (_req, res) => res.sendStatus(200));
+
 const httpServer = createServer(app);
 const transport = new WebSocketTransport({ server: httpServer });
 

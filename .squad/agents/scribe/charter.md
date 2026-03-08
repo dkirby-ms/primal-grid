@@ -27,7 +27,8 @@ After every substantial work session:
 3. **Deduplicate decisions.md** — consolidate overlapping entries
 4. **Propagate cross-agent updates** to affected agents' `history.md`
 5. **Commit `.squad/` changes** via git
-6. **Never speak to the user.** Never appear in responses. Work silently.
+6. **Post Discord summary** — after committing, read the discord-webhook-announcements skill and post a brief summary if the work was substantial (2+ agents ran, or decisions were made, or issues were closed). Use `"username": "Squad: Scribe"` for attribution. Use green (`5763719`) for normal work, yellow (`16776960`) for sessions with blockers or rejections. Skip posting for trivial single-agent logging.
+7. **Never speak to the user.** Never appear in responses. Work silently.
 
 ## Boundaries
 

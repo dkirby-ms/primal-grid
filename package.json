@@ -12,10 +12,12 @@
     "build": "npm run build -w shared && npm run build -w server && npm run build -w client",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "playwright test --config e2e/playwright.config.ts"
   },
   "devDependencies": {
     "@bradygaster/squad-cli": "^0.8.20",
+    "@playwright/test": "^1.58.2",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "concurrently": "^9.0.0",

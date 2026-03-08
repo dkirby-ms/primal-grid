@@ -25,4 +25,13 @@ module.exports = {
     'security/detect-object-injection': 'off',
   },
   ignorePatterns: ['dist', 'node_modules', '*.js', '!.eslintrc.cjs'],
+  overrides: [
+    {
+      files: ['e2e/**/*.ts'],
+      rules: {
+        // E2E tests use page.evaluate() which returns untyped browser-context data
+        '@typescript-eslint/no-explicit-any': 'off',
+      },
+    },
+  ],
 };

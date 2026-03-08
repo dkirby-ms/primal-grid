@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: "uat-reset"
+  cancel-in-progress: true
+
 jobs:
   reset-uat:
     runs-on: ubuntu-latest

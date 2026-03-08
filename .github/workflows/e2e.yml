@@ -1,0 +1,111 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [uat, master]
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      artifact-id: ${{ steps.upload-report.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build shared package
+        run: npm run build -w shared
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+
+      - uses: actions/upload-artifact@v4
+        id: upload-report
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  discord-notify:
+    needs: e2e
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+    steps:
+      - name: Send Discord notification
+        if: env.DISCORD_WEBHOOK_URL != ''
+        env:
+          E2E_RESULT: ${{ needs.e2e.result }}
+          ARTIFACT_ID: ${{ needs.e2e.outputs.artifact-id }}
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          RUN_ID: ${{ github.run_id }}
+          REPOSITORY: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$E2E_RESULT" = "success" ]; then
+            STATUS="✅ E2E Tests Passed"
+            COLOR=5763719
+          else
+            STATUS="❌ E2E Tests Failed"
+            COLOR=15548997
+          fi
+
+          # Build artifact and run URLs
+          REPORT_URL="https://github.com/${REPOSITORY}/actions/runs/${RUN_ID}/artifacts/${ARTIFACT_ID}"
+          RUN_URL="https://github.com/${REPOSITORY}/actions/runs/${RUN_ID}"
+
+          # Build fields array with jq for safe JSON escaping
+          FIELDS=$(jq -n --arg report_url "$REPORT_URL" --arg run_url "$RUN_URL" \
+            '[{"name": "📊 Test Report", "value": "[Download Report](\($report_url))", "inline": true},
+              {"name": "🔗 Run", "value": "[View Actions Run](\($run_url))", "inline": true}]')
+
+          # Add commit info
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          COMMIT_URL="https://github.com/${REPOSITORY}/commit/${COMMIT_SHA}"
+          SAFE_MSG=$(echo "$COMMIT_MSG" | head -1)
+          FIELDS=$(echo "$FIELDS" | jq \
+            --arg sha "$SHORT_SHA" --arg msg "$SAFE_MSG" --arg url "$COMMIT_URL" \
+            '. + [{"name": "📝 Commit", "value": "[`\($sha)`](\($url)) \($msg)"}]')
+
+          PAYLOAD=$(jq -n \
+            --arg title "$STATUS" \
+            --arg desc "E2E test results for \`${REF_NAME}\`" \
+            --argjson color "$COLOR" \
+            --argjson fields "$FIELDS" \
+            --arg footer "Primal Grid CI • ${REPOSITORY}" \
+            '{
+              "username": "Squad: Marathe",
+              "embeds": [{
+                "title": $title,
+                "description": $desc,
+                "color": $color,
+                "fields": $fields,
+                "footer": { "text": $footer }
+              }]
+            }')
+
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$DISCORD_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          if [ "$HTTP_STATUS" = "204" ] || [ "$HTTP_STATUS" = "200" ]; then
+            echo "Discord notification sent successfully (HTTP ${HTTP_STATUS})"
+          else
+            echo "::warning::Discord notification failed with HTTP ${HTTP_STATUS}"
+          fi

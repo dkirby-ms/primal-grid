@@ -4694,3 +4694,361 @@ Enemy entities are a fundamentally different AI domain. Mixing them into the gen
 - `creatureAI.ts`: Enemy base/mobile processing moved to top of loop
 - `CreatureRenderer.ts`: Exhausted indicator guarded for enemy types
 - If new enemy entity types are added, they must also be routed early in `tickCreatureAI()`
+
+---
+
+## 2026-03-07T23:57: tickCombat() Memory Leak Fix — attackerState Cleanup Convention
+
+**By:** Pemulis (Systems Dev)  
+**Status:** IMPLEMENTED — Commit ccd2a84  
+
+**Decision:** Pass `attackerState` Map as 5th parameter to `tickCombat()` and delete entries in Phase 3 (pawn death cleanup).
+
+**Rationale:**
+- Centralizes all per-creature Map cleanup in Phase 3 death loop
+- Avoids split cleanup logic across GameRoom + combat.ts
+- Establishes convention: all new `Map<creatureId, ...>` must be cleaned up in Phase 3
+
+**Impact:**
+- `tickCombat()` signature: 4 → 5 parameters
+- All call sites (GameRoom, test helpers) updated
+- Prevents memory leaks when new per-creature state Maps are added
+
+**Convention Going Forward:** Combat-related per-creature state Maps must be passed to `tickCombat()` and cleaned up in Phase 3 death handling.
+
+
+---
+
+## 2026-03-10: Playwright E2E Testing Framework for Multiplayer
+
+**By:** Steeply (Tester)  
+**Date:** 2026-03-10  
+**Status:** IMPLEMENTED (PR #52, draft) — Phase 1 complete
+
+### Summary
+
+Established the Playwright E2E testing framework at `e2e/` with custom fixtures, state helpers, and CI workflow for multiplayer Canvas-based testing.
+
+### Implementation Details
+
+#### 1. Browser Contexts for Multi-Player Simulation
+
+- One browser, multiple contexts (not separate browser instances)
+- Each context = one player with isolated session
+- Custom Playwright fixtures for `playerOne` / `playerTwo` with automatic join flow
+- `workers: 1` — all tests share a single Colyseus server to prevent race conditions
+
+#### 2. State-Based Assertions (Primary Strategy)
+
+- Expose `window.__ROOM__` in dev mode for `page.evaluate()` access to Colyseus `room.state`
+- Assert on deserialized game state (players, creatures, tiles), not pixels
+- Use `page.waitForFunction()` to wait for server state sync before asserting
+- DOM selectors: HUD/scoreboard/prompt (20%), visual regression sparingly (10%)
+
+#### 3. Client Code Changes (Complete)
+
+Added to `client/src/network.ts` after room join:
+```typescript
+if (import.meta.env.DEV || new URLSearchParams(window.location.search).has('dev')) {
+  (window as any).__ROOM__ = room;
+}
+```
+Also gated `window.__PIXI_APP__` in `client/src/main.ts` for renderer access.
+
+#### 4. Dual webServer Config
+
+Playwright config starts both Colyseus server (port 2567) and Vite dev client (port 3000). All test URLs use `?dev=1` to disable fog of war.
+
+#### 5. CI Workflow
+
+New `.github/workflows/e2e.yml` triggers on push/PR to `uat` and `master` branches. Runs alongside Vitest, no failures.
+
+#### 6. Phase 1 Tests (Complete)
+
+- ✅ `join-flow.spec.ts` — 4 P0 tests (join, two-player room, spawn pawn)
+- ✅ Custom fixture at `e2e/fixtures/game.fixture.ts`
+- ✅ State helper at `e2e/helpers/state.helper.ts`
+- ✅ Player helper at `e2e/helpers/player.helper.ts`
+- ✅ All 520 unit tests pass
+- ✅ All 4 E2E tests pass
+
+### Team Impact
+
+- **Gately/Pemulis:** Code changes done — `window.__ROOM__` and `window.__PIXI_APP__` now dev-mode accessible
+- **Hal:** Can implement Phase 2 tests (P1/P2 mechanics) — use `e2e/fixtures/game.fixture.ts`
+- **CI/CD:** E2E workflow integrated, runs on every `uat` and `master` push
+- **Test Performance:** Serial execution by design — slower than unit tests but reliable for multiplayer
+
+### Files Modified
+
+- `client/src/main.ts` — gated `window.__PIXI_APP__`
+- `client/src/network.ts` — gated `window.__ROOM__`
+- `package.json`, `package-lock.json` — Playwright + dependencies
+
+### Next Phase
+
+Phase 2: Territory, resource income, day/night (P1 tests). Phase 3: Conflict/combat (P2 tests).
+
+---
+
+# Decision: E2E helper type interfaces for `window.__ROOM__`
+
+**Author:** Pemulis  
+**Date:** 2026-03-08  
+**Scope:** e2e/helpers/
+
+## Context
+
+Fixed all 8 `@typescript-eslint/no-explicit-any` lint errors across 4 files. The E2E helpers (`player.helper.ts`, `state.helper.ts`) access `window.__ROOM__` inside Playwright's `page.evaluate` / `page.waitForFunction` callbacks. These need TypeScript types for the Colyseus room state shape as exposed on `window`.
+
+## Decision
+
+- **Client files** (`main.ts`, `network.ts`): Used `(window as unknown as Record<string, unknown>)` for assigning dev-mode globals (`__PIXI_APP__`, `__ROOM__`). These are write-only contexts so a generic record type is sufficient.
+- **E2E helpers**: Defined local `E2ERoom` and `E2EPlayerData` interfaces in each helper file to type the `window.__ROOM__` shape. These are lightweight compile-time-only types that mirror the fields actually accessed by the test helpers.
+- Chose **file-local interfaces** over a shared type file because there are only 2 consumers and the types are minimal. If more E2E helpers emerge that access `__ROOM__`, consolidate into `e2e/helpers/e2e-types.ts`.
+
+## Impact
+
+Parker and Dallas should be aware: if new E2E helpers need `window.__ROOM__`, reuse the `E2ERoom`/`E2EPlayerData` pattern or factor into a shared type.
+
+---
+
+# Decision: GitHub Pages for Playwright E2E Reports
+
+**Date:** 2026-03-08
+**Author:** Pemulis (Systems Dev)
+**Status:** Accepted
+
+## Context
+
+E2E test reports were only available as workflow artifacts, which expire after 7 days and require downloading a zip to view. We needed a more accessible way to review test results, especially for failing tests on the `dev` branch.
+
+## Decision
+
+- Configured the Playwright reporter in CI to emit both `github` (for inline annotations) and `html` (for the full report).
+- Added a `deploy-report` job to `.github/workflows/e2e.yml` that publishes the HTML report to GitHub Pages on every push to `dev`.
+- The deploy job uses `if: always()` so reports are published even when tests fail — seeing failing reports is the primary use case.
+- The existing artifact upload is preserved for PR runs where Pages deployment is skipped.
+
+## Consequences
+
+- The repo's GitHub Pages must be configured to use GitHub Actions as the source (Settings → Pages → Source → GitHub Actions).
+- Pages deployments are scoped to pushes to `dev` only; PR runs still get artifact uploads.
+- A `concurrency` group prevents overlapping Pages deployments.
+
+---
+
+# Decision: Colyseus Client-Side State Access Patterns in E2E Tests
+
+**Author:** Steeply (Tester)
+**Date:** 2026-03-08
+**Context:** Phase 2 E2E smoke tests (Issue #50)
+
+## Decision
+
+When accessing Colyseus room state in `page.evaluate()` calls within Playwright tests:
+
+- **Players** (MapSchema): Use `.forEach((player, key) => ...)` and `.size` — NOT bracket access
+- **Tiles** (ArraySchema): Use bracket notation `tiles[index]` — NOT `.get()` or `.at()`
+- **Scalar fields** (tick, dayPhase, mapWidth): Direct property access `room.state.tick`
+
+## Rationale
+
+Colyseus deserializes state differently on the client vs server. The server-side `ArraySchema.at()` method is not available on the client-side deserialized object. The `.get()` method also doesn't exist. Only bracket notation works for array-type schemas on the client.
+
+## Impact
+
+All future E2E tests that read tile data must use this pattern. This is not obvious from the server-side test code, which exclusively uses `.at()`.
+
+---
+
+## 2026-03-08: CI/CD Audit Remediation Complete
+
+**Author:** Marathe (DevOps/CI-CD)  
+**Date:** 2026-03-08  
+**Status:** Implemented  
+
+### Context
+
+A comprehensive audit of all 16 GitHub Actions workflows identified 3 critical issues and 6 warnings. All 9 findings have been fixed.
+
+### Decisions Made
+
+#### Standards established (all team members should follow):
+
+1. **Node 22 is the standard** — all workflows must use `node-version: 22`. No exceptions.
+2. **Always cache npm** — every `setup-node` step should include `cache: npm`.
+3. **Pre-merge validation required** — any workflow that validates a branch must have a `pull_request` trigger, not just `push`. Validation after push is too late.
+4. **Concurrency guards on git operations** — workflows that push, merge, or reset branches must use concurrency groups to prevent race conditions.
+5. **ASCII-safe output** — workflow scripts should use ASCII or well-supported emoji (✅, ❌, ⛔, ⚠️). Avoid special Unicode that may render as mojibake in different environments.
+
+### Files Changed
+
+- `.github/workflows/e2e.yml` — Node 20→22
+- `.github/workflows/squad-ci.yml` — removed push trigger, added workflow_dispatch, added npm cache
+- `.github/workflows/squad-preview.yml` — added pull_request trigger
+- `.github/workflows/squad-release.yml` — added npm cache
+- `.github/workflows/squad-insider-release.yml` — added npm cache
+- `.github/workflows/reset-uat.yml` — added concurrency guard
+- `.github/workflows/squad-promote.yml` — added concurrency guard
+- `.github/workflows/squad-main-guard.yml` — fixed mojibake
+- `.github/workflows/squad-heartbeat.yml` — documented disabled cron
+
+### Impact
+
+- Faster CI runs (npm caching)
+- No more wasted compute (redundant push triggers removed)
+- Safer git operations (concurrency guards)
+- Pre-merge validation on preview branch (catches issues before they land)
+- Readable error messages in squad-main-guard
+
+---
+
+## 2026-03-08: User Directive — E2E Should NOT Trigger on Dev
+
+**By:** saitcho (via Copilot)  
+**Date:** 2026-03-08T14:05:00Z  
+**Status:** DECISION — Confirmed user intent  
+
+**What:** E2E workflow should NOT trigger on push/PR to `dev` branch. Only trigger on `uat` and `master`.
+
+**Why:** Intentional cost optimization. E2E test suite consumes significant cloud compute. Running on every dev push wastes resources. Dev is for feature iteration, not full validation.
+
+**Implementation:** `.github/workflows/e2e.yml` branch triggers set to `[uat, master]` only.
+
+---
+
+## 2026-03-08: E2E Workflow Permissions Scoping (Least-Privilege Pattern)
+
+**By:** Marathe (DevOps/CI-CD)  
+**Date:** 2026-03-08  
+**Status:** IMPLEMENTED  
+
+**What:** Workflow permissions in `.github/workflows/e2e.yml` scoped to job-level (least-privilege) instead of workflow-level.
+
+**Before:**
+```yaml
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+```
+All jobs had all three permissions.
+
+**After:**
+```yaml
+permissions:
+  contents: read
+```
+Workflow-level baseline. Job-level `permissions:` added to `deploy-report` only:
+```yaml
+deploy-report:
+  permissions:
+    pages: write
+    id-token: write
+```
+
+**Rationale:**
+- `contents: read` — all jobs need this (checkout, downloads)
+- `pages: write` — ONLY `deploy-report` needs this (publishes to GitHub Pages)
+- `id-token: write` — ONLY `deploy-report` needs this (OIDC token for Pages)
+
+The `e2e` job (tests, artifacts) and `discord-notify` job (webhook) don't need elevated perms.
+
+**Pattern:** Going forward, ALL GitHub Actions workflows should grant only baseline `contents: read` at workflow level and add job-level `permissions:` blocks for jobs that need elevated access. Reduces blast radius if a job is compromised.
+
+**Decisions.md Correction:** Also updated lines documenting E2E branch triggers to reflect `uat`/`master`, not `dev`.
+
+---
+
+## 2026-03-08T16:58: User Directive — Lint-Clean Code from the Start
+
+**By:** saitcho (via Copilot)  
+**Status:** BINDING DIRECTIVE — All Agents  
+
+**What:** Agents must write lint-clean code from the start. No exceptions:
+- **No `@typescript-eslint/no-explicit-any`** — Use proper types (`unknown`, interfaces, generics, or relax rules with documented rationale)
+- **No `@typescript-eslint/no-unused-vars`** — Don't import or declare things you don't use
+- **Run the linter before committing** — `npm run lint` is mandatory in the commit workflow
+
+**Why:** User request. The team keeps shipping `no-explicit-any` and `no-unused-vars` errors in every PR. This is a recurring problem and must stop. Prevention (write clean code first) is far better than cleanup (fixing lint errors post-merge).
+
+**Scope:** Applies to all agents (Copilot, Hal, Gately, Pemulis, Steeply, Marathe).
+
+**Note:** Valid exceptions (e.g., E2E tests with browser-context type erasure) require documented decision in decisions.md. See 2026-03-08: ESLint Override for E2E Browser Context Code.
+
+---
+
+## 2026-03-08: ESLint Override for E2E Browser Context Code
+
+**Author:** Steeply (Tester)  
+**Date:** 2026-03-08  
+**Status:** Implemented  
+
+### Problem
+
+E2E test helpers use Playwright's `page.evaluate()` to extract game state from the browser's runtime context. The Colyseus state objects in the browser don't have compile-time TypeScript types, so helper functions that process this data must use `any` types.
+
+34 of 47 lint errors were `@typescript-eslint/no-explicit-any` violations in:
+- `e2e/helpers/creature.helper.ts` (13 errors)
+- `e2e/helpers/snapshot.helper.ts` (5 errors)
+- `e2e/helpers/tile.helper.ts` (8 errors)
+- `e2e/helpers/websocket.helper.ts` (8 errors)
+
+### Decision
+
+**Add an ESLint override for `e2e/**/*.ts` that disables `@typescript-eslint/no-explicit-any`.**
+
+```javascript
+overrides: [
+  {
+    files: ['e2e/**/*.ts'],
+    rules: {
+      // E2E tests use page.evaluate() which returns untyped browser-context data
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+]
+```
+
+### Rationale
+
+1. **Inherent Type Erasure:** Browser runtime state has no compile-time types. TypeScript cannot infer types for data extracted from `page.evaluate()`.
+2. **Standard Practice:** Relaxing `no-explicit-any` for E2E test code is industry-standard. The helpers are isolated to `e2e/` and don't affect production code quality.
+3. **Pragmatic:** Alternative would be to add hundreds of type assertions (`as SomeType`) throughout helpers, which provides no safety benefit and clutters the code.
+
+### Impact
+
+- **Scope:** Only affects `e2e/` directory. Production code in `client/`, `server/`, `shared/` still enforces strict `no-explicit-any`.
+- **Developer Experience:** Removes friction for writing E2E helpers that extract browser-context state.
+- **Code Quality:** No degradation. The helpers already use defensive checks (null guards, property existence checks) to handle untyped data safely.
+
+### Result
+
+Zero ESLint errors. E2E tests continue to pass unchanged.
+
+---
+
+## 2026-03-08: Tick-Tolerant E2E Assertions
+
+**Author:** Steeply (Tester)  
+**Date:** 2026-03-08  
+**Status:** STANDARD PATTERN — All E2E Tests  
+
+### Decision
+
+E2E tests must not use exact equality (`toBe`) for resource values that can be modified by game ticks (HQ income, pawn upkeep). Use inequality checks (`toBeLessThan`, `toBeGreaterThan`) or tolerance ranges instead.
+
+When testing negative outcomes (e.g., "spawn should fail"), always verify the precondition (e.g., "resources are actually insufficient") before sending the command.
+
+Replace all `waitForTimeout()` usage with `expect.poll()` or `waitForFunction()` — fixed-duration waits are inherently nondeterministic.
+
+### Rationale
+
+HQ income fires every 40 ticks and pawn upkeep every 60 ticks. A spawn happening near those boundaries shifts resource values, making exact assertions flaky. Inequality checks assert the game invariant (resources decreased) without coupling to tick timing.
+
+### Scope
+
+Applies to all E2E tests in `e2e/tests/`. See pattern in `e2e/tests/multiplayer.spec.ts` (spawn resource assertions).
+
+---
