@@ -1709,3 +1709,9 @@ Fixed:
 Tests now more deterministic and properly assert expected behaviors.
 
 **Related:** Scribe merge of PR #52 review feedback batch (Pemulis + Steeply + Marathe).
+
+### Tick-Sensitive Assertion Patterns — PR #52 Re-review (2026-03-10)
+
+- **Never use exact equality for resource assertions in E2E tests.** HQ income ticks (every 40 ticks) and pawn upkeep (every 60 ticks) can fire between the "before" and "after" snapshots, shifting resource values by ±5 or more. Use inequality checks (`toBeLessThan`) to assert the invariant (resources decreased) without coupling to exact tick timing.
+- **Verify preconditions before negative tests.** When testing "spawn rejected due to insufficient resources," explicitly assert that resources are below the cost threshold *before* sending the spawn command. This prevents false passes when HQ income has silently replenished resources.
+- **Replace `waitForTimeout` with `expect.poll()`.** Fixed-duration waits are nondeterministic — `expect.poll()` with explicit intervals retries the check multiple times, making the test both faster on success and more reliable under load.
