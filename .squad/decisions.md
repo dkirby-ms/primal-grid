@@ -4761,7 +4761,7 @@ Playwright config starts both Colyseus server (port 2567) and Vite dev client (p
 
 #### 5. CI Workflow
 
-New `.github/workflows/e2e.yml` triggers on push/PR to `dev` branch. Runs alongside Vitest, no failures.
+New `.github/workflows/e2e.yml` triggers on push/PR to `uat` and `master` branches. Runs alongside Vitest, no failures.
 
 #### 6. Phase 1 Tests (Complete)
 
@@ -4776,7 +4776,7 @@ New `.github/workflows/e2e.yml` triggers on push/PR to `dev` branch. Runs alongs
 
 - **Gately/Pemulis:** Code changes done — `window.__ROOM__` and `window.__PIXI_APP__` now dev-mode accessible
 - **Hal:** Can implement Phase 2 tests (P1/P2 mechanics) — use `e2e/fixtures/game.fixture.ts`
-- **CI/CD:** E2E workflow integrated, runs on every dev push
+- **CI/CD:** E2E workflow integrated, runs on every `uat` and `master` push
 - **Test Performance:** Serial execution by design — slower than unit tests but reliable for multiplayer
 
 ### Files Modified

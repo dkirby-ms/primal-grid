@@ -157,3 +157,34 @@ All agents should follow these going forward:
 - **Session log:** `.squad/log/2026-03-08T13-27-49Z-cicd-fixes.md`
 - **Decision:** Merged into `.squad/decisions.md` from inbox
 
+## PR #52 Hygiene Fixes
+
+**Date:** 2026-03-08  
+**Context:** Code review hygiene issues flagged by @Copilot
+
+### Issue 1: Workflow Permissions Scoped to Job Level
+
+**Problem:** `.github/workflows/e2e.yml` had `pages: write` and `id-token: write` at workflow level (lines 9-12), but only the `deploy-report` job needs these permissions. The `e2e` and `discord-notify` jobs don't need them.
+
+**Fix applied:**
+- Kept `contents: read` at workflow level (all jobs need it)
+- Moved `pages: write` and `id-token: write` to job-level permissions on `deploy-report` job only
+
+**Rationale:** Principle of least privilege — each job should only have the minimum permissions it needs to operate. Reduces blast radius if a job is compromised.
+
+### Issue 2: Documentation Accuracy — Branch Triggers
+
+**Problem:** `.squad/decisions.md` lines 4764 and 4779 incorrectly stated E2E workflow triggers on `dev` branch, but actual workflow triggers on `uat` and `master`.
+
+**Fix applied:**
+- Line 4764: Changed "triggers on push/PR to `dev` branch" → "triggers on push/PR to `uat` and `master` branches"
+- Line 4779: Changed "runs on every dev push" → "runs on every `uat` and `master` push"
+
+**Rationale:** The user explicitly does NOT want E2E tests running on dev pushes to save cloud compute. Docs must accurately reflect this intentional design decision.
+
+### Patterns Reinforced
+
+- **Job-level permissions** — always scope permissions to the job that needs them, not workflow-level
+- **Documentation accuracy** — decisions.md must reflect actual implementation, not aspirational/outdated state
+- **Intentional compute optimization** — E2E tests are expensive; run them only on pre-production (uat) and production (master) branches
+
