@@ -1530,3 +1530,20 @@ Resolved all 202 ESLint errors across 7 server files in parallel with Gately's c
 **Impact:** Scribe now has charter permission and skill reference to post team summaries to Discord channel. Improves team visibility on coordinated work.
 
 **Convention:** Always use `"username": "Squad: {Role}"` for attribution (e.g., "Squad: Scribe", "Squad: Tester").
+
+---
+
+## 2026-03-08: Playwright E2E Framework — Room State Exposure
+
+**By:** Steeply (Tester) — Phase 1 implementation complete
+
+**Update:** `window.__ROOM__` is now exposed in dev mode for E2E state assertions.
+
+- Exposed in `client/src/network.ts` after room join
+- Gated: `if (import.meta.env.DEV || new URLSearchParams(...).has('dev'))`
+- E2E tests access room state via `page.evaluate('window.__ROOM__.state')`
+- Binary protocol consideration: Colyseus state is deserialized, so JSON inspection is not useful — always read state through `window.__ROOM__.state` directly
+
+**Impact for Pemulis:** No code changes needed. The room instance is only exposed in dev mode and never reaches production. Safe to use in tests.
+
+**Convention:** Room state is read-only in tests. If you add new room properties or handlers, they are automatically available to E2E via `window.__ROOM__`.

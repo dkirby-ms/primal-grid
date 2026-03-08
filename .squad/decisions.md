@@ -4723,67 +4723,68 @@ Enemy entities are a fundamentally different AI domain. Mixing them into the gen
 
 **By:** Steeply (Tester)  
 **Date:** 2026-03-10  
-**Status:** PROPOSAL — Research complete, ready for team review
+**Status:** IMPLEMENTED (PR #52, draft) — Phase 1 complete
 
 ### Summary
 
-Recommended approach for Primal Grid's E2E testing framework using Playwright for Canvas-based multiplayer WebSocket games.
+Established the Playwright E2E testing framework at `e2e/` with custom fixtures, state helpers, and CI workflow for multiplayer Canvas-based testing.
 
-### Key Recommendations
+### Implementation Details
 
-#### 1. Use Browser Contexts for Multi-Player Simulation
+#### 1. Browser Contexts for Multi-Player Simulation
 
 - One browser, multiple contexts (not separate browser instances)
 - Each context = one player with isolated session
 - Custom Playwright fixtures for `playerOne` / `playerTwo` with automatic join flow
-- `workers: 1` is mandatory — all tests share a single Colyseus server
+- `workers: 1` — all tests share a single Colyseus server to prevent race conditions
 
-#### 2. State-Based Assertions (70% of tests)
+#### 2. State-Based Assertions (Primary Strategy)
 
 - Expose `window.__ROOM__` in dev mode for `page.evaluate()` access to Colyseus `room.state`
 - Assert on deserialized game state (players, creatures, tiles), not pixels
 - Use `page.waitForFunction()` to wait for server state sync before asserting
 - DOM selectors: HUD/scoreboard/prompt (20%), visual regression sparingly (10%)
 
-#### 3. Required Client Code Change
+#### 3. Client Code Changes (Complete)
 
-Add to `client/src/network.ts` after room join:
+Added to `client/src/network.ts` after room join:
 ```typescript
 if (import.meta.env.DEV || new URLSearchParams(window.location.search).has('dev')) {
   (window as any).__ROOM__ = room;
 }
 ```
-Gated behind dev mode — never exposed in production.
+Also gated `window.__PIXI_APP__` in `client/src/main.ts` for renderer access.
 
 #### 4. Dual webServer Config
 
 Playwright config starts both Colyseus server (port 2567) and Vite dev client (port 3000). All test URLs use `?dev=1` to disable fog of war.
 
-#### 5. Binary Protocol Caveat
+#### 5. CI Workflow
 
-Colyseus uses `@colyseus/schema` binary encoding. WebSocket frame inspection NOT useful — frames are binary, not JSON. Always read state via `page.evaluate()`.
+New `.github/workflows/e2e.yml` triggers on push/PR to `dev` branch. Runs alongside Vitest, no failures.
 
-#### 6. Test Priority
+#### 6. Phase 1 Tests (Complete)
 
-- **P0 (must-have):** Join flow, two-player room, spawn pawn
-- **P1 (important):** Territory expansion, resource income, day/night
-- **P2 (valuable):** Territory contests, combat, pawn limits
-- **P3 (nice-to-have):** Enemy spawning, disconnect, visual regression
-
-#### 7. Implementation Estimate
-
-- Phase 1 (Foundation): ~2 days — install, config, P0 tests
-- Phase 2 (Game Mechanics): ~3 days — state helpers, P1 tests
-- Phase 3 (Multiplayer): ~3 days — P2 conflict tests
-- Phase 4 (Polish): ~2 days — CI/CD, visual regression, P3 tests
+- ✅ `join-flow.spec.ts` — 4 P0 tests (join, two-player room, spawn pawn)
+- ✅ Custom fixture at `e2e/fixtures/game.fixture.ts`
+- ✅ State helper at `e2e/helpers/state.helper.ts`
+- ✅ Player helper at `e2e/helpers/player.helper.ts`
+- ✅ All 520 unit tests pass
+- ✅ All 4 E2E tests pass
 
 ### Team Impact
 
-- **Pemulis/Gately:** Single code change (5 lines) in `client/src/network.ts`
-- **Hal:** Can implement P0 tests once decision approved
-- **CI/CD:** New GitHub Actions workflow needed, runs alongside Vitest
-- **Test Performance:** Serially executed (single worker) — slower than unit tests but catches real multiplayer bugs
+- **Gately/Pemulis:** Code changes done — `window.__ROOM__` and `window.__PIXI_APP__` now dev-mode accessible
+- **Hal:** Can implement Phase 2 tests (P1/P2 mechanics) — use `e2e/fixtures/game.fixture.ts`
+- **CI/CD:** E2E workflow integrated, runs on every dev push
+- **Test Performance:** Serial execution by design — slower than unit tests but reliable for multiplayer
 
-### Full Research
+### Files Modified
 
-Complete analysis with code examples, architecture diagrams, gotchas, and comparisons in `.squad/agents/steeply/history.md`.
+- `client/src/main.ts` — gated `window.__PIXI_APP__`
+- `client/src/network.ts` — gated `window.__ROOM__`
+- `package.json`, `package-lock.json` — Playwright + dependencies
+
+### Next Phase
+
+Phase 2: Territory, resource income, day/night (P1 tests). Phase 3: Conflict/combat (P2 tests).
