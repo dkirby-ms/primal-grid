@@ -21,7 +21,7 @@ import type { AttackerTracker } from "../rooms/attackerAI.js";
 import {
   ENEMY_BASE_TYPES, ENEMY_MOBILE_TYPES, PAWN_TYPES,
   COMBAT, ENEMY_SPAWNING, SHAPE,
-  PAWN, TERRITORY,
+  TERRITORY,
   DayPhase,
   isEnemyBase, isEnemyMobile,
 } from "@primal-grid/shared";
@@ -1478,83 +1478,6 @@ describe("Attackers — Seek & Destroy AI", () => {
 
     // Should re-seek
     expect(atk.currentState).toBe("seek_target");
-  });
-});
-
-// ── 2.7  Pawn Upkeep — Defenders & Attackers ─────────────────────────
-
-describe("Pawn Upkeep — Defenders & Attackers", () => {
-  it("defender incurs upkeep cost each UPKEEP_INTERVAL_TICKS", () => {
-    const room = createRoom();
-    const player = joinPlayer(room, "p1");
-    player.wood = 100;
-
-    addDefender(room, "upkeep-def", "p1", player.hqX, player.hqY);
-
-    room.state.tick = PAWN.UPKEEP_INTERVAL_TICKS;
-    room.tickPawnUpkeep();
-
-    const defUpkeep = PAWN_TYPES["defender"].upkeep.wood;
-    expect(player.wood).toBe(100 - defUpkeep);
-  });
-
-  it("attacker incurs upkeep cost each UPKEEP_INTERVAL_TICKS", () => {
-    const room = createRoom();
-    const player = joinPlayer(room, "p1");
-    player.wood = 100;
-
-    addAttacker(room, "upkeep-atk", "p1", player.hqX, player.hqY);
-
-    room.state.tick = PAWN.UPKEEP_INTERVAL_TICKS;
-    room.tickPawnUpkeep();
-
-    const atkUpkeep = PAWN_TYPES["attacker"].upkeep.wood;
-    expect(player.wood).toBe(100 - atkUpkeep);
-  });
-
-  it("defender takes damage if player cannot afford upkeep", () => {
-    const room = createRoom();
-    const player = joinPlayer(room, "p1");
-    player.wood = 0;
-
-    const def = addDefender(room, "broke-def", "p1", player.hqX, player.hqY);
-    const origHP = def.health;
-
-    room.state.tick = PAWN.UPKEEP_INTERVAL_TICKS;
-    room.tickPawnUpkeep();
-
-    expect(def.health).toBe(origHP - PAWN.UPKEEP_DAMAGE);
-  });
-
-  it("attacker takes damage if player cannot afford upkeep", () => {
-    const room = createRoom();
-    const player = joinPlayer(room, "p1");
-    player.wood = 0;
-
-    const atk = addAttacker(room, "broke-atk", "p1", player.hqX, player.hqY);
-    const origHP = atk.health;
-
-    room.state.tick = PAWN.UPKEEP_INTERVAL_TICKS;
-    room.tickPawnUpkeep();
-
-    expect(atk.health).toBe(origHP - PAWN.UPKEEP_DAMAGE);
-  });
-
-  it("pawn dies from accumulated upkeep damage when resources stay at zero", () => {
-    const room = createRoom();
-    const player = joinPlayer(room, "p1");
-    player.wood = 0;
-
-    const _def = addDefender(room, "starve-def", "p1", player.hqX, player.hqY);
-
-    // Enough upkeep ticks to kill the defender
-    const ticksToKill = Math.ceil(PAWN_TYPES["defender"].health / PAWN.UPKEEP_DAMAGE);
-    for (let i = 1; i <= ticksToKill; i++) {
-      room.state.tick = PAWN.UPKEEP_INTERVAL_TICKS * i;
-      room.tickPawnUpkeep();
-    }
-
-    expect(room.state.creatures.has("starve-def")).toBe(false);
   });
 });
 

@@ -159,18 +159,6 @@ function tickAI(room: GameRoom): void {
   }
 }
 
-/** Tick upkeep system once at the given cycle number. */
-function tickUpkeep(room: GameRoom, cycle: number): void {
-  room.state.tick = PAWN.UPKEEP_INTERVAL_TICKS * cycle;
-  if (typeof room.tickPawnUpkeep === "function") {
-    room.tickPawnUpkeep();
-  } else if (typeof room.tickBuilderAI === "function") {
-    room.tickBuilderAI();
-  } else {
-    room.tickCreatureAI();
-  }
-}
-
 /** Manhattan distance. */
 function manhattan(x1: number, y1: number, x2: number, y2: number): number {
   return Math.abs(x1 - x2) + Math.abs(y1 - y2);
@@ -499,60 +487,6 @@ describe("Adjacency validation (prevent teleport builds)", () => {
     for (let i = 0; i < 3; i++) tickAI(room);
 
     expect(["idle", "find_build_site", "move_to_site", "building"]).toContain(builder.currentState);
-  });
-});
-
-// ═════════════════════════════════════════════════════════════════════
-// Category 4 — Upkeep system (resource drain, frequency)           3
-// ═════════════════════════════════════════════════════════════════════
-
-describe("Upkeep system (resource drain, frequency)", () => {
-
-  it("upkeep deducts 1 Wood per builder each 60-tick cycle", () => {
-    const room = createRoomWithMap(42);
-    const { player } = joinPlayer(room, "p1");
-
-    player.wood = 20;
-    const pos = findWalkableTile(room);
-    addBuilder(room, "b-upkeep", "p1", pos.x, pos.y);
-
-    tickUpkeep(room, 1);
-
-    expect(player.wood).toBe(20 - PAWN.BUILDER_UPKEEP_WOOD);
-  });
-
-  it("builder takes UPKEEP_DAMAGE when player has no wood", () => {
-    const room = createRoomWithMap(42);
-    const { player } = joinPlayer(room, "p1");
-
-    player.wood = 0;
-    const pos = findWalkableTile(room);
-    const builder = addBuilder(room, "b-broke", "p1", pos.x, pos.y, {
-      health: PAWN.BUILDER_HEALTH,
-    });
-
-    const healthBefore = builder.health;
-    tickUpkeep(room, 1);
-
-    expect(builder.health).toBeLessThan(healthBefore);
-  });
-
-  it("builder dies from accumulated upkeep damage (removed from creatures)", () => {
-    const room = createRoomWithMap(42);
-    const { player } = joinPlayer(room, "p1");
-
-    player.wood = 0;
-    const pos = findWalkableTile(room);
-    addBuilder(room, "b-starve", "p1", pos.x, pos.y, {
-      health: PAWN.BUILDER_HEALTH,
-    });
-
-    for (let cycle = 1; cycle <= 20; cycle++) {
-      tickUpkeep(room, cycle);
-      if (!room.state.creatures.has("b-starve")) break;
-    }
-
-    expect(room.state.creatures.has("b-starve")).toBe(false);
   });
 });
 

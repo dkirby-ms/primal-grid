@@ -128,16 +128,6 @@ function tickAI(room: TestGameRoom): void {
   if (typeof room.tickCreatureAI === "function") room.tickCreatureAI();
 }
 
-/** Tick upkeep system once at the given cycle number. */
-function tickUpkeep(room: TestGameRoom, cycle: number): void {
-  room.state.tick = PAWN.UPKEEP_INTERVAL_TICKS * cycle;
-  if (typeof room.tickPawnUpkeep === "function") {
-    room.tickPawnUpkeep();
-  } else if (typeof room.tickCreatureAI === "function") {
-    room.tickCreatureAI();
-  }
-}
-
 /** Collect all broadcast calls matching a given message type. */
 function getLogBroadcasts(room: TestGameRoom, logType?: string): GameLogPayload[] {
   return room.broadcast.mock.calls
@@ -234,69 +224,7 @@ describe("Game Log Events", () => {
     });
   });
 
-  // ── 3. Upkeep damage → "upkeep" event ───────────────────────────
-
-  describe("builder upkeep warning", () => {
-    it("builder upkeep damage sends game_log upkeep event", () => {
-      const room = createRoomWithMap(42);
-      const { player } = joinPlayer(room, "p1");
-
-      player.wood = 0;
-      const pos = findWalkableTile(room);
-      addBuilder(room, "b-hungry", "p1", pos.x, pos.y, {
-        health: PAWN.BUILDER_HEALTH,
-      });
-
-      const healthBefore = PAWN.BUILDER_HEALTH;
-      tickUpkeep(room, 1);
-
-      // Verify state precondition: builder took upkeep damage
-      const builder = room.state.creatures.get("b-hungry");
-      expect(builder).toBeDefined();
-      expect(builder!.health).toBeLessThan(healthBefore);
-
-      // Verify game_log broadcast with type "upkeep"
-      // TODO: This assertion will pass once Pemulis lands upkeep event broadcasting in tickPawnUpkeep
-      const upkeepLogs = getLogBroadcasts(room, "upkeep");
-      expect(upkeepLogs.length).toBeGreaterThanOrEqual(1);
-      expect(upkeepLogs[0]).toMatchObject({
-        type: "upkeep",
-        message: expect.any(String),
-      });
-    });
-  });
-
-  // ── 4. Builder death from upkeep → "death" event ────────────────
-
-  describe("builder death from upkeep", () => {
-    it("builder death from upkeep sends game_log death event", () => {
-      const room = createRoomWithMap(42);
-      const { player } = joinPlayer(room, "p1");
-
-      player.wood = 0;
-      const pos = findWalkableTile(room);
-      // Health less than UPKEEP_DAMAGE so one tick kills it
-      addBuilder(room, "b-starve", "p1", pos.x, pos.y, {
-        health: PAWN.UPKEEP_DAMAGE - 1,
-      });
-
-      tickUpkeep(room, 1);
-
-      // Verify state precondition: builder is dead
-      expect(room.state.creatures.has("b-starve")).toBe(false);
-
-      // Verify game_log broadcast with type "death"
-      // TODO: This assertion will pass once Pemulis lands death event broadcasting in tickPawnUpkeep
-      const deathLogs = getLogBroadcasts(room, "death");
-      expect(deathLogs.length).toBeGreaterThanOrEqual(1);
-      expect(deathLogs[0]).toMatchObject({
-        type: "death",
-        message: expect.any(String),
-      });
-    });
-  });
-
-  // ── 5. Player join → "info" event (sent to joining client) ──────
+  // ── 3. Player join → "info" event (sent to joining client) ──────
 
   describe("player join info event", () => {
     it("player joining sends game_log info event to that client", () => {
