@@ -55,6 +55,10 @@ jobs:
           fi
 
           VERSION=$(node -e "console.log(require('./package.json').version)")
+          if [ -z "$VERSION" ] || [ "$VERSION" = "undefined" ]; then
+            VERSION=$(git rev-parse --short HEAD)
+            echo "⚠️ package.json missing version field — falling back to git SHA: $VERSION"
+          fi
           CHANGELOG=$(git log --pretty=format:'- %h %s' origin/uat..origin/dev | head -20)
 
           gh pr create \
@@ -110,6 +114,10 @@ jobs:
         id: staging
         run: |
           VERSION=$(node -e "console.log(require('./package.json').version)")
+          if [ -z "$VERSION" ] || [ "$VERSION" = "undefined" ]; then
+            VERSION=$(git rev-parse --short HEAD)
+            echo "⚠️ package.json missing version field — falling back to git SHA: $VERSION"
+          fi
           BRANCH="promote/prod-v${VERSION}"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
