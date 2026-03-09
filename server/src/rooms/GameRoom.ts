@@ -10,8 +10,8 @@ import type { EnemyBaseTracker } from "./enemyBaseAI.js";
 import type { AttackerTracker } from "./attackerAI.js";
 import type { AuthProvider, AuthUser } from "../auth/AuthProvider.js";
 import type { PlayerStateRepository } from "../persistence/PlayerStateRepository.js";
-import { serializePlayerState } from "../persistence/playerStateSerde.js";
-import { deserializePlayerState } from "../persistence/playerStateSerde.js";
+import { serializePlayerState, deserializePlayerState } from "../persistence/playerStateSerde.js";
+import type { SerializedPlayerState } from "../persistence/playerStateSerde.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
   SPAWN_PAWN, SET_NAME, CHAT, CHAT_MAX_LENGTH,
@@ -107,17 +107,19 @@ export class GameRoom extends Room {
     player.id = client.sessionId;
     player.color = PLAYER_COLORS[this.state.players.size % PLAYER_COLORS.length];
 
-    // Restore saved state if authenticated and persistence is configured
+    // Restore saved state if authenticated and persistence is configured.
+    // Only displayName is set before spawnHQ (needed for client name-prompt skip).
+    // Progression stats (level, xp) and resources (wood, stone) are restored AFTER
+    // spawnHQ, which resets score/resources to starting values.
+    // Score is NOT restored — it reflects actual current territory, not historical totals.
     let restored = false;
+    let savedState: SerializedPlayerState | null = null;
     if (authUser && this.playerStateRepo) {
       const saved = await this.playerStateRepo.load(authUser.id);
       if (saved) {
-        const parsed = deserializePlayerState(saved.gameState);
-        if (parsed) {
-          player.displayName = parsed.displayName;
-          player.score = parsed.score;
-          player.level = parsed.level;
-          player.xp = parsed.xp;
+        savedState = deserializePlayerState(saved.gameState);
+        if (savedState) {
+          player.displayName = savedState.displayName;
           restored = true;
           console.log(`[GameRoom] Restored state for user ${authUser.username}`);
         }
@@ -126,15 +128,18 @@ export class GameRoom extends Room {
 
     this.state.players.set(client.sessionId, player);
 
-    // Spawn HQ and claim starting territory
+    // Spawn HQ and claim starting territory (sets score = tile count, resets resources)
     const hqPos = this.findHQSpawnLocation();
     spawnHQ(this.state, player, hqPos.x, hqPos.y);
 
-    // Restore resources after HQ spawn (which sets starting resources)
-    // Only override if we have a saved state with more resources
-    if (restored) {
-      // Player keeps their saved score/xp/level but gets fresh resources and territory
-      // (territory is spatial — can't meaningfully restore across different map seeds)
+    // Restore earned progression and resources after HQ spawn.
+    // Territory is spatial and can't transfer across map seeds, so score stays
+    // at the actual tile count set by spawnHQ.
+    if (restored && savedState) {
+      player.wood = savedState.wood;
+      player.stone = savedState.stone;
+      player.level = savedState.level;
+      player.xp = savedState.xp;
     }
 
     const devMode = options?.devMode === true;
