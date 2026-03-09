@@ -147,15 +147,11 @@ export class LobbyScreen {
   private handleCreateGame(): void {
     if (!this.room) return;
 
-    // Ensure player has a name
-    const name = this.nameInput.value.trim();
-    if (!name) {
-      this.nameInput.focus();
-      this.showNotification("Enter your name first", "error");
-      return;
-    }
+    // Ensure player has a name (fall back to placeholder)
+    const name = this.nameInput.value.trim() || this.nameInput.placeholder || "Explorer";
     if (name !== this.playerDisplayName) {
       this.playerDisplayName = name;
+      this.nameInput.value = name;
       this.room.send("set_name", { name });
     }
 
@@ -218,15 +214,11 @@ export class LobbyScreen {
         joinBtn.textContent = "Join";
         joinBtn.addEventListener("click", () => {
           if (!this.room) return;
-          // Ensure name is set
-          const name = this.nameInput.value.trim();
-          if (!name) {
-            this.nameInput.focus();
-            this.showNotification("Enter your name first", "error");
-            return;
-          }
+          // Ensure name is set (fall back to placeholder)
+          const name = this.nameInput.value.trim() || this.nameInput.placeholder || "Explorer";
           if (name !== this.playerDisplayName) {
             this.playerDisplayName = name;
+            this.nameInput.value = name;
             this.room.send("set_name", { name });
           }
           this.room.send(JOIN_GAME, { gameId: game.id });
