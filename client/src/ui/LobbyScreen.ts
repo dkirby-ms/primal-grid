@@ -63,6 +63,21 @@ export class LobbyScreen {
     this.container.classList.remove("visible");
   }
 
+  /** Show a connection error instead of the lobby UI. */
+  showConnectionError(message: string): void {
+    this.show();
+    const lobbyContainer = document.getElementById("lobby-container");
+    if (lobbyContainer) {
+      lobbyContainer.innerHTML = `
+        <div style="text-align:center; padding:40px 20px;">
+          <h2 style="color:#ff6b6b; margin-bottom:16px;">⚠️ Connection Error</h2>
+          <p style="color:#ccc; margin-bottom:24px;">${message}</p>
+          <p style="color:#888; font-size:0.9em;">Close this tab and return to your existing session.</p>
+        </div>
+      `;
+    }
+  }
+
   /** Bind to a lobby room and listen for state updates. */
   bindToRoom(room: Room, displayName?: string): void {
     this.room = room;

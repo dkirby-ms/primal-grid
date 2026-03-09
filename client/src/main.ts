@@ -102,6 +102,8 @@ async function connectToLobbyAndShow(
     });
   } catch (err) {
     console.error('[main] Lobby connection failed:', err);
+    const message = err instanceof Error ? err.message : "Connection failed";
+    lobbyScreen.showConnectionError(message);
   }
 }
 
