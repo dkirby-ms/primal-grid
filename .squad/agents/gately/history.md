@@ -1300,3 +1300,13 @@ See `.squad/decisions.md` Initiative Triage & Execution Plan (2026-03-09) for fu
 
 **Impact on Gately:** Chat overlay pattern is reusable for future overlay features. InputHandler integration via `chatPanel.isFocused` guard pattern can be cloned for other overlays.
 
+### Client-Side Session Persistence — #77 (2026-03-XX)
+
+## Learnings
+- **Auth URL derivation:** Server runs Express (HTTP auth) and Colyseus (WS game) on the same host:port. Derived HTTP URL from WS URL with regex: `ws(s?)://` → `http$1://`. Handles both ws/wss correctly.
+- **Auth response shape:** `POST /auth/guest` returns `{ user: { id, username, isGuest }, token: { accessToken, expiresIn } }`. Token is a JWT with 24h expiry.
+- **SERVER_PORT is 2567** (not 3001 as sometimes referenced). Defined in `shared/src/constants.ts`.
+- **GameRoom.onJoin() is auth-optional:** Server silently allows join even with invalid/missing token — it just skips state restoration. No error thrown. This means the retry-on-expired pattern is defensive, not strictly required for basic play.
+- **Token stored under `primal-grid-token`** in localStorage. Wrapped in try/catch for private browsing compatibility.
+- **Key file:** `client/src/network.ts` — auth helpers (`ensureToken`, `createGuestSession`, `loadToken`, `saveToken`, `clearToken`) + `connect()` with token flow and retry logic.
+- **PR:** #78 targeting dev.

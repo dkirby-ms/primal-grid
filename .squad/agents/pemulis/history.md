@@ -1780,3 +1780,9 @@ See `.squad/decisions.md` for full triage document, dependency graph, risk mitig
 
 **Impact on Pemulis:** No follow-up work required. Handler is complete and tested. Chat protocol stable.
 
+### PR #78 Review Fixes — CORS, Auth Degradation, DRY (2026-03-12)
+
+- **CORS middleware**: Added `cors` package to Express server (`server/src/index.ts`). Required because `fetch()` auth calls from Vite dev server (port 3000) to Colyseus (port 2567) are cross-origin. WebSocket connections bypass CORS but HTTP fetch does not.
+- **Graceful auth degradation**: `ensureToken()` now returns `string | undefined` — catches auth failures silently. `connect()` joins without a token when auth is unavailable. If token-bearing join fails, falls back to anonymous join. Game is always playable with zero auth infrastructure.
+- **DRY room setup**: Extracted `setupRoom()` helper in `client/src/network.ts` — eliminates duplicated `onLeave`/`onError`/`__ROOM__` assignment between initial join and retry paths.
+- **Key pattern**: Auth is strictly optional on both sides. Server's `GameRoom.onJoin()` skips state restoration when no token provided. Client's `connect()` gracefully degrades to anonymous join on any auth failure.

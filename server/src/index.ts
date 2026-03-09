@@ -2,6 +2,7 @@ import { createServer } from "http";
 import path from "path";
 import { fileURLToPath } from "url";
 import express from "express";
+import cors from "cors";
 import { Server } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { Encoder } from "@colyseus/schema";
@@ -26,6 +27,7 @@ const playerStateRepo = new SqlitePlayerStateRepository(DB_PATH);
 const authProvider = new LocalAuthProvider(userRepo, JWT_SECRET);
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
 // Auth API routes
