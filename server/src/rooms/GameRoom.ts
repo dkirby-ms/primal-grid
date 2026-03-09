@@ -8,6 +8,10 @@ import { tickCombat } from "./combat.js";
 import { tickGraveDecay } from "./graveDecay.js";
 import type { EnemyBaseTracker } from "./enemyBaseAI.js";
 import type { AttackerTracker } from "./attackerAI.js";
+import type { AuthProvider, AuthUser } from "../auth/AuthProvider.js";
+import type { PlayerStateRepository } from "../persistence/PlayerStateRepository.js";
+import { serializePlayerState } from "../persistence/playerStateSerde.js";
+import { deserializePlayerState } from "../persistence/playerStateSerde.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
   SPAWN_PAWN, SET_NAME,
@@ -30,6 +34,9 @@ const PLAYER_COLORS = [
   "#fabed4", "#469990", "#dcbeff", "#9a6324",
 ];
 
+/** Auto-save interval: every 120 ticks (30 seconds at 4 ticks/sec). */
+const AUTO_SAVE_INTERVAL_TICKS = 120;
+
 export class GameRoom extends Room {
   state = new GameState();
   private nextCreatureId = 0;
@@ -41,6 +48,12 @@ export class GameRoom extends Room {
   private attackerState = new Map<string, AttackerTracker>();
   /** Shared mutable counter for creature IDs (passed to AI functions). */
   private creatureIdCounter = { value: 0 };
+  /** Auth provider for JWT validation on room join. */
+  authProvider?: AuthProvider;
+  /** Player state persistence repository. */
+  playerStateRepo?: PlayerStateRepository;
+  /** Maps Colyseus sessionId → authenticated userId for persistence. */
+  private sessionUserMap = new Map<string, string>();
 
   override onCreate(options: Record<string, unknown>) {
     const seed = typeof options?.seed === "number" ? options.seed : DEFAULT_MAP_SEED;
@@ -59,6 +72,7 @@ export class GameRoom extends Room {
       this.tickCombat();
       this.tickGraveDecay();
       this.tickFogOfWar();
+      this.tickAutoSave();
     }, 1000 / TICK_RATE);
 
     this.onMessage(SPAWN_PAWN, (client, message: SpawnPawnPayload) => {
@@ -72,16 +86,52 @@ export class GameRoom extends Room {
     console.log("[GameRoom] Room created.");
   }
 
-  override onJoin(client: Client, options?: Record<string, unknown>) {
+  override async onJoin(client: Client, options?: Record<string, unknown>) {
+    // Validate JWT if auth is configured
+    let authUser: AuthUser | undefined;
+    const token = typeof options?.token === "string" ? options.token : undefined;
+
+    if (this.authProvider && token) {
+      const result = await this.authProvider.validateToken(token);
+      if (result.valid && result.user) {
+        authUser = result.user;
+        this.sessionUserMap.set(client.sessionId, authUser.id);
+      }
+    }
+
     const player = new PlayerState();
     player.id = client.sessionId;
     player.color = PLAYER_COLORS[this.state.players.size % PLAYER_COLORS.length];
+
+    // Restore saved state if authenticated and persistence is configured
+    let restored = false;
+    if (authUser && this.playerStateRepo) {
+      const saved = await this.playerStateRepo.load(authUser.id);
+      if (saved) {
+        const parsed = deserializePlayerState(saved.gameState);
+        if (parsed) {
+          player.displayName = parsed.displayName;
+          player.score = parsed.score;
+          player.level = parsed.level;
+          player.xp = parsed.xp;
+          restored = true;
+          console.log(`[GameRoom] Restored state for user ${authUser.username}`);
+        }
+      }
+    }
 
     this.state.players.set(client.sessionId, player);
 
     // Spawn HQ and claim starting territory
     const hqPos = this.findHQSpawnLocation();
     spawnHQ(this.state, player, hqPos.x, hqPos.y);
+
+    // Restore resources after HQ spawn (which sets starting resources)
+    // Only override if we have a saved state with more resources
+    if (restored) {
+      // Player keeps their saved score/xp/level but gets fresh resources and territory
+      // (territory is spatial — can't meaningfully restore across different map seeds)
+    }
 
     const devMode = options?.devMode === true;
 
@@ -97,23 +147,67 @@ export class GameRoom extends Room {
       }
     }
 
-    console.log(`[GameRoom] Client joined: ${client.sessionId}, HQ at (${hqPos.x}, ${hqPos.y})${devMode ? ' [DEV MODE]' : ''}`);
+    const userLabel = authUser ? ` (user: ${authUser.username})` : "";
+    console.log(`[GameRoom] Client joined: ${client.sessionId}${userLabel}, HQ at (${hqPos.x}, ${hqPos.y})${devMode ? ' [DEV MODE]' : ''}`);
     client.send("game_log", { message: "Welcome to Primal Grid!", type: "info" });
   }
 
   override onLeave(client: Client, code: number) {
+    // Capture state synchronously before cleanup, then persist async
+    const userId = this.sessionUserMap?.get(client.sessionId);
+    const player = this.state.players.get(client.sessionId);
+    if (userId && player && this.playerStateRepo) {
+      const serialized = serializePlayerState(player);
+      const displayName = player.displayName;
+      const repo = this.playerStateRepo;
+      void repo.save(userId, displayName, serialized).catch((err: unknown) => {
+        console.error(`[GameRoom] Failed to save state for ${client.sessionId}:`, err);
+      });
+    }
+
     // Clean up fog of war StateView
     this.cleanupPlayerView(client.sessionId);
 
     this.state.players.delete(client.sessionId);
+    this.sessionUserMap?.delete(client.sessionId);
     const consented = code === CloseCode.CONSENTED;
     console.log(
       `[GameRoom] Client left: ${client.sessionId} (consented: ${consented})`
     );
   }
 
-  override onDispose() {
+  override async onDispose() {
+    // Save all connected players on room dispose
+    for (const sessionId of this.state.players.keys()) {
+      await this.savePlayerState(sessionId);
+    }
     console.log("[GameRoom] Room disposed.");
+  }
+
+  /** Save a player's state to the persistence layer (if configured). */
+  private async savePlayerState(sessionId: string): Promise<void> {
+    const userId = this.sessionUserMap?.get(sessionId);
+    if (!userId || !this.playerStateRepo) return;
+
+    const player = this.state.players.get(sessionId);
+    if (!player) return;
+
+    try {
+      const serialized = serializePlayerState(player);
+      await this.playerStateRepo.save(userId, player.displayName, serialized);
+    } catch (err) {
+      console.error(`[GameRoom] Failed to save state for ${sessionId}:`, err);
+    }
+  }
+
+  /** Periodic auto-save checkpoint for all authenticated players. */
+  private tickAutoSave(): void {
+    if (this.state.tick % AUTO_SAVE_INTERVAL_TICKS !== 0) return;
+    if (!this.playerStateRepo) return;
+
+    for (const sessionId of this.sessionUserMap.keys()) {
+      void this.savePlayerState(sessionId);
+    }
   }
 
   private generateMap(seed: number = DEFAULT_MAP_SEED) {

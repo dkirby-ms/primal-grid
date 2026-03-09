@@ -1262,3 +1262,11 @@ See `.squad/decisions.md` Initiative Triage & Execution Plan (2026-03-09) for fu
 - **Shared types** — Added `GameLogPayload` interface and `GameLogCategory` type union to `shared/src/messages.ts`. Client uses shared type for `room.onMessage` handler.
 - **Reusable pattern** — Built as the overlay panel pattern that #30 (chat) will extract: header + scroll area + auto-scroll + entry pruning.
 - **PR:** #72 targeting dev.
+### Soften Grid Appearance — Rounded Corners & Natural Variation (2026-03-08)
+
+- **roundRect usage:** PixiJS 8 Graphics.roundRect() works identically to rect() but accepts a 5th radius parameter. Already used in CreatureRenderer for headstones. Now used for all terrain tiles.
+- **Per-tile deterministic hash:** Used a simple integer hash `tileHash(x, y, seed)` for noise-free per-tile variation. Deterministic (same tile always same result), zero allocations, pure arithmetic. Two separate seeds (7 for radius, 31 for color) ensure independent variation channels.
+- **Corner radius range:** 3–6px on 32px tiles — subtle enough to not look like buttons, visible enough to break up the rigid grid.
+- **Color jitter:** ±6% brightness shift per tile. Applied to both base biome colors and resource-tinted colors. Makes the terrain look natural without being distracting.
+- **Fog overlays kept as rect():** Fog needs full tile coverage to avoid light bleed at corners. Rounded fog would show terrain through corner gaps.
+- **Performance:** No measurable impact. Hash functions are 3 integer operations each. Viewport culling (~400 tiles/frame) unchanged.
