@@ -1215,6 +1215,11 @@ See: 2026-03-08: ESLint Override for E2E Browser Context Code
 
 ---
 
+- **Level/XP removed from HUD:** Removed entire section-level (HTML), updateLevelDisplay method, onLevelChange callback, xpForNextLevel import, and stat-bar CSS. Level/XP has no gameplay element — was confusing testers. Can be re-added when progression unlocks something meaningful.
+- **Header renames:** "Inventory" → "Resources" (standard game term), "Creatures" → "Wildlife" (distinguishes from player pawns like builders/defenders/attackers).
+- **Section reorder:** Resources → Territory → Builders → Combat → Time of Day → Wildlife. Prioritizes actionable/frequently-checked info at top, ambient info at bottom.
+- **CSS cleanup:** Removed stat-bar-wrap, bar-label, stat-bar, stat-bar-fill CSS classes — they were only used by the XP progress bar.
+- **No test impact:** All 515 tests pass. Server HUD state contract tests don't reference level/XP display.
 ## 2026-03-09: PR #68 Status Panel UX Redesign — MERGED
 
 **By:** Gately (Game Dev)  
@@ -1246,3 +1251,31 @@ Scope discipline maintained (HUD DOM only, no game logic). User-facing clarity i
 - **#30 Chat UI** — After #31 overlay pattern lands
 
 See `.squad/decisions.md` Initiative Triage & Execution Plan (2026-03-09) for full Wave 1/Wave 2 sequencing.
+
+### Game Log Overlay Panel — Issue #31 (2026-03-09)
+
+- **Rewrote GameLog.ts** with 5 event categories (Territory 🟢, Combat 🔴, Resources 🟡, Creatures 🔵, System ⚪) each with distinct color and dot icon.
+- **Timestamps** (HH:MM:SS) on every entry using `formatTimestamp()` helper.
+- **Smart auto-scroll** — tracks `userScrolledUp` flag via scroll event listener. Only auto-scrolls if user is within 30px of the bottom. Scroll up to read history without losing your place.
+- **Message pruning** cap raised from 50 → 200 entries.
+- **Panel structure** — `#game-log` container now uses flex column: `.game-log-header` (title bar) + `.game-log-scroll` (scrollable message area). Custom styled scrollbar.
+- **Shared types** — Added `GameLogPayload` interface and `GameLogCategory` type union to `shared/src/messages.ts`. Client uses shared type for `room.onMessage` handler.
+- **Reusable pattern** — Built as the overlay panel pattern that #30 (chat) will extract: header + scroll area + auto-scroll + entry pruning.
+- **PR:** #72 targeting dev.
+### Soften Grid Appearance — Rounded Corners & Natural Variation (2026-03-08)
+
+- **roundRect usage:** PixiJS 8 Graphics.roundRect() works identically to rect() but accepts a 5th radius parameter. Already used in CreatureRenderer for headstones. Now used for all terrain tiles.
+- **Per-tile deterministic hash:** Used a simple integer hash `tileHash(x, y, seed)` for noise-free per-tile variation. Deterministic (same tile always same result), zero allocations, pure arithmetic. Two separate seeds (7 for radius, 31 for color) ensure independent variation channels.
+- **Corner radius range:** 3–6px on 32px tiles — subtle enough to not look like buttons, visible enough to break up the rigid grid.
+- **Color jitter:** ±6% brightness shift per tile. Applied to both base biome colors and resource-tinted colors. Makes the terrain look natural without being distracting.
+- **Fog overlays kept as rect():** Fog needs full tile coverage to avoid light bleed at corners. Rounded fog would show terrain through corner gaps.
+- **Performance:** No measurable impact. Hash functions are 3 integer operations each. Viewport culling (~400 tiles/frame) unchanged.
+
+### Creature Stacking Fix — #74 (2026-03-XX)
+
+- **Bug:** Two creatures on the same tile rendered at the exact same pixel position (tile center), so one occluded the other — looked like they "merged" into one.
+- **Root cause:** `CreatureRenderer.tick()` targeted every creature at `tileX * TILE_SIZE + TILE_SIZE / 2` regardless of how many shared the tile. Pure rendering bug — server state correctly tracked multiple creatures per tile.
+- **Fix:** In `tick()`, group entries by tile key. When multiple creatures share a tile, apply small pixel offsets from `STACK_OFFSETS` array (up to 6 unique positions, ~5px from center). Single creatures render at exact tile center (no offset). Offsets interpolate smoothly via existing lerp.
+- **Key file:** `client/src/renderer/CreatureRenderer.ts` — `tick()` method and `STACK_OFFSETS` constant.
+- **Tests:** `client/src/__tests__/creature-stacking.test.ts` — 4 regression tests with PixiJS mocks.
+- **Pattern:** PixiJS mocking pattern reused from `camera-zoom.test.ts` — mock Container/Graphics/Text classes, stub `@primal-grid/shared` and `GridRenderer.js`.

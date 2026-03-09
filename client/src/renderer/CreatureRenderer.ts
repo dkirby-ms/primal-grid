@@ -16,6 +16,16 @@ import { CombatEffects } from './CombatEffects.js';
 const CREATURE_RADIUS = 6;
 const ENEMY_BASE_RADIUS = 9;
 
+// Pixel offsets applied when multiple creatures share a tile so they don't visually merge.
+const STACK_OFFSETS: ReadonlyArray<Readonly<{ x: number; y: number }>> = [
+  { x: -5, y: -4 },
+  { x: 5, y: 4 },
+  { x: 5, y: -4 },
+  { x: -5, y: 4 },
+  { x: 0, y: -6 },
+  { x: 0, y: 6 },
+];
+
 // Base colors per creature type
 const HERBIVORE_COLOR = 0x4caf50;
 const CARNIVORE_COLOR = 0xf44336;
@@ -513,15 +523,36 @@ export class CreatureRenderer {
     entry.hpBar.visible = true;
   }
 
-  /** Smoothly interpolate creature display positions and update combat effects. */
+  /** Smoothly interpolate creature display positions and update combat effects.
+   *  Creatures sharing a tile are offset so they remain individually visible. */
   public tick(_dt: number): void {
     const speed = 0.15;
+
+    // Group entries by tile so we can detect stacking
+    const tileGroups = new Map<string, CreatureEntry[]>();
     for (const entry of this.entries.values()) {
-      const targetX = entry.tileX * TILE_SIZE + TILE_SIZE / 2;
-      const targetY = entry.tileY * TILE_SIZE + TILE_SIZE / 2;
-      entry.displayX += (targetX - entry.displayX) * speed;
-      entry.displayY += (targetY - entry.displayY) * speed;
-      entry.container.position.set(entry.displayX, entry.displayY);
+      const key = `${entry.tileX},${entry.tileY}`;
+      let group = tileGroups.get(key);
+      if (!group) {
+        group = [];
+        tileGroups.set(key, group);
+      }
+      group.push(entry);
+    }
+
+    for (const group of tileGroups.values()) {
+      const stacked = group.length > 1;
+      for (let i = 0; i < group.length; i++) {
+        const entry = group[i];
+        const offset = stacked
+          ? STACK_OFFSETS[i % STACK_OFFSETS.length]
+          : { x: 0, y: 0 };
+        const targetX = entry.tileX * TILE_SIZE + TILE_SIZE / 2 + offset.x;
+        const targetY = entry.tileY * TILE_SIZE + TILE_SIZE / 2 + offset.y;
+        entry.displayX += (targetX - entry.displayX) * speed;
+        entry.displayY += (targetY - entry.displayY) * speed;
+        entry.container.position.set(entry.displayX, entry.displayY);
+      }
     }
 
     // Drive combat effect animations (floating numbers, hit flash decay)
