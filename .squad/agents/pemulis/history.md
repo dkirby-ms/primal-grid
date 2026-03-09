@@ -1679,3 +1679,14 @@ Removed `tickPawnUpkeep()` method, game loop call, `upkeep` field from `PawnType
 - Territorial exclusion zones via Manhattan-distance radius checks
 - Interior gap detection using cardinal neighbor counts
 - Systematic removal of deprecated game mechanics
+
+### JWT Auth & Player Persistence (2026-03-12)
+
+- **Issue #42, PR #70** on `squad/42-user-auth-persistence` branch.
+- **Auth layer** (`server/src/auth/`): `AuthProvider` interface abstracted for future Entra ID swap. `LocalAuthProvider` implements JWT issuance via jsonwebtoken + bcryptjs. Express middleware validates Bearer tokens. Routes: `/auth/register`, `/auth/login`, `/auth/guest`, `/auth/upgrade`.
+- **Persistence layer** (`server/src/persistence/`): Repository pattern — `UserRepository` and `PlayerStateRepository` interfaces with SQLite implementations. Designed for Postgres/Cosmos swap.
+- **GameRoom hooks**: JWT validated on `onJoin` via `options.token`. State serialized synchronously in `onLeave` (async write, sync capture — critical for test compatibility since tests use `Object.create(GameRoom.prototype)` without constructors). Auto-save every 120 ticks (30s).
+- **Guest play**: `/auth/guest` creates anonymous sessions. `/auth/upgrade` converts guest to full account preserving userId and all saved state.
+- **Design trade-off**: Resources/territory NOT restored on rejoin — territory is spatial and map-dependent. Only score/level/XP/displayName persist.
+- **Dependencies added**: jsonwebtoken, better-sqlite3, bcryptjs (+ @types/).
+- **Test impact**: 515/515 tests pass, zero regressions. Key insight: `onLeave` must stay synchronous because tests call it without `await`.

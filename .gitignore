@@ -28,3 +28,7 @@ e2e/**/*.js
 e2e/**/*.js.map
 e2e/**/*.d.ts
 e2e/**/*.d.ts.map
+primal-grid.db
+*.db-journal
+*.db-wal
+*.db-shm

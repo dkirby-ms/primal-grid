@@ -10,7 +10,7 @@ import { GameLog } from './ui/GameLog.js';
 import { HelpScreen } from './ui/HelpScreen.js';
 import { Scoreboard } from './ui/Scoreboard.js';
 import { connect, disconnect, onConnectionStatus, isDevMode } from './network.js';
-import { SET_NAME } from '@primal-grid/shared';
+import { SET_NAME, type GameLogPayload } from '@primal-grid/shared';
 
 const WIDTH = 600;
 const HEIGHT = 600;
@@ -143,7 +143,7 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
     const logEl = document.getElementById('game-log');
     if (logEl) {
       gameLog.init(logEl);
-      room.onMessage('game_log', (data: { message: string; type: string }) => {
+      room.onMessage('game_log', (data: GameLogPayload) => {
         gameLog.addEntry(data.message, data.type);
       });
     }
