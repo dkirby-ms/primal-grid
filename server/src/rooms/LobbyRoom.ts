@@ -72,12 +72,26 @@ export class LobbyRoom extends Room {
       }
     }
 
+    const userId = authUser?.id ?? client.sessionId;
+
+    // Kick any existing lobby session for this user (handles multi-tab)
+    for (const [existingSessionId, existingSession] of this.sessions) {
+      if (existingSession.userId === userId && existingSessionId !== client.sessionId) {
+        const existingClient = this.clients.find((c) => c.sessionId === existingSessionId);
+        if (existingClient) {
+          this.sendError(existingClient, "Connected from another tab");
+          existingClient.leave(4001);
+        }
+        break;
+      }
+    }
+
     const displayName = typeof options?.displayName === "string"
       ? options.displayName.trim().slice(0, LOBBY_DEFAULTS.MAX_DISPLAY_NAME_LENGTH)
       : "";
 
     const session: LobbySession = {
-      userId: authUser?.id ?? client.sessionId,
+      userId,
       displayName: displayName || authUser?.username || "",
       isGuest: authUser?.isGuest ?? true,
     };

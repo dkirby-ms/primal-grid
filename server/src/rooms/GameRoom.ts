@@ -111,6 +111,16 @@ export class GameRoom extends Room {
       const result = await this.authProvider.validateToken(token);
       if (result.valid && result.user) {
         authUser = result.user;
+
+        // Reject if this user is already in the room (multi-tab guard)
+        for (const [, existingUserId] of this.sessionUserMap) {
+          if (existingUserId === authUser.id) {
+            client.send("game_log", { message: "You are already in this game from another tab.", type: "error" });
+            client.leave(4001);
+            return;
+          }
+        }
+
         this.sessionUserMap.set(client.sessionId, authUser.id);
       }
     }
