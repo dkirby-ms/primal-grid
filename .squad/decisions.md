@@ -1946,3 +1946,186 @@ Chat overlay is a DOM-based panel (`ChatPanel.ts`) following the same overlay-pa
 - **Pemulis:** Server must handle `"chat"` message type and broadcast `{ sender, text, timestamp }`.
 - **Steeply:** ChatPanel needs tests for: message rendering, pruning, input focus/blur, toggle visibility.
 
+
+---
+
+## 2026-03-09: Versioning Baseline Established
+
+**By:** Pemulis (Systems Dev)  
+**Date:** 2026-03-12  
+**Status:** IMPLEMENTED
+
+### What
+
+- Root `package.json` now has `"version": "0.1.0"` — the single source of truth for release versioning.
+- `squad-promote.yml` (both dev→uat and uat→prod jobs) is hardened: if version is missing/undefined, falls back to short git SHA and logs a warning. PRs still get created with a meaningful identifier.
+- `squad-release.yml` is hardened: if version is missing/undefined, the step fails with a clear error. Releases must have a real semver version — no `vundefined` tags.
+
+### Why
+
+Both promote and release workflows were producing "vundefined" in PR titles and git tags because `package.json` had no `version` field. The hardening ensures this class of bug is caught immediately rather than silently producing bad artifacts.
+
+### Design Choices
+
+- **Soft fallback (promote):** git SHA used as PR identifier if version missing. Promotion is a process step; useful even without a version string.
+- **Hard fail (release):** semver is required. git tags and GitHub releases with bad version strings pollute release history and are painful to clean up.
+- **Starting version:** 0.1.0 per semver convention for pre-release software.
+- **Version bumping:** Manual for now. No automation added.
+
+### Impact
+
+All future promote PRs and releases will have correct version identifiers. If someone removes the version field, promote still works (with SHA fallback) and release fails fast with a clear message.
+
+**User Directive Captured:** Auto-increment version on each UAT release. Under review for future implementation.
+
+---
+
+## 2026-03-09: User Directive — Auto-Increment Version on UAT Release
+
+**From:** dkirby-ms (via Copilot)  
+**Date:** 2026-03-09T23:29:07Z  
+**Status:** PROPOSED
+
+For each release to UAT, the version in package.json should be auto-incremented.
+
+**Captured by:** Scribe for team memory. Requires design review by Pemulis and DevOps.
+
+---
+
+## 2026-03-XX: Reconnection on Disconnect (Grace Period)
+
+**By:** Hal (Lead)  
+**Date:** 2026-03-10  
+**Status:** PROPOSED
+
+### Context
+
+Player refresh or network drop destroys all game state — territory, creatures, structures gone. Player dumped to lobby as a new player.
+
+### Approach
+
+Use Colyseus's built-in reconnection API (`allowReconnection()` server, `client.reconnect()` client). No custom plumbing — the framework handles session identity, state re-sync, and token management.
+
+**Grace period: 60 seconds.** Long enough for a browser refresh, brief wifi drop, or laptop lid close. Short enough that abandoned slots don't linger.
+
+### Key Insight
+
+Territory, creatures, and structures are already NOT cleaned up on disconnect (no removal code exists). We only need to stop deleting the player from `state.players` and stop tearing down their fog-of-war view during the grace period. The framework does the rest.
+
+### Server Changes (Pemulis)
+
+1. Add `RECONNECT_GRACE_SECONDS = 60` constant
+2. Restructure `onLeave()` to use `allowReconnection()`
+3. Extract `saveAndRemovePlayer()` private method
+4. Update multi-tab guard in `onJoin()` to evict disconnected sessions
+
+### Client Changes (Gately)
+
+1. Add `'reconnecting'` to `ConnectionStatus` type and UI
+2. Store/clear reconnection token in sessionStorage
+3. Implement `reconnectGameRoom()` with exponential backoff
+4. Update `joinGameRoom()` onLeave handler to trigger reconnection
+5. Update `setupGameSession()` to not tear down game UI during reconnection
+
+### What We Are NOT Doing
+
+- **No territory cleanup on disconnect.** Territory persists — fixing cleanup is separate.
+- **No creature pausing.** Creatures continue AI during grace period.
+- **No event queuing.** Player misses events during disconnect.
+- **No cross-session reconnection.** If room disposed, reconnection fails.
+- **No localStorage for reconnect token.** sessionStorage only (closing tab should not hold a ghost slot).
+
+### Implementation Order
+
+1. **Server first** (Pemulis): `allowReconnection()` safe to ship alone. No behavior change for current clients.
+2. **Client second** (Gately): reconnection logic + UI.
+3. **QA third** (Steeply): verify full flow.
+
+---
+
+## 2026-03-XX: Game Creation Loading State
+
+**By:** Hal (Lead)  
+**Date:** 2025-07-24  
+**Status:** ACCEPTED
+
+### Decision
+
+Client-only approach. No server changes, no new shared types, no new game status.
+
+### Why
+
+Adding a `"creating"` status to `GameStatus` would touch shared types, server logic, game list rendering. That's too much surface area for a 2-second spinner.
+
+### Implementation
+
+**One loading overlay on the create form. Three guard rails.**
+
+1. **Add `isCreatingGame` guard flag** (LobbyScreen.ts)
+   - Set `true` before `room.send(CREATE_GAME, ...)`, `false` in success/error handlers
+   - Early-return to prevent double-submit
+
+2. **Disable form elements while creating**
+   - Disable submit button (set `disabled = true`)
+   - Change button text to "Creating..."
+   - Disable cancel button
+
+3. **Add timeout safety net** (15 seconds)
+   - If neither `GAME_JOINED` nor `LOBBY_ERROR` arrives, reset form
+   - Show error notification
+
+4. **CSS** (minimal)
+   - `:disabled` styles for submit/cancel buttons
+
+### Files Changed
+
+| File | What |
+|---|---|
+| `client/src/ui/LobbyScreen.ts` | `isCreatingGame` flag, button disable/enable, timeout, text swap |
+| `client/index.html` | `:disabled` styles |
+
+### Assignment
+
+- **Gately (UI):** CSS disabled states, button text swap, form logic
+- **Pemulis:** Not needed
+
+---
+
+## 2026-03-XX: Client Auth Token Storage & Silent Guest Flow
+
+**Author:** Gately  
+**Date:** 2026-03-XX  
+**Issue:** #77  
+**Status:** IMPLEMENTED
+
+### Decision
+
+- **Token key:** `primal-grid-token` in localStorage
+- **Auth URL:** Derived from WS URL by replacing `ws://` → `http://` (same host:port)
+- **Flow:** Auto-guest on first visit, reuse token on return, silent refresh on expiry
+- **No UI:** Guest auth is completely invisible to the user
+
+### Impact
+
+- Future login/register UI should use the same `saveToken()` / `clearToken()` helpers in `client/src/network.ts`
+- Account upgrade flow (`POST /auth/upgrade`) should replace the stored token with the new one
+- All auth-related client logic lives in `client/src/network.ts`
+
+---
+
+## 2026-03-12: CORS + Auth Graceful Degradation
+
+**By:** Pemulis (Systems Dev)  
+**Date:** 2026-03-12  
+**Context:** PR #78 review feedback
+
+### Decisions
+
+1. **CORS via `cors` npm package** on Express server — permissive (`cors()` with defaults). Needed for dev mode where Vite (port 3000) makes `fetch()` calls to Colyseus (port 2567). In production, same-origin serves both, so CORS headers are harmless but unused.
+
+2. **Auth is always optional on the client.** If `ensureToken()` fails for any reason (network, CORS, server down), the client joins the room without a token. If a token-bearing join fails, the client retries without auth. The game must never crash due to auth infrastructure being unavailable.
+
+### Impact
+
+All agents touching `connect()` or adding auth endpoints should respect this pattern — auth failures are warnings, never errors.
+
