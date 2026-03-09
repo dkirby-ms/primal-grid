@@ -35,6 +35,8 @@ export class LobbyScreen {
   private eventCallback: LobbyEventCallback | null = null;
   private currentGameId: string | null = null;
   private playerDisplayName = "";
+  private isCreatingGame = false;
+  private createGameTimeout: ReturnType<typeof setTimeout> | null = null;
 
   /** Returns the current display name entered by the player. */
   getDisplayName(): string {
@@ -118,6 +120,7 @@ export class LobbyScreen {
     });
 
     room.onMessage(GAME_JOINED, (data: GameJoinedPayload) => {
+      this.clearCreateGameState();
       this.currentGameId = data.gameId;
       this.eventCallback?.({ type: "join_game", gameId: data.gameId, roomId: data.roomId });
     });
@@ -127,6 +130,10 @@ export class LobbyScreen {
     });
 
     room.onMessage(LOBBY_ERROR, (data: LobbyErrorPayload) => {
+      if (this.isCreatingGame) {
+        this.clearCreateGameState();
+        this.setCreateFormEnabled(true);
+      }
       this.eventCallback?.({ type: "error", message: data.message });
       this.showNotification(data.message, "error");
     });
@@ -173,7 +180,7 @@ export class LobbyScreen {
   }
 
   private handleCreateGame(): void {
-    if (!this.room) return;
+    if (!this.room || this.isCreatingGame) return;
 
     // Ensure player has a name (fall back to placeholder)
     const name = this.nameInput.value.trim() || this.nameInput.placeholder || "Explorer";
@@ -195,14 +202,42 @@ export class LobbyScreen {
       mapSize: parseInt(mapSizeInput.value, 10) || 128,
     };
 
+    this.isCreatingGame = true;
+    this.setCreateFormEnabled(false);
+
     this.room.send(CREATE_GAME, payload);
 
-    // Reset form
-    gameNameInput.value = "";
-    const form = document.getElementById("lobby-create-form")!;
-    const toggleBtn = document.getElementById("lobby-create-toggle")!;
-    form.classList.remove("visible");
-    toggleBtn.style.display = "";
+    this.createGameTimeout = setTimeout(() => {
+      this.clearCreateGameState();
+      this.setCreateFormEnabled(true);
+      this.showNotification("Game creation timed out. Please try again.", "error");
+    }, 15_000);
+  }
+
+  private clearCreateGameState(): void {
+    this.isCreatingGame = false;
+    if (this.createGameTimeout) {
+      clearTimeout(this.createGameTimeout);
+      this.createGameTimeout = null;
+    }
+  }
+
+  private setCreateFormEnabled(enabled: boolean): void {
+    const submitBtn = document.getElementById("lobby-create-submit") as HTMLButtonElement | null;
+    const cancelBtn = document.getElementById("lobby-create-cancel") as HTMLButtonElement | null;
+    if (submitBtn) {
+      submitBtn.disabled = !enabled;
+      submitBtn.textContent = enabled ? "Create Game" : "Creating...";
+    }
+    if (cancelBtn) {
+      cancelBtn.disabled = !enabled;
+    }
+    if (enabled) {
+      // Reset form visibility
+      const form = document.getElementById("lobby-create-form");
+      const gameNameInput = document.getElementById("lobby-game-name") as HTMLInputElement | null;
+      if (gameNameInput) gameNameInput.value = "";
+    }
   }
 
   private renderGameList(): void {

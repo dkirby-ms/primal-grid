@@ -488,7 +488,16 @@
         border-radius: 4px;
         cursor: pointer;
       }
-      #lobby-create-submit:hover { background: #3a5a3a; }
+      #lobby-create-submit:hover:not(:disabled) { background: #3a5a3a; }
+      #lobby-create-submit:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        animation: lobby-pulse 1.5s ease-in-out infinite;
+      }
+      @keyframes lobby-pulse {
+        0%, 100% { opacity: 0.5; }
+        50% { opacity: 0.7; }
+      }
       #lobby-create-cancel {
         padding: 6px 16px;
         font-size: 12px;
@@ -499,7 +508,11 @@
         border-radius: 4px;
         cursor: pointer;
       }
-      #lobby-create-cancel:hover { background: #3a3a3a; }
+      #lobby-create-cancel:hover:not(:disabled) { background: #3a3a3a; }
+      #lobby-create-cancel:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
       .lobby-notification {
         display: none;
         text-align: center;
