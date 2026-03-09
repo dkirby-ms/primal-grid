@@ -74,9 +74,17 @@ export class LobbyRoom extends Room {
 
     const userId = authUser?.id ?? client.sessionId;
 
-    // Kick any existing lobby session for this user (handles multi-tab)
+    // Kick any existing lobby session for this user (handles multi-tab).
+    // Transfer game membership so the game isn't cleaned up on kick.
+    let transferGameId = "";
     for (const [existingSessionId, existingSession] of this.sessions) {
       if (existingSession.userId === userId && existingSessionId !== client.sessionId) {
+        // Preserve game membership — clear activeGameId so onLeave won't remove the game
+        const existingLobbyPlayer = this.state.players.get(existingSessionId);
+        if (existingLobbyPlayer?.activeGameId) {
+          transferGameId = existingLobbyPlayer.activeGameId;
+          existingLobbyPlayer.activeGameId = "";
+        }
         const existingClient = this.clients.find((c) => c.sessionId === existingSessionId);
         if (existingClient) {
           this.sendError(existingClient, "Connected from another tab");
@@ -102,6 +110,7 @@ export class LobbyRoom extends Room {
     lobbyPlayer.userId = session.userId;
     lobbyPlayer.displayName = session.displayName;
     lobbyPlayer.isGuest = session.isGuest;
+    if (transferGameId) lobbyPlayer.activeGameId = transferGameId;
     this.state.players.set(client.sessionId, lobbyPlayer);
 
     // Send current game list to joining client
