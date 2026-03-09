@@ -153,7 +153,13 @@ export class GameRoom extends Room {
 
     const userLabel = authUser ? ` (user: ${authUser.username})` : "";
     console.log(`[GameRoom] Client joined: ${client.sessionId}${userLabel}, HQ at (${hqPos.x}, ${hqPos.y})${devMode ? ' [DEV MODE]' : ''}`);
-    client.send("game_log", { message: "Welcome to Primal Grid!", type: "info" });
+
+    if (restored && player.displayName) {
+      client.send("game_log", { message: `Welcome back, ${player.displayName}!`, type: "info" });
+      this.broadcast("game_log", { message: `${player.displayName} has returned`, type: "info" }, { except: client });
+    } else {
+      client.send("game_log", { message: "Welcome to Primal Grid!", type: "info" });
+    }
   }
 
   override onLeave(client: Client, code: number) {
