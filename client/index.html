@@ -49,6 +49,28 @@
         letter-spacing: 1px;
         margin-bottom: 6px;
       }
+      /* Stat bars (used by XP progress bar) */
+      .stat-bar-wrap {
+        margin-bottom: 4px;
+      }
+      .stat-bar-wrap .bar-label {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        margin-bottom: 2px;
+      }
+      .stat-bar {
+        width: 100%;
+        height: 12px;
+        background: #222;
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      .stat-bar-fill {
+        height: 100%;
+        border-radius: 3px;
+        transition: width 0.15s ease, background 0.3s ease;
+      }
       /* Inventory items */
       .inv-row {
         display: flex;
@@ -238,14 +260,32 @@
     <div id="game-wrapper">
       <div id="app"></div>
       <div id="hud-panel">
-        <div class="hud-section" id="section-inventory">
-          <h3>Resources</h3>
-          <div class="inv-row"><span class="inv-icon">🪵 Wood</span><span class="inv-count" id="inv-wood">0</span></div>
-          <div class="inv-row"><span class="inv-icon">🪨 Stone</span><span class="inv-count" id="inv-stone">0</span></div>
+        <div class="hud-section" id="section-day-phase">
+          <h3>Time of Day</h3>
+          <div id="day-phase-display" style="font-size:14px;font-weight:bold;color:#ffa726">☀️ Day</div>
+        </div>
+        <div class="hud-section" id="section-level">
+          <h3>Level</h3>
+          <div style="font-size:14px;font-weight:bold;color:#7ecfff">⭐ Level <span id="level-val">1</span></div>
+          <div class="stat-bar-wrap" style="margin-top:4px;">
+            <div class="bar-label"><span>XP</span><span id="xp-text">0 / 10</span></div>
+            <div class="stat-bar">
+              <div class="stat-bar-fill" id="xp-bar-fill" style="width:0%;background:#7ecfff;"></div>
+            </div>
+          </div>
         </div>
         <div class="hud-section" id="territory-count">
           <h3>Territory</h3>
           <div style="font-size:16px;font-weight:bold;color:#ffd700">🏰 <span id="territory-count-val">0</span> tiles</div>
+        </div>
+        <div class="hud-section" id="section-inventory">
+          <h3>Inventory</h3>
+          <div class="inv-row"><span class="inv-icon">🪵 Wood</span><span class="inv-count" id="inv-wood">0</span></div>
+          <div class="inv-row"><span class="inv-icon">🪨 Stone</span><span class="inv-count" id="inv-stone">0</span></div>
+        </div>
+        <div class="hud-section" id="section-creatures">
+          <h3>Creatures</h3>
+          <div class="creature-row" id="creature-counts">🦕 0 &nbsp; 🦖 0</div>
         </div>
         <div class="hud-section" id="section-builders">
           <h3>Builders</h3>
@@ -262,6 +302,7 @@
             cursor:pointer;
           ">🔨 Spawn Builder (10W, 5S)</button>
         </div>
+
         <div class="hud-section" id="section-combat">
           <h3>Combat</h3>
           <div id="enemy-base-count" style="font-size:12px;margin-bottom:6px;color:#ff6666;">No threats</div>
@@ -293,14 +334,7 @@
             cursor:pointer;
           ">⚔ Spawn Attacker (20W, 15S)</button>
         </div>
-        <div class="hud-section" id="section-day-phase">
-          <h3>Time of Day</h3>
-          <div id="day-phase-display" style="font-size:14px;font-weight:bold;color:#ffa726">☀️ Day</div>
-        </div>
-        <div class="hud-section" id="section-creatures">
-          <h3>Wildlife</h3>
-          <div class="creature-row" id="creature-counts">🦕 0 &nbsp; 🦖 0</div>
-        </div>
+
       </div>
     </div>
     <div id="game-log"></div>
