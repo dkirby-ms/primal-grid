@@ -54,6 +54,6 @@ const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
 server.listen(port).then(() => {
   console.log(`[Primal Grid] Colyseus server listening on port ${port}`);
   console.log(`[Primal Grid] Client available at ${clientUrl}`);
-  console.log(`[Primal Grid] Auth endpoints available at /auth/{register,login,guest,upgrade}`);
+  console.log(`[Primal Grid] Auth endpoints available at /auth/{register,login,guest,upgrade,refresh}`);
   console.log(`[Primal Grid] Database: ${DB_PATH}`);
 });

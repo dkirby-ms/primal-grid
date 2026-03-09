@@ -8,6 +8,7 @@ import { authMiddleware, type AuthenticatedRequest } from "./middleware.js";
  * POST /auth/login    — authenticate and get JWT
  * POST /auth/guest    — create guest session with temporary JWT
  * POST /auth/upgrade  — upgrade guest account to full account (requires auth)
+ * POST /auth/refresh — exchange refresh token for new token pair
  */
 export function createAuthRouter(authProvider: AuthProvider): Router {
   const router = Router();
@@ -102,6 +103,26 @@ export function createAuthRouter(authProvider: AuthProvider): Router {
     res.json({
       user: loginResult.user,
       token: loginResult.token,
+    });
+  });
+
+  router.post("/refresh", async (req, res) => {
+    const { refreshToken } = req.body as { refreshToken?: string };
+
+    if (!refreshToken) {
+      res.status(400).json({ error: "Refresh token is required" });
+      return;
+    }
+
+    const result = await authProvider.refreshToken(refreshToken);
+    if (!result.success) {
+      res.status(401).json({ error: result.error });
+      return;
+    }
+
+    res.json({
+      user: result.user,
+      token: result.token,
     });
   });
 

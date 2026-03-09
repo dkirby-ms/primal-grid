@@ -87,6 +87,11 @@ export class GameRoom extends Room {
   }
 
   override async onJoin(client: Client, options?: Record<string, unknown>) {
+    // Lazy init for test environments using Object.create (bypasses constructor)
+    if (!this.sessionUserMap) {
+      this.sessionUserMap = new Map<string, string>();
+    }
+
     // Validate JWT if auth is configured
     let authUser: AuthUser | undefined;
     const token = typeof options?.token === "string" ? options.token : undefined;
@@ -204,6 +209,8 @@ export class GameRoom extends Room {
   private tickAutoSave(): void {
     if (this.state.tick % AUTO_SAVE_INTERVAL_TICKS !== 0) return;
     if (!this.playerStateRepo) return;
+
+    if (!this.sessionUserMap) return;
 
     for (const sessionId of this.sessionUserMap.keys()) {
       void this.savePlayerState(sessionId);

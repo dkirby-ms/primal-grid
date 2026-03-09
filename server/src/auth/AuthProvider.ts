@@ -11,7 +11,9 @@ export interface AuthUser {
 
 export interface TokenPair {
   accessToken: string;
+  refreshToken: string;
   expiresIn: number;
+  refreshExpiresIn: number;
 }
 
 export interface RegisterResult {
@@ -52,4 +54,7 @@ export interface AuthProvider {
 
   /** Validate a JWT and return the associated user. */
   validateToken(token: string): Promise<TokenValidationResult>;
+
+  /** Exchange a refresh token for a new token pair. */
+  refreshToken(refreshToken: string): Promise<LoginResult>;
 }
