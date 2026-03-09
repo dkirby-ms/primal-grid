@@ -32,7 +32,7 @@ export class ChatPanel {
   private entryCount = 0;
   private userScrolledUp = false;
   private room: Room | null = null;
-  private visible = true;
+  private visible = false;
 
   /** Build DOM structure inside the given container and bind to room. */
   init(container: HTMLElement, room: Room): void {
