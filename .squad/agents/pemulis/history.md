@@ -1748,3 +1748,12 @@ See `.squad/decisions.md` for full triage document, dependency graph, risk mitig
 - **Design trade-off**: Resources/territory NOT restored on rejoin — territory is spatial and map-dependent. Only score/level/XP/displayName persist.
 - **Dependencies added**: jsonwebtoken, better-sqlite3, bcryptjs (+ @types/).
 - **Test impact**: 515/515 tests pass, zero regressions. Key insight: `onLeave` must stay synchronous because tests call it without `await`.
+
+### Token Refresh Mechanism (2026-03-12)
+
+- **Added**: Refresh tokens (7-day expiry) alongside 24h access tokens. `TokenPair` now includes `refreshToken` and `refreshExpiresIn`.
+- **AuthProvider interface**: Added `refreshToken(token: string)` method — Entra ID swap only needs to implement this one additional method.
+- **Security**: `validateToken` now rejects refresh tokens used as access tokens (checks `type` field in JWT payload). Refresh tokens checked for `type === "refresh"` in `refreshToken()`.
+- **Endpoint**: `POST /auth/refresh` with `{ refreshToken }` body — returns new token pair.
+- **Defensive init**: Added lazy `sessionUserMap` initialization in `onJoin` and guard in `tickAutoSave` for test environments that use `Object.create(GameRoom.prototype)` (bypasses class field initializers).
+- **PR**: #75 — closes #42.
