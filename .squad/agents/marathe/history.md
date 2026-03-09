@@ -389,3 +389,40 @@ Ralph (Work Monitor) simultaneously performed board hygiene on #65:
 PR #66 pending review and merge into dev branch.
 
 ---
+
+---
+
+## 2026-03-09T23:29:38Z: Versioning Baseline & Workflow Hardening (Pemulis)
+
+**Context:** Pemulis (Systems Dev) fixed "vundefined" bug in promote/release workflows by adding `"version": "0.1.0"` to package.json and hardening both workflows.
+
+**DevOps Impact:** 
+- **Promote workflows now resilient** — if version field missing, falls back to git SHA (soft fallback). Promotion PRs always get created with meaningful identifiers.
+- **Release workflow now safe-fail** — if version field missing, step fails hard with clear error. Prevents malformed git tags and GitHub releases.
+- **Pattern established:** Promote uses soft fallback (process step useful without version), release uses hard fail (release artifacts must have proper semver).
+
+**Implication for CI/CD:** All future release workflows should require semver validation. If auto-increment of version is implemented in future (user directive captured), release workflows must handle version bumping in the CI context.
+
+**Decision reference:** `.squad/decisions.md` → "Versioning Baseline Established" & "User Directive — Auto-Increment Version on UAT Release"
+
+---
+
+## 2026-03-09T23:32:55Z: Auto-Bump Patch Version on Dev→UAT Promotion (Pemulis)
+
+**Context:** Pemulis (Systems Dev) implemented automatic patch version bumping in the dev→uat promotion workflow.
+
+**DevOps Changes:**
+- `.github/workflows/squad-promote.yml` now includes "Bump patch version" step in `dev-to-uat` job
+- Step: `npm version patch --no-git-tag-version` — updates `package.json` + `package-lock.json`, no git tags
+- Bump commit is pushed to `dev` **before** the promotion PR is created
+- Workflow permissions upgraded from `contents: read` → `contents: write` to enable push access
+
+**Pattern Consistency:**
+- Aligns with versioning baseline (soft fallback for promote, hard fail for release)
+- Commit is clean: only JSON updates, no extraneous files
+- Manual control preserved: minor/major bumps still manual
+
+**Next Promotion:** When dev→uat is run, the new version will appear in the PR title automatically.
+
+**Decision reference:** `.squad/decisions.md` → "Automatic Patch Version Bump on UAT Promotion"
+
