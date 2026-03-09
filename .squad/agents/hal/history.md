@@ -531,3 +531,80 @@ See: 2026-03-08: ESLint Override for E2E Browser Context Code
 **Status:** APPROVED & MERGED
 
 Reviewed PR #60 differential viewport culling for camera panning performance fix. Culling approach is correct and performant. PR merged to dev. Non-blocking notes documented for future optimization of territory overlays and fog structure icons.
+
+---
+
+## 2026-03-10: PR #66 Review — Discord Deploy Notifications
+
+**Reviewed:** 2026-03-10  
+**Status:** APPROVED  
+**Issue:** #65 — Discord deploy notifications showed `Deployed URL: https://` with no actual URL  
+**PR:** #66 by Marathe (Dale Kirby)
+
+### Problem & Root Cause
+
+Issue #65 reported that Discord notifications after deployments included no actual URL—just the scheme prefix. Root cause: GitHub Actions secret masking was stripping the Azure Container App FQDN from job outputs (log warning: `##[warning]Skip output 'fqdn' since it may contain secret`).
+
+The deployment workflow was trying to pass `DEPLOY_URL` from the deploy job via `${{ needs.deploy.outputs.fqdn }}`, but GitHub's secret redaction logic masked this value because it matched known secrets in the vault.
+
+### Solution & Architecture
+
+Marathe hardcoded the static custom domain URLs directly in the workflow environments:
+- **Production:** `https://gridwar.kirbytoso.xyz`
+- **UAT:** `https://gridtest.kirbytoso.xyz`
+
+This is the **correct approach** because:
+1. Custom domains are not secrets (they're publicly routable FQDNs anyone can visit)
+2. These are static infrastructure endpoints that never change per deployment
+3. Secret masking is working as designed—we just don't need dynamic outputs here
+
+Also improved URL formatting:
+- Removed `https://` prefix concatenation from jq (was `"https://${DEPLOY_URL}"`, now `"${DEPLOY_URL}"`)
+- Applied markdown link format: `[Open App]({URL})`
+- Added 🌐 emoji to field label for UX clarity
+
+### Key Learnings
+
+**GitHub Actions Secret Masking:**
+- Secret masking is **overly aggressive** but by design. Any value matching known secrets (including substrings) gets redacted from job outputs, even if the value itself isn't sensitive.
+- Workaround: Don't rely on dynamic outputs for values that might accidentally match secret patterns. Hardcode known static values instead.
+- For truly dynamic URLs: Use non-secret environment configuration (e.g., repo variables) as the source of truth.
+
+**Workflow Architecture Pattern:**
+- Job outputs are useful for passing generated values downstream (e.g., commit SHA, build artifact paths), but they're vulnerable to secret redaction.
+- For infrastructure endpoints, prefer environment variables (repo-level or workflow-level) over runtime-generated outputs.
+- Static configuration is simpler and doesn't suffer from redaction surprises.
+
+**When to Hardcode vs. Parameterize:**
+- Hardcode: Infrastructure endpoints, build flags, environment names (i.e., things that are known at workflow definition time)
+- Parameterize: Build outputs, generated URLs, runtime state (i.e., things that are unknown until the job runs)
+
+---
+
+## 2026-03-08T23:49:23Z: PR #66 Review & Merge — Deploy URL Fix
+
+**Task:** Review & approve PR #66 for deployment  
+**Status:** ✅ APPROVED & MERGED  
+
+### What Hal Did
+- Reviewed PR #66 (Marathe): Hardcode deploy URLs to fix GitHub Actions secret masking
+- Verified all review criteria passed:
+  - Security posture: Static URLs eliminate masking interference
+  - Backward compatibility: No breaking changes
+  - Code quality: Minimal, focused change
+  - Testing: E2E tests pass on uat/master
+  - Documentation: Deployment changes documented
+- Approved for merge
+- Documented decision in `.squad/decisions.md` for future CI/CD work
+
+### Decision Created
+**Decision:** "GitHub Actions Secret Masking & Job Output Patterns" (2026-03-10)
+- Establishes pattern: Hardcode static infrastructure endpoints, don't use dynamic job outputs
+- Binding for all future CI/CD work
+- Distinguishes when to use job outputs vs. hardcoding vs. repository variables
+
+### Outcome
+- ✅ PR #66 approved
+- ✅ Issue #65 resolved (Discord notifications now include deploy URLs)
+- ✅ Decision merged into team memory
+- ✅ Downstream: Coordinator merges to dev, closes issue #65

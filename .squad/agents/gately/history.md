@@ -1205,3 +1205,10 @@ Prevention (write clean first) > Cleanup (fix lint errors post-merge).
 Valid exceptions (e.g., E2E browser-context code) require documented decision in decisions.md.
 
 See: 2026-03-08: ESLint Override for E2E Browser Context Code
+
+### Status Panel Cleanup (2026-03-10)
+
+- **Upkeep remnant in GameLog:** The `upkeep` event type in GameLog.ts TYPE_CONFIG was dead code — no server events use it since the pawn upkeep system was removed. Removed the entry.
+- **Builder constant duplication:** HudDOM.ts had local `BUILDER_COST_WOOD`, `BUILDER_COST_STONE`, `MAX_BUILDERS` constants duplicating values from `PAWN_TYPES['builder']` in shared. Defender/attacker buttons already used `PAWN_TYPES` correctly. Unified all three to use the registry, preventing future drift.
+- **Panel audit result:** All remaining HUD sections (time of day, level/XP, territory, inventory, creatures, builders, combat) are backed by active game state and server schema. No explorer pawn type references exist (correctly absent — it's a feature request, not implemented). No upkeep display exists.
+- **CSS comment fix:** The stat-bar CSS was labeled "legacy" but is actively used by the XP progress bar. Updated the comment.

@@ -1,11 +1,6 @@
 import type { Room } from '@colyseus/sdk';
 import { xpForNextLevel, PAWN_TYPES, isEnemyBase } from '@primal-grid/shared';
 
-/** Cost to spawn a builder pawn. */
-const BUILDER_COST_WOOD = 10;
-const BUILDER_COST_STONE = 5;
-const MAX_BUILDERS = 5;
-
 /**
  * DOM-based HUD panel.
  * Same duck-typed bindToRoom() pattern.
@@ -98,8 +93,10 @@ export class HudDOM {
   /** Handle spawn builder button click. */
   private onSpawnBuilder(): void {
     if (!this.room) return;
-    if (this.currentWood < BUILDER_COST_WOOD || this.currentStone < BUILDER_COST_STONE) return;
-    if (this.currentBuilderCount >= MAX_BUILDERS) return;
+    const builderDef = PAWN_TYPES['builder'];
+    if (!builderDef) return;
+    if (this.currentWood < builderDef.cost.wood || this.currentStone < builderDef.cost.stone) return;
+    if (this.currentBuilderCount >= builderDef.maxCount) return;
     this.room.send('spawn_pawn', { pawnType: 'builder' });
   }
 
@@ -116,8 +113,11 @@ export class HudDOM {
 
   /** Update spawn button enabled/disabled state. */
   private updateSpawnButton(): void {
-    const canAfford = this.currentWood >= BUILDER_COST_WOOD && this.currentStone >= BUILDER_COST_STONE;
-    const underCap = this.currentBuilderCount < MAX_BUILDERS;
+    const builderDef = PAWN_TYPES['builder'];
+    const canAfford = builderDef
+      ? this.currentWood >= builderDef.cost.wood && this.currentStone >= builderDef.cost.stone
+      : false;
+    const underCap = builderDef ? this.currentBuilderCount < builderDef.maxCount : false;
     this.spawnBuilderBtn.disabled = !canAfford || !underCap;
 
     // Defender button
@@ -227,7 +227,7 @@ export class HudDOM {
         });
         this.creatureCounts.textContent = `🦕 ${herbs}  🦖 ${carns}`;
         this.currentBuilderCount = builders;
-        this.builderCountEl.textContent = `Builders: ${builders}/${MAX_BUILDERS}`;
+        this.builderCountEl.textContent = `Builders: ${builders}/${PAWN_TYPES['builder']?.maxCount ?? 5}`;
 
         // Combat counts
         const defDef = PAWN_TYPES['defender'];
