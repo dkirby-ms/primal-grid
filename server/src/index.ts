@@ -20,9 +20,10 @@ Encoder.BUFFER_SIZE = 768 * 1024; // 768 KB — needed for 128×128 map state sy
 
 // Auth configuration
 const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET environment variable is required. Set it before starting the server.");
+if (!JWT_SECRET && process.env.NODE_ENV === "production") {
+  throw new Error("JWT_SECRET environment variable is required in production.");
 }
+const jwtSecret = JWT_SECRET || "primal-grid-local-dev-only";
 const DB_PATH = process.env.DB_PATH || "primal-grid.db";
 
 // Initialize persistence layer (SQLite for dev)
@@ -31,7 +32,7 @@ const playerStateRepo = new SqlitePlayerStateRepository(DB_PATH);
 const gameSessionRepo = new GameSessionRepository(DB_PATH);
 
 // Initialize auth provider (local JWT — swap to Entra ID later)
-const authProvider = new LocalAuthProvider(userRepo, JWT_SECRET);
+const authProvider = new LocalAuthProvider(userRepo, jwtSecret);
 
 // Bridge for GameRoom → LobbyRoom lifecycle events (single instance shared by all rooms)
 const lobbyBridge = new LobbyBridge();
