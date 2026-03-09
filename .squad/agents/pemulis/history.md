@@ -1748,3 +1748,13 @@ See `.squad/decisions.md` for full triage document, dependency graph, risk mitig
 - **Design trade-off**: Resources/territory NOT restored on rejoin — territory is spatial and map-dependent. Only score/level/XP/displayName persist.
 - **Dependencies added**: jsonwebtoken, better-sqlite3, bcryptjs (+ @types/).
 - **Test impact**: 515/515 tests pass, zero regressions. Key insight: `onLeave` must stay synchronous because tests call it without `await`.
+
+### Session Persistence Client Integration (2026-03-09)
+
+- **Issue #77, PR #78** on `squad/78-session-persistence-client` branch.
+- **CORS middleware**: Added cors package to Express server. fetch()-based auth endpoints work cross-origin from Vite dev client (port :3000 → Colyseus :2567). WebSocket connections bypass CORS by design; fetch requests required explicit middleware.
+- **Graceful auth degradation**: ensureToken() now catches auth failures and returns undefined instead of throwing. connect() joins without token when auth unavailable. If token-bearing join fails, falls back to anonymous join. Game always boots even with zero auth infrastructure (dev/offline mode support).
+- **DRY room setup**: Extracted setupRoom() helper for onJoin, onLeave, onError, and dev-mode __ROOM__ assignment. Eliminates copy-paste logic, reduces maintenance burden for future retry logic refactoring.
+- **Test coverage**: All 515 tests pass, zero regressions. Lint clean.
+- **Merged**: Hal approved and squash-merged to dev. Issue #77 closed.
+- **Impact**: Full session persistence chain now live. Players: login → play → close browser → rejoin with state intact. Score, level, XP, displayName all restored.

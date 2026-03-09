@@ -675,3 +675,14 @@ Analyzed dependencies and created formal execution plan for four GitHub issues:
 - Pemulis begins #42 immediately
 - Gately picks up #19 after PR #68 merge (scheduled ~2026-03-10)
 - Steeply prepares #42 auth test suite
+
+### Session Persistence Client Integration Review (2026-03-09)
+
+- **Issue #77, PR #78** review and merge.
+- **Reviewed**: Pemulis's fixes for three blockers:
+  1. CORS middleware — fetch auth endpoints work from Vite dev client
+  2. Graceful auth degradation — connect() joins without token, fallback to anonymous
+  3. DRY room setup — extracted setupRoom() helper
+- **Approval**: All blockers addressed. Code quality verified (515/515 tests, lint clean). Design sound for dev/offline support.
+- **Merge**: Squash-merged to dev, deleted squad/78-session-persistence-client branch, closed issue #77.
+- **Impact**: Session persistence chain complete. Auth (PR #70) → server auto-save (PR #77) → client restore (PR #78). Players have end-to-end persistence.
