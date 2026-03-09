@@ -13,6 +13,10 @@ param containerImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
 @description('Deployment environment (prod or uat)')
 param environment string = 'prod'
 
+@description('JWT secret for auth token signing. Must be set for all environments.')
+@secure()
+param jwtSecret string
+
 // ---------- Azure Container Registry ----------
 
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
@@ -79,6 +83,10 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
           name: 'acr-password'
           value: acr.listCredentials().passwords[0].value
         }
+        {
+          name: 'jwt-secret'
+          value: jwtSecret
+        }
       ]
     }
     template: {
@@ -94,6 +102,10 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
             {
               name: 'PORT'
               value: '2567'
+            }
+            {
+              name: 'JWT_SECRET'
+              secretRef: 'jwt-secret'
             }
           ]
         }
