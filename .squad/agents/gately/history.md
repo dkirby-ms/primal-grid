@@ -1220,3 +1220,45 @@ See: 2026-03-08: ESLint Override for E2E Browser Context Code
 - **Section reorder:** Resources → Territory → Builders → Combat → Time of Day → Wildlife. Prioritizes actionable/frequently-checked info at top, ambient info at bottom.
 - **CSS cleanup:** Removed stat-bar-wrap, bar-label, stat-bar, stat-bar-fill CSS classes — they were only used by the XP progress bar.
 - **No test impact:** All 515 tests pass. Server HUD state contract tests don't reference level/XP display.
+## 2026-03-09: PR #68 Status Panel UX Redesign — MERGED
+
+**By:** Gately (Game Dev)  
+**Date:** 2026-03-09  
+**PR:** #68 (merged to dev)  
+
+### Changes
+
+1. **Removed Level/XP from HUD** — Confusing to testers (no gameplay purpose yet, no unlocks/gating)
+2. **Renamed headers:** "Inventory" → "Resources", "Creatures" → "Wildlife" (clearer in context)
+3. **Reordered sections by importance:** Resources > Territory > Builders > Combat > Time of Day > Wildlife
+
+### Code Cleanup
+
+- `HudDOM.updateLevelDisplay()` removed
+- `onLevelChange` callback removed
+- `xpForNextLevel` no longer imported in client code
+- Stat-bar CSS classes removed (re-add if progression re-implemented)
+
+### Impact
+
+Scope discipline maintained (HUD DOM only, no game logic). User-facing clarity improved. Clean merge with no issues.
+
+### Initiative Status
+
+**Ready for pickup:**
+- **#19 Rounded tiles** — Recommended next (quick 1-file win)
+- **#31 Game log UI** — After #19
+- **#30 Chat UI** — After #31 overlay pattern lands
+
+See `.squad/decisions.md` Initiative Triage & Execution Plan (2026-03-09) for full Wave 1/Wave 2 sequencing.
+
+### Game Log Overlay Panel — Issue #31 (2026-03-09)
+
+- **Rewrote GameLog.ts** with 5 event categories (Territory 🟢, Combat 🔴, Resources 🟡, Creatures 🔵, System ⚪) each with distinct color and dot icon.
+- **Timestamps** (HH:MM:SS) on every entry using `formatTimestamp()` helper.
+- **Smart auto-scroll** — tracks `userScrolledUp` flag via scroll event listener. Only auto-scrolls if user is within 30px of the bottom. Scroll up to read history without losing your place.
+- **Message pruning** cap raised from 50 → 200 entries.
+- **Panel structure** — `#game-log` container now uses flex column: `.game-log-header` (title bar) + `.game-log-scroll` (scrollable message area). Custom styled scrollbar.
+- **Shared types** — Added `GameLogPayload` interface and `GameLogCategory` type union to `shared/src/messages.ts`. Client uses shared type for `room.onMessage` handler.
+- **Reusable pattern** — Built as the overlay panel pattern that #30 (chat) will extract: header + scroll area + auto-scroll + entry pruning.
+- **PR:** #72 targeting dev.
