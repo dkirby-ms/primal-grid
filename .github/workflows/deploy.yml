@@ -2,7 +2,7 @@ name: Deploy Primal Grid
 
 on:
   push:
-    branches: [master]
+    branches: [prod]
     paths-ignore:
       - 'docs/**'
       - 'infra/**'
@@ -97,7 +97,7 @@ jobs:
           # Checkout with full history for changelog
           git clone --depth 50 https://github.com/${REPOSITORY}.git repo
           cd repo
-          git fetch --depth 50 origin master
+          git fetch --depth 50 origin prod
 
           # Generate changelog (last 10 commits)
           CHANGELOG=$(git log --pretty=format:'• %h %s (%an)' HEAD~10..HEAD 2>/dev/null | head -10)

@@ -114,7 +114,7 @@ rm -f shared/tsconfig.tsbuildinfo && npm run build -w shared
 
 | Environment | Branch | Container App | URL | Deploys On |
 |-------------|--------|---------------|-----|------------|
-| Production | `master` | `primal-grid` | (prod URL) | Push to `master` |
+| Production | `prod` | `primal-grid` | (prod URL) | Push to `prod` |
 | UAT | `uat` | `primal-grid-uat` | (UAT URL) | Push to `uat` |
 
 ### Infrastructure
@@ -128,22 +128,20 @@ rm -f shared/tsconfig.tsbuildinfo && npm run build -w shared
 ### Branch Strategy
 
 ```
-feature/* ──PR──▶ uat ──PR──▶ master
-                  │              │
-                  ▼              ▼
-              UAT deploy    Prod deploy
+feature/* ──PR──▶ dev ──PR──▶ uat ──PR──▶ prod
+                   │           │            │
+                   ▼           ▼            ▼
+               Development  UAT deploy  Prod deploy
 ```
 
-1. **Feature → UAT:** Open a PR from your feature branch to `uat`. On merge, `deploy-uat.yml` auto-deploys.
-2. **UAT → Master:** Once validated on UAT, open a PR from `uat` → `master`. On merge, `deploy.yml` auto-deploys to prod.
-3. **After promotion:** Reset uat to master to prevent divergence:
-   ```bash
-   git checkout uat && git reset --hard origin/master && git push --force-with-lease
-   ```
+1. **Feature → Dev:** Open a PR from your feature branch to `dev`. Hal reviews for code quality.
+2. **Dev → UAT:** Open a PR from `dev` → `uat`. @copilot reviews for test coverage.
+3. **UAT → Prod:** Open a PR from `uat` → `prod`. @dkirby-ms reviews and merges manually.
+4. **After prod promotion:** UAT is automatically reset to prod via `reset-uat.yml`.
 
 ### Branch Protection
 
-The `uat` branch is protected:
+The `uat` and `prod` branches are protected:
 - Requires pull request (no direct push)
 - Requires CI status checks to pass
 - No force push (except for post-promotion reset by admins)
@@ -153,7 +151,7 @@ The `uat` branch is protected:
 
 | Workflow | File | Trigger | What it does |
 |----------|------|---------|--------------|
-| Deploy Prod | `deploy.yml` | Push to `master` | Build + test → push image to ACR (tag: `{sha}`) → deploy to `primal-grid` |
+| Deploy Prod | `deploy.yml` | Push to `prod` | Build + test → push image to ACR (tag: `{sha}`) → deploy to `primal-grid` |
 | Deploy UAT | `deploy-uat.yml` | Push to `uat` / workflow_dispatch | Build + test → push image to ACR (tag: `uat-{branch}-{sha}`) → deploy to `primal-grid-uat` |
 
 ### Emergency UAT Override

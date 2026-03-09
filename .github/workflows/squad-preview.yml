@@ -2,7 +2,7 @@ name: Squad Preview Validation
 
 on:
   push:
-    branches: [preview]
+    branches: [uat]
 
 permissions:
   contents: read

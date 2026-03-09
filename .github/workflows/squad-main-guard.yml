@@ -2,10 +2,10 @@ name: Squad Protected Branch Guard
 
 on:
   pull_request:
-    branches: [main, preview, insider]
+    branches: [prod, uat]
     types: [opened, synchronize, reopened]
   push:
-    branches: [main, preview, insider]
+    branches: [prod, uat]
 
 permissions:
   contents: read
@@ -92,9 +92,9 @@ jobs:
 
             // Build a clear, actionable error message
             const lines = [
-              '## ⛔ Forbidden files detected in PR to main',
+              '## ⛔ Forbidden files detected in PR to protected branch',
               '',
-              'The following files must NOT be merged into `main`.',
+              'The following files must NOT be merged into `prod` or `uat`.',
               '`.ai-team/` and `.squad/` are runtime team state — they belong on dev branches only.',
               '`.ai-team-templates/` is Squad\'s internal planning — it belongs on dev branches only.',
               '`team-docs/` is internal team content — it belongs on dev branches only.',
@@ -122,7 +122,7 @@ jobs:
               '```',
               '',
               '> ⚠️ `.ai-team/` and `.squad/` are committed on `dev` and feature branches by design.',
-              '> The guard workflow is the enforcement mechanism that keeps these files off `main` and `preview`.',
+              '> The guard workflow is the enforcement mechanism that keeps these files off `prod` and `uat`.',
               '> `git rm --cached` untracks them from this PR without deleting your local copies.',
             ];
 
