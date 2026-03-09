@@ -331,6 +331,187 @@
       }
       #name-prompt-submit:hover { background: #3a3a5a; border-color: #7ecfff; color: #fff; }
 
+      /* ---- Lobby overlay ---- */
+      #lobby-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: #111;
+        z-index: 1100;
+        justify-content: center;
+        align-items: center;
+        font-family: 'Courier New', monospace;
+      }
+      #lobby-overlay.visible { display: flex; }
+      #lobby-container {
+        background: #1a1a2e;
+        border: 1px solid #444466;
+        border-radius: 8px;
+        padding: 24px 32px;
+        min-width: 600px;
+        max-width: 750px;
+        width: 90%;
+      }
+      #lobby-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+      #lobby-header h1 {
+        font-size: 20px;
+        color: #ffd700;
+        margin: 0;
+      }
+      .lobby-name-section {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .lobby-name-section label {
+        font-size: 11px;
+        color: #888;
+        text-transform: uppercase;
+      }
+      #lobby-name-input {
+        padding: 4px 8px;
+        font-size: 13px;
+        font-family: 'Courier New', monospace;
+        background: #222;
+        color: #fff;
+        border: 1px solid #444466;
+        border-radius: 4px;
+        outline: none;
+        width: 140px;
+      }
+      #lobby-name-input:focus { border-color: #7ecfff; }
+
+      /* Game list table */
+      #lobby-game-list {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        margin-bottom: 16px;
+      }
+      #lobby-game-list th {
+        text-align: left;
+        color: #888;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        padding: 6px 8px;
+        border-bottom: 1px solid #333;
+      }
+      #lobby-game-list td {
+        padding: 8px;
+        color: #cccccc;
+        border-bottom: 1px solid #222;
+      }
+      #lobby-game-list tr:hover td { background: rgba(255,255,255,0.03); }
+      .lobby-game-name { color: #7ecfff; font-weight: bold; }
+      .lobby-empty { text-align: center; color: #666; padding: 24px 8px !important; }
+      .lobby-action-cell { text-align: right; }
+      .lobby-join-btn {
+        padding: 4px 14px;
+        font-size: 11px;
+        font-family: 'Courier New', monospace;
+        background: #2a4a2a;
+        color: #88ff88;
+        border: 1px solid #446644;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .lobby-join-btn:hover { background: #3a5a3a; border-color: #66ff66; }
+
+      /* Create game section */
+      #lobby-create-toggle {
+        padding: 8px 20px;
+        font-size: 12px;
+        font-family: 'Courier New', monospace;
+        background: #2a2a4a;
+        color: #ffd700;
+        border: 1px solid #444466;
+        border-radius: 4px;
+        cursor: pointer;
+        width: 100%;
+      }
+      #lobby-create-toggle:hover { background: #3a3a5a; border-color: #ffd700; }
+      #lobby-create-form {
+        display: none;
+        background: #161628;
+        border: 1px solid #333355;
+        border-radius: 6px;
+        padding: 16px;
+        margin-top: 8px;
+      }
+      #lobby-create-form.visible { display: block; }
+      .lobby-form-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .lobby-form-row label {
+        font-size: 11px;
+        color: #888;
+        text-transform: uppercase;
+        width: 100px;
+        flex-shrink: 0;
+      }
+      .lobby-form-row input,
+      .lobby-form-row select {
+        flex: 1;
+        padding: 6px 8px;
+        font-size: 12px;
+        font-family: 'Courier New', monospace;
+        background: #222;
+        color: #fff;
+        border: 1px solid #444466;
+        border-radius: 4px;
+        outline: none;
+      }
+      .lobby-form-row input:focus,
+      .lobby-form-row select:focus { border-color: #7ecfff; }
+      .lobby-form-actions {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        margin-top: 12px;
+      }
+      #lobby-create-submit {
+        padding: 6px 20px;
+        font-size: 12px;
+        font-family: 'Courier New', monospace;
+        background: #2a4a2a;
+        color: #88ff88;
+        border: 1px solid #446644;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      #lobby-create-submit:hover { background: #3a5a3a; }
+      #lobby-create-cancel {
+        padding: 6px 16px;
+        font-size: 12px;
+        font-family: 'Courier New', monospace;
+        background: #2a2a2a;
+        color: #888;
+        border: 1px solid #444;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      #lobby-create-cancel:hover { background: #3a3a3a; }
+      .lobby-notification {
+        display: none;
+        text-align: center;
+        padding: 6px;
+        font-size: 11px;
+        border-radius: 4px;
+        margin-top: 8px;
+      }
+      .lobby-notification.visible { display: block; }
+      .lobby-notification.error { background: #4a2a2a; color: #ff8888; border: 1px solid #663333; }
+      .lobby-notification.info { background: #2a2a4a; color: #8888ff; border: 1px solid #333366; }
+
       /* Scoreboard overlay */
       #scoreboard-overlay {
         display: none;
@@ -467,7 +648,67 @@
     <div id="help-hint">Press ? for help · C to toggle chat</div>
     </div>
 
-    <!-- Name prompt modal -->
+    <!-- Lobby overlay -->
+    <div id="lobby-overlay">
+      <div id="lobby-container">
+        <div id="lobby-header">
+          <h1>🏰 Primal Grid</h1>
+          <div class="lobby-name-section">
+            <label>Your Name</label>
+            <input id="lobby-name-input" type="text" maxlength="20" placeholder="Explorer" autocomplete="off" />
+          </div>
+        </div>
+
+        <table id="lobby-game-list">
+          <thead>
+            <tr>
+              <th>Game</th>
+              <th>Host</th>
+              <th>Players</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="lobby-game-list-body">
+            <tr><td colspan="5" class="lobby-empty">Connecting…</td></tr>
+          </tbody>
+        </table>
+
+        <button id="lobby-create-toggle">+ Create New Game</button>
+
+        <div id="lobby-create-form">
+          <div class="lobby-form-row">
+            <label>Game Name</label>
+            <input id="lobby-game-name" type="text" maxlength="32" placeholder="My Colony" autocomplete="off" />
+          </div>
+          <div class="lobby-form-row">
+            <label>Max Players</label>
+            <select id="lobby-max-players">
+              <option value="2">2</option>
+              <option value="4">4</option>
+              <option value="6">6</option>
+              <option value="8" selected>8</option>
+            </select>
+          </div>
+          <div class="lobby-form-row">
+            <label>Map Size</label>
+            <select id="lobby-map-size">
+              <option value="64">Small (64×64)</option>
+              <option value="128" selected>Medium (128×128)</option>
+              <option value="256">Large (256×256)</option>
+            </select>
+          </div>
+          <div class="lobby-form-actions">
+            <button id="lobby-create-cancel">Cancel</button>
+            <button id="lobby-create-submit">Create Game</button>
+          </div>
+        </div>
+
+        <div id="lobby-notification" class="lobby-notification"></div>
+      </div>
+    </div>
+
+    <!-- Name prompt modal (legacy, kept for fallback) -->
     <div id="name-prompt-overlay">
       <div id="name-prompt-box">
         <h2>🏰 Enter Your Name</h2>

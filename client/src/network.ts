@@ -11,7 +11,9 @@ interface AuthResponse {
   token: { accessToken: string; expiresIn: number };
 }
 
-let room: Room | null = null;
+let lobbyRoom: Room | null = null;
+let gameRoom: Room | null = null;
+let colyseusClient: Client | null = null;
 let statusCallback: StatusCallback | null = null;
 
 export function onConnectionStatus(cb: StatusCallback): void {
@@ -100,95 +102,167 @@ async function ensureToken(): Promise<string | undefined> {
   }
 }
 
-/** Attach lifecycle handlers and dev-mode bindings to a newly joined room. */
-function setupRoom(joined: Room): void {
-  if (import.meta.env.DEV || isDevMode()) {
-    (window as unknown as Record<string, unknown>).__ROOM__ = joined;
+function getClient(): Client {
+  if (!colyseusClient) {
+    colyseusClient = new Client(getServerUrl());
   }
-
-  joined.onLeave(() => {
-    console.log('[network] Left room');
-    statusCallback?.('disconnected');
-    room = null;
-  });
-
-  joined.onError((code, message) => {
-    console.error('[network] Room error:', code, message);
-    statusCallback?.('error');
-  });
+  return colyseusClient;
 }
 
+// ---------------------------------------------------------------------------
+// Lobby connection — connects to the LobbyRoom
+// ---------------------------------------------------------------------------
+
+/**
+ * Connect to the lobby. Returns the lobby Room for binding UI.
+ * Identity (JWT) is established here.
+ */
+export async function connectToLobby(displayName?: string): Promise<Room> {
+  const client = getClient();
+  statusCallback?.('connecting');
+  console.log('[network] Connecting to lobby…');
+
+  const token = await ensureToken();
+
+  const joinOptions: Record<string, unknown> = {};
+  if (token) joinOptions.token = token;
+  if (displayName) joinOptions.displayName = displayName;
+
+  try {
+    lobbyRoom = await client.joinOrCreate('lobby', joinOptions);
+    console.log('[network] Joined lobby:', lobbyRoom.roomId);
+    statusCallback?.('connected');
+
+    lobbyRoom.onLeave(() => {
+      console.log('[network] Left lobby');
+      lobbyRoom = null;
+    });
+
+    lobbyRoom.onError((code, message) => {
+      console.error('[network] Lobby error:', code, message);
+    });
+
+    return lobbyRoom;
+  } catch (err) {
+    // Token may be expired — clear and retry
+    if (token && err instanceof Error && (err.message.includes('token') || err.message.includes('401'))) {
+      console.log('[auth] Token rejected — refreshing guest session');
+      clearToken();
+      try {
+        const freshToken = await createGuestSession();
+        saveToken(freshToken);
+        joinOptions.token = freshToken;
+      } catch {
+        delete joinOptions.token;
+      }
+
+      lobbyRoom = await client.joinOrCreate('lobby', joinOptions);
+      console.log('[network] Joined lobby (retry):', lobbyRoom.roomId);
+      statusCallback?.('connected');
+      return lobbyRoom;
+    }
+
+    console.error('[network] Lobby connection failed:', err);
+    statusCallback?.('error');
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Game connection — joins a specific GameRoom by roomId
+// ---------------------------------------------------------------------------
+
+/**
+ * Join a specific game room by its Colyseus roomId.
+ * Called after receiving a GAME_JOINED event from the lobby.
+ */
+export async function joinGameRoom(roomId: string): Promise<Room> {
+  const client = getClient();
+  const token = loadToken();
+
+  const joinOptions: Record<string, unknown> = {};
+  if (token) joinOptions.token = token;
+  if (isDevMode()) {
+    joinOptions.devMode = true;
+    console.log('[network] Dev mode enabled — fog of war disabled');
+  }
+
+  gameRoom = await client.joinById(roomId, joinOptions);
+  console.log('[network] Joined game room:', gameRoom.roomId);
+
+  if (import.meta.env.DEV || isDevMode()) {
+    (window as unknown as Record<string, unknown>).__ROOM__ = gameRoom;
+  }
+
+  gameRoom.onLeave(() => {
+    console.log('[network] Left game room');
+    statusCallback?.('disconnected');
+    gameRoom = null;
+  });
+
+  gameRoom.onError((code, message) => {
+    console.error('[network] Game room error:', code, message);
+    statusCallback?.('error');
+  });
+
+  return gameRoom;
+}
+
+/**
+ * Legacy connect — directly joins a GameRoom (backwards compatibility).
+ * Used when lobby is not available.
+ */
 export async function connect(): Promise<Room> {
-  const client = new Client(getServerUrl());
+  const client = getClient();
   statusCallback?.('connecting');
   console.log('[network] Connecting to server…');
 
   const token = await ensureToken();
 
   const joinOptions: Record<string, unknown> = {};
-  if (token) {
-    joinOptions.token = token;
-  }
+  if (token) joinOptions.token = token;
   if (isDevMode()) {
     joinOptions.devMode = true;
     console.log('[network] Dev mode enabled — fog of war disabled');
   }
 
   try {
-    room = await client.joinOrCreate('game', joinOptions);
-    console.log('[network] Joined room:', room.roomId);
+    gameRoom = await client.joinOrCreate('game', joinOptions);
+    console.log('[network] Joined room:', gameRoom.roomId);
     statusCallback?.('connected');
-    setupRoom(room);
-    return room;
-  } catch (err) {
-    // If join failed, the token may be expired — clear and retry once
-    const isRetryable =
-      token &&
-      err instanceof Error &&
-      (err.message.includes('token') || err.message.includes('401'));
 
-    if (isRetryable && loadToken()) {
+    if (import.meta.env.DEV || isDevMode()) {
+      (window as unknown as Record<string, unknown>).__ROOM__ = gameRoom;
+    }
+
+    gameRoom.onLeave(() => {
+      console.log('[network] Left room');
+      statusCallback?.('disconnected');
+      gameRoom = null;
+    });
+
+    gameRoom.onError((code, message) => {
+      console.error('[network] Room error:', code, message);
+      statusCallback?.('error');
+    });
+
+    return gameRoom;
+  } catch (err) {
+    if (token && err instanceof Error && (err.message.includes('token') || err.message.includes('401'))) {
       console.log('[auth] Token rejected — refreshing guest session');
       clearToken();
-
       try {
         const freshToken = await createGuestSession();
         saveToken(freshToken);
         joinOptions.token = freshToken;
       } catch {
-        // Auth is down — fall back to anonymous join
-        console.warn('[auth] Token refresh failed — joining without auth');
         delete joinOptions.token;
       }
 
-      try {
-        room = await client.joinOrCreate('game', joinOptions);
-        console.log('[network] Joined room (retry):', room.roomId);
-        statusCallback?.('connected');
-        setupRoom(room);
-        return room;
-      } catch (retryErr) {
-        console.error('[network] Retry connection failed:', retryErr);
-        statusCallback?.('disconnected');
-        throw retryErr;
-      }
-    }
-
-    // If auth failed but we had a token, try once more without auth
-    if (token) {
-      console.warn('[network] Join failed with token — retrying without auth');
-      delete joinOptions.token;
-      try {
-        room = await client.joinOrCreate('game', joinOptions);
-        console.log('[network] Joined room (anonymous fallback):', room.roomId);
-        statusCallback?.('connected');
-        setupRoom(room);
-        return room;
-      } catch (fallbackErr) {
-        console.error('[network] Anonymous fallback failed:', fallbackErr);
-        statusCallback?.('disconnected');
-        throw fallbackErr;
-      }
+      gameRoom = await client.joinOrCreate('game', joinOptions);
+      console.log('[network] Joined room (retry):', gameRoom.roomId);
+      statusCallback?.('connected');
+      return gameRoom;
     }
 
     console.error('[network] Connection failed:', err);
@@ -197,13 +271,28 @@ export async function connect(): Promise<Room> {
   }
 }
 
+export function getLobbyRoom(): Room | null {
+  return lobbyRoom;
+}
+
 export function getRoom(): Room | null {
-  return room;
+  return gameRoom;
+}
+
+export async function leaveGame(): Promise<void> {
+  if (gameRoom) {
+    await gameRoom.leave();
+    gameRoom = null;
+  }
 }
 
 export async function disconnect(): Promise<void> {
-  if (room) {
-    await room.leave();
-    room = null;
+  if (gameRoom) {
+    await gameRoom.leave();
+    gameRoom = null;
+  }
+  if (lobbyRoom) {
+    await lobbyRoom.leave();
+    lobbyRoom = null;
   }
 }

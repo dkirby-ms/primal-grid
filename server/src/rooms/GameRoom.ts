@@ -10,6 +10,7 @@ import type { EnemyBaseTracker } from "./enemyBaseAI.js";
 import type { AttackerTracker } from "./attackerAI.js";
 import type { AuthProvider, AuthUser } from "../auth/AuthProvider.js";
 import type { PlayerStateRepository } from "../persistence/PlayerStateRepository.js";
+import type { LobbyBridge } from "./LobbyBridge.js";
 import { serializePlayerState, deserializePlayerState } from "../persistence/playerStateSerde.js";
 import type { SerializedPlayerState } from "../persistence/playerStateSerde.js";
 import {
@@ -52,12 +53,23 @@ export class GameRoom extends Room {
   authProvider?: AuthProvider;
   /** Player state persistence repository. */
   playerStateRepo?: PlayerStateRepository;
+  /** Bridge for notifying the LobbyRoom of lifecycle events. */
+  lobbyBridge?: LobbyBridge;
   /** Maps Colyseus sessionId → authenticated userId for persistence. */
   private sessionUserMap = new Map<string, string>();
+  /** Game session ID (from lobby). Empty for legacy direct-connect. */
+  private gameId = "";
 
   override onCreate(options: Record<string, unknown>) {
     const seed = typeof options?.seed === "number" ? options.seed : DEFAULT_MAP_SEED;
-    this.generateMap(seed);
+    const mapSize = typeof options?.mapSize === "number" ? options.mapSize : DEFAULT_MAP_SIZE;
+    const maxPlayers = typeof options?.maxPlayers === "number" ? options.maxPlayers : 8;
+
+    // Store game metadata for lifecycle tracking
+    this.gameId = typeof options?.gameId === "string" ? options.gameId : "";
+    this.maxClients = maxPlayers;
+
+    this.generateMap(seed, mapSize);
     this.spawnCreatures();
 
     this.setSimulationInterval((_deltaTime) => {
@@ -165,6 +177,11 @@ export class GameRoom extends Room {
     } else {
       client.send("game_log", { message: "Welcome to Primal Grid!", type: "info" });
     }
+
+    // Notify lobby of actual player count
+    if (this.gameId) {
+      this.lobbyBridge?.notifyPlayerCountChanged(this.gameId, this.state.players.size);
+    }
   }
 
   override onLeave(client: Client, code: number) {
@@ -189,6 +206,11 @@ export class GameRoom extends Room {
     console.log(
       `[GameRoom] Client left: ${client.sessionId} (consented: ${consented})`
     );
+
+    // Notify lobby of actual player count
+    if (this.gameId) {
+      this.lobbyBridge?.notifyPlayerCountChanged(this.gameId, this.state.players.size);
+    }
   }
 
   override async onDispose() {
@@ -196,6 +218,12 @@ export class GameRoom extends Room {
     for (const sessionId of this.state.players.keys()) {
       await this.savePlayerState(sessionId);
     }
+
+    // Notify lobby that this game has ended
+    if (this.gameId) {
+      this.lobbyBridge?.notifyGameEnded(this.gameId);
+    }
+
     console.log("[GameRoom] Room disposed.");
   }
 
@@ -225,8 +253,8 @@ export class GameRoom extends Room {
     }
   }
 
-  private generateMap(seed: number = DEFAULT_MAP_SEED) {
-    generateProceduralMap(this.state, seed, DEFAULT_MAP_SIZE, DEFAULT_MAP_SIZE);
+  private generateMap(seed: number = DEFAULT_MAP_SEED, mapSize: number = DEFAULT_MAP_SIZE) {
+    generateProceduralMap(this.state, seed, mapSize, mapSize);
   }
 
   private handleSetName(client: Client, message: SetNamePayload) {
