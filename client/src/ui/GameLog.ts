@@ -4,7 +4,6 @@ const TYPE_CONFIG: Record<string, { icon: string; color: string }> = {
   spawn:  { icon: '🔨', color: '#7ecfff' },
   death:  { icon: '💀', color: '#ff6b6b' },
   combat: { icon: '⚔️', color: '#ffaa44' },
-  upkeep: { icon: '⚠️', color: '#ffd700' },
   info:   { icon: 'ℹ️', color: '#888' },
 };
 
