@@ -68,8 +68,11 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
       ingress: {
         external: true
         targetPort: 2567
-        transport: 'http'
+        transport: 'auto'
         allowInsecure: false
+        stickySessions: {
+          affinity: 'sticky'
+        }
       }
       registries: [
         {
@@ -111,7 +114,7 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
         }
       ]
       scale: {
-        minReplicas: environment == 'uat' ? 0 : 1
+        minReplicas: 1
         maxReplicas: environment == 'uat' ? 3 : 1
       }
     }
