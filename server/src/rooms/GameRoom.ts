@@ -138,6 +138,12 @@ export class GameRoom extends Room {
       }
     }
 
+    // If no saved displayName, use the name passed from the lobby
+    if (!player.displayName) {
+      const optName = typeof options?.displayName === "string" ? options.displayName.trim() : "";
+      if (optName) player.displayName = optName;
+    }
+
     this.state.players.set(client.sessionId, player);
 
     // Spawn HQ and claim starting territory (sets score = tile count, resets resources)

@@ -176,12 +176,13 @@ export async function connectToLobby(displayName?: string): Promise<Room> {
  * Join a specific game room by its Colyseus roomId.
  * Called after receiving a GAME_JOINED event from the lobby.
  */
-export async function joinGameRoom(roomId: string): Promise<Room> {
+export async function joinGameRoom(roomId: string, displayName?: string): Promise<Room> {
   const client = getClient();
   const token = loadToken();
 
   const joinOptions: Record<string, unknown> = {};
   if (token) joinOptions.token = token;
+  if (displayName) joinOptions.displayName = displayName;
   if (isDevMode()) {
     joinOptions.devMode = true;
     console.log('[network] Dev mode enabled — fog of war disabled');

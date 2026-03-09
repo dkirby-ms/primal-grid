@@ -36,6 +36,11 @@ export class LobbyScreen {
   private currentGameId: string | null = null;
   private playerDisplayName = "";
 
+  /** Returns the current display name entered by the player. */
+  getDisplayName(): string {
+    return this.playerDisplayName;
+  }
+
   constructor() {
     this.container = document.getElementById("lobby-overlay")!;
     this.gameListBody = document.getElementById("lobby-game-list-body")!;

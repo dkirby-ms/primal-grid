@@ -89,7 +89,7 @@ async function connectToLobbyAndShow(
     lobbyScreen.onEvent(async (event) => {
       if (event.type === "join_game" || event.type === "game_started") {
         try {
-          const gameRoom = await joinGameRoom(event.roomId);
+          const gameRoom = await joinGameRoom(event.roomId, lobbyScreen.getDisplayName());
           lobbyScreen.hide();
           setGameUIVisible(true);
           setupGameSession(app, grid, camera, gameRoom, lobbyScreen);
