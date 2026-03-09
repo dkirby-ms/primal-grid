@@ -1252,6 +1252,16 @@ Scope discipline maintained (HUD DOM only, no game logic). User-facing clarity i
 
 See `.squad/decisions.md` Initiative Triage & Execution Plan (2026-03-09) for full Wave 1/Wave 2 sequencing.
 
+### Game Log Overlay Panel — Issue #31 (2026-03-09)
+
+- **Rewrote GameLog.ts** with 5 event categories (Territory 🟢, Combat 🔴, Resources 🟡, Creatures 🔵, System ⚪) each with distinct color and dot icon.
+- **Timestamps** (HH:MM:SS) on every entry using `formatTimestamp()` helper.
+- **Smart auto-scroll** — tracks `userScrolledUp` flag via scroll event listener. Only auto-scrolls if user is within 30px of the bottom. Scroll up to read history without losing your place.
+- **Message pruning** cap raised from 50 → 200 entries.
+- **Panel structure** — `#game-log` container now uses flex column: `.game-log-header` (title bar) + `.game-log-scroll` (scrollable message area). Custom styled scrollbar.
+- **Shared types** — Added `GameLogPayload` interface and `GameLogCategory` type union to `shared/src/messages.ts`. Client uses shared type for `room.onMessage` handler.
+- **Reusable pattern** — Built as the overlay panel pattern that #30 (chat) will extract: header + scroll area + auto-scroll + entry pruning.
+- **PR:** #72 targeting dev.
 ### Soften Grid Appearance — Rounded Corners & Natural Variation (2026-03-08)
 
 - **roundRect usage:** PixiJS 8 Graphics.roundRect() works identically to rect() but accepts a 5th radius parameter. Already used in CreatureRenderer for headstones. Now used for all terrain tiles.
