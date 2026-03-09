@@ -47,6 +47,9 @@ const CATEGORY_STYLES: Record<string, CategoryStyle> = {
   // ⚪ System (default / fallback)
   system:    { dot: '⚪', color: '#9e9e9e' },
   info:      { dot: '⚪', color: '#9e9e9e' },
+
+  // 🔴 Errors
+  error:     { dot: '🔴', color: '#ff6b6b' },
 };
 
 const DEFAULT_STYLE: CategoryStyle = { dot: '⚪', color: '#9e9e9e' };
@@ -70,6 +73,10 @@ export class GameLog {
 
   /** Attach to the log container element and build internal DOM. */
   init(container: HTMLElement): void {
+    container.textContent = '';
+    this.entryCount = 0;
+    this.userScrolledUp = false;
+
     // Header
     const header = document.createElement('div');
     header.className = 'game-log-header';

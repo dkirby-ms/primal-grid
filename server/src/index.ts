@@ -19,7 +19,10 @@ import { LobbyBridge } from "./rooms/LobbyBridge.js";
 Encoder.BUFFER_SIZE = 768 * 1024; // 768 KB — needed for 128×128 map state sync
 
 // Auth configuration
-const JWT_SECRET = process.env.JWT_SECRET || "primal-grid-dev-secret-change-in-production";
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET environment variable is required. Set it before starting the server.");
+}
 const DB_PATH = process.env.DB_PATH || "primal-grid.db";
 
 // Initialize persistence layer (SQLite for dev)

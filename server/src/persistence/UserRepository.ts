@@ -16,7 +16,7 @@ export interface UserRepository {
   /** Find user by unique ID. */
   findById(id: string): Promise<StoredUser | null>;
 
-  /** Find user by username (case-insensitive). */
+  /** Find user by username. */
   findByUsername(username: string): Promise<StoredUser | null>;
 
   /** Create a new user. Returns the created user with generated ID. */

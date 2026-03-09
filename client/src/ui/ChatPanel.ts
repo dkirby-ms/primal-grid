@@ -36,6 +36,9 @@ export class ChatPanel {
 
   /** Build DOM structure inside the given container and bind to room. */
   init(container: HTMLElement, room: Room): void {
+    container.textContent = '';
+    this.entryCount = 0;
+    this.userScrolledUp = false;
     this.container = container;
     this.room = room;
 

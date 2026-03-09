@@ -16,6 +16,7 @@ export class InputHandler {
   private scoreboard: Scoreboard | null = null;
   private camera: Camera | null = null;
   private chatPanel: ChatPanel | null = null;
+  private _keyHandler: ((e: KeyboardEvent) => void) | null = null;
 
   constructor(room: Room, worldContainer: Container, canvas: HTMLCanvasElement) {
     this.room = room;
@@ -51,7 +52,7 @@ export class InputHandler {
   }
 
   private bindKeys(): void {
-    window.addEventListener('keydown', (e) => {
+    this._keyHandler = (e: KeyboardEvent) => {
       // When chat input is focused, don't process game keys
       if (this.chatPanel?.isFocused) return;
 
@@ -87,6 +88,15 @@ export class InputHandler {
         this.camera?.centerOnHQ(this.hud?.localHqX ?? 0, this.hud?.localHqY ?? 0);
         return;
       }
-    });
+    };
+    window.addEventListener('keydown', this._keyHandler);
+  }
+
+  /** Remove all event listeners. Call when leaving a game session. */
+  dispose(): void {
+    if (this._keyHandler) {
+      window.removeEventListener('keydown', this._keyHandler);
+      this._keyHandler = null;
+    }
   }
 }

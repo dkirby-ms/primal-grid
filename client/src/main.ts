@@ -182,6 +182,9 @@ function setupGameSession(
 
   // Handle leaving game (room disconnect)
   room.onLeave(() => {
+    // Clean up input handler listeners
+    input.dispose();
+
     // Clean up game-specific renderers
     app.ticker.remove(creatureTicker);
     if (creatures.container.parent) {

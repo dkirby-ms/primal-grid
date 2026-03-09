@@ -26,6 +26,7 @@ export interface SetNamePayload {
  * - resource / harvest / deplete → 🟡 yellow (harvests, depletions)
  * - creature / spawn / tame / migrate → 🔵 blue (spawns, migrations, taming)
  * - system / info → ⚪ gray (join/leave, time of day)
+ * - error → 🔴 red (auth/connection errors)
  */
 export type GameLogCategory =
   | "territory"
@@ -41,7 +42,8 @@ export type GameLogCategory =
   | "tame"
   | "migrate"
   | "system"
-  | "info";
+  | "info"
+  | "error";
 
 export interface GameLogPayload {
   message: string;

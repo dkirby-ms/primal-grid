@@ -168,6 +168,10 @@ export class LobbyRoom extends Room {
     const session = this.sessions.get(client.sessionId);
     if (!session) return this.sendError(client, "Not authenticated");
 
+    // Prevent creating a game while already in one
+    const lobbyPlayer = this.state.players.get(client.sessionId);
+    if (lobbyPlayer?.activeGameId) return this.sendError(client, "Already in a game");
+
     // Validate name
     const name = typeof payload.name === "string"
       ? payload.name.trim().slice(0, LOBBY_DEFAULTS.MAX_GAME_NAME_LENGTH)
@@ -200,7 +204,7 @@ export class LobbyRoom extends Room {
         hostId: session.userId,
         hostName: session.displayName,
         status: "waiting",
-        playerCount: 0,
+        playerCount: 1,
         maxPlayers,
         mapSize,
         mapSeed,
@@ -227,7 +231,6 @@ export class LobbyRoom extends Room {
     client.send(GAME_JOINED, { gameId: gameInfo.id, roomId: gameRoom.roomId });
 
     // Update lobby player's active game
-    const lobbyPlayer = this.state.players.get(client.sessionId);
     if (lobbyPlayer) lobbyPlayer.activeGameId = gameInfo.id;
 
     console.log(`[LobbyRoom] Game created: "${name}" (${gameInfo.id}) by ${session.displayName}`);
@@ -250,16 +253,7 @@ export class LobbyRoom extends Room {
     const roomId = this.gameRoomIds.get(gameId);
     if (!roomId) return this.sendError(client, "Game room not available");
 
-    // Increment player count
-    entry.playerCount += 1;
-    if (this.gameSessionRepo) {
-      await this.gameSessionRepo.updatePlayerCount(gameId, entry.playerCount);
-    }
-
-    // Broadcast updated game to all lobby clients
-    this.broadcast(GAME_UPDATED, { game: this.entryToInfo(entry) });
-
-    // Tell the joiner the roomId
+    // Tell the joiner the roomId (count will be updated by bridge event)
     client.send(GAME_JOINED, { gameId, roomId });
 
     // Update lobby player's active game

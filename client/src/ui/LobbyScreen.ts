@@ -68,13 +68,26 @@ export class LobbyScreen {
     this.show();
     const lobbyContainer = document.getElementById("lobby-container");
     if (lobbyContainer) {
-      lobbyContainer.innerHTML = `
-        <div style="text-align:center; padding:40px 20px;">
-          <h2 style="color:#ff6b6b; margin-bottom:16px;">⚠️ Connection Error</h2>
-          <p style="color:#ccc; margin-bottom:24px;">${message}</p>
-          <p style="color:#888; font-size:0.9em;">Close this tab and return to your existing session.</p>
-        </div>
-      `;
+      lobbyContainer.textContent = '';
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'text-align:center; padding:40px 20px;';
+
+      const heading = document.createElement('h2');
+      heading.style.cssText = 'color:#ff6b6b; margin-bottom:16px;';
+      heading.textContent = '⚠️ Connection Error';
+      wrapper.appendChild(heading);
+
+      const msg = document.createElement('p');
+      msg.style.cssText = 'color:#ccc; margin-bottom:24px;';
+      msg.textContent = message;
+      wrapper.appendChild(msg);
+
+      const hint = document.createElement('p');
+      hint.style.cssText = 'color:#888; font-size:0.9em;';
+      hint.textContent = 'Close this tab and return to your existing session.';
+      wrapper.appendChild(hint);
+
+      lobbyContainer.appendChild(wrapper);
     }
   }
 
