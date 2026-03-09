@@ -54,10 +54,19 @@ export class GameRoom extends Room {
   playerStateRepo?: PlayerStateRepository;
   /** Maps Colyseus sessionId → authenticated userId for persistence. */
   private sessionUserMap = new Map<string, string>();
+  /** Game session ID (from lobby). Empty for legacy direct-connect. */
+  private gameId = "";
 
   override onCreate(options: Record<string, unknown>) {
     const seed = typeof options?.seed === "number" ? options.seed : DEFAULT_MAP_SEED;
-    this.generateMap(seed);
+    const mapSize = typeof options?.mapSize === "number" ? options.mapSize : DEFAULT_MAP_SIZE;
+    const maxPlayers = typeof options?.maxPlayers === "number" ? options.maxPlayers : 8;
+
+    // Store game metadata for lifecycle tracking
+    this.gameId = typeof options?.gameId === "string" ? options.gameId : "";
+    this.maxClients = maxPlayers;
+
+    this.generateMap(seed, mapSize);
     this.spawnCreatures();
 
     this.setSimulationInterval((_deltaTime) => {
@@ -214,8 +223,8 @@ export class GameRoom extends Room {
     }
   }
 
-  private generateMap(seed: number = DEFAULT_MAP_SEED) {
-    generateProceduralMap(this.state, seed, DEFAULT_MAP_SIZE, DEFAULT_MAP_SIZE);
+  private generateMap(seed: number = DEFAULT_MAP_SEED, mapSize: number = DEFAULT_MAP_SIZE) {
+    generateProceduralMap(this.state, seed, mapSize, mapSize);
   }
 
   private handleSetName(client: Client, message: SetNamePayload) {
