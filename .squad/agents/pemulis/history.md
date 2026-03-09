@@ -1786,3 +1786,19 @@ See `.squad/decisions.md` for full triage document, dependency graph, risk mitig
 - **Graceful auth degradation**: `ensureToken()` now returns `string | undefined` — catches auth failures silently. `connect()` joins without a token when auth is unavailable. If token-bearing join fails, falls back to anonymous join. Game is always playable with zero auth infrastructure.
 - **DRY room setup**: Extracted `setupRoom()` helper in `client/src/network.ts` — eliminates duplicated `onLeave`/`onError`/`__ROOM__` assignment between initial join and retry paths.
 - **Key pattern**: Auth is strictly optional on both sides. Server's `GameRoom.onJoin()` skips state restoration when no token provided. Client's `connect()` gracefully degrades to anonymous join on any auth failure.
+
+### Session Persistence Bug Fix (2026-03-13)
+
+**Bug:** Browser refresh always showed the name prompt, even when the server successfully restored the player's identity (displayName, score, XP, level) from the persistence layer via JWT token.
+
+**Root cause:** `client/src/main.ts` called `promptForName()` unconditionally after every `connect()`. The server-side auth/restore flow was correct — the bug was purely client-side.
+
+**Fix (2 files):**
+- `client/src/main.ts`: After `connect()`, check `room.state.players.get(room.sessionId).displayName`. Only show the name prompt if the server didn't restore one. In Colyseus 0.17+, initial state is synced before `joinOrCreate` resolves.
+- `server/src/rooms/GameRoom.ts`: Differentiated welcome messages — returning players see "Welcome back, {name}!" and a "{name} has returned" broadcast goes to other players.
+
+## Learnings
+
+- **Colyseus 0.17 state sync timing**: `joinOrCreate` resolves AFTER the initial state snapshot is applied. `room.state.players.get(room.sessionId)` is available immediately after the promise resolves — no need to wait for `onStateChange`.
+- **Auth flow data path**: Token in localStorage → `ensureToken()` → `joinOptions.token` → server `onJoin` validates via `authProvider.validateToken()` → `sessionUserMap` maps sessionId→userId → `playerStateRepo.load(userId)` → `deserializePlayerState()` restores displayName/score/level/xp.
+- **Key files for session persistence**: `client/src/network.ts` (token storage), `client/src/main.ts` (name prompt gating), `server/src/rooms/GameRoom.ts` (onJoin restore, onLeave save, auto-save), `server/src/persistence/playerStateSerde.ts` (serde).
