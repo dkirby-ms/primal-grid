@@ -1,0 +1,91 @@
+name: Squad PR Review Routing
+
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  assign-reviewer:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Auto-assign reviewer based on target branch
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const targetBranch = pr.base.ref;
+            const author = pr.user.login;
+
+            let reviewer = null;
+            let comment = '';
+
+            if (targetBranch === 'dev') {
+              // Feature/fix PRs to dev — Hal (lead) reviews
+              // Hal is an AI agent, so we post a comment for routing
+              comment = [
+                '### 🔍 PR Review Routing',
+                '',
+                `**Target:** \`${targetBranch}\``,
+                `**Reviewer:** Hal (Lead — code review)`,
+                '',
+                '> This PR targets `dev`. Hal will review for code quality and architectural alignment.',
+                '> To trigger review, start a Copilot session and say: `Hal, review PR #' + pr.number + '`',
+              ].join('\n');
+
+            } else if (targetBranch === 'uat') {
+              // dev → uat promotion — @copilot reviews
+              comment = [
+                '### 🔍 PR Review Routing',
+                '',
+                `**Target:** \`${targetBranch}\``,
+                `**Reviewer:** @copilot (automated review)`,
+                '',
+                '> This PR promotes code to UAT. @copilot will review for test coverage and CI status.',
+              ].join('\n');
+
+            } else if (targetBranch === 'prod') {
+              // uat → prod promotion — owner only
+              reviewer = 'dkirby-ms';
+              comment = [
+                '### 🔍 PR Review Routing',
+                '',
+                `**Target:** \`${targetBranch}\``,
+                `**Reviewer:** @dkirby-ms (manual production gate)`,
+                '',
+                '> This PR promotes code to production. Only the repository owner should merge.',
+              ].join('\n');
+            }
+
+            if (!comment) return;
+
+            // Post routing comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body: comment
+            });
+
+            // Request review from human reviewer if applicable
+            if (reviewer && reviewer !== author) {
+              try {
+                await github.rest.pulls.requestReviewers({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                  reviewers: [reviewer]
+                });
+                core.info(`Requested review from ${reviewer}`);
+              } catch (err) {
+                core.warning(`Could not request review from ${reviewer}: ${err.message}`);
+              }
+            }
+
+            core.info(`PR #${pr.number} → ${targetBranch}: routed review`);
