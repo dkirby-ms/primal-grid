@@ -5336,6 +5336,7 @@ If another workflow needs to expose a runtime value:
 ---
 
 ## 2026-03-10: Viewport Culling for Tile Rendering
+## 2026-03-10: Viewport Culling for Tile Rendering (Camera Performance)
 
 **Date:** 2026-03-10  
 **Author:** Steeply (Tester)  
@@ -5363,6 +5364,7 @@ PixiJS 8's built-in culling still iterates all objects each frame to check bound
 
 - At 1× zoom: ~400 objects rendered per frame (was ~49,152)
 - Per-frame culling work: ~80 border tiles (differential), not 16,384
+- Scrolling/camera panning is now smooth and responsive
 
 ### For Future Work
 
