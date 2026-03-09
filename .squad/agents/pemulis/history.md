@@ -1758,3 +1758,25 @@ See `.squad/decisions.md` for full triage document, dependency graph, risk mitig
 - **Test coverage**: All 515 tests pass, zero regressions. Lint clean.
 - **Merged**: Hal approved and squash-merged to dev. Issue #77 closed.
 - **Impact**: Full session persistence chain now live. Players: login → play → close browser → rejoin with state intact. Score, level, XP, displayName all restored.
+
+### In-Game Chat Protocol (2026-03-14, Issue #30)
+
+- **Scope:** Server-side chat message handling + shared types. Client UI handled by Gately separately.
+- **Shared types:** Added `CHAT` message constant, `ChatPayload` (client→server: `{ text: string }`), `ChatBroadcastPayload` (server→clients: `{ sender, text, timestamp }`), and `CHAT_MAX_LENGTH = 200` to `shared/src/messages.ts`.
+- **Server handler:** `handleChat()` in `GameRoom.ts` — validates text is a string, strips HTML tags via regex, trims whitespace, rejects empty, caps at 200 chars, broadcasts with player displayName and `Date.now()` timestamp.
+- **No state storage:** Chat is ephemeral — broadcast only, no schema storage, no persistence. Client handles history display.
+- **Sanitization pattern:** `stripHtml()` static method uses `/<[^>]*>/g` regex replacement. Sufficient for in-game chat (not a rich-text context).
+- **All 644 tests pass, zero regressions.**
+
+---
+
+### Cross-Agent Update: In-Game Chat #30 (2026-03-09, issue #30)
+
+**Feature completed** by Pemulis, Gately, and Steeply in coordinated sprint. PR #80 merged to dev.
+
+- **Pemulis (Systems):** Server-side chat message handler + shared types (completed above).
+- **Gately (Game Dev):** Client-side ChatPanel UI (DOM overlay, 100-message cap, auto-scroll, keyboard isolation via stopPropagation, keybindings C/Enter/Esc).
+- **Steeply (Tester):** 19-test suite covering validation, sanitization, broadcast, client rendering. All tests passing.
+
+**Impact on Pemulis:** No follow-up work required. Handler is complete and tested. Chat protocol stable.
+

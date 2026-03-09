@@ -1287,3 +1287,16 @@ See `.squad/decisions.md` Initiative Triage & Execution Plan (2026-03-09) for fu
 - **Key file:** `client/src/renderer/CreatureRenderer.ts` — `tick()` method and `STACK_OFFSETS` constant.
 - **Tests:** `client/src/__tests__/creature-stacking.test.ts` — 4 regression tests with PixiJS mocks.
 - **Pattern:** PixiJS mocking pattern reused from `camera-zoom.test.ts` — mock Container/Graphics/Text classes, stub `@primal-grid/shared` and `GridRenderer.js`.
+
+---
+
+### Cross-Agent Update: In-Game Chat #30 (2026-03-09, issue #30)
+
+**Feature completed** by Pemulis, Gately, and Steeply in coordinated sprint. PR #80 merged to dev.
+
+- **Pemulis (Systems):** Server-side chat message handler with HTML stripping, 200-char limit, server-auth sender/timestamp, shared types in messages.ts.
+- **Gately (Game Dev):** Client-side ChatPanel UI (completed above).
+- **Steeply (Tester):** 19-test suite covering both server and client sides. All tests passing. 663 total tests.
+
+**Impact on Gately:** Chat overlay pattern is reusable for future overlay features. InputHandler integration via `chatPanel.isFocused` guard pattern can be cloned for other overlays.
+

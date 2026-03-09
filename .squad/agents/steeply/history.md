@@ -1877,3 +1877,16 @@ Large-map rendering with PixiJS requires explicit culling—the scene graph does
 - **Shared types:** `ChatPayload { text: string }`, `ChatBroadcastPayload { sender, text, timestamp }`, `CHAT = "chat"`, `CHAT_MAX_LENGTH = 200` — all in `shared/src/messages.ts`.
 - **Edge cases tested:** whitespace-only text rejected, non-string text rejected, ghost client (no player state) rejected, HTML-only content (e.g. `<br><hr>`) rejected after stripping, self-closing tags stripped, script tags stripped (inner text preserved), displayName fallback to "Unknown".
 - **Test pattern:** Same `Object.create(GameRoom.prototype)` + `room.broadcast = vi.fn()` pattern as other test files. No new `playerViews` init needed — `handleChat` doesn't touch fog-of-war.
+
+---
+
+### Cross-Agent Update: In-Game Chat #30 (2026-03-09, issue #30)
+
+**Feature completed** by Pemulis, Gately, and Steeply in coordinated sprint. PR #80 merged to dev.
+
+- **Pemulis (Systems):** Server-side chat message handler in GameRoom.ts with validation, HTML stripping, 200-char cap, broadcasts.
+- **Gately (Game Dev):** Client-side ChatPanel UI (DOM overlay, 100-msg cap, auto-scroll, keyboard isolation, C/Enter/Esc bindings).
+- **Steeply (Tester):** 19-test suite covering: broadcast validation, HTML sanitization edge cases (script tags, self-closing, content-stripped), sender name fallback, timestamp verification, client message rendering/pruning/focus.
+
+**Impact on Steeply:** Chat test pattern uses same `Object.create(GameRoom.prototype) + room.broadcast = vi.fn()` mocking as auth tests. HTML sanitization edge cases (script, self-closing, content-emptied) are now reference patterns for future sanitization work.
+
