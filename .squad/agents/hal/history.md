@@ -608,3 +608,32 @@ Also improved URL formatting:
 - ✅ Issue #65 resolved (Discord notifications now include deploy URLs)
 - ✅ Decision merged into team memory
 - ✅ Downstream: Coordinator merges to dev, closes issue #65
+
+---
+
+## 2026-03-06 Four-Issue Initiative Triage (Issues #19, #30, #31, #42)
+
+**Status:** TRIAGE COMPLETE — Execution plan ready
+
+**Context:** Dale requested triage and execution planning for 4 issues covering rendering polish, chat, game log, and user auth. Triage reveals critical dependency: auth (#42) gates both chat (#30) and game log (#31). Rendering (#19) runs independently.
+
+**Triage decisions:**
+1. **Issue #19 (Grid rendering)** → Gately, 2d, no dependencies, parallelize with auth server work
+2. **Issue #42 (Auth + persistence)** → **CRITICAL PATH** (Pemulis 3d + Gately 1d). Gates #30, #31. Basic JWT per Dale (no OAuth provider in MVP, design for future Entra ID swap).
+3. **Issue #31 (Game log)** → Deferred until #42 server lands (benefits from user context)
+4. **Issue #30 (Chat)** → **Hard-blocked by #42** (needs JWT to verify sender)
+
+**Execution order:**
+- Phase 1: Pemulis does #42 server (JWT, DB, auto-save) in parallel with Gately #19 (rendering)
+- Day 4: Gately #42 client (login UI) after Pemulis server deploys to test
+- Phase 2: Pemulis #31 + Gately #31 (game log), then #30 (chat)
+- Total: 5–7 days, two parallel tracks
+
+**Plan location:** `.squad/decisions/inbox/hal-initiative-plan.md` (13KB, full breakdown with risk mitigation)
+
+**Key insight:** User persistence (auth + auto-save) is the linchpin. Without it, players can't be identified in chat/logs, and no game state persists. Worth the upfront cost. Design the token issuer as a pluggable module so Entra ID can be swapped in Phase 7+ without touching room join logic or client storage.
+
+**Constraint noted:** Gately finishing Phase 4.5 HUD redesign PR. Assume Gately free after that lands (today or tomorrow).
+
+**Next:** Pemulis begins #42 server immediately. Scribe logs this plan to orchestration log with daily status updates.
+
