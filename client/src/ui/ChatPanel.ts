@@ -42,7 +42,18 @@ export class ChatPanel {
     // Header
     const header = document.createElement('div');
     header.className = 'chat-header';
-    header.textContent = '💬 Chat';
+
+    const headerTitle = document.createElement('span');
+    headerTitle.textContent = '💬 Chat';
+    header.appendChild(headerTitle);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'chat-close-btn';
+    closeBtn.textContent = '✕';
+    closeBtn.title = 'Close chat';
+    closeBtn.addEventListener('click', () => this.hide());
+    header.appendChild(closeBtn);
+
     container.appendChild(header);
 
     // Scrollable message area
