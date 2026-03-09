@@ -7,12 +7,10 @@ name: Squad Heartbeat (Ralph)
 # Run 'squad upgrade' to sync installed copies from source templates.
 
 on:
-  # DISABLED: Cron heartbeat disabled during migration to event-driven triage (2024-01).
-  # The heartbeat is now replaced by event triggers (issues closed/labeled, PR closed).
-  # Re-enable the schedule below if event-driven triggers miss stale/untriaged issues,
-  # or if a periodic sweep is needed as a safety net. Recommended interval: every 2 hours.
+  # DISABLED: Cron heartbeat commented out pre-migration — re-enable when ready
   # schedule:
-  #   - cron: '0 */2 * * *'
+  #   # Every 30 minutes — adjust or remove if not needed
+  #   - cron: '*/30 * * * *'
 
   # React to completed work or new squad work
   issues:
