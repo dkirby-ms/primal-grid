@@ -10,6 +10,7 @@ import type { EnemyBaseTracker } from "./enemyBaseAI.js";
 import type { AttackerTracker } from "./attackerAI.js";
 import type { AuthProvider, AuthUser } from "../auth/AuthProvider.js";
 import type { PlayerStateRepository } from "../persistence/PlayerStateRepository.js";
+import type { LobbyBridge } from "./LobbyBridge.js";
 import { serializePlayerState } from "../persistence/playerStateSerde.js";
 import { deserializePlayerState } from "../persistence/playerStateSerde.js";
 import {
@@ -52,6 +53,8 @@ export class GameRoom extends Room {
   authProvider?: AuthProvider;
   /** Player state persistence repository. */
   playerStateRepo?: PlayerStateRepository;
+  /** Bridge for notifying the LobbyRoom of lifecycle events. */
+  lobbyBridge?: LobbyBridge;
   /** Maps Colyseus sessionId → authenticated userId for persistence. */
   private sessionUserMap = new Map<string, string>();
   /** Game session ID (from lobby). Empty for legacy direct-connect. */
@@ -163,6 +166,11 @@ export class GameRoom extends Room {
     const userLabel = authUser ? ` (user: ${authUser.username})` : "";
     console.log(`[GameRoom] Client joined: ${client.sessionId}${userLabel}, HQ at (${hqPos.x}, ${hqPos.y})${devMode ? ' [DEV MODE]' : ''}`);
     client.send("game_log", { message: "Welcome to Primal Grid!", type: "info" });
+
+    // Notify lobby of actual player count
+    if (this.gameId) {
+      this.lobbyBridge?.notifyPlayerCountChanged(this.gameId, this.state.players.size);
+    }
   }
 
   override onLeave(client: Client, code: number) {
@@ -187,6 +195,11 @@ export class GameRoom extends Room {
     console.log(
       `[GameRoom] Client left: ${client.sessionId} (consented: ${consented})`
     );
+
+    // Notify lobby of actual player count
+    if (this.gameId) {
+      this.lobbyBridge?.notifyPlayerCountChanged(this.gameId, this.state.players.size);
+    }
   }
 
   override async onDispose() {
@@ -194,6 +207,12 @@ export class GameRoom extends Room {
     for (const sessionId of this.state.players.keys()) {
       await this.savePlayerState(sessionId);
     }
+
+    // Notify lobby that this game has ended
+    if (this.gameId) {
+      this.lobbyBridge?.notifyGameEnded(this.gameId);
+    }
+
     console.log("[GameRoom] Room disposed.");
   }
 

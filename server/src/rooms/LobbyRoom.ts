@@ -1,6 +1,7 @@
 import { Room, Client, matchMaker } from "colyseus";
 import type { AuthProvider, AuthUser } from "../auth/AuthProvider.js";
 import type { GameSessionRepository } from "../persistence/GameSessionRepository.js";
+import type { LobbyBridge } from "./LobbyBridge.js";
 import { LobbyState, LobbyGameEntry, LobbyPlayer } from "./LobbyState.js";
 import {
   CREATE_GAME, JOIN_GAME, LEAVE_GAME, START_GAME,
@@ -33,6 +34,8 @@ export class LobbyRoom extends Room {
   authProvider?: AuthProvider;
   /** Injected by server setup. */
   gameSessionRepo?: GameSessionRepository;
+  /** Injected by server setup — receives lifecycle events from GameRooms. */
+  lobbyBridge?: LobbyBridge;
 
   /** Maps sessionId → user info for connected lobby clients. */
   private sessions = new Map<string, LobbySession>();
@@ -54,6 +57,7 @@ export class LobbyRoom extends Room {
     }
 
     this.registerMessageHandlers();
+    this.registerBridgeListeners();
     console.log("[LobbyRoom] Lobby created.");
   }
 
@@ -97,6 +101,12 @@ export class LobbyRoom extends Room {
   }
 
   override onLeave(client: Client) {
+    // Clean up game membership before removing the player
+    const lobbyPlayer = this.state.players.get(client.sessionId);
+    if (lobbyPlayer?.activeGameId) {
+      this.handleLeaveGame(client);
+    }
+
     this.sessions.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
   }
@@ -127,6 +137,24 @@ export class LobbyRoom extends Room {
     });
   }
 
+  private registerBridgeListeners() {
+    if (!this.lobbyBridge) return;
+
+    this.lobbyBridge.on("player_count_changed", (gameId: string, count: number) => {
+      const entry = this.state.games.get(gameId);
+      if (!entry) return;
+      entry.playerCount = count;
+      if (this.gameSessionRepo) {
+        void this.gameSessionRepo.updatePlayerCount(gameId, count);
+      }
+      this.broadcast(GAME_UPDATED, { game: this.entryToInfo(entry) });
+    });
+
+    this.lobbyBridge.on("game_ended", (gameId: string) => {
+      this.onGameEnded(gameId);
+    });
+  }
+
   private async handleCreateGame(client: Client, payload: CreateGamePayload) {
     const session = this.sessions.get(client.sessionId);
     if (!session) return this.sendError(client, "Not authenticated");
@@ -143,7 +171,10 @@ export class LobbyRoom extends Room {
       Math.max(payload.maxPlayers ?? LOBBY_DEFAULTS.MAX_PLAYERS, LOBBY_DEFAULTS.MIN_PLAYERS),
       LOBBY_DEFAULTS.MAX_PLAYERS
     );
-    const mapSize = payload.mapSize ?? DEFAULT_MAP_SIZE;
+    const mapSize = Math.min(
+      Math.max(payload.mapSize ?? DEFAULT_MAP_SIZE, 32),
+      256
+    );
     const mapSeed = payload.mapSeed ?? Math.floor(Math.random() * 999999);
 
     // Persist game session
@@ -197,6 +228,10 @@ export class LobbyRoom extends Room {
     const session = this.sessions.get(client.sessionId);
     if (!session) return this.sendError(client, "Not authenticated");
 
+    // Prevent joining multiple games simultaneously
+    const lobbyPlayer = this.state.players.get(client.sessionId);
+    if (lobbyPlayer?.activeGameId) return this.sendError(client, "Already in a game");
+
     const gameId = payload.gameId;
     const entry = this.state.games.get(gameId);
     if (!entry) return this.sendError(client, "Game not found");
@@ -219,7 +254,6 @@ export class LobbyRoom extends Room {
     client.send(GAME_JOINED, { gameId, roomId });
 
     // Update lobby player's active game
-    const lobbyPlayer = this.state.players.get(client.sessionId);
     if (lobbyPlayer) lobbyPlayer.activeGameId = gameId;
 
     console.log(`[LobbyRoom] ${session.displayName} joined game "${entry.name}"`);

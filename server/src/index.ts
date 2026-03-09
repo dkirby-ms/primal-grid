@@ -14,6 +14,7 @@ import { createAuthRouter } from "./auth/routes.js";
 import { SqliteUserRepository } from "./persistence/SqliteUserRepository.js";
 import { SqlitePlayerStateRepository } from "./persistence/SqlitePlayerStateRepository.js";
 import { GameSessionRepository } from "./persistence/GameSessionRepository.js";
+import { LobbyBridge } from "./rooms/LobbyBridge.js";
 
 Encoder.BUFFER_SIZE = 768 * 1024; // 768 KB — needed for 128×128 map state sync
 
@@ -28,6 +29,9 @@ const gameSessionRepo = new GameSessionRepository(DB_PATH);
 
 // Initialize auth provider (local JWT — swap to Entra ID later)
 const authProvider = new LocalAuthProvider(userRepo, JWT_SECRET);
+
+// Bridge for GameRoom → LobbyRoom lifecycle events (single instance shared by all rooms)
+const lobbyBridge = new LobbyBridge();
 
 const app = express();
 app.use(cors());
@@ -52,12 +56,14 @@ const server = new Server({ transport });
 server.define("game", GameRoom).on("create", (room: GameRoom) => {
   room.authProvider = authProvider;
   room.playerStateRepo = playerStateRepo;
+  room.lobbyBridge = lobbyBridge;
 });
 
 // Define lobby room with auth + game session repo
 server.define("lobby", LobbyRoom).on("create", (room: LobbyRoom) => {
   room.authProvider = authProvider;
   room.gameSessionRepo = gameSessionRepo;
+  room.lobbyBridge = lobbyBridge;
 });
 
 const port = Number(process.env.PORT) || SERVER_PORT;
