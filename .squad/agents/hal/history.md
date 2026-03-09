@@ -675,3 +675,7 @@ Analyzed dependencies and created formal execution plan for four GitHub issues:
 - Pemulis begins #42 immediately
 - Gately picks up #19 after PR #68 merge (scheduled ~2026-03-10)
 - Steeply prepares #42 auth test suite
+
+- **2026-03 PR #78 Review (Silent Guest Auth):** Reviewed Gately's client-side session persistence PR. Found two blocking issues: (1) CORS — `fetch()` to `http://localhost:2567/auth/guest` from Vite on `http://localhost:3000` will be blocked; Express server has no CORS middleware. (2) No graceful degradation — if `createGuestSession()` throws, `connect()` fails entirely even though `GameRoom.onJoin()` is auth-optional. Also flagged duplicated room-setup code in the retry path. Lint clean. Auth URL derivation (`ws(s)://` → `http(s)://`) is correct. Requested changes via PR comment (couldn't use request-changes since bot authored the PR).
+
+- **2026-03 PR #78 Re-review (Session Persistence — Approved):** Pemulis addressed all three requested changes: (1) CORS middleware added via `app.use(cors())` on Express. (2) `ensureToken()` now catches failures and returns `undefined`; `connect()` falls back to anonymous join with three retry layers. (3) `setupRoom()` helper extracted to DRY lifecycle wiring across all join paths. Lint clean, no `any` types. Approved via comment (can't use `--approve` on bot-authored PRs). Ready to merge.
