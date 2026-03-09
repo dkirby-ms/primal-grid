@@ -163,12 +163,7 @@ export class LobbyScreen {
     const maxPlayersInput = document.getElementById("lobby-max-players") as HTMLSelectElement;
     const mapSizeInput = document.getElementById("lobby-map-size") as HTMLSelectElement;
 
-    const gameName = gameNameInput.value.trim();
-    if (!gameName) {
-      gameNameInput.focus();
-      this.showNotification("Enter a game name", "error");
-      return;
-    }
+    const gameName = gameNameInput.value.trim() || gameNameInput.placeholder || "My Colony";
 
     const payload: CreateGamePayload = {
       name: gameName,
