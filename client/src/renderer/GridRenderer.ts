@@ -32,6 +32,34 @@ function lerpColor(a: number, b: number, t: number): number {
   return (r << 16) | (g << 8) | bl;
 }
 
+// --- Per-tile natural variation ---
+
+/** Deterministic hash for a tile coordinate → value in [0, 1). */
+function tileHash(x: number, y: number, seed: number = 0): number {
+  let h = (x * 374761393 + y * 668265263 + seed) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h = h ^ (h >>> 16);
+  return (h >>> 0) / 4294967296;
+}
+
+/** Corner radius for a tile, varying between min and max based on position hash. */
+function tileCornerRadius(x: number, y: number): number {
+  const MIN_RADIUS = 3;
+  const MAX_RADIUS = 6;
+  return MIN_RADIUS + tileHash(x, y, 7) * (MAX_RADIUS - MIN_RADIUS);
+}
+
+/** Subtle brightness jitter for a base color at (x,y). Returns adjusted color. */
+function jitterColor(color: number, x: number, y: number): number {
+  const JITTER_RANGE = 0.06; // ±6% brightness shift
+  const t = tileHash(x, y, 31) * 2 - 1; // [-1, 1)
+  const factor = 1 + t * JITTER_RANGE;
+  const r = Math.min(255, Math.round(((color >> 16) & 0xff) * factor));
+  const g = Math.min(255, Math.round(((color >> 8) & 0xff) * factor));
+  const b = Math.min(255, Math.round((color & 0xff) * factor));
+  return (r << 16) | (g << 8) | b;
+}
+
 /** Parse a CSS hex color string (e.g. "#FF0000") to a numeric color. */
 function parseColor(color: string): number {
   if (color.startsWith('#')) return parseInt(color.slice(1), 16);
@@ -99,8 +127,10 @@ export class GridRenderer {
       this.lastIsHQTerritory[y] = [];
       for (let x = 0; x < this.mapSize; x++) {
         const g = new Graphics();
-        g.rect(0, 0, TILE_SIZE, TILE_SIZE);
-        g.fill(TILE_COLORS[TileType.Grassland]);
+        const radius = tileCornerRadius(x, y);
+        const color = jitterColor(TILE_COLORS[TileType.Grassland], x, y);
+        g.roundRect(0, 0, TILE_SIZE, TILE_SIZE, radius);
+        g.fill(color);
         g.position.set(x * TILE_SIZE, y * TILE_SIZE);
         g.visible = false;
         this.container.addChild(g);
@@ -139,19 +169,21 @@ export class GridRenderer {
     g.clear();
 
     const baseColor = TILE_COLORS[type] ?? TILE_COLORS[TileType.Grassland];
+    const radius = tileCornerRadius(x, y);
 
     if (resourceAmount && resourceAmount > 0 && resourceType !== undefined && resourceType in RESOURCE_COLORS) {
       // Blend biome color toward resource color (~25%) so the biome stays recognizable
-      const tinted = lerpColor(baseColor, RESOURCE_COLORS[resourceType], 0.25);
-      g.rect(0, 0, TILE_SIZE, TILE_SIZE);
+      const tinted = jitterColor(lerpColor(baseColor, RESOURCE_COLORS[resourceType], 0.25), x, y);
+      g.roundRect(0, 0, TILE_SIZE, TILE_SIZE, radius);
       g.fill(tinted);
       // Thin inner border in the resource color for extra contrast
       const inset = 2;
-      g.rect(inset, inset, TILE_SIZE - inset * 2, TILE_SIZE - inset * 2);
+      g.roundRect(inset, inset, TILE_SIZE - inset * 2, TILE_SIZE - inset * 2, Math.max(1, radius - inset));
       g.stroke({ width: 1, color: RESOURCE_COLORS[resourceType], alpha: 0.4 });
     } else {
-      g.rect(0, 0, TILE_SIZE, TILE_SIZE);
-      g.fill(baseColor);
+      const color = jitterColor(baseColor, x, y);
+      g.roundRect(0, 0, TILE_SIZE, TILE_SIZE, radius);
+      g.fill(color);
     }
   }
 
