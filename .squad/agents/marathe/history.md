@@ -405,3 +405,24 @@ PR #66 pending review and merge into dev branch.
 
 **Decision reference:** `.squad/decisions.md` → "Versioning Baseline Established" & "User Directive — Auto-Increment Version on UAT Release"
 
+---
+
+## 2026-03-09T23:32:55Z: Auto-Bump Patch Version on Dev→UAT Promotion (Pemulis)
+
+**Context:** Pemulis (Systems Dev) implemented automatic patch version bumping in the dev→uat promotion workflow.
+
+**DevOps Changes:**
+- `.github/workflows/squad-promote.yml` now includes "Bump patch version" step in `dev-to-uat` job
+- Step: `npm version patch --no-git-tag-version` — updates `package.json` + `package-lock.json`, no git tags
+- Bump commit is pushed to `dev` **before** the promotion PR is created
+- Workflow permissions upgraded from `contents: read` → `contents: write` to enable push access
+
+**Pattern Consistency:**
+- Aligns with versioning baseline (soft fallback for promote, hard fail for release)
+- Commit is clean: only JSON updates, no extraneous files
+- Manual control preserved: minor/major bumps still manual
+
+**Next Promotion:** When dev→uat is run, the new version will appear in the PR title automatically.
+
+**Decision reference:** `.squad/decisions.md` → "Automatic Patch Version Bump on UAT Promotion"
+
