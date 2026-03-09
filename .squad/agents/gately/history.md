@@ -1270,3 +1270,12 @@ See `.squad/decisions.md` Initiative Triage & Execution Plan (2026-03-09) for fu
 - **Color jitter:** ±6% brightness shift per tile. Applied to both base biome colors and resource-tinted colors. Makes the terrain look natural without being distracting.
 - **Fog overlays kept as rect():** Fog needs full tile coverage to avoid light bleed at corners. Rounded fog would show terrain through corner gaps.
 - **Performance:** No measurable impact. Hash functions are 3 integer operations each. Viewport culling (~400 tiles/frame) unchanged.
+
+### Creature Stacking Fix — #74 (2026-03-XX)
+
+- **Bug:** Two creatures on the same tile rendered at the exact same pixel position (tile center), so one occluded the other — looked like they "merged" into one.
+- **Root cause:** `CreatureRenderer.tick()` targeted every creature at `tileX * TILE_SIZE + TILE_SIZE / 2` regardless of how many shared the tile. Pure rendering bug — server state correctly tracked multiple creatures per tile.
+- **Fix:** In `tick()`, group entries by tile key. When multiple creatures share a tile, apply small pixel offsets from `STACK_OFFSETS` array (up to 6 unique positions, ~5px from center). Single creatures render at exact tile center (no offset). Offsets interpolate smoothly via existing lerp.
+- **Key file:** `client/src/renderer/CreatureRenderer.ts` — `tick()` method and `STACK_OFFSETS` constant.
+- **Tests:** `client/src/__tests__/creature-stacking.test.ts` — 4 regression tests with PixiJS mocks.
+- **Pattern:** PixiJS mocking pattern reused from `camera-zoom.test.ts` — mock Container/Graphics/Text classes, stub `@primal-grid/shared` and `GridRenderer.js`.
