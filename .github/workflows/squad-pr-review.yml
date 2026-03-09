@@ -2,7 +2,7 @@ name: Squad PR Review Routing
 
 on:
   pull_request:
-    types: [opened, ready_for_review]
+    types: [opened, ready_for_review, synchronize]
 
 permissions:
   pull-requests: write
@@ -22,13 +22,45 @@ jobs:
             const pr = context.payload.pull_request;
             const targetBranch = pr.base.ref;
             const author = pr.user.login;
+            const action = context.payload.action;
 
+            // On synchronize (new push), re-request copilot review for uat PRs
+            if (action === 'synchronize') {
+              if (targetBranch === 'uat') {
+                try {
+                  // Dismiss stale copilot review so it gets re-requested
+                  const { data: reviews } = await github.rest.pulls.listReviews({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: pr.number,
+                  });
+                  const copilotReview = reviews.find(r =>
+                    r.user?.login === 'copilot-pull-request-reviewer[bot]' ||
+                    r.user?.login === 'copilot-pull-request-reviewer'
+                  );
+                  if (copilotReview) {
+                    await github.rest.pulls.dismissReview({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      pull_number: pr.number,
+                      review_id: copilotReview.id,
+                      message: 'New commits pushed — re-requesting review.',
+                    });
+                    core.info('Dismissed stale copilot review to trigger re-review');
+                  }
+                } catch (err) {
+                  core.warning(`Could not dismiss copilot review: ${err.message}`);
+                }
+              }
+              // Don't post routing comments on every push
+              return;
+            }
+
+            // First-time routing (opened / ready_for_review)
             let reviewer = null;
             let comment = '';
 
             if (targetBranch === 'dev') {
-              // Feature/fix PRs to dev — Hal (lead) reviews
-              // Hal is an AI agent, so we post a comment for routing
               comment = [
                 '### 🔍 PR Review Routing',
                 '',
@@ -40,7 +72,6 @@ jobs:
               ].join('\n');
 
             } else if (targetBranch === 'uat') {
-              // dev → uat promotion — @copilot reviews
               comment = [
                 '### 🔍 PR Review Routing',
                 '',
@@ -51,7 +82,6 @@ jobs:
               ].join('\n');
 
             } else if (targetBranch === 'prod') {
-              // uat → prod promotion — owner only
               reviewer = 'dkirby-ms';
               comment = [
                 '### 🔍 PR Review Routing',
@@ -65,7 +95,6 @@ jobs:
 
             if (!comment) return;
 
-            // Post routing comment
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -73,7 +102,6 @@ jobs:
               body: comment
             });
 
-            // Request review from human reviewer if applicable
             if (reviewer && reviewer !== author) {
               try {
                 await github.rest.pulls.requestReviewers({
