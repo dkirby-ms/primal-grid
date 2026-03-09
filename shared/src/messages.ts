@@ -3,6 +3,7 @@
 export const SPAWN_PAWN = "spawn_pawn" as const;
 export const SET_NAME = "set_name" as const;
 export const GAME_LOG = "game_log" as const;
+export const CHAT = "chat" as const;
 
 // --- Message payload interfaces ---
 
@@ -45,4 +46,19 @@ export type GameLogCategory =
 export interface GameLogPayload {
   message: string;
   type: GameLogCategory;
+}
+
+/** Max allowed length for a single chat message. */
+export const CHAT_MAX_LENGTH = 200;
+
+/** Payload sent by the client to the server when sending a chat message. */
+export interface ChatPayload {
+  text: string;
+}
+
+/** Payload broadcast by the server to all clients for a chat message. */
+export interface ChatBroadcastPayload {
+  sender: string;
+  text: string;
+  timestamp: number;
 }

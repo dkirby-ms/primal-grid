@@ -14,7 +14,7 @@ import { serializePlayerState } from "../persistence/playerStateSerde.js";
 import { deserializePlayerState } from "../persistence/playerStateSerde.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
-  SPAWN_PAWN, SET_NAME,
+  SPAWN_PAWN, SET_NAME, CHAT, CHAT_MAX_LENGTH,
   ResourceType, TileType, isWaterTile,
   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
   CREATURE_AI, CREATURE_RESPAWN, TERRITORY,
@@ -25,7 +25,7 @@ import {
   DayPhase,
   isEnemyBase,
 } from "@primal-grid/shared";
-import type { SpawnPawnPayload, SetNamePayload } from "@primal-grid/shared";
+import type { SpawnPawnPayload, SetNamePayload, ChatPayload } from "@primal-grid/shared";
 import { spawnHQ } from "./territory.js";
 
 const PLAYER_COLORS = [
@@ -81,6 +81,10 @@ export class GameRoom extends Room {
 
     this.onMessage(SET_NAME, (client, message: SetNamePayload) => {
       this.handleSetName(client, message);
+    });
+
+    this.onMessage(CHAT, (client, message: ChatPayload) => {
+      this.handleChat(client, message);
     });
 
     console.log("[GameRoom] Room created.");
@@ -224,6 +228,25 @@ export class GameRoom extends Room {
 
     player.displayName = sanitized;
     this.broadcast("game_log", { message: `${sanitized} has joined`, type: "info" });
+  }
+
+  /** Strip HTML tags to prevent injection in chat messages. */
+  private static stripHtml(input: string): string {
+    return input.replace(/<[^>]*>/g, "");
+  }
+
+  private handleChat(client: Client, message: ChatPayload) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+
+    if (typeof message.text !== "string") return;
+    const stripped = GameRoom.stripHtml(message.text).trim();
+    if (stripped.length === 0) return;
+    const text = stripped.slice(0, CHAT_MAX_LENGTH);
+
+    const sender = player.displayName || "Unknown";
+
+    this.broadcast(CHAT, { sender, text, timestamp: Date.now() });
   }
 
   private handleSpawnPawn(client: Client, message: SpawnPawnPayload) {
