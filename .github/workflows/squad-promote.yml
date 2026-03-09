@@ -3,23 +3,81 @@ name: Squad Promote
 on:
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: 'Dry run — show what would happen without pushing'
-        required: false
-        default: 'false'
+      target:
+        description: 'Promotion target'
+        required: true
+        default: 'dev-to-uat'
         type: choice
-        options: ['false', 'true']
+        options:
+          - 'dev-to-uat'
+          - 'uat-to-prod'
 
 permissions:
-  contents: write
-
-concurrency:
-  group: "promotion"
-  cancel-in-progress: false
+  contents: read
+  pull-requests: write
 
 jobs:
-  dev-to-preview:
-    name: Promote dev → preview
+  promote-dev-to-uat:
+    name: Create PR — dev → uat
+    if: ${{ inputs.target == 'dev-to-uat' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch all branches
+        run: git fetch --all
+
+      - name: Check for differences
+        id: diff
+        run: |
+          DIFF_COUNT=$(git rev-list --count origin/uat..origin/dev)
+          echo "commit_count=$DIFF_COUNT" >> "$GITHUB_OUTPUT"
+          if [ "$DIFF_COUNT" = "0" ]; then
+            echo "ℹ️ No new commits — uat is already up to date with dev"
+          else
+            echo "📦 $DIFF_COUNT commit(s) to promote"
+            git log --oneline origin/uat..origin/dev
+          fi
+
+      - name: Create promotion PR
+        if: steps.diff.outputs.commit_count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check for existing open PR
+          EXISTING=$(gh pr list --base uat --head dev --state open --json number --jq '.[0].number' 2>/dev/null)
+          if [ -n "$EXISTING" ]; then
+            echo "ℹ️ PR #$EXISTING already exists for dev → uat"
+            echo "### ℹ️ Existing PR #$EXISTING" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          VERSION=$(node -e "console.log(require('./package.json').version)")
+          CHANGELOG=$(git log --pretty=format:'- %h %s' origin/uat..origin/dev | head -20)
+
+          gh pr create \
+            --base uat \
+            --head dev \
+            --title "Promote dev → uat (v${VERSION})" \
+            --body "## Promotion: dev → uat
+
+          **Version:** v${VERSION}
+          **Commits:** ${{ steps.diff.outputs.commit_count }}
+
+          ### Changes
+          ${CHANGELOG}
+
+          ---
+          > Reviewer: @copilot (automated review per PR review gates)
+          > Created by \`squad-promote.yml\` workflow dispatch"
+
+          echo "### ✅ PR created for dev → uat" >> "$GITHUB_STEP_SUMMARY"
+
+  promote-uat-to-prod:
+    name: Create PR — uat → prod
+    if: ${{ inputs.target == 'uat-to-prod' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,20 +93,31 @@ jobs:
       - name: Fetch all branches
         run: git fetch --all
 
-      - name: Show current state (dry run info)
+      - name: Check for differences
+        id: diff
         run: |
-          echo "=== dev HEAD ===" && git log origin/dev -1 --oneline
-          echo "=== preview HEAD ===" && git log origin/preview -1 --oneline
-          echo "=== Files that would be stripped ==="
-          git diff origin/preview..origin/dev --name-only | grep -E "^(\.(ai-team|squad|ai-team-templates)|team-docs/|docs/proposals/)" || echo "(none)"
+          DIFF_COUNT=$(git rev-list --count origin/prod..origin/uat)
+          echo "commit_count=$DIFF_COUNT" >> "$GITHUB_OUTPUT"
+          if [ "$DIFF_COUNT" = "0" ]; then
+            echo "ℹ️ No new commits — prod is already up to date with uat"
+          else
+            echo "📦 $DIFF_COUNT commit(s) to promote"
+            git log --oneline origin/prod..origin/uat
+          fi
 
-      - name: Merge dev → preview (strip forbidden paths)
-        if: ${{ inputs.dry_run == 'false' }}
+      - name: Create staging branch (strip forbidden files)
+        if: steps.diff.outputs.commit_count != '0'
+        id: staging
         run: |
-          git checkout preview
-          git merge origin/dev --no-commit --no-ff -X theirs || true
+          VERSION=$(node -e "console.log(require('./package.json').version)")
+          BRANCH="promote/prod-v${VERSION}"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-          # Strip forbidden paths from merge commit
+          # Create staging branch from uat
+          git checkout -b "$BRANCH" origin/uat
+
+          # Strip forbidden paths
           git rm -rf --cached --ignore-unmatch \
             .ai-team/ \
             .squad/ \
@@ -56,69 +125,43 @@ jobs:
             team-docs/ \
             "docs/proposals/" || true
 
-          # Commit if there are staged changes
           if ! git diff --cached --quiet; then
-            git commit -m "chore: promote dev → preview (v$(node -e "console.log(require('./package.json').version)"))"
-            git push origin preview
-            echo "✅ Pushed preview branch"
-          else
-            echo "ℹ️ Nothing to commit — preview is already up to date"
+            git commit -m "chore: strip squad/team files for production"
           fi
 
-      - name: Dry run complete
-        if: ${{ inputs.dry_run == 'true' }}
-        run: echo "🔍 Dry run complete — no changes pushed."
+          git push --force origin "$BRANCH"
+          echo "✅ Staging branch $BRANCH created"
 
-  preview-to-main:
-    name: Promote preview → main (release)
-    needs: dev-to-preview
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure git
+      - name: Create promotion PR
+        if: steps.diff.outputs.commit_count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Fetch all branches
-        run: git fetch --all
-
-      - name: Show current state
-        run: |
-          echo "=== preview HEAD ===" && git log origin/preview -1 --oneline
-          echo "=== main HEAD ===" && git log origin/main -1 --oneline
-          echo "=== Version ===" && node -e "console.log('v' + require('./package.json').version)"
-
-      - name: Validate preview is release-ready
-        run: |
-          git checkout preview
-          VERSION=$(node -e "console.log(require('./package.json').version)")
-          if ! grep -q "## \[$VERSION\]" CHANGELOG.md 2>/dev/null; then
-            echo "::error::Version $VERSION not found in CHANGELOG.md — update before releasing"
-            exit 1
+          # Check for existing open PR from any promote/ branch
+          EXISTING=$(gh pr list --base prod --state open --json number,headRefName --jq '.[] | select(.headRefName | startswith("promote/")) | .number' 2>/dev/null | head -1)
+          if [ -n "$EXISTING" ]; then
+            echo "ℹ️ PR #$EXISTING already exists for uat → prod"
+            echo "### ℹ️ Existing PR #$EXISTING" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
-          echo "✅ Version $VERSION has CHANGELOG entry"
 
-          # Verify no forbidden files on preview
-          FORBIDDEN=$(git ls-files | grep -E "^(\.(ai-team|squad|ai-team-templates)/|team-docs/|docs/proposals/)" || true)
-          if [ -n "$FORBIDDEN" ]; then
-            echo "::error::Forbidden files found on preview: $FORBIDDEN"
-            exit 1
-          fi
-          echo "✅ No forbidden files on preview"
+          CHANGELOG=$(git log --pretty=format:'- %h %s' origin/prod..origin/uat | head -20)
 
-      - name: Merge preview → main
-        if: ${{ inputs.dry_run == 'false' }}
-        run: |
-          git checkout main
-          git merge origin/preview --no-ff -m "chore: promote preview → main (v$(node -e "console.log(require('./package.json').version)"))"
-          git push origin main
-          echo "✅ Pushed main — squad-release.yml will tag and publish the release"
+          gh pr create \
+            --base prod \
+            --head "${{ steps.staging.outputs.branch }}" \
+            --title "Release: uat → prod (v${{ steps.staging.outputs.version }})" \
+            --body "## Release: uat → prod
 
-      - name: Dry run complete
-        if: ${{ inputs.dry_run == 'true' }}
-        run: echo "🔍 Dry run complete — no changes pushed."
+          **Version:** v${{ steps.staging.outputs.version }}
+          **Commits:** ${{ steps.diff.outputs.commit_count }}
+
+          ### Changes
+          ${CHANGELOG}
+
+          ---
+          > ⚠️ \`.squad/\` files have been stripped from this branch for production.
+          > Reviewer: @dkirby-ms (manual production gate)
+          > Created by \`squad-promote.yml\` workflow dispatch"
+
+          echo "### ✅ PR created for uat → prod" >> "$GITHUB_STEP_SUMMARY"

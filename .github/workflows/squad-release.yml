@@ -2,7 +2,7 @@ name: Squad Release
 
 on:
   push:
-    branches: [main]
+    branches: [prod]
 
 permissions:
   contents: write
@@ -18,19 +18,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
-      - name: Run tests
-        run: node --test test/*.test.js
-
-      - name: Validate version consistency
-        run: |
-          VERSION=$(node -e "console.log(require('./package.json').version)")
-          if ! grep -q "## \[$VERSION\]" CHANGELOG.md 2>/dev/null; then
-            echo "::error::Version $VERSION not found in CHANGELOG.md — update CHANGELOG.md before release"
-            exit 1
-          fi
-          echo "✅ Version $VERSION validated in CHANGELOG.md"
+      - run: npm ci
+      - run: npm run build -w shared
+      - run: npm test
 
       - name: Read version from package.json
         id: version

@@ -2,7 +2,7 @@ name: Deploy Primal Grid
 
 on:
   push:
-    branches: [master]
+    branches: [prod]
     paths-ignore:
       - 'docs/**'
       - 'infra/**'
@@ -51,15 +51,10 @@ jobs:
 
       - name: Deploy to Container Apps
         run: |
-          az containerapp secret set \
-            --name ${{ secrets.CONTAINER_APP_NAME }} \
-            --resource-group ${{ secrets.RESOURCE_GROUP }} \
-            --secrets jwt-secret=${{ secrets.JWT_SECRET }}
           az containerapp update \
             --name ${{ secrets.CONTAINER_APP_NAME }} \
             --resource-group ${{ secrets.RESOURCE_GROUP }} \
-            --image ${{ secrets.ACR_NAME }}.azurecr.io/primal-grid:${{ github.sha }} \
-            --set-env-vars JWT_SECRET=secretref:jwt-secret
+            --image ${{ secrets.ACR_NAME }}.azurecr.io/primal-grid:${{ github.sha }}
 
       - name: Output app URL
         id: get-url
@@ -81,7 +76,7 @@ jobs:
     env:
       DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
       DEPLOY_RESULT: ${{ needs.deploy.result }}
-      DEPLOY_URL: ${{ needs.deploy.outputs.fqdn }}
+      DEPLOY_URL: "https://gridwar.kirbytoso.xyz"
       REPOSITORY: ${{ github.repository }}
       COMMIT_SHA: ${{ github.sha }}
       REF_NAME: ${{ github.ref_name }}
@@ -102,7 +97,7 @@ jobs:
           # Checkout with full history for changelog
           git clone --depth 50 https://github.com/${REPOSITORY}.git repo
           cd repo
-          git fetch --depth 50 origin master
+          git fetch --depth 50 origin prod
 
           # Generate changelog (last 10 commits)
           CHANGELOG=$(git log --pretty=format:'• %h %s (%an)' HEAD~10..HEAD 2>/dev/null | head -10)
@@ -122,9 +117,9 @@ jobs:
 
           FIELDS=$(jq -n \
             --arg env "🎮 Production" \
-            --arg url "https://${DEPLOY_URL}" \
+            --arg url "${DEPLOY_URL}" \
             '[{"name": "Environment", "value": $env, "inline": true},
-              {"name": "Deployed URL", "value": $url, "inline": false}]')
+              {"name": "🌐 Deployed URL", "value": "[Open App](\($url))", "inline": false}]')
 
           # Add changelog field
           FIELDS=$(echo "$FIELDS" | jq --arg changelog "$CHANGELOG" \
