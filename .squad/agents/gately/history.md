@@ -681,6 +681,14 @@ Previous pass removed some shape UI but missed significant remnants that were st
 
 ## Learnings
 
+### In-Game Chat UI (2026-03-06)
+- **ChatPanel** (`client/src/ui/ChatPanel.ts`): DOM-based overlay following overlay-panel skill pattern. Header, scrollable message area (120px), text input at bottom.
+- **Input isolation:** `e.stopPropagation()` on the input's keydown handler prevents game controls from firing when typing in chat. `isFocused` getter lets InputHandler bail early from game key processing.
+- **Keybindings:** `C` toggles chat visibility, `Enter` focuses chat input from game context, `Escape` blurs the input back to game.
+- **Colyseus protocol:** Client sends `room.send('chat', { text })`, listens `room.onMessage('chat', { sender, text, timestamp })`. Server broadcasts — Pemulis owns the server handler.
+- **CSS consistency:** Reused game-log dark theme styling (`#1a1a2e` bg, `#2a2a4a` borders, `#3a3a5a` scrollbar thumb, Courier New monospace). Chat sender names styled cyan (`#7ecfff`) to distinguish from log text.
+- **Integration pattern:** ChatPanel instantiated in `connectToServer()` after room join, wired to InputHandler via `setChatPanel()`. Same setter pattern as HelpScreen, Scoreboard, Camera.
+
 ### Resource Tile Tinting (2026-03-05)
 - Replaced per-tile `Graphics` resource dots with background color tinting via `lerpColor()` at 25% blend
 - Resource tiles now show a subtle inner border (1px, 40% alpha) in the resource color for extra contrast
@@ -1279,6 +1287,18 @@ See `.squad/decisions.md` Initiative Triage & Execution Plan (2026-03-09) for fu
 - **Key file:** `client/src/renderer/CreatureRenderer.ts` — `tick()` method and `STACK_OFFSETS` constant.
 - **Tests:** `client/src/__tests__/creature-stacking.test.ts` — 4 regression tests with PixiJS mocks.
 - **Pattern:** PixiJS mocking pattern reused from `camera-zoom.test.ts` — mock Container/Graphics/Text classes, stub `@primal-grid/shared` and `GridRenderer.js`.
+
+---
+
+### Cross-Agent Update: In-Game Chat #30 (2026-03-09, issue #30)
+
+**Feature completed** by Pemulis, Gately, and Steeply in coordinated sprint. PR #80 merged to dev.
+
+- **Pemulis (Systems):** Server-side chat message handler with HTML stripping, 200-char limit, server-auth sender/timestamp, shared types in messages.ts.
+- **Gately (Game Dev):** Client-side ChatPanel UI (completed above).
+- **Steeply (Tester):** 19-test suite covering both server and client sides. All tests passing. 663 total tests.
+
+**Impact on Gately:** Chat overlay pattern is reusable for future overlay features. InputHandler integration via `chatPanel.isFocused` guard pattern can be cloned for other overlays.
 
 ### Client-Side Session Persistence — #77 (2026-03-XX)
 

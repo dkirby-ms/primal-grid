@@ -36,3 +36,4 @@ How to decide who handles what.
 5. **"Team, ..." → fan-out.** Spawn all relevant agents in parallel as `mode: "background"`.
 6. **Anticipate downstream work.** If a feature is being built, spawn Steeply to write test cases from requirements simultaneously.
 7. **Issue-labeled work** — when a `squad:{member}` label is applied to an issue, route to that member. Hal handles all `squad` (base label) triage.
+8. **GitHub auto-close for issue PRs** — When opening a PR to fix an issue, include `Closes #N` (or `Fixes #N`, `Resolves #N`) in the PR body. This is the only reliable place for GitHub to detect issue references across all merge strategies (squash, rebase, merge commit).

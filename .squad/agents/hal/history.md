@@ -19,6 +19,10 @@
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
+- **GitHub Auto-Close Issue Process Gap Fixed (2026-03-12):** Four issues (#19, #31, #42, #74) had PRs merged to dev but stayed OPEN. Root cause: "Closes #N" syntax was placed in commit messages or PR titles, not PR bodies. GitHub only auto-closes on squash+merge when the close keyword appears in the PR body. Investigation found agents were ambiguous on placement. Fix: (1) Updated `.squad/copilot-instructions.md` to emphasize PR BODY as the only reliable location for auto-close keywords, (2) Added Rule 8 to `.squad/routing.md` explicitly requiring "Closes #N" in PR body, (3) Created decision file `.squad/decisions/inbox/hal-issue-auto-close.md` documenting the gap and enforcement points. Key learning: Single authoritative location (PR body) prevents process gaps — GitHub only reads PR body for squash merges, regardless of commit message content.
+
+
+
 - **Pawn Builder Architecture proposed (2026-03-04):** dkirby-ms rejected all conquest mechanics (Influence Flooding, Resource Pressure, Creature Siege, Shape Overlap Invasion) in favor of autonomous pawn-based expansion. Architected full builder system: pawns reuse CreatureState schema (creatureType="builder", ownerID=player.id — same pattern as removed Phase B worker), 3-state FSM (IDLE→SEEK_SITE→BUILDING), 1×1 structures claim single tiles, builders spawned at HQ for 5W+5S cost. Direct shape placement removed — player role shifts from "Tetris player" to "commander" (spawn pawns, manage economy). PawnTypeDef registry enables future pawn types (gatherer, scout, soldier). MVP: ~255 lines added, ~200 removed, 2–3 days. Key trade-off: no rally points in MVP (builders pick their own targets). Deferred: multi-tile structures, pawn upgrades, rally points, population caps. Filed to `.squad/decisions/inbox/hal-pawn-builder-architecture.md`.
 
 - **Competitive Territory Spec authored (2026-03-02):** User confirmed B+C hybrid direction. Wrote full build spec at `docs/competitive-territory-spec.md`. Key decisions: territory contesting (place on opponent tiles, 4s vs 2s claim), wood upkeep (1 per 10 tiles/60s, decay from edges), neutral creatures (herbivore bonus income, carnivore border damage), 10-min timed rounds, HQ immunity (3×3 sacred). Implementation: 4 phases, ~553 lines, phases 1/2/4 parallelizable. Scope cuts: no taming, no fog of war, no biome scoring, no matchmaking. The critical code change is removing the `tile.ownerID !== player.id` rejection in `handlePlaceShape` (line 105 of GameRoom.ts) and adding contest timing. Decision filed to inbox.
@@ -676,6 +680,16 @@ Analyzed dependencies and created formal execution plan for four GitHub issues:
 - Gately picks up #19 after PR #68 merge (scheduled ~2026-03-10)
 - Steeply prepares #42 auth test suite
 
+### Session Persistence Client Integration Review (2026-03-09)
+
+- **Issue #77, PR #78** review and merge.
+- **Reviewed**: Pemulis's fixes for three blockers:
+  1. CORS middleware — fetch auth endpoints work from Vite dev client
+  2. Graceful auth degradation — connect() joins without token, fallback to anonymous
+  3. DRY room setup — extracted setupRoom() helper
+- **Approval**: All blockers addressed. Code quality verified (515/515 tests, lint clean). Design sound for dev/offline support.
+- **Merge**: Squash-merged to dev, deleted squad/78-session-persistence-client branch, closed issue #77.
+- **Impact**: Session persistence chain complete. Auth (PR #70) → server auto-save (PR #77) → client restore (PR #78). Players have end-to-end persistence.
 - **2026-03 PR #78 Review (Silent Guest Auth):** Reviewed Gately's client-side session persistence PR. Found two blocking issues: (1) CORS — `fetch()` to `http://localhost:2567/auth/guest` from Vite on `http://localhost:3000` will be blocked; Express server has no CORS middleware. (2) No graceful degradation — if `createGuestSession()` throws, `connect()` fails entirely even though `GameRoom.onJoin()` is auth-optional. Also flagged duplicated room-setup code in the retry path. Lint clean. Auth URL derivation (`ws(s)://` → `http(s)://`) is correct. Requested changes via PR comment (couldn't use request-changes since bot authored the PR).
 
 - **2026-03 PR #78 Re-review (Session Persistence — Approved):** Pemulis addressed all three requested changes: (1) CORS middleware added via `app.use(cors())` on Express. (2) `ensureToken()` now catches failures and returns `undefined`; `connect()` falls back to anonymous join with three retry layers. (3) `setupRoom()` helper extracted to DRY lifecycle wiring across all join paths. Lint clean, no `any` types. Approved via comment (can't use `--approve` on bot-authored PRs). Ready to merge.
