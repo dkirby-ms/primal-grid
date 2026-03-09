@@ -13,7 +13,7 @@ on:
           - 'uat-to-prod'
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
@@ -25,6 +25,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: dev
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Fetch all branches
         run: git fetch --all
@@ -40,6 +42,20 @@ jobs:
             echo "📦 $DIFF_COUNT commit(s) to promote"
             git log --oneline origin/uat..origin/dev
           fi
+
+      - name: Bump patch version
+        if: steps.diff.outputs.commit_count != '0'
+        id: version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          npm version patch --no-git-tag-version
+          NEW_VERSION=$(node -e "console.log(require('./package.json').version)")
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          git add package.json package-lock.json
+          git commit -m "chore: bump version to v${NEW_VERSION}"
+          git push origin dev
+          echo "📦 Bumped version to v${NEW_VERSION}"
 
       - name: Create promotion PR
         if: steps.diff.outputs.commit_count != '0'
