@@ -3,97 +3,106 @@ name: Squad Promote
 on:
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: 'Dry run — show what would happen without pushing'
-        required: false
-        default: 'false'
+      target:
+        description: 'Promotion target'
+        required: true
+        default: 'dev-to-uat'
         type: choice
-        options: ['false', 'true']
+        options:
+          - 'dev-to-uat'
+          - 'uat-to-prod'
 
 permissions:
-  contents: write
+  contents: read
+  pull-requests: write
 
 jobs:
-  dev-to-uat:
-    name: Promote dev → uat
+  promote-dev-to-uat:
+    name: Create PR — dev → uat
+    if: ${{ inputs.target == 'dev-to-uat' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Fetch all branches
         run: git fetch --all
 
-      - name: Show current state (dry run info)
+      - name: Check for differences
+        id: diff
         run: |
-          echo "=== dev HEAD ===" && git log origin/dev -1 --oneline
-          echo "=== uat HEAD ===" && git log origin/uat -1 --oneline
-          echo "=== Files that would be stripped ==="
-          git diff origin/uat..origin/dev --name-only | grep -E "^(\.(ai-team|squad|ai-team-templates)|team-docs/|docs/proposals/)" || echo "(none)"
-
-      - name: Merge dev → uat (strip forbidden paths)
-        if: ${{ inputs.dry_run == 'false' }}
-        run: |
-          git checkout uat
-          git merge origin/dev --no-commit --no-ff -X theirs || true
-
-          # Strip forbidden paths from merge commit
-          git rm -rf --cached --ignore-unmatch \
-            .ai-team/ \
-            .squad/ \
-            .ai-team-templates/ \
-            team-docs/ \
-            "docs/proposals/" || true
-
-          # Commit if there are staged changes
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: promote dev → uat (v$(node -e "console.log(require('./package.json').version)"))"
-            git push origin uat
-            echo "✅ Pushed uat branch"
+          DIFF_COUNT=$(git rev-list --count origin/uat..origin/dev)
+          echo "commit_count=$DIFF_COUNT" >> "$GITHUB_OUTPUT"
+          if [ "$DIFF_COUNT" = "0" ]; then
+            echo "ℹ️ No new commits — uat is already up to date with dev"
           else
-            echo "ℹ️ Nothing to commit — uat is already up to date"
+            echo "📦 $DIFF_COUNT commit(s) to promote"
+            git log --oneline origin/uat..origin/dev
           fi
 
-      - name: Dry run complete
-        if: ${{ inputs.dry_run == 'true' }}
-        run: echo "🔍 Dry run complete — no changes pushed."
+      - name: Create promotion PR
+        if: steps.diff.outputs.commit_count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check for existing open PR
+          EXISTING=$(gh pr list --base uat --head dev --state open --json number --jq '.[0].number' 2>/dev/null)
+          if [ -n "$EXISTING" ]; then
+            echo "ℹ️ PR #$EXISTING already exists for dev → uat"
+            echo "### ℹ️ Existing PR #$EXISTING" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
 
-  uat-to-prod:
-    name: Promote uat → prod (release)
-    needs: dev-to-uat
+          VERSION=$(node -e "console.log(require('./package.json').version)")
+          CHANGELOG=$(git log --pretty=format:'- %h %s' origin/uat..origin/dev | head -20)
+
+          gh pr create \
+            --base uat \
+            --head dev \
+            --title "Promote dev → uat (v${VERSION})" \
+            --body "## Promotion: dev → uat
+
+          **Version:** v${VERSION}
+          **Commits:** ${{ steps.diff.outputs.commit_count }}
+
+          ### Changes
+          ${CHANGELOG}
+
+          ---
+          > Reviewer: @copilot (automated review per PR review gates)
+          > Created by \`squad-promote.yml\` workflow dispatch"
+
+          echo "### ✅ PR created for dev → uat" >> "$GITHUB_STEP_SUMMARY"
+
+  promote-uat-to-prod:
+    name: Create PR — uat → prod
+    if: ${{ inputs.target == 'uat-to-prod' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Fetch all branches
         run: git fetch --all
 
-      - name: Show current state
+      - name: Check for differences
+        id: diff
         run: |
-          echo "=== uat HEAD ===" && git log origin/uat -1 --oneline
-          echo "=== prod HEAD ===" && git log origin/prod -1 --oneline
-          echo "=== Version ===" && node -e "console.log('v' + require('./package.json').version)"
+          DIFF_COUNT=$(git rev-list --count origin/prod..origin/uat)
+          echo "commit_count=$DIFF_COUNT" >> "$GITHUB_OUTPUT"
+          if [ "$DIFF_COUNT" = "0" ]; then
+            echo "ℹ️ No new commits — prod is already up to date with uat"
+          else
+            echo "📦 $DIFF_COUNT commit(s) to promote"
+            git log --oneline origin/prod..origin/uat
+          fi
 
-      - name: Validate uat is release-ready
+      - name: Validate uat has no forbidden files
+        if: steps.diff.outputs.commit_count != '0'
         run: |
-          git checkout uat
-
-          # Verify no forbidden files on uat
+          git checkout origin/uat
           FORBIDDEN=$(git ls-files | grep -E "^(\.(ai-team|squad|ai-team-templates)/|team-docs/|docs/proposals/)" || true)
           if [ -n "$FORBIDDEN" ]; then
             echo "::error::Forbidden files found on uat: $FORBIDDEN"
@@ -101,14 +110,35 @@ jobs:
           fi
           echo "✅ No forbidden files on uat"
 
-      - name: Merge uat → prod
-        if: ${{ inputs.dry_run == 'false' }}
+      - name: Create promotion PR
+        if: steps.diff.outputs.commit_count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git checkout prod
-          git merge origin/uat --no-ff -m "chore: promote uat → prod (v$(node -e "console.log(require('./package.json').version)"))"
-          git push origin prod
-          echo "✅ Pushed prod — squad-release.yml will tag and publish the release"
+          EXISTING=$(gh pr list --base prod --head uat --state open --json number --jq '.[0].number' 2>/dev/null)
+          if [ -n "$EXISTING" ]; then
+            echo "ℹ️ PR #$EXISTING already exists for uat → prod"
+            echo "### ℹ️ Existing PR #$EXISTING" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
 
-      - name: Dry run complete
-        if: ${{ inputs.dry_run == 'true' }}
-        run: echo "🔍 Dry run complete — no changes pushed."
+          VERSION=$(node -e "console.log(require('./package.json').version)")
+          CHANGELOG=$(git log --pretty=format:'- %h %s' origin/prod..origin/uat | head -20)
+
+          gh pr create \
+            --base prod \
+            --head uat \
+            --title "Release: uat → prod (v${VERSION})" \
+            --body "## Release: uat → prod
+
+          **Version:** v${VERSION}
+          **Commits:** ${{ steps.diff.outputs.commit_count }}
+
+          ### Changes
+          ${CHANGELOG}
+
+          ---
+          > Reviewer: @dkirby-ms (manual production gate)
+          > Created by \`squad-promote.yml\` workflow dispatch"
+
+          echo "### ✅ PR created for uat → prod" >> "$GITHUB_STEP_SUMMARY"
