@@ -1213,7 +1213,7 @@ See: 2026-03-08: ESLint Override for E2E Browser Context Code
 - **Panel audit result:** All remaining HUD sections (time of day, level/XP, territory, inventory, creatures, builders, combat) are backed by active game state and server schema. No explorer pawn type references exist (correctly absent — it's a feature request, not implemented). No upkeep display exists.
 - **CSS comment fix:** The stat-bar CSS was labeled "legacy" but is actively used by the XP progress bar. Updated the comment.
 
-### Status Panel UX Redesign (PR #68)
+---
 
 - **Level/XP removed from HUD:** Removed entire section-level (HTML), updateLevelDisplay method, onLevelChange callback, xpForNextLevel import, and stat-bar CSS. Level/XP has no gameplay element — was confusing testers. Can be re-added when progression unlocks something meaningful.
 - **Header renames:** "Inventory" → "Resources" (standard game term), "Creatures" → "Wildlife" (distinguishes from player pawns like builders/defenders/attackers).
