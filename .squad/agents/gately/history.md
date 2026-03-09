@@ -681,6 +681,14 @@ Previous pass removed some shape UI but missed significant remnants that were st
 
 ## Learnings
 
+### In-Game Chat UI (2026-03-06)
+- **ChatPanel** (`client/src/ui/ChatPanel.ts`): DOM-based overlay following overlay-panel skill pattern. Header, scrollable message area (120px), text input at bottom.
+- **Input isolation:** `e.stopPropagation()` on the input's keydown handler prevents game controls from firing when typing in chat. `isFocused` getter lets InputHandler bail early from game key processing.
+- **Keybindings:** `C` toggles chat visibility, `Enter` focuses chat input from game context, `Escape` blurs the input back to game.
+- **Colyseus protocol:** Client sends `room.send('chat', { text })`, listens `room.onMessage('chat', { sender, text, timestamp })`. Server broadcasts — Pemulis owns the server handler.
+- **CSS consistency:** Reused game-log dark theme styling (`#1a1a2e` bg, `#2a2a4a` borders, `#3a3a5a` scrollbar thumb, Courier New monospace). Chat sender names styled cyan (`#7ecfff`) to distinguish from log text.
+- **Integration pattern:** ChatPanel instantiated in `connectToServer()` after room join, wired to InputHandler via `setChatPanel()`. Same setter pattern as HelpScreen, Scoreboard, Camera.
+
 ### Resource Tile Tinting (2026-03-05)
 - Replaced per-tile `Graphics` resource dots with background color tinting via `lerpColor()` at 25% blend
 - Resource tiles now show a subtle inner border (1px, 40% alpha) in the resource color for extra contrast
