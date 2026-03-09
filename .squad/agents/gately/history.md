@@ -1212,3 +1212,11 @@ See: 2026-03-08: ESLint Override for E2E Browser Context Code
 - **Builder constant duplication:** HudDOM.ts had local `BUILDER_COST_WOOD`, `BUILDER_COST_STONE`, `MAX_BUILDERS` constants duplicating values from `PAWN_TYPES['builder']` in shared. Defender/attacker buttons already used `PAWN_TYPES` correctly. Unified all three to use the registry, preventing future drift.
 - **Panel audit result:** All remaining HUD sections (time of day, level/XP, territory, inventory, creatures, builders, combat) are backed by active game state and server schema. No explorer pawn type references exist (correctly absent — it's a feature request, not implemented). No upkeep display exists.
 - **CSS comment fix:** The stat-bar CSS was labeled "legacy" but is actively used by the XP progress bar. Updated the comment.
+
+### Status Panel UX Redesign (PR #68)
+
+- **Level/XP removed from HUD:** Removed entire section-level (HTML), updateLevelDisplay method, onLevelChange callback, xpForNextLevel import, and stat-bar CSS. Level/XP has no gameplay element — was confusing testers. Can be re-added when progression unlocks something meaningful.
+- **Header renames:** "Inventory" → "Resources" (standard game term), "Creatures" → "Wildlife" (distinguishes from player pawns like builders/defenders/attackers).
+- **Section reorder:** Resources → Territory → Builders → Combat → Time of Day → Wildlife. Prioritizes actionable/frequently-checked info at top, ambient info at bottom.
+- **CSS cleanup:** Removed stat-bar-wrap, bar-label, stat-bar, stat-bar-fill CSS classes — they were only used by the XP progress bar.
+- **No test impact:** All 515 tests pass. Server HUD state contract tests don't reference level/XP display.

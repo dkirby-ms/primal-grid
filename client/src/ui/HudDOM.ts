@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { xpForNextLevel, PAWN_TYPES, isEnemyBase } from '@primal-grid/shared';
+import { PAWN_TYPES, isEnemyBase } from '@primal-grid/shared';
 
 /**
  * DOM-based HUD panel.
@@ -13,11 +13,7 @@ export class HudDOM {
   private invWood: HTMLElement;
   private invStone: HTMLElement;
   private creatureCounts: HTMLElement;
-  private levelVal: HTMLElement;
-  private xpText: HTMLElement;
-  private xpBarFill: HTMLElement;
   private dayPhaseDisplay: HTMLElement;
-  private currentLevel = 1;
 
   // Builder panel
   private spawnBuilderBtn: HTMLButtonElement;
@@ -40,9 +36,6 @@ export class HudDOM {
   public localHqX = 0;
   public localHqY = 0;
 
-  /** Callback when level changes. */
-  public onLevelChange: ((level: number) => void) | null = null;
-
   private room: Room | null = null;
 
   constructor(localSessionId: string) {
@@ -52,9 +45,6 @@ export class HudDOM {
     this.invWood = document.getElementById('inv-wood')!;
     this.invStone = document.getElementById('inv-stone')!;
     this.creatureCounts = document.getElementById('creature-counts')!;
-    this.levelVal = document.getElementById('level-val')!;
-    this.xpText = document.getElementById('xp-text')!;
-    this.xpBarFill = document.getElementById('xp-bar-fill')!;
     this.dayPhaseDisplay = document.getElementById('day-phase-display')!;
 
     // Builder panel elements
@@ -70,24 +60,6 @@ export class HudDOM {
     this.spawnAttackerBtn = document.getElementById('spawn-attacker-btn') as HTMLButtonElement;
     this.spawnDefenderBtn.addEventListener('click', () => this.onSpawnPawn('defender'));
     this.spawnAttackerBtn.addEventListener('click', () => this.onSpawnPawn('attacker'));
-  }
-
-  /** Update the level/XP display. */
-  public updateLevelDisplay(level: number, xp: number): void {
-    this.levelVal.textContent = String(level);
-    const nextXp = xpForNextLevel(level);
-    if (nextXp !== null) {
-      const pct = Math.min(100, Math.round((xp / nextXp) * 100));
-      this.xpText.textContent = `${xp} / ${nextXp}`;
-      this.xpBarFill.style.width = `${pct}%`;
-    } else {
-      this.xpText.textContent = `${xp} (MAX)`;
-      this.xpBarFill.style.width = '100%';
-    }
-    if (level !== this.currentLevel) {
-      this.currentLevel = level;
-      this.onLevelChange?.(level);
-    }
   }
 
   /** Handle spawn builder button click. */
@@ -183,11 +155,6 @@ export class HudDOM {
           // Territory count
           const score = (player['score'] as number) ?? 0;
           this.territoryCount.textContent = String(score);
-
-          // Level / XP
-          const level = (player['level'] as number) ?? 1;
-          const xp = (player['xp'] as number) ?? 0;
-          this.updateLevelDisplay(level, xp);
 
           // Inventory (wood & stone only)
           this.currentWood = (player['wood'] as number) ?? 0;
