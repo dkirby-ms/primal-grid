@@ -39,6 +39,7 @@ beforeEach(() => {
 
 afterEach(() => {
   userRepo.close();
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   try { fs.unlinkSync(dbPath); } catch { /* may not exist */ }
 });
 
