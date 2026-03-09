@@ -1860,3 +1860,12 @@ Large-map rendering with PixiJS requires explicit culling—the scene graph does
 - **Fog visibility restoration:** When a tile is culled back in, fog visibility is restored based on `visibleTiles` set (server-visible tiles get no fog, others get fog overlay).
 - **No test changes required:** Existing 514 tests all pass. The 1 pre-existing timeout failure in water-depth.test.ts is unrelated.
 - **PR:** #60, branch `squad/29-fix-laggy-scrolling`.
+
+### Auth System Test Coverage — Issue #42 (PR #73)
+
+- **Scope:** 125 tests across 7 files covering the full auth/persistence stack.
+- **Test files:** `auth-provider.test.ts` (45), `auth-middleware.test.ts` (9), `auth-routes.test.ts` (11), `auth-room-integration.test.ts` (14), `player-state-serde.test.ts` (17), `user-repository.test.ts` (15), `player-state-repository.test.ts` (14).
+- **Key pattern:** Auth integration tests use `Object.create(GameRoom.prototype)` + must manually init `sessionUserMap` and `playerViews` (private fields skipped by Object.create).
+- **Gotcha:** Player score on join includes HQ territory points on top of restored value — test with `toBeGreaterThanOrEqual` not exact match.
+- **Real SQLite in tests:** Repository tests use temp files (`os.tmpdir()`) with `afterEach` cleanup. Works fast, tests real SQL behavior including constraints.
+- **All 640 tests passing** after adding auth tests (39 files total).
