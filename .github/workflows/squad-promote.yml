@@ -121,6 +121,7 @@ jobs:
             git log --oneline origin/prod..origin/uat
           fi
 
+
       - name: Create promotion PR
         if: steps.diff.outputs.commit_count != '0'
         env:
