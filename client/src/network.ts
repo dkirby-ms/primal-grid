@@ -4,6 +4,13 @@ import { SERVER_PORT } from '@primal-grid/shared';
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 type StatusCallback = (status: ConnectionStatus) => void;
 
+const TOKEN_KEY = 'primal-grid-token';
+
+interface AuthResponse {
+  user: { id: string; username: string; isGuest: boolean };
+  token: { accessToken: string; expiresIn: number };
+}
+
 let room: Room | null = null;
 let statusCallback: StatusCallback | null = null;
 
@@ -22,9 +29,93 @@ function getServerUrl(): string {
   return `ws://localhost:${SERVER_PORT}`;
 }
 
+/** Derive an HTTP URL from the WebSocket server URL for auth API calls. */
+function getHttpUrl(): string {
+  const wsUrl = getServerUrl();
+  return wsUrl.replace(/^ws(s?):\/\//, 'http$1://');
+}
+
 export function isDevMode(): boolean {
   const params = new URLSearchParams(window.location.search);
   return params.get('dev') === '1' || params.get('devmode') === '1';
+}
+
+// ---------------------------------------------------------------------------
+// Auth helpers — silent guest flow, token persistence
+// ---------------------------------------------------------------------------
+
+function loadToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveToken(token: string): void {
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+  } catch {
+    // Storage full or blocked — continue without persistence
+  }
+}
+
+function clearToken(): void {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // Ignore
+  }
+}
+
+/** Create a guest session and return the JWT access token. */
+async function createGuestSession(): Promise<string> {
+  const url = `${getHttpUrl()}/auth/guest`;
+  const res = await fetch(url, { method: 'POST' });
+  if (!res.ok) {
+    throw new Error(`Guest auth failed: ${res.status}`);
+  }
+  const data: AuthResponse = await res.json() as AuthResponse;
+  return data.token.accessToken;
+}
+
+/**
+ * Ensure we have a valid token. On first visit, silently creates a guest
+ * session. On return visit, reuses the stored token. Returns undefined if
+ * auth is unavailable — the game remains playable without persistence.
+ */
+async function ensureToken(): Promise<string | undefined> {
+  const existing = loadToken();
+  if (existing) {
+    return existing;
+  }
+  try {
+    console.log('[auth] No stored token — creating guest session');
+    const token = await createGuestSession();
+    saveToken(token);
+    return token;
+  } catch (err) {
+    console.warn('[auth] Guest auth unavailable — continuing without session persistence', err);
+    return undefined;
+  }
+}
+
+/** Attach lifecycle handlers and dev-mode bindings to a newly joined room. */
+function setupRoom(joined: Room): void {
+  if (import.meta.env.DEV || isDevMode()) {
+    (window as unknown as Record<string, unknown>).__ROOM__ = joined;
+  }
+
+  joined.onLeave(() => {
+    console.log('[network] Left room');
+    statusCallback?.('disconnected');
+    room = null;
+  });
+
+  joined.onError((code, message) => {
+    console.error('[network] Room error:', code, message);
+    statusCallback?.('error');
+  });
 }
 
 export async function connect(): Promise<Room> {
@@ -32,7 +123,12 @@ export async function connect(): Promise<Room> {
   statusCallback?.('connecting');
   console.log('[network] Connecting to server…');
 
+  const token = await ensureToken();
+
   const joinOptions: Record<string, unknown> = {};
+  if (token) {
+    joinOptions.token = token;
+  }
   if (isDevMode()) {
     joinOptions.devMode = true;
     console.log('[network] Dev mode enabled — fog of war disabled');
@@ -42,25 +138,59 @@ export async function connect(): Promise<Room> {
     room = await client.joinOrCreate('game', joinOptions);
     console.log('[network] Joined room:', room.roomId);
     statusCallback?.('connected');
-
-    // Expose room reference for Playwright E2E testing (dev mode only)
-    if (import.meta.env.DEV || isDevMode()) {
-      (window as unknown as Record<string, unknown>).__ROOM__ = room;
-    }
-
-    room.onLeave(() => {
-      console.log('[network] Left room');
-      statusCallback?.('disconnected');
-      room = null;
-    });
-
-    room.onError((code, message) => {
-      console.error('[network] Room error:', code, message);
-      statusCallback?.('error');
-    });
-
+    setupRoom(room);
     return room;
   } catch (err) {
+    // If join failed, the token may be expired — clear and retry once
+    const isRetryable =
+      token &&
+      err instanceof Error &&
+      (err.message.includes('token') || err.message.includes('401'));
+
+    if (isRetryable && loadToken()) {
+      console.log('[auth] Token rejected — refreshing guest session');
+      clearToken();
+
+      try {
+        const freshToken = await createGuestSession();
+        saveToken(freshToken);
+        joinOptions.token = freshToken;
+      } catch {
+        // Auth is down — fall back to anonymous join
+        console.warn('[auth] Token refresh failed — joining without auth');
+        delete joinOptions.token;
+      }
+
+      try {
+        room = await client.joinOrCreate('game', joinOptions);
+        console.log('[network] Joined room (retry):', room.roomId);
+        statusCallback?.('connected');
+        setupRoom(room);
+        return room;
+      } catch (retryErr) {
+        console.error('[network] Retry connection failed:', retryErr);
+        statusCallback?.('disconnected');
+        throw retryErr;
+      }
+    }
+
+    // If auth failed but we had a token, try once more without auth
+    if (token) {
+      console.warn('[network] Join failed with token — retrying without auth');
+      delete joinOptions.token;
+      try {
+        room = await client.joinOrCreate('game', joinOptions);
+        console.log('[network] Joined room (anonymous fallback):', room.roomId);
+        statusCallback?.('connected');
+        setupRoom(room);
+        return room;
+      } catch (fallbackErr) {
+        console.error('[network] Anonymous fallback failed:', fallbackErr);
+        statusCallback?.('disconnected');
+        throw fallbackErr;
+      }
+    }
+
     console.error('[network] Connection failed:', err);
     statusCallback?.('disconnected');
     throw err;
