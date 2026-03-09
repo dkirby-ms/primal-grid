@@ -5,6 +5,7 @@ const LABELS: Record<Status, string> = {
   connecting: '⏳ Connecting…',
   connected: '✅ Connected',
   disconnected: '❌ Disconnected',
+  reconnecting: '🔄 Reconnecting…',
   error: '⚠️ Error',
 };
 
@@ -12,6 +13,7 @@ const COLORS: Record<Status, string> = {
   connecting: '#f1c40f',
   connected: '#2ecc71',
   disconnected: '#e74c3c',
+  reconnecting: '#f39c12',
   error: '#e67e22',
 };
 

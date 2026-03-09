@@ -1,4 +1,4 @@
-import { Room, Client, CloseCode } from "colyseus";
+import { Room, Client } from "colyseus";
 import { StateView } from "@colyseus/schema";
 import { GameState, PlayerState, CreatureState } from "./GameState.js";
 import { generateProceduralMap } from "./mapGenerator.js";
@@ -37,6 +37,9 @@ const PLAYER_COLORS = [
 
 /** Auto-save interval: every 120 ticks (30 seconds at 4 ticks/sec). */
 const AUTO_SAVE_INTERVAL_TICKS = 120;
+
+/** Grace period (seconds) for reconnection after non-consented disconnect. */
+const RECONNECT_GRACE_SECONDS = 60;
 
 export class GameRoom extends Room {
   state = new GameState();
@@ -113,8 +116,15 @@ export class GameRoom extends Room {
         authUser = result.user;
 
         // Reject if this user is already in the room (multi-tab guard)
-        for (const [, existingUserId] of this.sessionUserMap) {
+        for (const [existingSessionId, existingUserId] of this.sessionUserMap) {
           if (existingUserId === authUser.id) {
+            // If old session is in reconnection grace period, evict it
+            const existingClient = this.clients.find(c => c.sessionId === existingSessionId);
+            if (!existingClient) {
+              this.saveAndRemovePlayer(existingSessionId);
+              break;
+            }
+            // Active duplicate — reject
             client.send("game_log", { message: "You are already in this game from another tab.", type: "error" });
             client.leave(4001);
             return;
@@ -200,33 +210,33 @@ export class GameRoom extends Room {
     }
   }
 
-  override onLeave(client: Client, code: number) {
-    // Capture state synchronously before cleanup, then persist async
-    const userId = this.sessionUserMap?.get(client.sessionId);
-    const player = this.state.players.get(client.sessionId);
-    if (userId && player && this.playerStateRepo) {
-      const serialized = serializePlayerState(player);
-      const displayName = player.displayName;
-      const repo = this.playerStateRepo;
-      void repo.save(userId, displayName, serialized).catch((err: unknown) => {
-        console.error(`[GameRoom] Failed to save state for ${client.sessionId}:`, err);
-      });
-    }
+  override async onDrop(client: Client) {
+    console.log(`[GameRoom] Client dropped: ${client.sessionId}`);
 
-    // Clean up fog of war StateView
+    // Clean up fog of war view immediately — no consumer during disconnect
     this.cleanupPlayerView(client.sessionId);
 
-    this.state.players.delete(client.sessionId);
-    this.sessionUserMap?.delete(client.sessionId);
-    const consented = code === CloseCode.CONSENTED;
-    console.log(
-      `[GameRoom] Client left: ${client.sessionId} (consented: ${consented})`
-    );
+    // Hold the slot — player, territory, creatures, sessionUserMap all stay
+    await this.allowReconnection(client, RECONNECT_GRACE_SECONDS);
+  }
 
-    // Notify lobby of actual player count
-    if (this.gameId) {
-      this.lobbyBridge?.notifyPlayerCountChanged(this.gameId, this.state.players.size);
+  override onReconnect(client: Client) {
+    const player = this.state.players.get(client.sessionId);
+    if (player) {
+      const devMode = false;
+      this.initPlayerView(client, player, devMode);
+      client.send("game_log", { message: "Reconnected!", type: "info" });
+      this.broadcast("game_log", {
+        message: `${player.displayName || "A player"} reconnected`,
+        type: "info",
+      }, { except: client });
     }
+    console.log(`[GameRoom] Client reconnected: ${client.sessionId}`);
+  }
+
+  override onLeave(client: Client) {
+    console.log(`[GameRoom] Client left: ${client.sessionId}`);
+    this.saveAndRemovePlayer(client.sessionId);
   }
 
   override async onDispose() {
@@ -241,6 +251,32 @@ export class GameRoom extends Room {
     }
 
     console.log("[GameRoom] Room disposed.");
+  }
+
+  /** Persist player state and remove from room. Idempotent — safe to call if already removed. */
+  private saveAndRemovePlayer(sessionId: string): void {
+    const userId = this.sessionUserMap?.get(sessionId);
+    const player = this.state.players.get(sessionId);
+
+    // Persist state before removal
+    if (userId && player && this.playerStateRepo) {
+      const serialized = serializePlayerState(player);
+      const displayName = player.displayName;
+      const repo = this.playerStateRepo;
+      void repo.save(userId, displayName, serialized).catch((err: unknown) => {
+        console.error(`[GameRoom] Failed to save state for ${sessionId}:`, err);
+      });
+    }
+
+    // Clean up fog of war (idempotent — may already be cleaned in grace period path)
+    this.cleanupPlayerView(sessionId);
+
+    this.state.players.delete(sessionId);
+    this.sessionUserMap?.delete(sessionId);
+
+    if (this.gameId) {
+      this.lobbyBridge?.notifyPlayerCountChanged(this.gameId, this.state.players.size);
+    }
   }
 
   /** Save a player's state to the persistence layer (if configured). */

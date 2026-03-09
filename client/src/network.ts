@@ -1,10 +1,11 @@
 import { Client, Room } from '@colyseus/sdk';
 import { SERVER_PORT } from '@primal-grid/shared';
 
-export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
+export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'error';
 type StatusCallback = (status: ConnectionStatus) => void;
 
 const TOKEN_KEY = 'primal-grid-token';
+const RECONNECT_TOKEN_KEY = 'primal-grid-reconnect-token';
 
 interface AuthResponse {
   user: { id: string; username: string; isGuest: boolean };
@@ -14,10 +15,17 @@ interface AuthResponse {
 let lobbyRoom: Room | null = null;
 let gameRoom: Room | null = null;
 let colyseusClient: Client | null = null;
-let statusCallback: StatusCallback | null = null;
+let statusCallbacks: StatusCallback[] = [];
 
-export function onConnectionStatus(cb: StatusCallback): void {
-  statusCallback = cb;
+export function onConnectionStatus(cb: StatusCallback): () => void {
+  statusCallbacks.push(cb);
+  return () => {
+    statusCallbacks = statusCallbacks.filter((c) => c !== cb);
+  };
+}
+
+function emitStatus(status: ConnectionStatus): void {
+  for (const cb of statusCallbacks) cb(status);
 }
 
 function getServerUrl(): string {
@@ -70,6 +78,34 @@ function clearToken(): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Reconnect token helpers (sessionStorage — tab-scoped, survives refresh)
+// ---------------------------------------------------------------------------
+
+function loadReconnectToken(): string | null {
+  try {
+    return sessionStorage.getItem(RECONNECT_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveReconnectToken(token: string): void {
+  try {
+    sessionStorage.setItem(RECONNECT_TOKEN_KEY, token);
+  } catch {
+    // Storage blocked — continue without persistence
+  }
+}
+
+export function clearReconnectToken(): void {
+  try {
+    sessionStorage.removeItem(RECONNECT_TOKEN_KEY);
+  } catch {
+    // Ignore
+  }
+}
+
 /** Create a guest session and return the JWT access token. */
 async function createGuestSession(): Promise<string> {
   const url = `${getHttpUrl()}/auth/guest`;
@@ -110,6 +146,87 @@ function getClient(): Client {
 }
 
 // ---------------------------------------------------------------------------
+// Reconnection logic
+// ---------------------------------------------------------------------------
+
+let reconnecting = false;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function attachGameRoomHandlers(room: Room): void {
+  room.onLeave((code: number) => {
+    console.log('[network] Left game room, code:', code);
+    gameRoom = null;
+
+    const consented = code === 1000 || code === 4000;
+    if (consented) {
+      clearReconnectToken();
+      emitStatus('disconnected');
+    } else {
+      emitStatus('reconnecting');
+      reconnectGameRoom();
+    }
+  });
+
+  room.onError((code, message) => {
+    console.error('[network] Game room error:', code, message);
+    emitStatus('error');
+  });
+}
+
+export async function reconnectGameRoom(): Promise<Room | null> {
+  const token = loadReconnectToken();
+  if (!token) {
+    emitStatus('disconnected');
+    return null;
+  }
+
+  const client = getClient();
+  const delays = [1000, 2000, 4000, 8000, 16000];
+  reconnecting = true;
+
+  for (let attempt = 0; attempt < delays.length; attempt++) {
+    if (!reconnecting) {
+      console.log('[network] Reconnection cancelled');
+      break;
+    }
+
+    try {
+      console.log(`[network] Reconnection attempt ${attempt + 1}/${delays.length}…`);
+      gameRoom = await client.reconnect(token);
+      console.log('[network] Reconnected to game room:', gameRoom.roomId);
+
+      if (gameRoom.reconnectionToken) {
+        saveReconnectToken(gameRoom.reconnectionToken);
+      }
+
+      attachGameRoomHandlers(gameRoom);
+
+      if (import.meta.env.DEV || isDevMode()) {
+        (window as unknown as Record<string, unknown>).__ROOM__ = gameRoom;
+      }
+
+      reconnecting = false;
+      emitStatus('connected');
+      return gameRoom;
+    } catch (err) {
+      console.warn(`[network] Reconnection attempt ${attempt + 1} failed:`, err);
+      if (attempt < delays.length - 1) {
+        await sleep(delays[attempt]);
+      }
+    }
+  }
+
+  reconnecting = false;
+  console.error('[network] All reconnection attempts failed');
+  clearReconnectToken();
+  emitStatus('disconnected');
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Lobby connection — connects to the LobbyRoom
 // ---------------------------------------------------------------------------
 
@@ -119,7 +236,7 @@ function getClient(): Client {
  */
 export async function connectToLobby(displayName?: string): Promise<Room> {
   const client = getClient();
-  statusCallback?.('connecting');
+  emitStatus('connecting');
   console.log('[network] Connecting to lobby…');
 
   const token = await ensureToken();
@@ -131,7 +248,7 @@ export async function connectToLobby(displayName?: string): Promise<Room> {
   try {
     lobbyRoom = await client.joinOrCreate('lobby', joinOptions);
     console.log('[network] Joined lobby:', lobbyRoom.roomId);
-    statusCallback?.('connected');
+    emitStatus('connected');
 
     lobbyRoom.onLeave(() => {
       console.log('[network] Left lobby');
@@ -158,12 +275,12 @@ export async function connectToLobby(displayName?: string): Promise<Room> {
 
       lobbyRoom = await client.joinOrCreate('lobby', joinOptions);
       console.log('[network] Joined lobby (retry):', lobbyRoom.roomId);
-      statusCallback?.('connected');
+      emitStatus('connected');
       return lobbyRoom;
     }
 
     console.error('[network] Lobby connection failed:', err);
-    statusCallback?.('error');
+    emitStatus('error');
     throw err;
   }
 }
@@ -191,21 +308,15 @@ export async function joinGameRoom(roomId: string, displayName?: string): Promis
   gameRoom = await client.joinById(roomId, joinOptions);
   console.log('[network] Joined game room:', gameRoom.roomId);
 
+  if (gameRoom.reconnectionToken) {
+    saveReconnectToken(gameRoom.reconnectionToken);
+  }
+
   if (import.meta.env.DEV || isDevMode()) {
     (window as unknown as Record<string, unknown>).__ROOM__ = gameRoom;
   }
 
-  gameRoom.onLeave(() => {
-    console.log('[network] Left game room');
-    statusCallback?.('disconnected');
-    gameRoom = null;
-  });
-
-  gameRoom.onError((code, message) => {
-    console.error('[network] Game room error:', code, message);
-    statusCallback?.('error');
-  });
-
+  attachGameRoomHandlers(gameRoom);
   return gameRoom;
 }
 
@@ -215,7 +326,7 @@ export async function joinGameRoom(roomId: string, displayName?: string): Promis
  */
 export async function connect(): Promise<Room> {
   const client = getClient();
-  statusCallback?.('connecting');
+  emitStatus('connecting');
   console.log('[network] Connecting to server…');
 
   const token = await ensureToken();
@@ -230,23 +341,17 @@ export async function connect(): Promise<Room> {
   try {
     gameRoom = await client.joinOrCreate('game', joinOptions);
     console.log('[network] Joined room:', gameRoom.roomId);
-    statusCallback?.('connected');
+    emitStatus('connected');
+
+    if (gameRoom.reconnectionToken) {
+      saveReconnectToken(gameRoom.reconnectionToken);
+    }
 
     if (import.meta.env.DEV || isDevMode()) {
       (window as unknown as Record<string, unknown>).__ROOM__ = gameRoom;
     }
 
-    gameRoom.onLeave(() => {
-      console.log('[network] Left room');
-      statusCallback?.('disconnected');
-      gameRoom = null;
-    });
-
-    gameRoom.onError((code, message) => {
-      console.error('[network] Room error:', code, message);
-      statusCallback?.('error');
-    });
-
+    attachGameRoomHandlers(gameRoom);
     return gameRoom;
   } catch (err) {
     if (token && err instanceof Error && (err.message.includes('token') || err.message.includes('401'))) {
@@ -262,12 +367,18 @@ export async function connect(): Promise<Room> {
 
       gameRoom = await client.joinOrCreate('game', joinOptions);
       console.log('[network] Joined room (retry):', gameRoom.roomId);
-      statusCallback?.('connected');
+      emitStatus('connected');
+
+      if (gameRoom.reconnectionToken) {
+        saveReconnectToken(gameRoom.reconnectionToken);
+      }
+
+      attachGameRoomHandlers(gameRoom);
       return gameRoom;
     }
 
     console.error('[network] Connection failed:', err);
-    statusCallback?.('disconnected');
+    emitStatus('disconnected');
     throw err;
   }
 }
@@ -281,6 +392,8 @@ export function getRoom(): Room | null {
 }
 
 export async function leaveGame(): Promise<void> {
+  reconnecting = false;
+  clearReconnectToken();
   if (gameRoom) {
     await gameRoom.leave();
     gameRoom = null;
@@ -288,6 +401,8 @@ export async function leaveGame(): Promise<void> {
 }
 
 export async function disconnect(): Promise<void> {
+  reconnecting = false;
+  clearReconnectToken();
   if (gameRoom) {
     await gameRoom.leave();
     gameRoom = null;
