@@ -5369,3 +5369,119 @@ PixiJS 8's built-in culling still iterates all objects each frame to check bound
 ### For Future Work
 
 If the map grows beyond 128×128, consider chunked containers (e.g., 16×16 tile chunks) where entire chunks can be culled as a unit, reducing even the border-tile overhead.
+
+---
+
+## 2026-03-09: User Directive — JWT Auth for MVP
+
+**Date:** 2026-03-09T01:11:15Z  
+**By:** Dale Kirby (via Copilot)  
+**Status:** ACCEPTED  
+
+Use basic JWT tokens for auth MVP. Entra ID external identities integration deferred (future swap via AuthProvider interface).
+
+---
+
+## 2026-03-09: Status Panel UX Redesign (PR #68)
+
+**By:** Gately (Game Dev)  
+**Date:** 2026-03-09  
+**PR:** #68  
+**Status:** MERGED to dev  
+
+### Changes
+
+1. **Removed Level/XP from HUD** — Confusing to testers (no gameplay purpose yet, no unlocks/gating)
+2. **Renamed headers:** "Inventory" → "Resources", "Creatures" → "Wildlife" (clearer in context)
+3. **Reordered sections by importance:** Resources > Territory > Builders > Combat > Time of Day > Wildlife
+
+### Impact
+
+- `HudDOM.updateLevelDisplay()` and `onLevelChange` callback removed
+- `xpForNextLevel` no longer imported in client code
+- Stat-bar CSS classes removed (re-add if progression re-implemented)
+
+---
+
+## 2026-03-09: Initiative Triage & Execution Plan (Issues #19, #30, #31, #42)
+
+**Author:** Hal (Lead)  
+**Date:** 2026-03-09  
+**Status:** ACTIVE PLAN  
+
+### Execution Plan Summary
+
+**Wave 1 (Parallel Start — Immediate)**
+| Issue | Lead | Support | Notes |
+|-------|------|---------|-------|
+| #42 Auth/JWT | Pemulis | Steeply (tests) | JWT-only scope. Entra ID deferred. SQLite for dev. |
+| #31 Game Log | Gately | Pemulis (log enrichment) | Establishes overlay panel pattern for #30. |
+| #19 Rounded Tiles | Gately or @copilot | — | Gately picks up after PR #68 merges. @copilot is fallback. |
+
+**Wave 2 (After #31)**
+| Issue | Lead | Support |
+|-------|------|---------|
+| #30 Chat | Gately (UI) | Pemulis (server protocol) |
+
+### Key Corrections from Prior Triage
+
+1. **#30 does NOT depend on #42** — Players already have display names from join prompt
+2. **#31 does NOT depend on #42** — Game log events are system events
+3. **#42 is independent** (blocks #41 godmode only)
+
+### Scope Boundaries (v1 only)
+
+**#19:** Rounded corners + per-tile noise in GridRenderer (no biome transitions, no animated effects)  
+**#30:** Text broadcast chat, server sanitization, scrollable overlay (no commands, DMs, channels, persistence, auth-linked identity)  
+**#31:** `game_log` handler, styled overlay, event categories with color (no filtering/search, no export, no click-to-locate)  
+**#42:** JWT token issuance, basic username/password + guest play with upgrade path, SQLite for dev (no OAuth providers, no Entra ID in v1, no game state persistence)
+
+### Risks & Mitigations
+
+- **Gately bottleneck:** Three issues route through Gately. Mitigation: #19 is small, #30 waits for #31 pattern, @copilot fallback for #19
+- **#42 scope creep:** Mitigation: JWT-only, no OAuth, no game state persistence in v1
+- **Overlay pattern divergence:** Mitigation: Hal reviews #31 PR specifically for reusability before #30 starts
+
+### Assignments
+
+| Member | Issues | Role |
+|--------|--------|------|
+| **Gately** | #19, #31, #30 | UI/rendering lead. Starts after PR #68. |
+| **Pemulis** | #42, #31, #30 | Backend lead for auth. Server support for log/chat. |
+| **Steeply** | #42 | Test coverage for auth flows. |
+| **Hal** | All | Scope/review. Enforce boundaries. |
+
+---
+
+## 2026-03-09: Auth Provider Abstraction & Persistence Repository Pattern
+
+**By:** Pemulis (Systems Dev)  
+**Date:** 2026-03-09  
+**Issue:** #42  
+**Status:** DECISION  
+
+### Design
+
+1. **AuthProvider interface** abstracts JWT issuance/validation
+   - Current: `LocalAuthProvider` (jsonwebtoken + bcryptjs)
+   - Future: Drop-in Entra ID external identities replacement
+   
+2. **Repository pattern** for persistence
+   - `UserRepository` and `PlayerStateRepository` interfaces
+   - SQLite implementation for dev
+   - Swap to Postgres/Cosmos by implementing interface
+   
+3. **Player state restoration** on rejoin
+   - **Persists:** score, level, XP, displayName
+   - **Does not persist:** resources, territory (map-seed-dependent)
+   
+4. **onLeave remains synchronous** for test compatibility (critical for Object.create mocking)
+
+### Why
+
+- Entra ID swap was explicit requirement from Dale. Interface design = zero GameRoom changes on backend swap.
+- Repository pattern is standard for swappable storage. SQLite for dev avoids external dependencies.
+- Territory restoration deferred (would require map-seed matching or spatial migration logic).
+
+---
+

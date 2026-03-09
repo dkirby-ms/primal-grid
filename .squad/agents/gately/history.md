@@ -1212,3 +1212,37 @@ See: 2026-03-08: ESLint Override for E2E Browser Context Code
 - **Builder constant duplication:** HudDOM.ts had local `BUILDER_COST_WOOD`, `BUILDER_COST_STONE`, `MAX_BUILDERS` constants duplicating values from `PAWN_TYPES['builder']` in shared. Defender/attacker buttons already used `PAWN_TYPES` correctly. Unified all three to use the registry, preventing future drift.
 - **Panel audit result:** All remaining HUD sections (time of day, level/XP, territory, inventory, creatures, builders, combat) are backed by active game state and server schema. No explorer pawn type references exist (correctly absent — it's a feature request, not implemented). No upkeep display exists.
 - **CSS comment fix:** The stat-bar CSS was labeled "legacy" but is actively used by the XP progress bar. Updated the comment.
+
+---
+
+## 2026-03-09: PR #68 Status Panel UX Redesign — MERGED
+
+**By:** Gately (Game Dev)  
+**Date:** 2026-03-09  
+**PR:** #68 (merged to dev)  
+
+### Changes
+
+1. **Removed Level/XP from HUD** — Confusing to testers (no gameplay purpose yet, no unlocks/gating)
+2. **Renamed headers:** "Inventory" → "Resources", "Creatures" → "Wildlife" (clearer in context)
+3. **Reordered sections by importance:** Resources > Territory > Builders > Combat > Time of Day > Wildlife
+
+### Code Cleanup
+
+- `HudDOM.updateLevelDisplay()` removed
+- `onLevelChange` callback removed
+- `xpForNextLevel` no longer imported in client code
+- Stat-bar CSS classes removed (re-add if progression re-implemented)
+
+### Impact
+
+Scope discipline maintained (HUD DOM only, no game logic). User-facing clarity improved. Clean merge with no issues.
+
+### Initiative Status
+
+**Ready for pickup:**
+- **#19 Rounded tiles** — Recommended next (quick 1-file win)
+- **#31 Game log UI** — After #19
+- **#30 Chat UI** — After #31 overlay pattern lands
+
+See `.squad/decisions.md` Initiative Triage & Execution Plan (2026-03-09) for full Wave 1/Wave 2 sequencing.

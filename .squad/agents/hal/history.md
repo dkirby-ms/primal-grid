@@ -608,3 +608,70 @@ Also improved URL formatting:
 - ✅ Issue #65 resolved (Discord notifications now include deploy URLs)
 - ✅ Decision merged into team memory
 - ✅ Downstream: Coordinator merges to dev, closes issue #65
+
+---
+
+## 2026-03-09: Triage Complete — Four-Issue Initiative (Issues #19, #30, #31, #42)
+
+**By:** Hal (Lead)  
+**Date:** 2026-03-09  
+**Status:** TRIAGE COMPLETE, EXECUTION PLAN ACTIVE  
+
+### Triage Summary
+
+Analyzed dependencies and created formal execution plan for four GitHub issues:
+1. **#19** (Soften Grid Appearance) — Rounded tiles + noise variation
+2. **#30** (In-Game Chat) — Player communication system
+3. **#31** (Game Log Content) — Event log overlay
+4. **#42** (User Persistence & Auth) — JWT auth + game state save
+
+### Key Corrections from Prior Analysis
+
+1. **#30 does NOT depend on #42** — Players already have display names from join prompt
+2. **#31 does NOT depend on #42** — Game log events are system events
+3. **#42 is independent** (blocks #41 godmode, not these)
+
+### Execution Plan
+
+**Wave 1 (Parallel Start — Immediate)**
+- **#42 Auth/JWT** — Pemulis lead, Steeply tests
+- **#31 Game Log** — Gately lead (UI), Pemulis support (server)
+- **#19 Rounded Tiles** — Gately lead (after PR #68), @copilot fallback
+
+**Wave 2 (After #31)**
+- **#30 Chat** — Gately (UI), Pemulis (server protocol)
+
+### Scope Boundaries (v1 only)
+
+**#19:** Rounded corners + per-tile noise in GridRenderer  
+**#30:** Text broadcast chat, server sanitization, scrollable overlay  
+**#31:** `game_log` handler, styled overlay, event categories with colors  
+**#42:** JWT token issuance, username/password + guest play, SQLite for dev  
+
+### Risk Mitigations
+
+- **Gately bottleneck:** Three issues, small sequential load. @copilot fallback for #19.
+- **#42 scope creep:** JWT-only, no OAuth, no game state persistence in v1.
+- **Overlay pattern divergence:** Will review #31 PR for reusability before #30 starts.
+
+### Assignments
+
+| Member | Issues | Role |
+|--------|--------|------|
+| **Gately** | #19, #31, #30 | UI/rendering lead |
+| **Pemulis** | #42, #31, #30 | Backend/auth lead |
+| **Steeply** | #42 | Test coverage |
+| **Hal** | All | Scope/review, enforce boundaries |
+
+### Decisions Created
+
+- `.squad/decisions/inbox/copilot-initiative-19-30-31-42.md` (merged to decisions.md)
+- `.squad/decisions/inbox/hal-initiative-plan.md` (merged to decisions.md)
+- Triage comments posted to all 4 GitHub issues
+
+### Next Actions
+
+- Scribe merges decision inbox → decisions.md
+- Pemulis begins #42 immediately
+- Gately picks up #19 after PR #68 merge (scheduled ~2026-03-10)
+- Steeply prepares #42 auth test suite

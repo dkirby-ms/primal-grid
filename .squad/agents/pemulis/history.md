@@ -1680,6 +1680,64 @@ Removed `tickPawnUpkeep()` method, game loop call, `upkeep` field from `PawnType
 - Interior gap detection using cardinal neighbor counts
 - Systematic removal of deprecated game mechanics
 
+---
+
+## 2026-03-09: Four-Issue Initiative Assigned — #42 (Auth), #31 (Log), #19 (Tiles), #30 (Chat)
+
+**By:** Hal (Lead Triage)  
+**Date:** 2026-03-09  
+**Status:** READY FOR PICKUP  
+
+### Your Assignments (Pemulis)
+
+**Wave 1 (Start Immediately)**
+- **#42 — User Persistence & Auth** — Lead developer
+  - JWT token generation + verification
+  - Database schema (users + game_saves tables, SQLite for dev)
+  - Auto-save on disconnect
+  - Login/signup API endpoints
+  - Guest upgrade path
+  - Estimated: 3 days
+  - Constraint: Design must support future Entra ID swap (interface-based, not coupled to GameRoom)
+
+- **#31 — Game Log Support (Server)** — Support role
+  - Game log message categorization
+  - Content filtering + timestamps
+  - Broadcast via Colyseus `room.broadcast("game_log", {...})`
+  - Estimated: 1 day (parallel with Gately UI)
+
+- **#30 — Chat Support (Server)** — Support role (Wave 2, after #31)
+  - Chat message protocol
+  - Sanitization (strip HTML, max 256 chars, rate limit: 5 msgs/10s)
+  - Message persistence
+  - Estimated: 1 day (parallel with Gately UI)
+
+### Scope for #42 (v1 Only)
+
+- JWT token issuance only (Entra ID deferred)
+- Username + password + guest play with upgrade path
+- SQLite for dev (design for portability to Postgres/Cosmos)
+- **Not:** OAuth providers, Entra ID integration, full game state persistence
+
+### Architecture Decision
+
+Auth provider pattern created: `AuthProvider` interface abstracts JWT issuance/validation. Current: `LocalAuthProvider`. Future: Drop-in Entra ID replacement without GameRoom changes.
+
+Repository pattern for persistence: `UserRepository` and `PlayerStateRepository` interfaces. SQLite implementation for dev. Swap backends by implementing the interface.
+
+**Decision file:** `.squad/decisions/inbox/pemulis-auth-persistence-design.md` (merged to decisions.md)
+
+### Next Steps
+
+1. Start #42 immediately after receiving go-ahead
+2. Gately starts #19 after PR #68 merge (scheduled ~2026-03-10)
+3. Gately/Pemulis coordinate on #31 (overlay pattern reusability for #30)
+4. Steeply will write test suite for #42 auth flows
+
+### Shared Context
+
+See `.squad/decisions.md` for full triage document, dependency graph, risk mitigations, and Wave 1/Wave 2 sequencing.
+
 ### JWT Auth & Player Persistence (2026-03-12)
 
 - **Issue #42, PR #70** on `squad/42-user-auth-persistence` branch.
