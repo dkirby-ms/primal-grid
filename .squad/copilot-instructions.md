@@ -32,7 +32,7 @@ Example: `squad/42-fix-login-validation`
 ## PR Guidelines
 
 When opening a PR:
-- **MUST: Include `Closes #{issue-number}` in the PR body** (not just title or commit message). GitHub auto-closes issues only when these keywords appear in the pull request body, regardless of merge strategy.
+- **MUST: Include `Closes #{issue-number}` in the PR body** (not just title or commit message). GitHub auto-closes issues only when these keywords appear in the pull request body, regardless of merge strategy. A backup workflow (`.github/workflows/auto-close-issues.yml`) also parses merged PR bodies and closes linked issues automatically, so squash-merge keyword loss is handled.
 - If the issue had a `squad:{member}` label, mention the member: `Working as {member} ({role})`
 - If this is a 🟡 needs-review task, add to the PR description: `⚠️ This task was flagged as "needs review" — please have a squad member review before merging.`
 - Follow any project conventions in `.squad/decisions.md`
