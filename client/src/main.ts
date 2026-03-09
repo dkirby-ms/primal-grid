@@ -7,6 +7,7 @@ import { InputHandler } from './input/InputHandler.js';
 import { ConnectionStatusUI } from './ui/ConnectionStatus.js';
 import { HudDOM } from './ui/HudDOM.js';
 import { GameLog } from './ui/GameLog.js';
+import { ChatPanel } from './ui/ChatPanel.js';
 import { HelpScreen } from './ui/HelpScreen.js';
 import { Scoreboard } from './ui/Scoreboard.js';
 import { connect, disconnect, onConnectionStatus, isDevMode } from './network.js';
@@ -148,6 +149,13 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
       });
     }
 
+    // Chat panel
+    const chatPanel = new ChatPanel();
+    const chatEl = document.getElementById('chat-panel');
+    if (chatEl) {
+      chatPanel.init(chatEl, room);
+    }
+
     // Help screen overlay (screen-fixed, on top)
     const helpScreen = new HelpScreen(WIDTH, HEIGHT);
     app.stage.addChild(helpScreen.container);
@@ -158,6 +166,7 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
     input.setHelpScreen(helpScreen);
     input.setScoreboard(scoreboard);
     input.setCamera(camera);
+    input.setChatPanel(chatPanel);
   } catch (err) {
     console.error('[main] Post-connect error:', err);
   }

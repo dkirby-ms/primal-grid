@@ -4,6 +4,7 @@ import type { HudDOM } from '../ui/HudDOM.js';
 import type { HelpScreen } from '../ui/HelpScreen.js';
 import type { Scoreboard } from '../ui/Scoreboard.js';
 import type { Camera } from '../renderer/Camera.js';
+import type { ChatPanel } from '../ui/ChatPanel.js';
 
 export class InputHandler {
   private room: Room;
@@ -14,6 +15,7 @@ export class InputHandler {
   private helpScreen: HelpScreen | null = null;
   private scoreboard: Scoreboard | null = null;
   private camera: Camera | null = null;
+  private chatPanel: ChatPanel | null = null;
 
   constructor(room: Room, worldContainer: Container, canvas: HTMLCanvasElement) {
     this.room = room;
@@ -43,8 +45,16 @@ export class InputHandler {
     this.camera = camera;
   }
 
+  /** Wire up the chat panel. */
+  public setChatPanel(chatPanel: ChatPanel): void {
+    this.chatPanel = chatPanel;
+  }
+
   private bindKeys(): void {
     window.addEventListener('keydown', (e) => {
+      // When chat input is focused, don't process game keys
+      if (this.chatPanel?.isFocused) return;
+
       // Help screen toggle
       if (e.key === '?' || e.key === '/') {
         this.helpScreen?.toggle();
@@ -55,6 +65,19 @@ export class InputHandler {
       if (e.key === 'Tab') {
         e.preventDefault();
         this.scoreboard?.toggle();
+        return;
+      }
+
+      // Chat toggle
+      if (e.key === 'c' || e.key === 'C') {
+        this.chatPanel?.toggle();
+        return;
+      }
+
+      // Focus chat on Enter
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this.chatPanel?.focus();
         return;
       }
 

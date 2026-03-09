@@ -164,6 +164,100 @@
         padding: 4px 4px 0 0;
       }
 
+      /* Chat panel */
+      #chat-panel {
+        width: 800px;
+        background: #1a1a2e;
+        border: 1px solid #2a2a4a;
+        border-top: none;
+        border-radius: 0 0 4px 4px;
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+        color: #cccccc;
+        display: flex;
+        flex-direction: column;
+      }
+      .chat-header {
+        padding: 4px 10px;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #888;
+        border-bottom: 1px solid #2a2a4a;
+        flex-shrink: 0;
+      }
+      .chat-scroll {
+        height: 120px;
+        overflow-y: auto;
+        padding: 4px 8px;
+      }
+      .chat-scroll::-webkit-scrollbar {
+        width: 6px;
+      }
+      .chat-scroll::-webkit-scrollbar-track {
+        background: #12121f;
+      }
+      .chat-scroll::-webkit-scrollbar-thumb {
+        background: #3a3a5a;
+        border-radius: 3px;
+      }
+      .chat-scroll::-webkit-scrollbar-thumb:hover {
+        background: #5a5a7a;
+      }
+      .chat-entry {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        line-height: 1.6;
+        padding: 1px 0;
+      }
+      .chat-entry.chat-system .chat-msg {
+        color: #666;
+        font-style: italic;
+      }
+      .chat-ts {
+        color: #555;
+        font-size: 10px;
+        flex-shrink: 0;
+      }
+      .chat-sender {
+        color: #7ecfff;
+        font-weight: bold;
+        flex-shrink: 0;
+        white-space: nowrap;
+      }
+      .chat-sender::after {
+        content: ':';
+      }
+      .chat-msg {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .chat-input-row {
+        border-top: 1px solid #2a2a4a;
+        padding: 4px 8px;
+        flex-shrink: 0;
+      }
+      .chat-input {
+        width: 100%;
+        background: #12121f;
+        border: 1px solid #3a3a5a;
+        border-radius: 3px;
+        color: #cccccc;
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+        padding: 4px 6px;
+        outline: none;
+        box-sizing: border-box;
+      }
+      .chat-input:focus {
+        border-color: #7ecfff;
+      }
+      .chat-input::placeholder {
+        color: #555;
+      }
+
       /* Name prompt modal */
       #name-prompt-overlay {
         display: none;
@@ -346,7 +440,8 @@
       </div>
     </div>
     <div id="game-log"></div>
-    <div id="help-hint">Press ? for help</div>
+    <div id="chat-panel"></div>
+    <div id="help-hint">Press ? for help · C to toggle chat</div>
     </div>
 
     <!-- Name prompt modal -->
