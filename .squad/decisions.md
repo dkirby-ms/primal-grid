@@ -1,3 +1,26 @@
+## 2026-03-09T23:43:26Z: Prod Default Branch & Squad File Policy
+
+**Author:** Pemulis (Systems Dev)  
+**Date:** 2026-03-09  
+**Status:** IMPLEMENTED  
+**Commit:** 356fcf9 — "ci: simplify uat-to-prod promotion to direct PR"
+
+**Decision:** 
+1. Default branch is **`prod`** (not `master` as previously assumed)
+2. **`.squad/` files are allowed in prod** — no stripping required during promotion workflows
+
+**Rationale:**
+- User confirmed `.squad/` metadata should persist through all branch tiers for complete audit trail and decision history
+- Simplified workflow: direct PR from `uat` → `prod` now mirrors `dev` → `uat` pattern (consistent architecture)
+- No staging branches or file stripping needed — proper permissions are configured
+
+**Impact:**
+- Promotion workflow simplified: −42 lines, +11 lines
+- UAT→prod pipeline now follows uniform pattern with dev→uat
+- Squad history and decisions fully traceable through prod branch
+
+---
+
 ## 2026-03-09: Automatic Patch Version Bump on UAT Promotion
 
 **Author:** Pemulis (Systems Dev)  
