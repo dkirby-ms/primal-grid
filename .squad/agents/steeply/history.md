@@ -1869,3 +1869,11 @@ Large-map rendering with PixiJS requires explicit culling—the scene graph does
 - **Gotcha:** Player score on join includes HQ territory points on top of restored value — test with `toBeGreaterThanOrEqual` not exact match.
 - **Real SQLite in tests:** Repository tests use temp files (`os.tmpdir()`) with `afterEach` cleanup. Works fast, tests real SQL behavior including constraints.
 - **All 640 tests passing** after adding auth tests (39 files total).
+
+### In-Game Chat — Issue #30 (proactive tests)
+
+- **19 tests** in `server/src/__tests__/chat.test.ts` covering: valid broadcast (2), empty/invalid rejection (4), max length truncation (3), HTML sanitization (5), sender name resolution (3), timestamp (2).
+- **Implementation already landed** by Pemulis/Gately: `handleChat` on GameRoom strips HTML via regex `/<[^>]*>/g`, trims, rejects empty, truncates to `CHAT_MAX_LENGTH` (200), broadcasts with `{ sender, text, timestamp }`.
+- **Shared types:** `ChatPayload { text: string }`, `ChatBroadcastPayload { sender, text, timestamp }`, `CHAT = "chat"`, `CHAT_MAX_LENGTH = 200` — all in `shared/src/messages.ts`.
+- **Edge cases tested:** whitespace-only text rejected, non-string text rejected, ghost client (no player state) rejected, HTML-only content (e.g. `<br><hr>`) rejected after stripping, self-closing tags stripped, script tags stripped (inner text preserved), displayName fallback to "Unknown".
+- **Test pattern:** Same `Object.create(GameRoom.prototype)` + `room.broadcast = vi.fn()` pattern as other test files. No new `playerViews` init needed — `handleChat` doesn't touch fog-of-war.
