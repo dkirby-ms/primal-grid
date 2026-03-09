@@ -65,10 +65,15 @@ jobs:
         run: |
           BRANCH_NAME=$(echo "${{ inputs.branch || github.ref_name }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
           TAG="uat-${BRANCH_NAME}-${{ github.sha }}"
+          az containerapp secret set \
+            --name primal-grid-uat \
+            --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            --secrets jwt-secret=${{ secrets.JWT_SECRET }}
           az containerapp update \
             --name primal-grid-uat \
             --resource-group ${{ secrets.RESOURCE_GROUP }} \
-            --image ${{ secrets.ACR_NAME }}.azurecr.io/primal-grid:$TAG
+            --image ${{ secrets.ACR_NAME }}.azurecr.io/primal-grid:$TAG \
+            --set-env-vars JWT_SECRET=secretref:jwt-secret
 
       - name: Output UAT URL
         id: get-url
