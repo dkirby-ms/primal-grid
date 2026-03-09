@@ -161,10 +161,14 @@ describe("GameRoom Auth Integration", () => {
 
       const player = room.state.players.get("session-restore")!;
       expect(player.displayName).toBe("SavedRex");
-      // Score includes restored value + HQ territory tiles claimed on join
-      expect(player.score).toBeGreaterThanOrEqual(500);
+      // Score reflects actual territory (spawnHQ tiles), NOT the saved value.
+      // Saved score is intentionally not restored — it's a spatial metric.
+      expect(player.score).toBeGreaterThan(0);
       expect(player.level).toBe(5);
       expect(player.xp).toBe(250);
+      // Resources ARE restored after spawnHQ
+      expect(player.wood).toBe(99);
+      expect(player.stone).toBe(88);
     });
 
     it("creates fresh player when no saved state exists", async () => {

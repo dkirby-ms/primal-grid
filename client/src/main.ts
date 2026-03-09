@@ -100,9 +100,13 @@ async function connectToServer(app: Application, grid: GridRenderer, camera: Cam
   try {
     const room = await connect();
 
-    // Prompt for display name and send to server
-    const displayName = await promptForName();
-    room.send(SET_NAME, { name: displayName });
+    // If the server restored a displayName from a previous session, skip the prompt.
+    // In Colyseus 0.17+, initial state is synced before joinOrCreate resolves.
+    const localPlayer = room.state.players?.get(room.sessionId);
+    if (!localPlayer?.displayName) {
+      const displayName = await promptForName();
+      room.send(SET_NAME, { name: displayName });
+    }
 
     // Bind renderers to server state
     grid.setLocalPlayerId(room.sessionId);
