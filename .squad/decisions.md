@@ -5485,3 +5485,56 @@ Use basic JWT tokens for auth MVP. Entra ID external identities integration defe
 
 ---
 
+
+## 2026-03-12: GitHub Auto-Close Issue Process Fix
+
+**Author:** Hal (Lead)  
+**Date:** 2026-03-12  
+**Status:** REQUIRES IMPLEMENTATION  
+**Affects:** All squad agents, PR workflow  
+
+### Problem Statement
+
+Four issues (#19, #31, #42, #74) had PRs merged to `dev` but remained OPEN on GitHub. Root cause: PRs used `(#N)` reference syntax in titles or only in commit messages, not GitHub's required auto-close syntax `Closes #N` in the **pull request body**.
+
+GitHub auto-closes issues only when:
+1. The PR body contains `Closes #N`, `Fixes #N`, `Resolves #N`, etc. **(ALWAYS WORKS)**
+2. The merge commit message contains these keywords **(ONLY works with non-squash merges)**
+
+When PRs are squash+merged on `dev`, GitHub only reads the PR body, not the commit message. Two PRs (#71, #76) had "Closes #N" only in the commit, causing auto-close to fail.
+
+### Evidence
+
+| PR  | Issue | PR Body Has "Closes" | Commit Has "Closes" | Result |
+|-----|-------|----------------------|---------------------|--------|
+| #70 | #42   | ✓ Yes                | N/A                 | ✓ Closed auto |
+| #71 | #19   | ✗ No                 | ✓ Yes               | ✗ Stayed open |
+| #72 | #31   | ✓ Yes                | N/A                 | ✓ Closed auto |
+| #76 | #74   | ✗ No                 | ✓ Yes               | ✗ Stayed open |
+
+### Root Cause
+
+Instructions in `.squad/copilot-instructions.md` say "Reference the issue: `Closes #{issue-number}`" but did not specify *where* this must appear. Squad agents interpreted this as "anywhere" and some placed it only in commit messages.
+
+### Decision
+
+**All PRs for issue work MUST include `Closes #N` in the pull request body.** Commit messages should also follow the convention (for master-to-uat-to-prod workflows where merge commits matter), but the PR body is the single source of truth for GitHub auto-close on squash merges.
+
+**Files Updated:**
+1. `.squad/copilot-instructions.md` — PR Guidelines section updated to emphasize PR BODY as the only reliable place
+2. `.squad/routing.md` — Rules section updated with explicit requirement
+
+### Rationale
+
+- **Clarity:** Removing ambiguity about where close keywords must appear prevents future failures
+- **Reliability:** PR body syntax works for all merge strategies (squash, rebase, merge commit)
+- **Process:** Single rule (PR body) is easier to enforce than dual locations (body + commit)
+- **GitHub native:** We rely on GitHub's auto-close feature; we must follow GitHub's rules
+
+### Success Criteria
+
+- [ ] Zero issues stay open after PRs merge to dev for 2 weeks (validation period)
+- [ ] All new issue-work PRs include `Closes #N` in body
+- [ ] Squad agents acknowledge updated instructions
+
+---
