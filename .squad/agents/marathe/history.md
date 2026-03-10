@@ -581,3 +581,24 @@ Coordinator consolidated the triage system. The heartbeat-triggered triage steps
 - a9c2bc8: Roster parser leak fix + consolidation
 
 **Session Log:** `.squad/log/2026-03-10T01-16-00Z-triage-fix-and-lobby-investigation.md`
+
+---
+
+## 2025-07-17: Changelog Sorting & Merge Exclusion
+
+**Task:** Improve Discord notification changelogs and promotion PR body changelogs.
+
+**Changes:**
+
+- Added `--no-merges` to all `git log` commands in `deploy-uat.yml`, `deploy.yml`, and `squad-promote.yml`
+- Changelogs now sort `feat`/`fix` commits first, then everything else (`chore`, `refactor`, `ci`, `docs`, `squad`, etc.)
+- Uses pure bash (`grep -iE` partition + `printf` reassembly) — no new dependencies
+- `RAW_LOG` pulls extra lines (head -20 or -30) before sorting so the final `head -10` or `head -20` still fills the output after filtering
+
+**Files Modified:**
+
+- `.github/workflows/deploy-uat.yml` — Discord changelog block
+- `.github/workflows/deploy.yml` — Discord changelog block
+- `.github/workflows/squad-promote.yml` — PR body changelog blocks (dev→uat and uat→prod)
+
+**Decision:** `.squad/decisions/inbox/marathe-changelog-sorting.md`

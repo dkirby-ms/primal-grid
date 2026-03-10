@@ -1,3 +1,39 @@
+## 2026-03-10T01:49:40Z: Changelog Sorting & Merge Commit Exclusion
+
+**Author:** Marathe (DevOps / CI-CD)  
+**Date:** 2026-03-10  
+**Status:** Accepted
+
+**Directive Source:** User request by dkirby-ms (2026-03-10T01:49:40Z)
+> Discord notification changelogs should always sort with features/bugfix commits first, chores or non-gameplay related things after. Merge commits should not be included in the changelog at all.
+
+**Decision:**
+
+1. **Exclude merge commits** — all `git log` commands in deployment/promotion workflows now use `--no-merges`.
+2. **Sort by significance** — `feat` and `fix` prefixed commits appear first, followed by everything else (`chore`, `refactor`, `ci`, `docs`, `squad`, etc.).
+3. **Pure bash** — sorting uses `grep -iE` to partition lines, no external dependencies.
+
+**Affected Workflows:**
+
+- `deploy-uat.yml` (Discord changelog)
+- `deploy.yml` (Discord changelog)
+- `squad-promote.yml` (PR body changelog, both dev→uat and uat→prod)
+
+**Implementation Pattern:**
+
+```bash
+RAW_LOG=$(git log --no-merges --pretty=format:'• %h %s (%an)' ... | head -N)
+FEATURES=$(echo "$RAW_LOG" | grep -iE '^• [a-f0-9]+ (feat|fix)' || true)
+OTHER=$(echo "$RAW_LOG" | grep -viE '^• [a-f0-9]+ (feat|fix)' || true)
+CHANGELOG=$(printf '%s\n%s' "$FEATURES" "$OTHER" | sed '/^$/d' | head -N)
+```
+
+**Rationale:**
+
+Features and bugfixes are what stakeholders care about most. Putting them first surfaces the signal. Excluding merge commits removes noise from fast-forward and squash-merge workflows.
+
+---
+
 ## 2026-03-10T00:42Z: Production Launch — v0.1.0
 
 **Author:** dkirby-ms (via Copilot)  

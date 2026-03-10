@@ -13,6 +13,7 @@ How to decide who handles what.
 | CI/CD & DevOps | Marathe | GitHub Actions, workflows, deployment, Docker, build pipelines, test reporting |
 | Testing | Steeply | Write tests, find edge cases, verify fixes, performance checks |
 | Scope & priorities | Hal | What to build next, trade-offs, decisions |
+| Community & Discord | Joelle | Discord notifications, release notes, README updates, player-facing comms |
 | Session logging | Scribe | Automatic — never needs routing |
 
 ## PR Review Gates
@@ -33,6 +34,7 @@ How to decide who handles what.
 | `squad:pemulis` | Game systems, simulation, AI work | Pemulis |
 | `squad:steeply` | Testing, quality work | Steeply |
 | `squad:marathe` | CI/CD, workflows, deployment, infrastructure | Marathe |
+| `squad:joelle` | Discord, README, release notes, community docs | Joelle |
 | `squad:copilot` | Single-file fixes, test writing, scoped implementation | @copilot |
 
 ## Rules
