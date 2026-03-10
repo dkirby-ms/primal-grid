@@ -68,6 +68,7 @@ server.define("lobby", LobbyRoom).on("create", (room: LobbyRoom) => {
   room.authProvider = authProvider;
   room.gameSessionRepo = gameSessionRepo;
   room.lobbyBridge = lobbyBridge;
+  room.registerBridgeListeners();
 });
 
 const port = Number(process.env.PORT) || SERVER_PORT;

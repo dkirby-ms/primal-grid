@@ -555,3 +555,29 @@ Pemulis (Systems Dev) updated the prod branch guard to allow `.squad/` orchestra
 - Prod domain: `gridwar.kirbytoso.xyz` (in `main.bicepparam`)
 - UAT domain: `gridtest.kirbytoso.xyz` (in `main-uat.bicepparam`)
 - Certificate name uses `uniqueString(customDomainName)` suffix to avoid collisions between environments sharing the same managed environment
+
+---
+
+## 2026-03-10T01:20:00Z: Triage Pipeline Consolidated (Coordinator)
+
+**Cross-Agent Update for Marathe (Release Ops)**
+
+Coordinator consolidated the triage system. The heartbeat-triggered triage steps have been removed, and `squad-triage.yml` is now the single authoritative triage system.
+
+**What Changed:**
+
+- **Heartbeat triage steps:** Removed from all workflows
+- **Single source of truth:** `squad-triage.yml` handles all issue triage operations
+- **Impact:** Eliminates redundant triage runs and memory leaks in roster parser
+
+**Benefits for Release Ops:**
+
+- Cleaner, more predictable triage behavior
+- No overlapping triage runs from multiple triggers
+- Release workflows now have consistent issue-labeling behavior across all environments
+
+**Commits:**
+- da01bb0: Auto-triage + template labels
+- a9c2bc8: Roster parser leak fix + consolidation
+
+**Session Log:** `.squad/log/2026-03-10T01-16-00Z-triage-fix-and-lobby-investigation.md`

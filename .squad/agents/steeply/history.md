@@ -1910,3 +1910,12 @@ Large-map rendering with PixiJS requires explicit culling—the scene graph does
 
 **Impact on Steeply:** Chat test pattern uses same `Object.create(GameRoom.prototype) + room.broadcast = vi.fn()` mocking as auth tests. HTML sanitization edge cases (script, self-closing, content-emptied) are now reference patterns for future sanitization work.
 
+
+### Lobby Player Count & Status Bug — Issue #95 (Investigation)
+
+- **Root cause:** Colyseus 0.17.8 lifecycle ordering — `handler.emit("create", room)` fires AFTER `await room.onCreate()` in `@colyseus/core/build/MatchMaker.mjs` (line 329 vs 289). The `on("create")` hook in `server/src/index.ts:67-71` injects `lobbyBridge` AFTER `LobbyRoom.onCreate()` already called `registerBridgeListeners()`, which returns early at `if (!this.lobbyBridge) return;` (line 150). Bridge listeners are **never registered**.
+- **Consequence:** All `player_count_changed` and `game_ended` events from GameRoom → LobbyRoom are silently dropped. `entry.playerCount` stays at 1 (initial creation value). Status stays "waiting" if host doesn't explicitly START_GAME.
+- **Key files:** `server/src/rooms/LobbyRoom.ts` (lines 60, 149-165), `server/src/index.ts` (lines 60-71), `server/src/rooms/LobbyBridge.ts`, `server/src/rooms/GameRoom.ts` (lines 209, 278).
+- **Fix:** Move `registerBridgeListeners()` call from `LobbyRoom.onCreate()` to the `on("create")` hook in `index.ts` after `lobbyBridge` injection. Make method public.
+- **Test gap:** ZERO lobby tests exist. LobbyRoom, LobbyBridge, GameSessionRepository, and lobby client UI are all untested. Need bridge lifecycle test, LobbyRoom unit tests, GameSessionRepository tests, and e2e lobby flow tests.
+- **Colyseus gotcha:** Never rely on properties being available in `onCreate()` if they're injected via Colyseus `on("create")` hooks — those hooks fire AFTER `onCreate()` returns (Colyseus 0.17.x).
