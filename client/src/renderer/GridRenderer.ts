@@ -280,12 +280,14 @@ export class GridRenderer {
           const hqX = (player['hqX'] as number) ?? -1;
           const hqY = (player['hqY'] as number) ?? -1;
           const displayName = (player['displayName'] as string) || '';
+          const isCPU = !!(player['isCPU']);
           this.playerColors.set(id, color);
           currentPlayerIds.add(id);
 
           // Render HQ marker if player has an HQ
           if (hqX >= 0 && hqY >= 0) {
-            this.updateHQMarker(id, hqX, hqY, displayName, color);
+            const hqLabel = isCPU ? `${displayName} 🤖` : displayName;
+            this.updateHQMarker(id, hqX, hqY, hqLabel, color);
           } else {
             this.removeHQMarker(id);
           }

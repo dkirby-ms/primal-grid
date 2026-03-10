@@ -2560,3 +2560,53 @@ On page load, `bootstrap()` checks `sessionStorage` for a Colyseus reconnect tok
 ### Impact
 
 Anyone working on `client/src/main.ts` bootstrap flow or `client/src/network.ts` connection handlers should be aware of this pattern. The lobby is no longer the guaranteed first screen after page load.
+
+---
+
+## 2026-03-12T00:00:00Z: CPU Opponent Architecture
+
+**Author:** Pemulis (Systems Dev)  
+**Date:** 2026-03-12  
+**Context:** Issue #105 — Computer controlled player-opponents
+
+### Decision
+
+CPU opponents are first-class `PlayerState` entries added at `GameRoom.onCreate()` time. They use synthetic session IDs (`cpu_0` through `cpu_6`), receive income/scoring from existing tick functions for free, and make strategic decisions via a flat priority-based AI loop in `cpuPlayerAI.ts`. Tactical behavior is delegated entirely to existing pawn AIs (builder, defender, attacker, explorer).
+
+### Key Design Points
+
+1. **`spawnPawnCore()` is now a public method on GameRoom** — extracted from `handleSpawnPawn` so CPU AI can spawn pawns without a Client reference. Any future system that needs to spawn pawns programmatically should use this method.
+2. **`cpuPlayerIds` Set on GameRoom** — tracks which session IDs are CPU-controlled. Must be null-guarded (`?.`) in methods that tests invoke via `Object.create()`.
+3. **`CreateGamePayload.cpuPlayers`** — new optional field in the lobby payload. LobbyRoom passes it through to GameRoom options.
+4. **Room auto-disposal** — `checkCpuOnlyRoom()` runs after every human player removal. If only CPU players remain, the room calls `this.disconnect()`.
+5. **CPU players skip StateView** — no `initPlayerView()` call, zero rendering cost.
+
+### Impact
+
+- **Gately (Frontend):** The client's create-game UI should expose a `cpuPlayers` number input (0–7) in the lobby.
+- **Steeply (Testing):** 20 new tests cover CPU AI decisions, spawn mechanics, and room cleanup. Existing 716 tests pass with no regressions.
+- **All:** New shared constant `CPU_PLAYER` in `constants.ts`. New pawn type names in `CPU_PLAYER.NAMES`.
+
+---
+
+## 2026-03-10T00:00:00Z: Performance Test Threshold Policy
+
+**Author:** Steeply (Tester)  
+**Date:** 2026-03-10  
+**Issue:** #104  
+**PR:** #106
+
+### Decision
+
+Performance tests in CI use a **two-tier threshold** pattern:
+
+1. **Ideal threshold** — the expected runtime on a fast machine. Exceeding this emits a `console.warn` so regressions are visible in logs.
+2. **Hard ceiling** — 5x the ideal threshold. Only this value is asserted with `expect()`. Failing this means an actual algorithmic regression, not environment variance.
+
+### Rationale
+
+CI runners vary in speed (shared VMs, load spikes, cold caches). Hard-asserting tight thresholds creates flaky tests that erode trust in the suite. The goal of perf tests in CI is to catch algorithmic regressions (O(n²) → O(n³)), not to benchmark absolute speed. The warn-at-ideal / fail-at-ceiling pattern gives us both visibility and stability.
+
+### Applies To
+
+All timing-based performance assertions in the test suite.

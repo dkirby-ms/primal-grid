@@ -188,6 +188,10 @@ export class LobbyRoom extends Room {
       256
     );
     const mapSeed = payload.mapSeed ?? Math.floor(Math.random() * 999999);
+    const cpuPlayers = Math.min(
+      Math.max(typeof payload.cpuPlayers === "number" ? Math.floor(payload.cpuPlayers) : 0, 0),
+      7
+    );
 
     // Persist game session
     let gameInfo: GameSessionInfo;
@@ -219,6 +223,7 @@ export class LobbyRoom extends Room {
       seed: mapSeed,
       maxPlayers,
       hostId: session.userId,
+      cpuPlayers,
     });
 
     this.gameRoomIds.set(gameInfo.id, gameRoom.roomId);

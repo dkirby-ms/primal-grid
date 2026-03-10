@@ -3648,3 +3648,6 @@ Players' 5×5 starting territory could contain Water or Rock tiles, which were s
 
 ---
 
+
+# Archived Decisions (older than 2026-03-09)
+

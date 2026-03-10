@@ -1320,3 +1320,10 @@ See `.squad/decisions.md` Initiative Triage & Execution Plan (2026-03-09) for fu
 - **Client reset on failure:** After `reconnectGameRoom()` exhausts its 5 attempts and returns null, reset the `colyseusClient` singleton (`resetClient()`) before falling through to lobby. The Client instance may be in a bad state after repeated failed reconnects.
 - **Key files:** `client/src/network.ts` (onLeave handler, reconnection logic, client singleton), `client/src/main.ts` (bootstrap flow).
 - **Test files:** `client/src/__tests__/reconnection.test.ts` (16 client tests), `server/src/__tests__/reconnection.test.ts` (14 server tests).
+
+### CPU Player Labels — Schema + UI (2026-03-11)
+
+- **isCPU schema field:** Added `@type("boolean") isCPU: boolean = false` to PlayerState in GameState.ts. Server sets it `true` in `spawnCpuPlayer()`. This is the canonical way for clients to identify CPU-controlled players — no need to parse session ID prefixes client-side.
+- **Scoreboard:** CPU players show a 🤖 emoji after their name and render at 0.75 opacity to visually distinguish them from human players. Human player still sees "(you)" suffix.
+- **Grid HQ labels:** CPU player HQ name labels on the map append " 🤖" to the display name. Computed in the state-sync loop before passing to `updateHQMarker()`.
+- **No breaking changes:** All existing tests pass (715/716 — 1 pre-existing timeout in water-depth test unrelated to this work).

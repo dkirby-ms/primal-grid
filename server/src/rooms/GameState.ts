@@ -72,6 +72,9 @@ export class PlayerState extends Schema {
 
   @type("number")
   xp: number = 0;
+
+  @type("boolean")
+  isCPU: boolean = false;
 }
 
 export class CreatureState extends Schema {

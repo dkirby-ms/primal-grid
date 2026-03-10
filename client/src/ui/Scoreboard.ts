@@ -4,6 +4,7 @@ interface PlayerRow {
   name: string;
   score: number;
   color: string;
+  isCPU: boolean;
 }
 
 /**
@@ -60,7 +61,14 @@ export class Scoreboard {
       const name = (player['displayName'] as string) || 'Player';
       const score = (player['score'] as number) ?? 0;
       const color = (player['color'] as string) ?? '#cccccc';
-      rows.push({ name: id === this.localSessionId ? `${name} (you)` : name, score, color });
+      const isCPU = !!(player['isCPU']);
+      let label = name;
+      if (id === this.localSessionId) {
+        label = `${name} (you)`;
+      } else if (isCPU) {
+        label = `${name} 🤖`;
+      }
+      rows.push({ name: label, score, color, isCPU });
     });
 
     // Sort by score descending
@@ -75,6 +83,9 @@ export class Scoreboard {
       tdName.textContent = row.name;
       tdName.style.color = row.color;
       tdName.style.fontWeight = 'bold';
+      if (row.isCPU) {
+        tdName.style.opacity = '0.75';
+      }
       tr.appendChild(tdName);
 
       const tdScore = document.createElement('td');
