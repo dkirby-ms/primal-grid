@@ -22,6 +22,27 @@
 
 ---
 
+## Auto Code Review
+
+| Field | Value |
+|-------|-------|
+| **Trigger** | auto |
+| **When** | after |
+| **Condition** | agent pushes code to a PR targeting `dev` branch |
+| **Facilitator** | lead |
+| **Participants** | lead (Hal) |
+| **Time budget** | focused |
+| **Enabled** | ✅ yes |
+
+**Agenda:**
+1. Lead reviews the PR diff for correctness, architecture, security
+2. Approve or request changes via `gh pr review`
+3. If approved and CI green, PR is ready for merge
+
+**Scope:** Only PRs targeting `dev`. CI cherry-picks to uat/prod skip this ceremony.
+
+---
+
 ## Retrospective
 
 | Field | Value |

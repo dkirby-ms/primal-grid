@@ -784,3 +784,30 @@ Reviewed Pemulis's fix for browser refresh dropping user session. The change is 
 ### Architecture Patterns
 - **Reconnection token storage:** sessionStorage is ideal for reconnection tokens — tab-scoped, survives refresh, cleared on tab close. localStorage would persist stale tokens across sessions.
 - **Bootstrap reconnection pattern:** Check for reconnection token BEFORE lobby connection, not after. Short-circuit on success, fall through on failure. This avoids unnecessary lobby connections.
+
+## 2026-03-10: PR #102 Review — Browser Refresh Reconnection Fix
+
+**By:** Hal (Lead)  
+**Date:** 2026-03-10T13:28:45Z  
+**Issue:** #101  
+**PR:** #102  
+**Status:** APPROVED ✅
+
+### Summary
+
+Reviewed Pemulis's fix for session persistence across browser refresh. The change is minimal (~15 lines across 2 files): exported `loadReconnectToken()` from `network.ts` and added a reconnection check at the top of `bootstrap()` in `main.ts`. On page load, if a reconnection token exists in sessionStorage, the client attempts `reconnectGameRoom()` before connecting to the lobby. Success skips the lobby; failure falls through to normal flow.
+
+### Review Findings
+
+- **Correctness:** All edge cases handled — expired tokens, server restart, network failure all trigger retry with exponential backoff (1s–16s), then clear token and fall through to lobby. Token rotation on successful reconnect.
+- **Architecture:** Clean bootstrap flow. Reconnection check placed after UI setup, before lobby. No new state or APIs.
+- **Security:** sessionStorage is the correct choice (tab-scoped, survives refresh, not cross-origin). Reconnection token is Colyseus-internal, not a JWT.
+- **Tests:** 690/690 pass (11 server, 16 client comprehensive).
+
+### Non-blocking Note
+
+`reconnectGameRoom()` doesn't emit `'reconnecting'` status when called from `bootstrap()` (only the `onLeave` caller path emits it). Low priority follow-up.
+
+### Approval
+
+Approved via `gh pr review`. CI passing. Ready for merge.

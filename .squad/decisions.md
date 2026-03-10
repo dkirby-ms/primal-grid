@@ -2384,3 +2384,43 @@ Custom domain binding and managed TLS certificates are now declared in `infra/ma
 - All deploy workflows will now provision/maintain the custom domain and cert automatically
 - No more manual Azure portal configuration after deployments
 - DNS records (CNAME + TXT verification) must already exist at the registrar before deployment
+
+---
+
+## 2026-03-10: Auto Code Review Ceremony — Dev-Only Scope
+
+**By:** dkirby-ms (via Copilot Directive)  
+**Date:** 2026-03-10T13:28:20Z  
+**What:** Auto-review ceremony should only trigger for PRs targeting the `dev` branch, not uat or prod.
+
+### Rationale
+
+- Dev is the primary integration branch for code review and testing
+- UAT and prod are automated cherry-picks from dev CI — they should skip the ceremony
+- Lead review gate applies to dev; production deployments are handled by separate deployment workflow approvals
+
+### Implementation
+
+Reflected in `ceremonies.md`:
+
+```
+## Auto Code Review
+
+| Field | Value |
+|-------|-------|
+| **Trigger** | auto |
+| **When** | after |
+| **Condition** | agent pushes code to a PR targeting `dev` branch |
+| **Facilitator** | lead |
+| **Participants** | lead (Hal) |
+| **Time budget** | focused |
+| **Enabled** | ✅ yes |
+
+**Scope:** Only PRs targeting `dev`. CI cherry-picks to uat/prod skip this ceremony.
+```
+
+### Impact
+
+- All future PRs to `dev` auto-trigger lead code review via `gh pr review`
+- UAT and prod deployment workflows proceed without ceremony gate
+- Team memory: Lead review is a dev-branch gate, not a deployment gate
