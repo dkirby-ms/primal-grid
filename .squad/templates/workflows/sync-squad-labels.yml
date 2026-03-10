@@ -43,7 +43,7 @@ jobs:
                 inMembersTable = true;
                 continue;
               }
-              if (inMembersTable && line.startsWith('## ')) {
+              if (inMembersTable && line.match(/^#{2,}\s/)) {
                 break;
               }
               if (inMembersTable && line.startsWith('|') && !line.includes('---') && !line.includes('Name')) {
