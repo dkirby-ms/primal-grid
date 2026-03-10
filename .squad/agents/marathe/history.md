@@ -515,3 +515,31 @@ Pemulis (Systems Dev) updated the prod branch guard to allow `.squad/` orchestra
 **Commit:** 8b0fa46 on dev  
 **Session Log:** `.squad/log/2026-03-10T00-29-39Z-guard-update.md`  
 **Orchestration Log:** `.squad/orchestration-log/2026-03-10T00-29-39Z-pemulis.md`
+
+## Custom Domain Investigation (ERR_CONNECTION_RESET)
+
+**Date:** $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+**Issue:** Server accessible via Azure Container App FQDN but returns ERR_CONNECTION_RESET via custom DNS (gridwar.kirbytoso.xyz / gridtest.kirbytoso.xyz).
+
+**Root Cause:** The Bicep template (`infra/main.bicep`) has **zero custom domain configuration**:
+- No `customDomains` property on the Container App ingress
+- No `Microsoft.App/managedEnvironments/managedCertificates` resource
+- No DNS validation records referenced
+- Deploy workflow has no DNS-related steps
+
+**Why ERR_CONNECTION_RESET occurs:** When a request arrives at Azure Container Apps with `Host: gridwar.kirbytoso.xyz`, the TLS handshake fails because there's no certificate or domain binding for that hostname. Azure resets the TCP connection immediately.
+
+**What works:** The Azure-assigned FQDN works because Azure automatically provisions a TLS certificate for `*.{region}.azurecontainerapps.io`.
+
+**Fix required (3 additions to `infra/main.bicep`):**
+1. Parameters for custom domain hostnames
+2. `Microsoft.App/managedEnvironments/managedCertificates` resources for each domain
+3. `customDomains` array in the Container App ingress configuration
+
+**DNS prerequisites (manual, outside Bicep):**
+- CNAME record: `gridwar.kirbytoso.xyz → <container-app-fqdn>`
+- TXT record: `asuid.gridwar.kirbytoso.xyz → <container-app-custom-domain-verification-id>`
+- Same for UAT domain
+
+**Key files:** `infra/main.bicep`, `infra/main.bicepparam`, `infra/main-uat.bicepparam`

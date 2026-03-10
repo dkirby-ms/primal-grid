@@ -1,3 +1,15 @@
+## 2026-03-10T00:42Z: Production Launch — v0.1.0
+
+**Author:** dkirby-ms (via Copilot)  
+**Date:** 2026-03-10  
+**Status:** LIVE  
+
+**Decision:** Primal Grid v0.1.0 is live on prod. First production deployment.
+
+**Rationale:** Milestone marker — the team has a live baseline to iterate on.
+
+---
+
 ## 2026-03-09T23:43:26Z: Prod Default Branch & Squad File Policy
 
 **Author:** Pemulis (Systems Dev)  
