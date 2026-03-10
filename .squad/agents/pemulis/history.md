@@ -1842,3 +1842,24 @@ See `.squad/decisions.md` for full triage document, dependency graph, risk mitig
 3. Future enhancement: difficulty settings (easy/medium/hard)
 
 **Next:** Awaiting Gately implementation for frontend UI. Ready for integration testing.
+
+### Building Placement System (2026-03-12)
+
+**Issue:** #110
+**Branch:** `squad/110-building-placement`
+**Status:** ✅ Server-side complete, awaiting Gately's client-side code
+
+**Deliverable:** Server-side PLACE_BUILDING message handler with full validation and data-driven income system.
+
+**Changes:**
+- `shared/src/constants.ts` — Added `BUILDING_COSTS` (farm: 12w/6s, factory: 20w/12s) and `BUILDING_INCOME` (farm: 1w/1s, factory: 2w/1s)
+- `shared/src/messages.ts` — Added `PLACE_BUILDING` constant, `PlaceBuildingPayload` interface, `"building"` GameLogCategory
+- `server/src/rooms/GameRoom.ts` — `handlePlaceBuilding()` with 7-condition validation (player exists, tile exists, tile owned, no existing building, walkable terrain, valid type, resources available). Updated `tickStructureIncome()` from hardcoded farm-only to data-driven loop over all BUILDING_INCOME types. Added defensive structureType clearing in `tickClaiming()`.
+
+**Design Decisions:**
+- Outpost tiles can be upgraded to farm/factory (structureType "" or "outpost" are valid placement targets; "hq"/"farm"/"factory" are blocked)
+- Terrain walkability check is inlined (not using `isWalkable()`) because owned tiles have shapeHP > 0 which isWalkable rejects
+- Building removal already handled by combat.ts (shapeHP→0 clears structureType); tickClaiming cleanup is defensive for future mechanics
+- Used `Record<string, { wood: number; stone: number }>` for BUILDING_COSTS/INCOME to make adding new building types trivial
+
+**Tests:** 716/716 passing, 0 regressions. No new tests added — that's Parker's domain per charter.

@@ -202,6 +202,7 @@ function setupGameSession(
     input.setScoreboard(scoreboard);
     input.setCamera(camera);
     input.setChatPanel(chatPanel);
+    input.setGridRenderer(grid);
   }
 
   // Initial bind

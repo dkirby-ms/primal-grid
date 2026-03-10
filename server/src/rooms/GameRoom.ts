@@ -16,11 +16,11 @@ import type { SerializedPlayerState } from "../persistence/playerStateSerde.js";
 import { tickCpuPlayers } from "./cpuPlayerAI.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
-  SPAWN_PAWN, SET_NAME, CHAT, CHAT_MAX_LENGTH,
+  SPAWN_PAWN, SET_NAME, CHAT, CHAT_MAX_LENGTH, PLACE_BUILDING,
   ResourceType, TileType, isWaterTile,
   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
   CREATURE_AI, CREATURE_RESPAWN, TERRITORY,
-  STRUCTURE_INCOME, SHAPE,
+  STRUCTURE_INCOME, SHAPE, BUILDING_COSTS, BUILDING_INCOME,
   PROGRESSION, getLevelForXP,
   PAWN_TYPES, DAY_NIGHT, FOG_OF_WAR,
   ENEMY_SPAWNING, ENEMY_BASE_TYPES,
@@ -28,7 +28,7 @@ import {
   isEnemyBase,
   CPU_PLAYER,
 } from "@primal-grid/shared";
-import type { SpawnPawnPayload, SetNamePayload, ChatPayload } from "@primal-grid/shared";
+import type { SpawnPawnPayload, SetNamePayload, ChatPayload, PlaceBuildingPayload } from "@primal-grid/shared";
 import { spawnHQ } from "./territory.js";
 
 const PLAYER_COLORS = [
@@ -113,6 +113,10 @@ export class GameRoom extends Room {
 
     this.onMessage(CHAT, (client, message: ChatPayload) => {
       this.handleChat(client, message);
+    });
+
+    this.onMessage(PLACE_BUILDING, (client, message: PlaceBuildingPayload) => {
+      this.handlePlaceBuilding(client, message);
     });
 
     console.log("[GameRoom] Room created.");
@@ -375,6 +379,70 @@ export class GameRoom extends Room {
     this.spawnPawnCore(client.sessionId, player, message.pawnType, message.buildMode);
   }
 
+  private handlePlaceBuilding(client: Client, message: PlaceBuildingPayload) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) {
+      client.send("game_log", { message: "Player not found.", type: "error" });
+      return;
+    }
+
+    const { x, y, buildingType } = message;
+
+    // Validate building type
+    const cost = BUILDING_COSTS[buildingType];
+    if (!cost) {
+      client.send("game_log", { message: "Invalid building type.", type: "error" });
+      return;
+    }
+
+    // Validate tile exists
+    const tile = this.state.getTile(x, y);
+    if (!tile) {
+      client.send("game_log", { message: "Invalid tile.", type: "error" });
+      return;
+    }
+
+    // Validate tile owned by player
+    if (tile.ownerID !== client.sessionId) {
+      client.send("game_log", { message: "You don't own this tile.", type: "error" });
+      return;
+    }
+
+    // Validate no existing building (outpost/"" can be replaced; hq/farm/factory cannot)
+    if (tile.structureType !== "" && tile.structureType !== "outpost") {
+      client.send("game_log", { message: "Tile already has a structure.", type: "error" });
+      return;
+    }
+
+    // Validate terrain is walkable (not water/rock)
+    if (isWaterTile(tile.type) || tile.type === TileType.Rock) {
+      client.send("game_log", { message: "Cannot build on this terrain.", type: "error" });
+      return;
+    }
+
+    // Validate player has resources
+    if (player.wood < cost.wood || player.stone < cost.stone) {
+      client.send("game_log", {
+        message: `Not enough resources. Need ${cost.wood} wood + ${cost.stone} stone.`,
+        type: "error",
+      });
+      return;
+    }
+
+    // Deduct resources
+    player.wood -= cost.wood;
+    player.stone -= cost.stone;
+
+    // Place building
+    tile.structureType = buildingType;
+
+    const displayName = player.displayName || client.sessionId;
+    this.broadcast("game_log", {
+      message: `${displayName} built a ${buildingType} at (${x}, ${y}).`,
+      type: "building",
+    });
+  }
+
   /**
    * Core pawn spawning logic shared between human (handleSpawnPawn) and CPU players.
    * Validates resources, pawn cap, finds spawn location, deducts cost, and creates the creature.
@@ -578,16 +646,21 @@ export class GameRoom extends Room {
   private tickStructureIncome() {
     if (this.state.tick % STRUCTURE_INCOME.INTERVAL_TICKS !== 0) return;
 
-    // Count farms per player
-    const farmCounts = new Map<string, number>();
+    // Count buildings per player by type
+    const buildingCounts = new Map<string, Map<string, number>>();
     const len = this.state.tiles.length;
     for (let i = 0; i < len; i++) {
       const tile = this.state.tiles.at(i);
-      if (!tile || tile.ownerID === "" || tile.structureType !== "farm") continue;
-      farmCounts.set(tile.ownerID, (farmCounts.get(tile.ownerID) || 0) + 1);
+      if (!tile || tile.ownerID === "" || !BUILDING_INCOME[tile.structureType]) continue;
+      let playerMap = buildingCounts.get(tile.ownerID);
+      if (!playerMap) {
+        playerMap = new Map<string, number>();
+        buildingCounts.set(tile.ownerID, playerMap);
+      }
+      playerMap.set(tile.structureType, (playerMap.get(tile.structureType) || 0) + 1);
     }
 
-    // Grant income per player: HQ base income + farm income
+    // Grant income per player: HQ base income + building income
     this.state.players.forEach((player, playerId) => {
       if (player.hqX < 0 || player.hqY < 0) return;
 
@@ -595,10 +668,17 @@ export class GameRoom extends Room {
       player.wood += STRUCTURE_INCOME.HQ_WOOD;
       player.stone += STRUCTURE_INCOME.HQ_STONE;
 
-      // Farm income
-      const farms = farmCounts.get(playerId) || 0;
-      player.wood += farms * STRUCTURE_INCOME.FARM_WOOD;
-      player.stone += farms * STRUCTURE_INCOME.FARM_STONE;
+      // Building income (farms, factories, etc.)
+      const playerBuildings = buildingCounts.get(playerId);
+      if (playerBuildings) {
+        playerBuildings.forEach((count, structureType) => {
+          const income = BUILDING_INCOME[structureType];
+          if (income) {
+            player.wood += count * income.wood;
+            player.stone += count * income.stone;
+          }
+        });
+      }
     });
   }
 
@@ -767,6 +847,10 @@ export class GameRoom extends Room {
 
       tile.claimProgress += 1;
       if (tile.claimProgress >= TERRITORY.CLAIM_TICKS) {
+        // Clear any building from previous owner when ownership transfers
+        if (tile.structureType !== "" && tile.structureType !== "hq") {
+          tile.structureType = "";
+        }
         tile.ownerID = tile.claimingPlayerID;
         tile.shapeHP = SHAPE.BLOCK_HP;
         const player = this.state.players.get(tile.claimingPlayerID);

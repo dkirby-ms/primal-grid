@@ -311,6 +311,18 @@ export const STRUCTURE_INCOME = {
   FARM_STONE: 1,
 } as const;
 
+/** Building placement costs (instant placement via PLACE_BUILDING). */
+export const BUILDING_COSTS: Record<string, { wood: number; stone: number }> = {
+  farm: { wood: 12, stone: 6 },
+  factory: { wood: 20, stone: 12 },
+} as const;
+
+/** Per-building income awarded each structure income tick. */
+export const BUILDING_INCOME: Record<string, { wood: number; stone: number }> = {
+  farm: { wood: 1, stone: 1 },
+  factory: { wood: 2, stone: 1 },
+} as const;
+
 /** Progression level definitions. */
 export const PROGRESSION = {
   MAX_LEVEL: 7,

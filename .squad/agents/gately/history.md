@@ -1327,3 +1327,14 @@ See `.squad/decisions.md` Initiative Triage & Execution Plan (2026-03-09) for fu
 - **Scoreboard:** CPU players show a 🤖 emoji after their name and render at 0.75 opacity to visually distinguish them from human players. Human player still sees "(you)" suffix.
 - **Grid HQ labels:** CPU player HQ name labels on the map append " 🤖" to the display name. Computed in the state-sync loop before passing to `updateHQMarker()`.
 - **No breaking changes:** All existing tests pass (715/716 — 1 pre-existing timeout in water-depth test unrelated to this work).
+
+### Building Placement UI & Rendering — Issue #110 (2026-03-11)
+
+- **Building buttons:** Added "Buildings" HUD section between Pawns and Combat with "Build Farm (12W, 6S)" and "Build Factory (20W, 12S)" buttons. Buttons auto-disable when player can't afford them. Uses same CSS pattern as spawn buttons.
+- **Placement mode:** Clicking a build button toggles placement mode. Active button gets green highlight (`.build-btn.active`). Valid tiles show green semi-transparent overlay (alpha 0.2 fill + alpha 0.5 stroke border). ESC cancels placement. Click on valid tile sends `PLACE_BUILDING` message and exits placement mode.
+- **Client-side validation:** `GridRenderer.isValidPlacementTile()` checks: owned by local player, no existing structureType, not water/rock. Server does final validation.
+- **Building rendering:** Building icons (🌾 farm, ⚙️ factory) rendered on visible tiles via `buildingContainer` + `buildingIcons` Map keyed by tile index. Same Text + anchor pattern as HQ markers. Added `factory: '⚙️'` to STRUCTURE_ICONS for fog silhouettes.
+- **Screen-to-tile conversion:** `InputHandler.screenToTile()` uses `worldContainer.worldTransform` to invert camera pan/zoom and convert screen coords to tile coordinates. This pattern is reusable for any future click-to-tile features.
+- **Placement highlights:** Dynamic Graphics objects created on-demand in `showPlacementHighlights()`, destroyed on clear. Not pre-allocated like territory overlays — placement mode is brief and infrequent, so allocation overhead is acceptable.
+- **Wiring:** `InputHandler.setGridRenderer(grid)` called from main.ts. HudDOM fires `onPlacementModeChange` callback that InputHandler subscribes to for showing/hiding highlights.
+- **Pre-existing server test failures:** 16 server-side test failures in buildings.test.ts and water-depth.test.ts — all pre-existing from Pemulis's server code, not caused by client changes. All 29 client tests pass.

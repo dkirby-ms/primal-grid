@@ -1,5 +1,6 @@
 import type { Room } from '@colyseus/sdk';
-import { PAWN_TYPES, isEnemyBase } from '@primal-grid/shared';
+import { PAWN_TYPES, BUILDING_COSTS, PLACE_BUILDING, isEnemyBase } from '@primal-grid/shared';
+import type { PlaceBuildingPayload } from '@primal-grid/shared';
 
 /**
  * DOM-based HUD panel.
@@ -35,6 +36,14 @@ export class HudDOM {
   private currentExplorerCount = 0;
   private currentEnemyBaseCount = 0;
 
+  // Building placement
+  private buildFarmBtn: HTMLButtonElement;
+  private buildFactoryBtn: HTMLButtonElement;
+  private buildPlacementHint: HTMLElement;
+  private _placementMode: 'farm' | 'factory' | null = null;
+  /** Callback fired when placement mode changes; InputHandler subscribes. */
+  public onPlacementModeChange: ((mode: 'farm' | 'factory' | null) => void) | null = null;
+
   /** HQ position for colony interactions. */
   public localHqX = 0;
   public localHqY = 0;
@@ -66,6 +75,13 @@ export class HudDOM {
     this.spawnDefenderBtn.addEventListener('click', () => this.onSpawnPawn('defender'));
     this.spawnAttackerBtn.addEventListener('click', () => this.onSpawnPawn('attacker'));
     this.spawnExplorerBtn.addEventListener('click', () => this.onSpawnPawn('explorer'));
+
+    // Building placement buttons
+    this.buildFarmBtn = document.getElementById('build-farm-btn') as HTMLButtonElement;
+    this.buildFactoryBtn = document.getElementById('build-factory-btn') as HTMLButtonElement;
+    this.buildPlacementHint = document.getElementById('build-placement-hint')!;
+    this.buildFarmBtn.addEventListener('click', () => this.togglePlacementMode('farm'));
+    this.buildFactoryBtn.addEventListener('click', () => this.togglePlacementMode('factory'));
   }
 
   /** Handle spawn builder button click. */
@@ -92,6 +108,50 @@ export class HudDOM {
     }
     if (count >= def.maxCount) return;
     this.room.send('spawn_pawn', { pawnType });
+  }
+
+  /** Toggle building placement mode. */
+  private togglePlacementMode(buildingType: 'farm' | 'factory'): void {
+    if (this._placementMode === buildingType) {
+      this.cancelPlacementMode();
+    } else {
+      this._placementMode = buildingType;
+      this.buildFarmBtn.classList.toggle('active', buildingType === 'farm');
+      this.buildFactoryBtn.classList.toggle('active', buildingType === 'factory');
+      this.buildPlacementHint.classList.add('visible');
+      this.onPlacementModeChange?.(buildingType);
+    }
+  }
+
+  /** Cancel building placement mode. */
+  public cancelPlacementMode(): void {
+    this._placementMode = null;
+    this.buildFarmBtn.classList.remove('active');
+    this.buildFactoryBtn.classList.remove('active');
+    this.buildPlacementHint.classList.remove('visible');
+    this.onPlacementModeChange?.(null);
+  }
+
+  /** Get current placement mode. */
+  public get placementMode(): 'farm' | 'factory' | null {
+    return this._placementMode;
+  }
+
+  /** Send a PLACE_BUILDING message to the server. Returns true if sent. */
+  public sendPlaceBuilding(x: number, y: number): boolean {
+    if (!this.room || !this._placementMode) return false;
+    const cost = BUILDING_COSTS[this._placementMode];
+    if (!cost) return false;
+    if (this.currentWood < cost.wood || this.currentStone < cost.stone) return false;
+
+    const payload: PlaceBuildingPayload = {
+      x,
+      y,
+      buildingType: this._placementMode,
+    };
+    this.room.send(PLACE_BUILDING, payload);
+    this.cancelPlacementMode();
+    return true;
   }
 
   /** Update spawn button enabled/disabled state. */
@@ -122,6 +182,16 @@ export class HudDOM {
     if (expDef) {
       const canAffordExp = this.currentWood >= expDef.cost.wood && this.currentStone >= expDef.cost.stone;
       this.spawnExplorerBtn.disabled = !canAffordExp || this.currentExplorerCount >= expDef.maxCount;
+    }
+
+    // Building buttons
+    const farmCost = BUILDING_COSTS['farm'];
+    if (farmCost) {
+      this.buildFarmBtn.disabled = this.currentWood < farmCost.wood || this.currentStone < farmCost.stone;
+    }
+    const factoryCost = BUILDING_COSTS['factory'];
+    if (factoryCost) {
+      this.buildFactoryBtn.disabled = this.currentWood < factoryCost.wood || this.currentStone < factoryCost.stone;
     }
   }
 
