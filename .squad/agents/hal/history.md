@@ -755,3 +755,32 @@ Analyzed dependencies and created formal execution plan for four GitHub issues:
 - Dev journal pattern: dkirby-ms journals end-of-day work and copypastes to squad for morning context
 - Issue-driven testing: Real issues filed to validate automation pipelines (dogfooding)
 
+
+## 2026-03-12: PR #102 Review — Browser Refresh Session Fix
+
+**By:** Hal (Lead)  
+**Date:** 2026-03-12  
+**Issue:** #101  
+**PR:** #102  
+**Status:** APPROVED
+
+### Summary
+
+Reviewed Pemulis's fix for browser refresh dropping user session. The change is minimal (~15 lines across 2 files): exported `loadReconnectToken()` from `network.ts` and added a reconnection check at the top of `bootstrap()` in `main.ts`. On page load, if a reconnection token exists in sessionStorage, the client attempts `reconnectGameRoom()` before connecting to the lobby. Success skips the lobby; failure falls through to normal flow.
+
+### Review Findings
+
+- **Correctness:** All edge cases handled — expired tokens, server restart, network failure all trigger retry with exponential backoff (1s–16s), then clear token and fall through to lobby. Token rotation on successful reconnect.
+- **Architecture:** Clean bootstrap flow. Reconnection check placed after UI setup, before lobby. No new state or APIs.
+- **Security:** sessionStorage is the correct choice (tab-scoped, survives refresh, not cross-origin). Reconnection token is Colyseus-internal, not a JWT.
+- **Tests:** 27 tests (11 server, 16 client) comprehensive. All 690/690 pass.
+
+### Non-blocking Note
+
+`reconnectGameRoom()` doesn't emit `'reconnecting'` status when called from `bootstrap()` (only the `onLeave` caller path emits it). Low priority follow-up.
+
+## Learnings
+
+### Architecture Patterns
+- **Reconnection token storage:** sessionStorage is ideal for reconnection tokens — tab-scoped, survives refresh, cleared on tab close. localStorage would persist stale tokens across sessions.
+- **Bootstrap reconnection pattern:** Check for reconnection token BEFORE lobby connection, not after. Short-circuit on success, fall through on failure. This avoids unnecessary lobby connections.
