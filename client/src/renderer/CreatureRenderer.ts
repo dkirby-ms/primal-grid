@@ -32,6 +32,7 @@ const CARNIVORE_COLOR = 0xf44336;
 const BUILDER_COLOR = 0x42a5f5;
 const DEFENDER_COLOR = 0x2196f3;
 const ATTACKER_COLOR = 0xff9800;
+const EXPLORER_COLOR = 0x66bb6a;
 
 // Brighter variants for Eat state
 const HERBIVORE_EAT_COLOR = 0x81c784;
@@ -122,7 +123,7 @@ export class CreatureRenderer {
 
         const isBuilder = creatureType === 'pawn_builder';
         const isLocalBuilder = isBuilder && ownerID === this.localSessionId;
-        const isCombatEntity = !isGrave && (isEnemyBase(creatureType) || isEnemyMobile(creatureType) || creatureType === 'pawn_defender' || creatureType === 'pawn_attacker');
+        const isCombatEntity = !isGrave && (isEnemyBase(creatureType) || isEnemyMobile(creatureType) || creatureType === 'pawn_defender' || creatureType === 'pawn_attacker' || creatureType === 'pawn_explorer');
 
         let entry = this.entries.get(id);
         if (!entry) {
@@ -336,6 +337,7 @@ export class CreatureRenderer {
     // Combat pawn icons from PAWN_TYPES registry
     if (creatureType === 'pawn_defender') return PAWN_TYPES['defender']?.icon ?? '🛡';
     if (creatureType === 'pawn_attacker') return PAWN_TYPES['attacker']?.icon ?? '⚔';
+    if (creatureType === 'pawn_explorer') return PAWN_TYPES['explorer']?.icon ?? '🔭';
     // Enemy base icons from ENEMY_BASE_TYPES registry
     if (isEnemyBase(creatureType)) return ENEMY_BASE_TYPES[creatureType]?.icon ?? '⛺';
     // Enemy mobile icons from ENEMY_MOBILE_TYPES registry
@@ -353,6 +355,9 @@ export class CreatureRenderer {
         alpha = currentState === 'exhausted' ? 0.3 : 0.4;
       } else if (creatureType === 'pawn_defender') {
         color = currentState === 'exhausted' ? EXHAUSTED_COLOR : DEFENDER_COLOR;
+        alpha = currentState === 'exhausted' ? 0.3 : 0.4;
+      } else if (creatureType === 'pawn_explorer') {
+        color = currentState === 'exhausted' ? EXHAUSTED_COLOR : EXPLORER_COLOR;
         alpha = currentState === 'exhausted' ? 0.3 : 0.4;
       } else {
         // pawn_attacker
@@ -412,6 +417,12 @@ export class CreatureRenderer {
       return;
     }
     if (creatureType === 'pawn_builder') {
+      indicator.text = '';
+      indicator.visible = false;
+      return;
+    }
+    // Explorer pawn — no state indicator needed
+    if (creatureType === 'pawn_explorer') {
       indicator.text = '';
       indicator.visible = false;
       return;
@@ -494,6 +505,7 @@ export class CreatureRenderer {
     if (isEnemyMobile(creatureType)) return ENEMY_MOBILE_TYPES[creatureType]?.health ?? 20;
     if (creatureType === 'pawn_defender') return PAWN_TYPES['defender']?.health ?? 80;
     if (creatureType === 'pawn_attacker') return PAWN_TYPES['attacker']?.health ?? 60;
+    if (creatureType === 'pawn_explorer') return PAWN_TYPES['explorer']?.health ?? 35;
     return 100;
   }
 

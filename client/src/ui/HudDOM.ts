@@ -25,11 +25,14 @@ export class HudDOM {
   // Combat panel
   private spawnDefenderBtn: HTMLButtonElement;
   private spawnAttackerBtn: HTMLButtonElement;
+  private spawnExplorerBtn: HTMLButtonElement;
   private defenderCountEl: HTMLElement;
   private attackerCountEl: HTMLElement;
+  private explorerCountEl: HTMLElement;
   private enemyBaseCountEl: HTMLElement;
   private currentDefenderCount = 0;
   private currentAttackerCount = 0;
+  private currentExplorerCount = 0;
   private currentEnemyBaseCount = 0;
 
   /** HQ position for colony interactions. */
@@ -55,11 +58,14 @@ export class HudDOM {
     // Combat panel elements
     this.defenderCountEl = document.getElementById('defender-count')!;
     this.attackerCountEl = document.getElementById('attacker-count')!;
+    this.explorerCountEl = document.getElementById('explorer-count')!;
     this.enemyBaseCountEl = document.getElementById('enemy-base-count')!;
     this.spawnDefenderBtn = document.getElementById('spawn-defender-btn') as HTMLButtonElement;
     this.spawnAttackerBtn = document.getElementById('spawn-attacker-btn') as HTMLButtonElement;
+    this.spawnExplorerBtn = document.getElementById('spawn-explorer-btn') as HTMLButtonElement;
     this.spawnDefenderBtn.addEventListener('click', () => this.onSpawnPawn('defender'));
     this.spawnAttackerBtn.addEventListener('click', () => this.onSpawnPawn('attacker'));
+    this.spawnExplorerBtn.addEventListener('click', () => this.onSpawnPawn('explorer'));
   }
 
   /** Handle spawn builder button click. */
@@ -72,13 +78,18 @@ export class HudDOM {
     this.room.send('spawn_pawn', { pawnType: 'builder' });
   }
 
-  /** Handle spawn defender/attacker button click. */
-  private onSpawnPawn(pawnType: 'defender' | 'attacker'): void {
+  /** Handle spawn defender/attacker/explorer button click. */
+  private onSpawnPawn(pawnType: 'defender' | 'attacker' | 'explorer'): void {
     if (!this.room) return;
     const def = PAWN_TYPES[pawnType];
     if (!def) return;
     if (this.currentWood < def.cost.wood || this.currentStone < def.cost.stone) return;
-    const count = pawnType === 'defender' ? this.currentDefenderCount : this.currentAttackerCount;
+    let count: number;
+    switch (pawnType) {
+      case 'defender': count = this.currentDefenderCount; break;
+      case 'attacker': count = this.currentAttackerCount; break;
+      case 'explorer': count = this.currentExplorerCount; break;
+    }
     if (count >= def.maxCount) return;
     this.room.send('spawn_pawn', { pawnType });
   }
@@ -104,6 +115,13 @@ export class HudDOM {
     if (atkDef) {
       const canAffordAtk = this.currentWood >= atkDef.cost.wood && this.currentStone >= atkDef.cost.stone;
       this.spawnAttackerBtn.disabled = !canAffordAtk || this.currentAttackerCount >= atkDef.maxCount;
+    }
+
+    // Explorer button
+    const expDef = PAWN_TYPES['explorer'];
+    if (expDef) {
+      const canAffordExp = this.currentWood >= expDef.cost.wood && this.currentStone >= expDef.cost.stone;
+      this.spawnExplorerBtn.disabled = !canAffordExp || this.currentExplorerCount >= expDef.maxCount;
     }
   }
 
@@ -175,6 +193,7 @@ export class HudDOM {
         let builders = 0;
         let defenders = 0;
         let attackers = 0;
+        let explorers = 0;
         let enemyBases = 0;
         creatures.forEach((creature) => {
           const t = (creature['creatureType'] as string) ?? 'herbivore';
@@ -185,6 +204,8 @@ export class HudDOM {
             defenders++;
           } else if (t === 'pawn_attacker' && ownerID === this.localSessionId) {
             attackers++;
+          } else if (t === 'pawn_explorer' && ownerID === this.localSessionId) {
+            explorers++;
           } else if (t === 'carnivore') {
             carns++;
           } else if (t === 'herbivore') {
@@ -199,11 +220,14 @@ export class HudDOM {
         // Combat counts
         const defDef = PAWN_TYPES['defender'];
         const atkDef = PAWN_TYPES['attacker'];
+        const expDef = PAWN_TYPES['explorer'];
         this.currentDefenderCount = defenders;
         this.currentAttackerCount = attackers;
+        this.currentExplorerCount = explorers;
         this.currentEnemyBaseCount = enemyBases;
         this.defenderCountEl.textContent = `🛡 ${defenders}/${defDef?.maxCount ?? 3}`;
         this.attackerCountEl.textContent = `⚔ ${attackers}/${atkDef?.maxCount ?? 2}`;
+        this.explorerCountEl.textContent = `🔭 ${explorers}/${expDef?.maxCount ?? 3}`;
         this.enemyBaseCountEl.textContent = enemyBases > 0 ? `⛺ ${enemyBases} active` : 'No threats';
 
         this.updateSpawnButton();
