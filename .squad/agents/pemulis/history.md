@@ -1820,3 +1820,12 @@ See `.squad/decisions.md` for full triage document, dependency graph, risk mitig
 - **Tests:** 27 TDD tests written (11 server, 16 client) covering token lifecycle, reconnection validation, and fallback paths. All 690 existing tests passing.
 - **Impact on Pemulis:** No follow-up work required. Session restoration plumbing was already complete and integrated into Pemulis' `GameRoom.onJoin()` logic. Token validation and `sessionUserMap` handoff remain stable.
 
+
+### Browser Refresh Session Recovery (#101) — 2026-03-12
+
+- **Bug:** `bootstrap()` in `main.ts` never checked for a stored reconnection token on page load — always went straight to lobby, dropping the user's active game session.
+- **Fix (2 files, ~15 lines):**
+  1. `network.ts`: Exported `loadReconnectToken()` (was private) so `bootstrap()` can check for a stored token.
+  2. `main.ts`: Added reconnection check at the top of `bootstrap()`, after UI init but before lobby connect. If a token exists, calls `reconnectGameRoom()` — on success skips lobby and wires up `setupGameSession()`; on failure falls through to normal lobby flow.
+- **Key insight:** All reconnection plumbing was already in place (server `onDrop`/`onReconnect`, client `reconnectGameRoom()` with exponential backoff, `sessionStorage` token persistence). The only gap was the cold-start check in `bootstrap()`.
+- **Tests:** All 27 reconnection tests pass (16 client, 11 server). 689/690 total tests pass (1 pre-existing flaky perf test).
