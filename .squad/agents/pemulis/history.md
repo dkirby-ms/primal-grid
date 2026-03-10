@@ -1813,3 +1813,32 @@ See `.squad/decisions.md` for full triage document, dependency graph, risk mitig
 - **Colyseus 0.17.34 onDrop/onReconnect events**: SDK v0.17.34 exposes `room.onDrop(cb)` and `room.onReconnect(cb)` for lifecycle hooks during SDK-managed reconnection. `onDrop` fires when the connection is temporarily lost; `onReconnect` fires when the SDK reconnects automatically. `onLeave` only fires on final disconnect (consented or SDK reconnection exhausted). Use `onDrop` for UI status ('reconnecting') and `onReconnect` to save rotated tokens.
 - **Browser refresh reconnection pattern**: The `pageUnloading` flag (set via `beforeunload` listener) prevents wasted reconnection attempts during page unload. On the new page load, `bootstrap()` checks `sessionStorage` for a reconnect token and calls `reconnectGameRoom()` before falling through to the lobby. Token key: `primal-grid-reconnect-token` in `sessionStorage` (tab-scoped, survives refresh).
 - **CPU Opponent System (Issue #105, PR):** CPU players are created at GameRoom `onCreate` time via `cpuPlayers` option. They get synthetic session IDs (`cpu_0`, `cpu_1`, ...), skip StateView/fog-of-war setup, and are ephemeral (no persistence/auth). The `cpuPlayerAI.ts` module runs a flat priority-based decision loop (defend → build → attack → farm → idle) every 16 ticks (~4 seconds). CPU players only make strategic decisions (which pawn to spawn); tactical behavior is handled by existing pawn AIs. `spawnPawnCore()` was extracted from `handleSpawnPawn` for shared use. Room auto-disposes when only CPU players remain (`checkCpuOnlyRoom`). `cpuPlayerIds` must be null-guarded (`?.`) since existing tests create GameRoom via `Object.create()` without initializing all fields.
+
+### CPU Opponent Implementation Complete (2026-03-12)
+
+**Work Session:** 2026-03-10T20:30:06Z  
+**Issue:** #105  
+**PR:** #111  
+**Status:** ✅ APPROVED (Hal)  
+**Closes:** #105
+
+**Deliverable:** CPU opponent system fully integrated and code-reviewed. PR #111 ready for merge to `dev`.
+
+**Artifacts:**
+- Created `cpuPlayerAI.ts` — Strategic decision loop using flat priority system (defend → build → attack → farm → idle)
+- Extracted `spawnPawnCore()` — Public method for programmatic pawn spawning (CPU AI + future systems)
+- Modified `GameRoom.ts` — CPU player tracking, `cpuPlayerIds` Set, room auto-disposal via `checkCpuOnlyRoom()`
+- Modified `LobbyRoom.ts` — `cpuPlayers` option passthrough to GameRoom
+- Modified `constants.ts` — `CPU_PLAYER` constant with player names
+- Modified `messages.ts` — CPU player message types
+
+**Test Coverage:** 20 new tests (CPU AI decisions, spawn mechanics, room cleanup). Total: 716 passing, 0 regressions.
+
+**Architecture Decisions Documented:** `.squad/decisions.md` merged decision for CPU opponent first-class PlayerState pattern, `spawnPawnCore()` generalization, synthetic session IDs, room auto-disposal, and StateView-skipping for zero rendering cost.
+
+**Hal's Review (Non-Blocking Items):**
+1. Frontend integration pending — Gately must add CPU player count input to lobby
+2. Perf baseline recommended with full CPU roster (7 players) before production
+3. Future enhancement: difficulty settings (easy/medium/hard)
+
+**Next:** Awaiting Gately implementation for frontend UI. Ready for integration testing.

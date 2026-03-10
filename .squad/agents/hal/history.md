@@ -885,3 +885,29 @@ Clean, well-tested implementation. Bootstrap reconnect-check handles all edge ca
 **Test Coverage & Mocking:** Mock `window.addEventListener` must capture callbacks by event name, not be a no-op `vi.fn()`. This is especially critical for lifecycle callbacks like `beforeunload` and `pageshow` that are registered at module load time and never tested otherwise. A no-op mock creates invisible coverage gaps.
 
 **pageUnloading One-Way Flag Bug (2026-03-10):** PR #103 set `pageUnloading = true` in `beforeunload` but never reset it. This causes all subsequent non-consented disconnects after a cancelled navigation to skip token clearing, stranding the user. Fix: Add `window.addEventListener('pageshow', () => { pageUnloading = false; })` to reset the flag after cancelled navigation or BFCache restore. New implementer needed (Pemulis and Gately locked out per reviewer protocol). Steeply to add test coverage.
+
+**CPU Opponents System (PR #111, 2026-03-12):** Reviewed and approved. CPU players are first-class `PlayerState` entries created in `GameRoom.onCreate()` with synthetic session IDs (`cpu_0`–`cpu_6`). They skip `initPlayerView` (no client), are ephemeral (no persistence/auth), and get income/scoring from existing tick functions with zero modifications to those systems. AI is strategic only (which pawn to spawn, via `cpuPlayerAI.ts` priority loop: defend → build → attack → farm → idle), tactical behavior delegated to existing pawn AIs. `spawnPawnCore()` extracted from `handleSpawnPawn` as a public method for programmatic pawn spawning. Room auto-disposes via `checkCpuOnlyRoom()` when all humans leave. `cpuPlayers` option flows from `CreateGamePayload` through `LobbyRoom` to `GameRoom` options. Key files: `server/src/rooms/cpuPlayerAI.ts`, `shared/src/constants.ts` (`CPU_PLAYER`), `shared/src/lobbyTypes.ts` (`CreateGamePayload.cpuPlayers`). Non-blocking cleanup noted: unused imports (`CreatureState`, `CREATURE_AI`) and unused `room` parameter in `tickCpuPlayers`, magic number `7` in LobbyRoom should use `CPU_PLAYER.MAX_COUNT`.
+
+### PR #111 Review: CPU Opponent Implementation (2026-03-12)
+
+**Work Session:** 2026-03-10T20:30:06Z  
+**Author:** Pemulis (Systems Dev)  
+**PR:** #111  
+**Status:** ✅ APPROVED  
+**Issue:** #105
+
+**Verdict:** APPROVED — clean architecture, comprehensive tests, zero regressions.
+
+**Assessment:**
+
+- **Architecture:** CPU opponents as first-class `PlayerState` entries is correct. Synthetic session IDs (`cpu_0`–`cpu_6`), no StateView, no persistence — clean separation. Strategic AI loop in `cpuPlayerAI.ts` delegates tactical decisions to existing pawn AIs — good encapsulation.
+- **Code Quality:** `spawnPawnCore()` extraction is clean and generalizable. Well-tested entry point for programmatic pawn spawning. `cpuPlayerIds` Set properly null-guarded.
+- **Test Coverage:** 20 new tests thoroughly exercise CPU decisions, pawn spawning, and room cleanup. 716 total tests passing, no regressions detected.
+- **Integration:** `cpuPlayers` option flows correctly from lobby payload through LobbyRoom to GameRoom options.
+
+**Non-Blocking Items (Noted in PR Comment):**
+1. **Frontend pending:** Gately to add CPU player count input (0–7) to create-game UI
+2. **Perf baseline:** Recommend baseline testing with full 7-CPU roster before production release
+3. **Future enhancement:** Difficulty settings (easy/medium/hard) can be added in follow-up PR
+
+**Recommendation:** Ready to merge to `dev` after above non-blocking feedback is reviewed. Unblocking team feature and closing #105.
