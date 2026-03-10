@@ -72,6 +72,7 @@ async function bootstrap(): Promise<void> {
   if (loadReconnectToken()) {
     const room = await reconnectGameRoom();
     if (room) {
+      lobbyScreen.hide();
       setGameUIVisible(true);
       setupGameSession(app, grid, camera, room, lobbyScreen);
       return;
