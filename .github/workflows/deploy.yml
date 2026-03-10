@@ -149,7 +149,7 @@ jobs:
             --argjson fields "$FIELDS" \
             --arg footer "Primal Grid CI • ${REPOSITORY}" \
             '{
-              "username": "Squad: Marathe",
+              "username": "Squad: Joelle",
               "embeds": [{
                 "title": $title,
                 "description": $desc,

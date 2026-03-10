@@ -693,3 +693,65 @@ Analyzed dependencies and created formal execution plan for four GitHub issues:
 - **2026-03 PR #78 Review (Silent Guest Auth):** Reviewed Gately's client-side session persistence PR. Found two blocking issues: (1) CORS — `fetch()` to `http://localhost:2567/auth/guest` from Vite on `http://localhost:3000` will be blocked; Express server has no CORS middleware. (2) No graceful degradation — if `createGuestSession()` throws, `connect()` fails entirely even though `GameRoom.onJoin()` is auth-optional. Also flagged duplicated room-setup code in the retry path. Lint clean. Auth URL derivation (`ws(s)://` → `http(s)://`) is correct. Requested changes via PR comment (couldn't use request-changes since bot authored the PR).
 
 - **2026-03 PR #78 Re-review (Session Persistence — Approved):** Pemulis addressed all three requested changes: (1) CORS middleware added via `app.use(cors())` on Express. (2) `ensureToken()` now catches failures and returns `undefined`; `connect()` falls back to anonymous join with three retry layers. (3) `setupRoom()` helper extracted to DRY lifecycle wiring across all join paths. Lint clean, no `any` types. Approved via comment (can't use `--approve` on bot-authored PRs). Ready to merge.
+
+---
+
+## 2026-03-10: Dev Journal Analysis & Discord Webhook Handoff
+
+**By:** Hal (Lead)  
+**Date:** 2026-03-10  
+**Status:** ANALYSIS COMPLETE, DECISION WRITTEN  
+
+### Dev Journal Summary (dkirby-ms)
+
+**Accomplishments:**
+1. **CI/CD & Code Review Automation** — workflows, triage, and PR automation mostly complete
+2. **Game Features** — lobby, server rooms, and in-game chat added
+3. **Session Persistence Issue** — browser refresh drops connection (issue incoming to test auto-triage)
+4. **Joelle Onboarding** — DevRel agent added, but Discord webhook shipped as Marathe instead of Joelle
+
+### Root Cause: Discord Webhook Identity
+
+**Problem:** Three workflows hardcode `"username": "Squad: Marathe"` in Discord webhook payloads:
+- `.github/workflows/deploy.yml` (line 169) — production deployments
+- `.github/workflows/deploy-uat.yml` (line 169) — UAT deployments
+- `.github/workflows/e2e.yml` (line 95) — E2E test results
+
+**Charter Review:**
+- **Joelle's charter** (`.squad/agents/joelle/charter.md`) explicitly owns: "Discord deployment notifications — tone, formatting, changelog quality"
+- **Marathe's charter** remains CI/CD mechanics and infrastructure
+
+**Decision:** Discord identity transfers from Marathe to Joelle. Changelog generation mechanics stay with Marathe (CI/CD domain), but the **community voice** is Joelle's.
+
+**Documented:** `.squad/decisions/inbox/hal-joelle-discord-handoff.md`
+
+### Browser Refresh Connection Drop
+
+**Issue:** Refreshing browser drops WebSocket connection instead of persisting session
+**Context:** Recent session persistence PRs (#70, #78) merged — this tests whether client-side restore is working correctly
+**Triage Prediction:** Likely Pemulis (backend session/auth) or Gately (client WebSocket lifecycle) depending on where the reconnection logic lives
+**Status:** Waiting for dkirby-ms to file issue (will test auto-triage pipeline)
+
+### Action Items
+
+1. **Immediate:** Update three workflows to change Discord username to "Squad: Joelle"
+2. **Monitor:** Browser refresh issue when filed — confirm auto-triage routes correctly
+3. **Pattern:** Established ownership boundary between CI/CD mechanics (Marathe) and community voice (Joelle)
+
+## Learnings
+
+### Architecture Patterns
+- **Discord Webhook Ownership Split:** Infrastructure (workflow YAML, changelog scripts) vs. Community Voice (Discord identity, message tone) can be cleanly separated
+- **Charter-Driven Ownership:** When onboarding new roles, audit ALL touch points in infrastructure for identity/ownership references
+
+### Key Files
+- `.github/workflows/deploy.yml` — production Discord notifications
+- `.github/workflows/deploy-uat.yml` — UAT Discord notifications
+- `.github/workflows/e2e.yml` — E2E test Discord notifications
+- `.squad/agents/joelle/charter.md` — DevRel charter (Discord notifications owner)
+- `.squad/agents/marathe/charter.md` — CI/CD charter (workflow mechanics owner)
+
+### User Preferences
+- Dev journal pattern: dkirby-ms journals end-of-day work and copypastes to squad for morning context
+- Issue-driven testing: Real issues filed to validate automation pipelines (dogfooding)
+
