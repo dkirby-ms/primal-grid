@@ -2,6 +2,7 @@ import { GameState, CreatureState } from "./GameState.js";
 import { stepBuilder } from "./builderAI.js";
 import { stepDefender } from "./defenderAI.js";
 import { stepAttacker } from "./attackerAI.js";
+import { stepExplorer } from "./explorerAI.js";
 import type { AttackerTracker } from "./attackerAI.js";
 import { stepEnemyBase } from "./enemyBaseAI.js";
 import type { EnemyBaseTracker } from "./enemyBaseAI.js";
@@ -95,6 +96,8 @@ export function tickCreatureAI(
       moved = stepDefender(creature, state);
     } else if (creature.pawnType === "attacker") {
       moved = stepAttacker(creature, state, attackerState);
+    } else if (creature.pawnType === "explorer") {
+      moved = stepExplorer(creature, state);
     } else if (creature.creatureType === "pawn_builder") {
       const prevX = creature.x;
       const prevY = creature.y;
@@ -413,6 +416,9 @@ export function isTileOpenForCreature(state: GameState, creature: CreatureState,
 
   // Attackers can enter any walkable tile
   if (creature.pawnType === "attacker") return true;
+
+  // Explorers can enter any walkable tile (they roam freely to scout)
+  if (creature.pawnType === "explorer") return true;
 
   // Defenders: own territory or unclaimed (cannot enter enemy-owned tiles)
   if (creature.pawnType === "defender") {

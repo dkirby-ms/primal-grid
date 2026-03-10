@@ -243,6 +243,21 @@ export const PAWN_TYPES: Record<string, PawnTypeDef> = {
     exhaustedThreshold: 5,
     visionRadius: 5,
   },
+  explorer: {
+    name: "Explorer",
+    icon: "🔭",
+    creatureType: "pawn_explorer",
+    health: 35,
+    cost: { wood: 12, stone: 8 },
+    maxCount: 3,
+    damage: 0,
+    detectionRadius: 0,
+    maxStamina: 30,
+    staminaCostPerMove: 1,
+    staminaRegenPerTick: 2,
+    exhaustedThreshold: 5,
+    visionRadius: 6,
+  },
 };
 
 /** Grave marker constants. */
