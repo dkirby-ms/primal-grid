@@ -2,7 +2,7 @@ name: Squad Triage
 
 on:
   issues:
-    types: [labeled]
+    types: [opened, labeled]
 
 permissions:
   issues: write
@@ -10,7 +10,9 @@ permissions:
 
 jobs:
   triage:
-    if: github.event.label.name == 'squad'
+    if: >-
+      github.event.action == 'opened' ||
+      (github.event.action == 'labeled' && github.event.label.name == 'squad')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,6 +23,19 @@ jobs:
           script: |
             const fs = require('fs');
             const issue = context.payload.issue;
+
+            // Auto-apply 'squad' label when triggered by issue open
+            if (context.payload.action === 'opened') {
+              const labels = issue.labels.map(l => l.name);
+              if (!labels.includes('squad')) {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  labels: ['squad']
+                });
+              }
+            }
 
             // Read team roster — check .squad/ first, fall back to .ai-team/
             let teamFile = '.squad/team.md';
