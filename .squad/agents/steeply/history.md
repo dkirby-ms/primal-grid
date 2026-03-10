@@ -1929,3 +1929,17 @@ Large-map rendering with PixiJS requires explicit culling—the scene graph does
 - **Fix needed:** ~15 lines in `main.ts` + 1 export in `network.ts`. Check for reconnect token before lobby on page load; attempt reconnection; skip lobby on success.
 - **Tests delivered:** 27 tests (11 server, 16 client) in PR #102. Server tests validate onDrop/onReconnect/onLeave lifecycle. Client tests validate token persistence, reconnection retry, and independent-of-lobby reconnection. Full suite: 690/690 passing.
 - **Key files:** `client/src/main.ts` (bootstrap flow), `client/src/network.ts` (reconnection logic, token helpers), `server/src/rooms/GameRoom.ts` (onDrop/onReconnect/onLeave).
+
+---
+
+### Cross-Agent Update: Browser Refresh Session Drop #101 (2026-03-12, issue #101)
+
+**Implementation completed** by Pemulis (Systems Dev). PR #102 merged.
+
+- **Steeply (Tester):** Delivered 27 TDD tests (11 server, 16 client) covering reconnection token persistence, retry logic, onDrop/onReconnect/onLeave lifecycle, and independent-of-lobby reconnection flow.
+- **Pemulis (Systems):** Implemented bootstrap reconnection check in `main.ts` (~8 lines) + exported `loadReconnectToken()` from `network.ts` (~1 line). Pattern: On page load, check `sessionStorage` for token before lobby connection; on token found, attempt `reconnectGameRoom()` first; on success, skip lobby entirely.
+
+**Test results:** All 27 reconnection tests passing. Full suite: 690/690.
+
+**Impact on Steeply:** Reconnection token lifecycle (storage in `sessionStorage`, lookup at bootstrap, cleanup on failed reconnect) is now reference pattern for future session/auth lifecycle work. Test setup for GameRoom mocking (`Object.create` + manual field init) continues to serve well across auth, chat, and reconnection suites.
+

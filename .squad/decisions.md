@@ -25,6 +25,44 @@ The reconnection plumbing is complete — the only missing piece is a trigger on
 
 ---
 
+## 2026-03-12: Bootstrap Reconnection Check Pattern — Issue #101 (Implementation)
+
+**Author:** Pemulis (Systems Dev)  
+**Date:** 2026-03-12  
+**Status:** Implemented (PR #102)
+
+### Decision
+
+On page load, `bootstrap()` checks `sessionStorage` for a reconnection token before connecting to the lobby. If found, it calls `reconnectGameRoom()` first. Success → skip lobby, restore game session. Failure → clear token, fall through to lobby.
+
+### Implementation Details
+
+**Files changed:**
+- `client/src/main.ts` — Added reconnection check in `bootstrap()` before lobby connection (~8 lines)
+- `client/src/network.ts` — Exported `loadReconnectToken()` function (~1 line)
+
+**Pattern:**
+1. Check `sessionStorage.getItem("primal-grid-reconnect-token")`
+2. If token exists, call `reconnectGameRoom(token)` with retry backoff
+3. On success: game session restored, skip lobby entirely
+4. On failure: clear token, fall through to normal lobby flow
+
+### Rationale
+
+The reconnection infrastructure was complete but never triggered on cold start. This is the minimal wiring to close the gap — no new state, no new APIs, just a conditional check at the top of `bootstrap()`.
+
+### Team Impact
+
+None. Server-side `GameRoom.onDrop`/`onReconnect` unchanged. Gately's UI renderers bind correctly via existing `setupGameSession()` path.
+
+### Test Coverage
+
+- 27 reconnection tests all passing (11 server, 16 client)
+- Full suite: 690/690 passing
+- Tests validate: token persistence, reconnection retry logic, independent-of-lobby reconnection, onDrop/onReconnect/onLeave lifecycle
+
+---
+
 ## 2026-03-10T12:14Z: Filter CI, Chore & Squad Commits from Changelogs
 
 **Author:** dkirby-ms (via Copilot)  
