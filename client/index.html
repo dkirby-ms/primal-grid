@@ -89,6 +89,43 @@
         opacity: 0.4;
         cursor: not-allowed;
       }
+      /* Building buttons */
+      .build-btn {
+        width: 100%;
+        padding: 6px 4px;
+        font-size: 11px;
+        font-family: 'Courier New', monospace;
+        background: #2a2a4a;
+        color: #cccccc;
+        border: 1px solid #444466;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-bottom: 4px;
+      }
+      .build-btn:not(:disabled):hover {
+        background: #3a3a5a;
+        border-color: #7ecfff;
+        color: #ffffff;
+      }
+      .build-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .build-btn.active {
+        background: #3a5a3a;
+        border-color: #88ff88;
+        color: #88ff88;
+      }
+      #build-placement-hint {
+        display: none;
+        font-size: 10px;
+        color: #88ff88;
+        text-align: center;
+        padding: 2px 0;
+      }
+      #build-placement-hint.visible {
+        display: block;
+      }
       /* Outer container for centering game-wrapper + log together */
       #game-outer {
         display: flex;
@@ -615,6 +652,13 @@
             border-radius:4px;
             cursor:pointer;
           ">🔨 Spawn Builder (10W, 5S)</button>
+        </div>
+
+        <div class="hud-section" id="section-buildings">
+          <h3>Buildings</h3>
+          <button id="build-farm-btn" class="build-btn" disabled>🌾 Build Farm (12W, 6S)</button>
+          <button id="build-factory-btn" class="build-btn" disabled>⚙️ Build Factory (20W, 12S)</button>
+          <div id="build-placement-hint">Click a tile to place · ESC to cancel</div>
         </div>
 
         <div class="hud-section" id="section-combat">
