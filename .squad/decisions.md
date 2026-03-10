@@ -2254,3 +2254,28 @@ Custom domain binding and managed TLS certificates are now declared in `infra/ma
 - All deploy workflows will now provision/maintain the custom domain and cert automatically
 - No more manual Azure portal configuration after deployments
 - DNS records (CNAME + TXT verification) must already exist at the registrar before deployment
+
+---
+
+## 2026-03-10: Issue Lifecycle & UAT Readiness Tagging
+
+**By:** dkirby-ms (User Directive)  
+**Date:** 2026-03-10  
+**Captured by:** Copilot
+
+### Decision
+
+Issues stay **open until the fix reaches production**. When a fix merges to `dev`:
+1. Label the issue to indicate it's ready for UAT testing (e.g., `stage: uat-ready`)
+2. Remove workflow-stage labels that are no longer relevant (e.g., `go:needs-research`, `go:in-progress`)
+
+This applies to all squad work, not just individual issues.
+
+### Rationale
+
+Provides visibility into the promotion pipeline (dev → UAT → prod) without prematurely closing issues. Stakeholders can track where a fix is in the release cycle.
+
+### Impact
+
+- All squad agents closing PRs should label related issues `stage: uat-ready` instead of closing them
+- Issues closed only after reaching prod
