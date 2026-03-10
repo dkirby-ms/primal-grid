@@ -515,3 +515,69 @@ Pemulis (Systems Dev) updated the prod branch guard to allow `.squad/` orchestra
 **Commit:** 8b0fa46 on dev  
 **Session Log:** `.squad/log/2026-03-10T00-29-39Z-guard-update.md`  
 **Orchestration Log:** `.squad/orchestration-log/2026-03-10T00-29-39Z-pemulis.md`
+
+## Custom Domain Investigation (ERR_CONNECTION_RESET)
+
+**Date:** $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+**Issue:** Server accessible via Azure Container App FQDN but returns ERR_CONNECTION_RESET via custom DNS (gridwar.kirbytoso.xyz / gridtest.kirbytoso.xyz).
+
+**Root Cause:** The Bicep template (`infra/main.bicep`) has **zero custom domain configuration**:
+- No `customDomains` property on the Container App ingress
+- No `Microsoft.App/managedEnvironments/managedCertificates` resource
+- No DNS validation records referenced
+- Deploy workflow has no DNS-related steps
+
+**Why ERR_CONNECTION_RESET occurs:** When a request arrives at Azure Container Apps with `Host: gridwar.kirbytoso.xyz`, the TLS handshake fails because there's no certificate or domain binding for that hostname. Azure resets the TCP connection immediately.
+
+**What works:** The Azure-assigned FQDN works because Azure automatically provisions a TLS certificate for `*.{region}.azurecontainerapps.io`.
+
+**Fix required (3 additions to `infra/main.bicep`):**
+1. Parameters for custom domain hostnames
+2. `Microsoft.App/managedEnvironments/managedCertificates` resources for each domain
+3. `customDomains` array in the Container App ingress configuration
+
+**DNS prerequisites (manual, outside Bicep):**
+- CNAME record: `gridwar.kirbytoso.xyz → <container-app-fqdn>`
+- TXT record: `asuid.gridwar.kirbytoso.xyz → <container-app-custom-domain-verification-id>`
+- Same for UAT domain
+
+**Key files:** `infra/main.bicep`, `infra/main.bicepparam`, `infra/main-uat.bicepparam`
+
+## Custom Domain Bicep Configuration (2026-03-10)
+
+- Added `customDomainName` parameter to `main.bicep` for per-environment custom domain binding
+- Added `Microsoft.App/managedEnvironments/managedCertificates@2024-03-01` resource as child of the Container App Environment
+- Certificate uses `domainControlValidation: 'CNAME'` (DNS records already configured at registrar)
+- Container App ingress updated with `customDomains` array binding hostname to managed cert via `SniEnabled`
+- Container App `dependsOn` managed cert to ensure correct deployment order
+- Container App API version bumped to `2024-03-01` to match certificate resource version
+- Prod domain: `gridwar.kirbytoso.xyz` (in `main.bicepparam`)
+- UAT domain: `gridtest.kirbytoso.xyz` (in `main-uat.bicepparam`)
+- Certificate name uses `uniqueString(customDomainName)` suffix to avoid collisions between environments sharing the same managed environment
+
+---
+
+## 2026-03-10T01:20:00Z: Triage Pipeline Consolidated (Coordinator)
+
+**Cross-Agent Update for Marathe (Release Ops)**
+
+Coordinator consolidated the triage system. The heartbeat-triggered triage steps have been removed, and `squad-triage.yml` is now the single authoritative triage system.
+
+**What Changed:**
+
+- **Heartbeat triage steps:** Removed from all workflows
+- **Single source of truth:** `squad-triage.yml` handles all issue triage operations
+- **Impact:** Eliminates redundant triage runs and memory leaks in roster parser
+
+**Benefits for Release Ops:**
+
+- Cleaner, more predictable triage behavior
+- No overlapping triage runs from multiple triggers
+- Release workflows now have consistent issue-labeling behavior across all environments
+
+**Commits:**
+- da01bb0: Auto-triage + template labels
+- a9c2bc8: Roster parser leak fix + consolidation
+
+**Session Log:** `.squad/log/2026-03-10T01-16-00Z-triage-fix-and-lobby-investigation.md`

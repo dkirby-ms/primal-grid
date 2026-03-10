@@ -17,6 +17,9 @@ param environment string = 'prod'
 @secure()
 param jwtSecret string
 
+@description('Custom domain hostname for the Container App (e.g. gridwar.kirbytoso.xyz).')
+param customDomainName string
+
 // ---------- Azure Container Registry ----------
 
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
@@ -57,11 +60,26 @@ resource containerEnv 'Microsoft.App/managedEnvironments@2023-05-01' = {
   }
 }
 
+// ---------- Managed Certificate ----------
+
+resource managedCert 'Microsoft.App/managedEnvironments/managedCertificates@2024-03-01' = {
+  parent: containerEnv
+  name: '${appName}-cert-${uniqueString(customDomainName)}'
+  location: location
+  properties: {
+    subjectName: customDomainName
+    domainControlValidation: 'CNAME'
+  }
+}
+
 // ---------- Container App ----------
 
-resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
+resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: environment == 'uat' ? '${appName}-uat' : appName
   location: location
+  dependsOn: [
+    managedCert
+  ]
   properties: {
     managedEnvironmentId: containerEnv.id
     configuration: {
@@ -70,6 +88,13 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
         targetPort: 2567
         transport: 'auto'
         allowInsecure: false
+        customDomains: [
+          {
+            name: customDomainName
+            certificateId: managedCert.id
+            bindingType: 'SniEnabled'
+          }
+        ]
       }
       registries: [
         {

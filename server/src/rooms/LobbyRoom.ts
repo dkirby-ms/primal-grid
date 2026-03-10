@@ -57,7 +57,6 @@ export class LobbyRoom extends Room {
     }
 
     this.registerMessageHandlers();
-    this.registerBridgeListeners();
     console.log("[LobbyRoom] Lobby created.");
   }
 
@@ -146,7 +145,7 @@ export class LobbyRoom extends Room {
     });
   }
 
-  private registerBridgeListeners() {
+  registerBridgeListeners() {
     if (!this.lobbyBridge) return;
 
     this.lobbyBridge.on("player_count_changed", (gameId: string, count: number) => {
