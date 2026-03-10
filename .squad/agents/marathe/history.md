@@ -451,3 +451,67 @@ PR #66 pending review and merge into dev branch.
 
 **Decision reference:** `.squad/decisions.md` → "Automatic Patch Version Bump on UAT Promotion"
 
+
+---
+
+## 2026-03-10T00:25:00Z: Merge Conflict Resolution in Promotion Workflows (Pemulis)
+
+**Cross-Agent Update for Marathe (Release Ops)**
+
+Pemulis (Systems Dev) resolved merge conflicts in `.github/workflows/squad-ci.yml` and `.github/workflows/squad-promote.yml` blocking PRs #89 (dev→uat) and #90 (uat→prod).
+
+**What Changed:**
+
+1. **PR #89 (dev → uat):**
+   - Merged origin/uat into dev
+   - Kept dev's simplified version of squad-promote.yml (direct PR pattern, no staging)
+   - Conflict resolved; PR is clean and mergeable
+
+2. **PR #90 (uat → prod):**
+   - Merged origin/prod into uat
+   - Kept uat's versions of both squad-ci.yml (path filters) and squad-promote.yml (contents:write, patch bump)
+   - GitHub mergeable cache was stale; fixed via close-reopen
+   - PR is now clean and mergeable
+
+**Key Learning:** GitHub's merge status cache doesn't auto-invalidate after manual conflict resolution. **Close-and-reopen PR** is the reliable fix for stale "CONFLICTING" status that persists after resolving conflicts.
+
+**Commits:**
+- c661647 on dev: `merge: resolve conflict in squad-promote.yml (keep dev's simplified version)`
+- f0f5918 on uat: `merge: resolve conflicts in squad-ci.yml and squad-promote.yml (keep uat versions)`
+
+**Impact on Release Ops (Marathe):**
+- Both PRs are now unblocked and ready for merge
+- No action required from Release Ops — conflicts resolved by Pemulis
+- Promotion workflows remain consistent across all tiers (direct PR pattern)
+- .squad/ metadata preserved through all branches for audit trail
+
+**Next Promotion:** When ready, merge PR #89, then PR #90 to complete dev→uat→prod pipeline.
+
+**Decision Reference:** No new decisions. Follows established promotion architecture.
+
+**Session Log:** `.squad/log/2026-03-10T00-25-00Z-conflict-resolution.md`
+**Orchestration Log:** `.squad/orchestration-log/2026-03-10T00-25-00Z-pemulis.md`
+
+
+---
+
+## 2026-03-10T00:29:39Z: Prod Guard Updated for .squad/ Files (Pemulis)
+
+**Cross-Agent Update for Marathe (Release Ops)**
+
+Pemulis (Systems Dev) updated the prod branch guard to allow `.squad/` orchestration files through the protection mechanism.
+
+**What Changed:**
+
+- **File:** `.github/workflows/squad-prod-guard.yml`
+- **Action:** Removed `.squad/` from the `forbidden_paths` filter list
+- **Rationale:** Squad metadata (orchestration logs, decisions, session history) now flows through to prod, enabling full audit trail and cross-tier decision tracking
+
+**Impact on Release Ops (Marathe):**
+- No longer need to worry about guard rejections blocking .squad/ metadata in prod
+- Decision history and orchestration logs will be preserved through all promotion tiers
+- Future promotions can safely include squad metadata without triggering false positives
+
+**Commit:** 8b0fa46 on dev  
+**Session Log:** `.squad/log/2026-03-10T00-29-39Z-guard-update.md`  
+**Orchestration Log:** `.squad/orchestration-log/2026-03-10T00-29-39Z-pemulis.md`
