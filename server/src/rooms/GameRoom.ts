@@ -527,6 +527,7 @@ export class GameRoom extends Room {
     const player = new PlayerState();
     player.id = cpuId;
     player.displayName = CPU_PLAYER.NAMES[index] ?? `CPU ${index}`;
+    player.isCPU = true;
     player.color = PLAYER_COLORS[(this.state.players.size) % PLAYER_COLORS.length];
 
     this.state.players.set(cpuId, player);
