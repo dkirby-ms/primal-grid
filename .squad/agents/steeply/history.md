@@ -1937,3 +1937,21 @@ Large-map rendering with PixiJS requires explicit culling—the scene graph does
 - **Regression tests added:** (1) verify `onConnectionStatus` receives `'disconnected'` on non-consented leave, (2) verify `mockClient.reconnect` is NOT called from `onLeave`.
 - **`resetClient()` export added** to `network.ts` — allows `main.ts` to clear the Colyseus client singleton after failed bootstrap reconnection.
 - **Server tests unchanged** — server-side `onDrop`/`onReconnect`/`onLeave` lifecycle is unaffected by this client-side fix.
+
+### Issue #101 — Test Gap Analysis (Browser Refresh Guard Untested)
+
+- **User report (dkirby-ms):** Bug still exists after PR #103. Tests don't verify the fix.
+- **All 18 client tests pass**, but NONE test the actual browser refresh scenario. Zero references to `pageUnloading` or `beforeunload` in the test file.
+- **Critical missing test:** No test simulates `beforeunload` → `pageUnloading = true` → `onLeave(non-consented-code)` → assert token is NOT cleared. This is the ENTIRE point of the #101 fix.
+- **Root cause of gap:** `window.addEventListener` is mocked as a no-op `vi.fn()`. When `network.ts` module loads and calls `window.addEventListener('beforeunload', ...)`, the callback is captured in mock history but never actually registered. So `pageUnloading` is ALWAYS `false` in every test. The `pageUnloading = true` code path has zero coverage.
+- **What existing tests actually verify:** Token CRUD, consented leave, non-consented leave WITHOUT page unload (which clears the token — correct), backoff retries, token rotation, bootstrap independence. All real but all tangential to the refresh guard.
+- **The `onLeave` condition `if (consented || !pageUnloading)` is correct on paper:** During refresh, `beforeunload` sets `pageUnloading = true` first, then `onLeave` fires with `consented=false, pageUnloading=true` → `false || false` = `false` → token preserved. But this logic has never been exercised in a test.
+- **Secondary concern — `pageUnloading` never resets:** If a user triggers `beforeunload` but cancels navigation (e.g., "Stay on page" dialog), `pageUnloading` stays `true` forever. A subsequent real disconnect would incorrectly preserve the token and skip cleanup. Not the reported bug, but a latent defect.
+- **What needs to happen:** (1) Modify test setup to capture the `beforeunload` callback from `window.addEventListener` mock calls. (2) Add test: join room → invoke captured `beforeunload` callback → fire `onLeave(1006)` → assert token is preserved and `disconnected` is NOT emitted. (3) Optionally add test for the `pageUnloading` never-reset edge case.
+
+### Browser Refresh Guard — Issue #101, PR #103 Fix (2026-03-10)
+
+- **Fixed `pageUnloading` one-way flag:** Added `window.addEventListener('pageshow', () => { pageUnloading = false; })` in `network.ts` right after the `beforeunload` listener. The `pageshow` event fires when a cancelled navigation returns to the page or on bfcache restore, resetting the flag so future disconnects clean up correctly.
+- **Fixed test coverage gap:** Updated `window.addEventListener` mock from no-op `vi.fn()` to a callback-capturing implementation that stores handlers by event name. Tests can now invoke `beforeunload` and `pageshow` callbacks directly.
+- **3 new tests added** to `reconnection.test.ts` under "Browser refresh guard (pageUnloading)": (1) token preserved during refresh, (2) cancelled navigation resets flag via pageshow, (3) normal disconnect after pageshow still cleans up. Total: 21 tests in file, 696 across full suite.
+- **Pattern note:** When mocking `window.addEventListener`, always capture callbacks by event name — a no-op mock silently hides untested code paths. This was the root cause of the coverage gap Hal flagged in PR #103.
