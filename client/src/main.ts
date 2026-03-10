@@ -156,6 +156,8 @@ function setupGameSession(
 
   let input: InputHandler | null = null;
 
+  let boundRoomId: string | null = null;
+
   /** Bind (or re-bind) all room listeners to a given room. */
   function bindGameRoom(r: Room): void {
     grid.bindToRoom(r);
@@ -163,21 +165,33 @@ function setupGameSession(
     hud.bindToRoom(r);
     scoreboard.bindToRoom(r);
 
-    r.onStateChange.once(() => {
-      const localPlayer = r.state.players?.get(r.sessionId);
-      if (localPlayer) {
-        camera.centerOnHQ(localPlayer.hqX, localPlayer.hqY);
-      }
-    });
-
-    if (logEl) {
-      r.onMessage('game_log', (data: GameLogPayload) => {
-        gameLog.addEntry(data.message, data.type);
+    // Center camera: if state is already synced (bootstrap reconnect),
+    // center immediately; otherwise wait for the first state update.
+    const localPlayer = r.state.players?.get(r.sessionId);
+    if (localPlayer) {
+      camera.centerOnHQ(localPlayer.hqX, localPlayer.hqY);
+    } else {
+      r.onStateChange.once(() => {
+        const p = r.state.players?.get(r.sessionId);
+        if (p) camera.centerOnHQ(p.hqX, p.hqY);
       });
     }
 
-    const chatEl = document.getElementById('chat-panel');
-    if (chatEl) chatPanel.init(chatEl, r);
+    // Only register message handlers once per room to avoid duplicates
+    // when bindGameRoom is re-called for in-session reconnects on the
+    // same Room object.
+    if (r.roomId !== boundRoomId) {
+      boundRoomId = r.roomId;
+
+      if (logEl) {
+        r.onMessage('game_log', (data: GameLogPayload) => {
+          gameLog.addEntry(data.message, data.type);
+        });
+      }
+
+      const chatEl = document.getElementById('chat-panel');
+      if (chatEl) chatPanel.init(chatEl, r);
+    }
 
     // (Re)create input handler bound to new room
     if (input) input.dispose();

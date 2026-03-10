@@ -24,6 +24,9 @@ function createRoom(): GameRoom {
   // Colyseus Room methods not present on prototype-only instances
   (room as any).allowReconnection = vi.fn().mockResolvedValue(undefined);
   (room as any).broadcast = vi.fn();
+  (room as any).clock = {
+    setTimeout: (fn: () => void) => { fn(); return { clear: () => {} }; },
+  };
   room.playerViews = new Map();
   return room;
 }
