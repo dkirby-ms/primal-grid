@@ -1310,3 +1310,13 @@ See `.squad/decisions.md` Initiative Triage & Execution Plan (2026-03-09) for fu
 - **Token stored under `primal-grid-token`** in localStorage. Wrapped in try/catch for private browsing compatibility.
 - **Key file:** `client/src/network.ts` — auth helpers (`ensureToken`, `createGuestSession`, `loadToken`, `saveToken`, `clearToken`) + `connect()` with token flow and retry logic.
 - **PR:** #78 targeting dev.
+
+### Fix Reconnection Infinite Loop — #101 (2026-07-XX)
+
+## Learnings
+- **Colyseus SDK 0.17 auto-reconnection:** The SDK has built-in reconnection via `Room.mjs` → `retryReconnection()` with 15 retries and exponential backoff. Handlers: `onDrop` (connection lost, retrying), `onReconnect` (reconnected), `onLeave` (gave up or consented).
+- **minUptime = 5000ms:** If room drops within 5s of joining, SDK fires `onLeave` immediately without attempting auto-reconnection. This is what causes the infinite loop when our custom `onLeave` handler also tries to reconnect.
+- **Reconnection boundary:** `reconnectGameRoom()` should ONLY be called for bootstrap (page refresh with saved sessionStorage token). In-session transient disconnects are handled by the SDK's own `onDrop`/`onReconnect` cycle.
+- **Client reset on failure:** After `reconnectGameRoom()` exhausts its 5 attempts and returns null, reset the `colyseusClient` singleton (`resetClient()`) before falling through to lobby. The Client instance may be in a bad state after repeated failed reconnects.
+- **Key files:** `client/src/network.ts` (onLeave handler, reconnection logic, client singleton), `client/src/main.ts` (bootstrap flow).
+- **Test files:** `client/src/__tests__/reconnection.test.ts` (16 client tests), `server/src/__tests__/reconnection.test.ts` (14 server tests).
