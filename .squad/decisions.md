@@ -2424,3 +2424,23 @@ Reflected in `ceremonies.md`:
 - All future PRs to `dev` auto-trigger lead code review via `gh pr review`
 - UAT and prod deployment workflows proceed without ceremony gate
 - Team memory: Lead review is a dev-branch gate, not a deployment gate
+
+---
+
+## 2026-03-10: All Squad PRs Must Target `dev` Branch
+
+**By:** dkirby-ms (via Copilot Directive)  
+**Date:** 2026-03-10T13:50:02Z  
+**What:** All squad PRs must explicitly use `--base dev` when creating pull requests via `gh pr create`. The repo default branch is `prod`, so agents must always specify the base branch to avoid PRs accidentally targeting prod.
+
+### Rationale
+
+- Prevents repeat of PR #102 which targeted prod instead of dev
+- Ensures all code review happens on the dev integration branch first
+- Team memory: Default repo branch is prod; explicitly pass `--base dev` every time
+
+### Impact
+
+- All future agent workflows must use `gh pr create --base dev`
+- PR #102 has been retargeted from prod to dev
+- This is a standing team directive for all squad agents
