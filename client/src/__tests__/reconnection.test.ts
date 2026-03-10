@@ -161,6 +161,32 @@ describe('Client reconnection lifecycle (#101)', () => {
       expect(mockClient.reconnect).not.toHaveBeenCalled();
     });
 
+    it("onLeave with non-consented code emits disconnected and clears token", async () => {
+      const room = makeMockRoom();
+      mockClient.joinById.mockResolvedValue(room);
+      await net.joinGameRoom('room-1');
+
+      const statuses: string[] = [];
+      net.onConnectionStatus((s) => statuses.push(s));
+
+      leaveHandler?.(1006);
+
+      expect(statuses).toContain('disconnected');
+      expect(sessionStore['primal-grid-reconnect-token']).toBeUndefined();
+    });
+
+    it("onLeave does NOT call reconnectGameRoom for non-consented disconnects", async () => {
+      const room = makeMockRoom();
+      mockClient.joinById.mockResolvedValue(room);
+      await net.joinGameRoom('room-1');
+      mockClient.reconnect.mockClear();
+
+      leaveHandler?.(1006);
+
+      // reconnectGameRoom() calls client.reconnect — should NOT be invoked
+      expect(mockClient.reconnect).not.toHaveBeenCalled();
+    });
+
     it("clears token on explicit leaveGame()", async () => {
       const room = makeMockRoom();
       mockClient.joinById.mockResolvedValue(room);
