@@ -16,6 +16,7 @@
 - Shared package must be built before server (`npm run build -w shared`) — stale `tsconfig.tsbuildinfo` can cause runtime bugs
 - E2E tests use `workers: 1` (serial) with a single shared Colyseus server instance
 - Deploy changelogs filter out `squad:` and `squad(agent):` commits using `grep -v ' squad[:(]'` — keeps player-facing changelogs clean of internal bookkeeping noise
+- Expanded changelog filter pattern: use `grep -vE ' (squad|ci|chore)[:(]'` to exclude multiple internal commit prefixes from Discord changelogs in a single regex (squad, ci, chore)
 
 ## CI/CD Audit Findings (2024-01-29)
 
