@@ -4,6 +4,7 @@ export const SPAWN_PAWN = "spawn_pawn" as const;
 export const SET_NAME = "set_name" as const;
 export const GAME_LOG = "game_log" as const;
 export const CHAT = "chat" as const;
+export const PLACE_BUILDING = "place_building" as const;
 
 // --- Message payload interfaces ---
 
@@ -43,6 +44,7 @@ export type GameLogCategory =
   | "migrate"
   | "system"
   | "info"
+  | "building"
   | "error";
 
 export interface GameLogPayload {
@@ -63,4 +65,11 @@ export interface ChatBroadcastPayload {
   sender: string;
   text: string;
   timestamp: number;
+}
+
+/** Payload for the PLACE_BUILDING message. */
+export interface PlaceBuildingPayload {
+  x: number;
+  y: number;
+  buildingType: "farm" | "factory";
 }
