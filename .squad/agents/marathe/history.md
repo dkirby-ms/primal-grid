@@ -15,6 +15,7 @@
 - Playwright config uses dual reporters in CI: `[['github'], ['html']]` for both Actions annotations and HTML reports
 - Shared package must be built before server (`npm run build -w shared`) — stale `tsconfig.tsbuildinfo` can cause runtime bugs
 - E2E tests use `workers: 1` (serial) with a single shared Colyseus server instance
+- Deploy changelogs filter out `squad:` and `squad(agent):` commits using `grep -v ' squad[:(]'` — keeps player-facing changelogs clean of internal bookkeeping noise
 
 ## CI/CD Audit Findings (2024-01-29)
 
