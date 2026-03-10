@@ -24,6 +24,26 @@
 - Zero test flakiness
 - Ready for Phase D
 
+## Core Context
+
+**Test Suite Status**
+- Server tests: 331 tests (all passing, zero flakiness)
+- Primary test files: `server/src/__tests__/` (world-gen, water-depth, tilemap, FSM, integration)
+- Integration tests: 244 tests covering ASSIGN_PAWN, FSM, UI, command dedup, network resilience
+- Build note: Must delete `shared/tsconfig.tsbuildinfo` when shared types change
+
+**Key Mechanics (Phase C & Earlier)**
+- Water depth classification: BFS from land, ShallowWater within radius 2, DeepWater beyond. Both block movement.
+- Pawn system: Assignment routing, idle→gather→idle FSM, multi-select dedup, HUD updates
+- Commands: Validated, deduplicated, latency-resilient
+- Territory: Income tick, guard zone adjacency
+- Removed: CLAIM_TILE, Wall/Floor recipes (Phase B cleanup)
+
+**Next Focus**
+- Phase D: Advanced mechanics (as per Gately's gameplay lead)
+- Maintain zero-flakiness testing culture
+- Regression prevention through baseline + integration coverage
+
 ## Learnings
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
