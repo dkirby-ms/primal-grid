@@ -1919,3 +1919,13 @@ Large-map rendering with PixiJS requires explicit culling—the scene graph does
 - **Fix:** Move `registerBridgeListeners()` call from `LobbyRoom.onCreate()` to the `on("create")` hook in `index.ts` after `lobbyBridge` injection. Make method public.
 - **Test gap:** ZERO lobby tests exist. LobbyRoom, LobbyBridge, GameSessionRepository, and lobby client UI are all untested. Need bridge lifecycle test, LobbyRoom unit tests, GameSessionRepository tests, and e2e lobby flow tests.
 - **Colyseus gotcha:** Never rely on properties being available in `onCreate()` if they're injected via Colyseus `on("create")` hooks — those hooks fire AFTER `onCreate()` returns (Colyseus 0.17.x).
+
+### Browser Refresh Session Drop — Issue #101 (Research + TDD Tests)
+
+- **Root cause:** The reconnection infrastructure is complete (server `allowReconnection` 60s, client `reconnectGameRoom` with backoff) but `bootstrap()` in `main.ts` never checks `sessionStorage` for a stored reconnection token on page load — always goes straight to the lobby.
+- **Reconnection token:** Stored in `sessionStorage` under `primal-grid-reconnect-token` (tab-scoped, survives refresh). Auth JWT is in `localStorage` under `primal-grid-token`.
+- **Server flow:** `onDrop` → `allowReconnection(client, 60)` → holds slot (state, territory, creatures, sessionUserMap). `onReconnect` → restores fog-of-war view. `onLeave` → only fires after grace period expires.
+- **Client flow:** `attachGameRoomHandlers` sets `onLeave` handler. Non-consented leave (code ≠ 1000/4000) calls `reconnectGameRoom()`. But this only works for runtime disconnects, NOT page refresh.
+- **Fix needed:** ~15 lines in `main.ts` + 1 export in `network.ts`. Check for reconnect token before lobby on page load; attempt reconnection; skip lobby on success.
+- **Tests delivered:** 27 tests (11 server, 16 client) in PR #102. Server tests validate onDrop/onReconnect/onLeave lifecycle. Client tests validate token persistence, reconnection retry, and independent-of-lobby reconnection. Full suite: 690/690 passing.
+- **Key files:** `client/src/main.ts` (bootstrap flow), `client/src/network.ts` (reconnection logic, token helpers), `server/src/rooms/GameRoom.ts` (onDrop/onReconnect/onLeave).
