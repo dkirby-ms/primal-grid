@@ -543,3 +543,15 @@ Pemulis (Systems Dev) updated the prod branch guard to allow `.squad/` orchestra
 - Same for UAT domain
 
 **Key files:** `infra/main.bicep`, `infra/main.bicepparam`, `infra/main-uat.bicepparam`
+
+## Custom Domain Bicep Configuration (2026-03-10)
+
+- Added `customDomainName` parameter to `main.bicep` for per-environment custom domain binding
+- Added `Microsoft.App/managedEnvironments/managedCertificates@2024-03-01` resource as child of the Container App Environment
+- Certificate uses `domainControlValidation: 'CNAME'` (DNS records already configured at registrar)
+- Container App ingress updated with `customDomains` array binding hostname to managed cert via `SniEnabled`
+- Container App `dependsOn` managed cert to ensure correct deployment order
+- Container App API version bumped to `2024-03-01` to match certificate resource version
+- Prod domain: `gridwar.kirbytoso.xyz` (in `main.bicepparam`)
+- UAT domain: `gridtest.kirbytoso.xyz` (in `main-uat.bicepparam`)
+- Certificate name uses `uniqueString(customDomainName)` suffix to avoid collisions between environments sharing the same managed environment
