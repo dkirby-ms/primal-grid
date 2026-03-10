@@ -75,7 +75,10 @@ jobs:
             VERSION=$(git rev-parse --short HEAD)
             echo "⚠️ package.json missing version field — falling back to git SHA: $VERSION"
           fi
-          CHANGELOG=$(git log --pretty=format:'- %h %s' origin/uat..origin/dev | head -20)
+          RAW_LOG=$(git log --no-merges --pretty=format:'- %h %s' origin/uat..origin/dev | head -30)
+          FEATURES=$(echo "$RAW_LOG" | grep -iE '^- [a-f0-9]+ (feat|fix)' || true)
+          OTHER=$(echo "$RAW_LOG" | grep -viE '^- [a-f0-9]+ (feat|fix)' || true)
+          CHANGELOG=$(printf '%s\n%s' "$FEATURES" "$OTHER" | sed '/^$/d' | head -20)
 
           gh pr create \
             --base uat \
@@ -140,7 +143,10 @@ jobs:
             VERSION=$(git rev-parse --short HEAD)
             echo "⚠️ package.json missing version field — falling back to git SHA: $VERSION"
           fi
-          CHANGELOG=$(git log --pretty=format:'- %h %s' origin/prod..origin/uat | head -20)
+          RAW_LOG=$(git log --no-merges --pretty=format:'- %h %s' origin/prod..origin/uat | head -30)
+          FEATURES=$(echo "$RAW_LOG" | grep -iE '^- [a-f0-9]+ (feat|fix)' || true)
+          OTHER=$(echo "$RAW_LOG" | grep -viE '^- [a-f0-9]+ (feat|fix)' || true)
+          CHANGELOG=$(printf '%s\n%s' "$FEATURES" "$OTHER" | sed '/^$/d' | head -20)
 
           gh pr create \
             --base prod \

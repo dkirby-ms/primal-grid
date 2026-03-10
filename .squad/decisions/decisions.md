@@ -596,29 +596,6 @@ Comprehensive audit discovered **3 critical issues**, **6 warnings**, and **7 go
 
 ---
 
-## User Directive: E2E Artifact Links in Discord
-
-**Date:** 2026-03-08  
-**By:** dkirby-ms  
-**Status:** ACTIVE  
-**Context:** Discord notification automation for E2E pipeline
-
-### Directive
-
-Playwright test artifacts (screenshots, traces, HTML reports) uploaded to GitHub Actions must be direct-linked in any related Discord posts (E2E results, test failures, artifact summaries).
-
-### Rationale
-
-Users need immediate visibility to test results without manual link copying or artifact downloads. Direct links in Discord enable rapid triage and feedback loops.
-
-### Implementation
-
-- E2E Discord notification job includes deep links to GitHub Pages report
-- Artifact links use GitHub Actions artifact URLs or GitHub Pages hosted reports
-- No shortened URLs — use full, persistent links for team search/history
-
----
-
 ## User Directive: E2E Pipeline Branch Targeting
 
 **Date:** 2026-03-08  

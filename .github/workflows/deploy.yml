@@ -104,8 +104,11 @@ jobs:
           cd repo
           git fetch --depth 50 origin prod
 
-          # Generate changelog (last 10 commits)
-          CHANGELOG=$(git log --pretty=format:'• %h %s (%an)' HEAD~10..HEAD 2>/dev/null | head -10)
+          # Generate changelog (last 10 commits, no merges, features/fixes first)
+          RAW_LOG=$(git log --no-merges --pretty=format:'• %h %s (%an)' HEAD~10..HEAD 2>/dev/null | head -20)
+          FEATURES=$(echo "$RAW_LOG" | grep -iE '^• [a-f0-9]+ (feat|fix)' || true)
+          OTHER=$(echo "$RAW_LOG" | grep -viE '^• [a-f0-9]+ (feat|fix)' || true)
+          CHANGELOG=$(printf '%s\n%s' "$FEATURES" "$OTHER" | sed '/^$/d' | head -10)
           if [ -z "$CHANGELOG" ]; then
             CHANGELOG="• No recent commits available"
           fi

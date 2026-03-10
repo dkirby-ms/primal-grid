@@ -1,9 +1,10 @@
----
-updated_at: 2026-03-09T23:32:55Z
-focus_area: Versioning complete with auto-bump on UAT promotion
-active_issues: []
----
+# Current Focus
 
-# What We're Focused On
+**v0.1.0 is live on prod.** First production deployment achieved 2026-03-10.
 
-Versioning system implemented end-to-end: baseline established (0.1.0), auto-bump on UAT promotion, resilient workflows.
+The team is transitioning from "get it running" to "iterate on a live product."
+
+## Open Work
+- #81 — Overhaul issue triage, branching strategy, and PR workflow (Marathe, in-progress)
+- #83 — Game lobby feature (Marathe, needs research)
+- #79 — OAuth login / Entra ID (Steeply, needs research)
