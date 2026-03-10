@@ -17,6 +17,7 @@
 | Pemulis | Systems Dev | `.squad/agents/pemulis/charter.md` | ✅ Active |
 | Steeply | Tester | `.squad/agents/steeply/charter.md` | ✅ Active |
 | Marathe | DevOps / CI-CD | `.squad/agents/marathe/charter.md` | ✅ Active |
+| Joelle | Community / DevRel | `.squad/agents/joelle/charter.md` | ✅ Active |
 | Scribe | Session Logger | `.squad/agents/scribe/charter.md` | 📋 Silent |
 | Ralph | Work Monitor | — | 🔄 Monitor |
 | @copilot | Coding Agent | `copilot-instructions.md` | 🤖 Autonomous |
