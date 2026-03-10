@@ -225,11 +225,16 @@ export class GameRoom extends Room {
     if (player) {
       const devMode = false;
       this.initPlayerView(client, player, devMode);
-      client.send("game_log", { message: "Reconnected!", type: "info" });
-      this.broadcast("game_log", {
-        message: `${player.displayName || "A player"} reconnected`,
-        type: "info",
-      }, { except: client });
+      // Defer game_log to next tick — the client registers onMessage
+      // handlers after the reconnect Promise resolves, so sending
+      // synchronously here would arrive before any handler exists.
+      this.clock.setTimeout(() => {
+        client.send("game_log", { message: "Reconnected!", type: "info" });
+        this.broadcast("game_log", {
+          message: `${player.displayName || "A player"} reconnected`,
+          type: "info",
+        }, { except: client });
+      }, 0);
     }
     console.log(`[GameRoom] Client reconnected: ${client.sessionId}`);
   }

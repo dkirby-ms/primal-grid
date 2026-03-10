@@ -1,3 +1,187 @@
+## 2026-03-10T18:23:36Z: Window Event Mocks Must Capture Callbacks
+
+**Author:** Steeply (Tester)  
+**Date:** 2026-03-10  
+**Context:** PR #103 review revealed that `window.addEventListener` was mocked as a no-op `vi.fn()`, silently hiding the entire `pageUnloading` code path from test coverage.
+
+**Decision:** In client-side tests that import modules registering `window.addEventListener` callbacks at module load time, the mock must capture callbacks by event name so they can be invoked in tests. A no-op mock is not acceptable — it creates invisible coverage gaps.
+
+**Pattern:**
+```typescript
+const windowEventCallbacks: Record<string, Array<(...args: unknown[]) => void>> = {};
+vi.stubGlobal('window', {
+  addEventListener: vi.fn((event: string, cb) => {
+    if (!windowEventCallbacks[event]) windowEventCallbacks[event] = [];
+    windowEventCallbacks[event].push(cb);
+  }),
+  // ...
+});
+```
+
+Reset `windowEventCallbacks` in `beforeEach` to avoid cross-test leakage.
+
+---
+
+## 2026-03-10T18:23:36Z: PR #103 Rejected — pageUnloading One-Way Flag Bug
+
+**Author:** Hal (Lead)  
+**Date:** 2026-03-10  
+**Status:** Pending remediation  
+**PR:** #103  
+**Issue:** #101
+
+### Context
+
+PR #103 introduced a `pageUnloading` flag to distinguish browser refresh (preserve reconnect token) from genuine disconnects (clear token). The `onLeave` condition `consented || !pageUnloading` is logically correct, but the flag is never reset after being set to `true`.
+
+### Problems Found
+
+1. **One-way flag:** `pageUnloading = true` in `beforeunload` is never reset. If navigation is cancelled (e.g., by a future `beforeunload` prompt), all subsequent non-consented disconnects silently skip token clearing and `'disconnected'` emission, stranding the user.
+2. **Zero test coverage:** Mock `window.addEventListener` is a no-op `vi.fn()`, preventing the `beforeunload` handler from registering. The central mechanism of the fix is untested.
+
+### Required Fixes
+
+1. Add `window.addEventListener('pageshow', () => { pageUnloading = false; })` to reset the flag after cancelled navigation or BFCache restore.
+2. Add tests that set `pageUnloading = true` before firing `onLeave` and verify token preservation.
+3. Add test that verifies `pageshow` resets the flag.
+
+### Ownership
+
+- **pageUnloading reset fix:** New implementer (Pemulis and Gately locked out per reviewer protocol)
+- **Test coverage:** Steeply (Tester)
+
+### Impact
+
+Anyone working on `client/src/network.ts` reconnection logic must understand that `pageUnloading` guards the token lifecycle during browser refresh. Tests must exercise this path.
+
+---
+
+## 2026-03-10T18:23:36Z: Reconnect Handler Registration Gap
+
+**Author:** Hal (Lead)  
+**Date:** 2026-03-10  
+**Context:** PR #103 / Issue #101 — Browser refresh drops user session  
+**Status:** Implemented with Combined Fix (Option C)
+
+### Problem
+
+After browser refresh, the reconnect succeeds at the transport level (server logs confirm "Client dropped" → "Client reconnected"), but the browser console shows:
+
+```
+@colyseus/sdk: onMessage() not registered for type 'game_log'
+```
+
+The user reports the session appears dropped despite successful reconnection.
+
+### Root Cause Analysis
+
+There is a race condition between the Colyseus SDK completing the reconnect and the client registering `onMessage` handlers.
+
+**Bootstrap reconnect flow (`main.ts:72-78`):**
+
+1. `loadReconnectToken()` — finds saved token ✅
+2. `reconnectGameRoom()` → `client.reconnect(token)` — transport reconnects
+3. **Server `onReconnect()` fires** → immediately sends `client.send("game_log", { message: "Reconnected!" })` (`GameRoom.ts:228`)
+4. **SDK receives `game_log` message** → no handler registered → **warning logged** ⚠️
+5. `client.reconnect()` Promise resolves → returns Room object
+6. `attachGameRoomHandlers(room)` runs → registers `onDrop`, `onReconnect`, `onLeave`, `onError` — **but NOT `onMessage`**
+7. `reconnectGameRoom()` returns room to `main.ts`
+8. `setupGameSession()` → `bindGameRoom(room)` → **`onMessage('game_log', ...)` finally registered** (too late)
+
+The console output confirms this timing — the SDK warning appears *between* the "Reconnection attempt 1/5" log (step 2) and the "Reconnected to game room" log (step 5):
+
+```
+network.ts:210 [network] Reconnection attempt 1/5…
+@colyseus/sdk: onMessage() not registered for type 'game_log'.    ← during client.reconnect()
+network.ts:212 [network] Reconnected to game room: iAwP_PDDM     ← after promise resolves
+```
+
+This proves the `game_log` message arrives *during* the `client.reconnect()` call, before the Promise resolves — so even registering handlers immediately after `client.reconnect()` resolves would still be too late.
+
+### What Gets Sent During `onReconnect` (Server-Side)
+
+`GameRoom.ts:223-234`:
+- `this.initPlayerView(client, player, devMode)` — restores fog-of-war visibility
+- `client.send("game_log", { message: "Reconnected!" })` — direct to client
+- `this.broadcast("game_log", { message: "X reconnected" })` — to all other clients
+
+All three happen synchronously in `onReconnect`, which fires as part of the reconnect handshake — before the client SDK resolves its `client.reconnect()` Promise.
+
+### Impact Assessment
+
+**What's lost:** The "Reconnected!" toast in the game log. This is cosmetic — the actual game state (player position, resources, territory, creatures) is synchronized via Colyseus Schema, which works independently of `onMessage`.
+
+**Why "session appears dropped":** Two possible explanations:
+
+1. **Console noise misleads the user.** The SDK warning suggests something is broken, even though the session is functional.
+2. **Camera centering may be delayed.** `bindGameRoom()` uses `r.onStateChange.once(...)` to center the camera on the player's HQ (`main.ts:166-170`). After a bootstrap reconnect, the full state may have already been synced during `client.reconnect()`. The `.once()` handler would fire on the *next* game tick rather than immediately — a brief moment where the player sees the wrong viewport, creating the impression of a dropped session.
+
+### Secondary Issue: Duplicate Handlers on In-Session Reconnect
+
+During in-session reconnects (network drops), `bindGameRoom()` is called again on the *same* Room object via the `onConnectionStatus('connected')` callback (`main.ts:216-222`). Colyseus `onMessage` is additive — each call adds another listener. After N reconnects, there are N duplicate `game_log` handlers, causing duplicate log entries. This doesn't cause the reported bug but is a code quality issue.
+
+### Fix Implemented (Option C: Combined Fix)
+
+1. **Server:** Defer `game_log` in `GameRoom.onReconnect()` by one tick — eliminates the primary race.
+2. **Client:** In `bindGameRoom()`, replace `r.onStateChange.once(...)` with an immediate check: if the player's state already exists, center the camera immediately instead of waiting for the next state change.
+3. **Client:** Clean up duplicate handler registration — `bindGameRoom()` should remove previous `onMessage` listeners before adding new ones (or use a flag to skip re-registration on the same Room).
+
+**Files changed:**
+- `server/src/rooms/GameRoom.ts` — defer `game_log` in `onReconnect` (1 change)
+- `client/src/main.ts` — fix `onStateChange.once` to handle pre-synced state; deduplicate handlers (2 changes)
+
+### Results
+
+- No `onMessage() not registered` warning in console after browser refresh reconnect ✅
+- Camera centers on player HQ immediately after reconnect ✅
+- No duplicate `game_log` entries after in-session reconnects ✅
+- All 692 tests pass ✅
+- 2 regression tests added by Steeply confirm `onLeave` behavior ✅
+
+---
+
+## 2026-03-10T16:34:04Z: Single-Layer Reconnection Strategy (Issue #101)
+
+**Author:** Gately (Game Dev)  
+**Date:** 2026-03-10  
+**Status:** Implemented  
+**PR:** #103
+
+### Context
+
+The Colyseus SDK 0.17 has built-in auto-reconnection (15 retries, exponential backoff) via `onDrop`/`onReconnect` handlers. Our custom `onLeave` handler was also calling `reconnectGameRoom()`, creating an infinite drop→reconnect→drop loop after browser refresh.
+
+### Decision
+
+1. **SDK handles in-session transient disconnects.** The `onDrop`/`onReconnect` callbacks update UI status. `onLeave` means the session is truly over — clear the reconnect token and return to lobby.
+2. **`reconnectGameRoom()` is bootstrap-only.** It's called once on page load when a sessionStorage token exists, creating a fresh connection from scratch. It is never called from `onLeave`.
+3. **Reset client singleton after failed bootstrap reconnect.** `resetClient()` clears `colyseusClient` before falling through to lobby to avoid stale WebSocket state.
+
+### Impact
+
+- No duplicate reconnection attempts — eliminates the infinite loop
+- Cleaner separation: SDK owns transport-level reconnection, our code owns application-level session recovery (bootstrap)
+- `onLeave` with non-consented codes now clears the token and emits `'disconnected'`, which triggers the lobby return flow in `main.ts`
+- All 692 tests pass; 2 regression tests added by Steeply confirm `onLeave` behavior
+
+---
+
+## 2026-03-10T15:16:56Z: User Directive — PR Review Comments Visibility
+
+**Author:** dkirby-ms (via Copilot)  
+**Date:** 2026-03-10  
+**Status:** Active
+
+### Directive
+
+After any code review, **Hal must post the review feedback as a comment on the PR** (using `gh pr comment`). Reviews should not only happen internally — they must be visible on the PR itself.
+
+### Rationale
+
+Transparency with the team and stakeholders. All review feedback is recorded on the PR where the work lives, making decision-making visible and reviewable.
+
+---
+
 ## 2026-03-10T11:42:00Z: Discord Webhook Identity Handoff — Marathe → Joelle
 
 **Author:** Hal (Lead)  
@@ -2327,3 +2511,52 @@ Provides visibility into the promotion pipeline (dev → UAT → prod) without p
 
 - All squad agents closing PRs should label related issues `stage: uat-ready` instead of closing them
 - Issues closed only after reaching prod
+
+---
+
+## 2026-03-10T15-14-07Z: Filter squad: commits from deploy changelogs
+
+**Author:** Marathe (DevOps / CI-CD)  
+**Date:** 2026-03-10  
+**Status:** Implemented
+
+### Context
+
+Deploy workflows (deploy-uat, deploy, squad-promote) generate changelogs from git history for Discord notifications and PR bodies. Internal `squad:` and `squad(agent):` commits (logs, decisions, history updates) were polluting these changelogs with noise players don't care about.
+
+### Decision
+
+Added `grep -v ' squad[:(]'` filter to all 4 changelog generation points, applied immediately after the `RAW_LOG` assignment and before the `FEATURES`/`OTHER` split. This strips any commit line containing ` squad:` or ` squad(` — covering both conventional commit formats used by squad agents.
+
+### Affected Files
+
+- `.github/workflows/deploy-uat.yml`
+- `.github/workflows/deploy.yml`
+- `.github/workflows/squad-promote.yml` (2 locations: dev→uat and uat→prod)
+
+### Rollout
+
+Cherry-picked directly to dev, uat, and prod per team policy (CI-only changes get cherry-picked).
+
+---
+
+## 2026-03-10T15-14-07Z: Browser Refresh Reconnect Pattern
+
+**Author:** Pemulis (Systems Dev)  
+**Date:** 2026-03-10  
+**Status:** Implemented  
+**Issue:** #101
+
+### Decision
+
+On page load, `bootstrap()` checks `sessionStorage` for a Colyseus reconnect token before connecting to the lobby. If a token exists (from a prior game session in the same tab), it attempts `reconnectGameRoom()` first. Success skips the lobby entirely; failure falls through to normal lobby flow.
+
+### Details
+
+- Uses SDK 0.17.34's `onDrop`/`onReconnect` lifecycle hooks for proper status updates during SDK-managed reconnection
+- A `pageUnloading` flag (via `beforeunload`) prevents wasted reconnection attempts when the page is being torn down
+- Token persisted in `sessionStorage` under key `primal-grid-reconnect-token` — tab-scoped, survives refresh, cleared on tab close
+
+### Impact
+
+Anyone working on `client/src/main.ts` bootstrap flow or `client/src/network.ts` connection handlers should be aware of this pattern. The lobby is no longer the guaranteed first screen after page load.
