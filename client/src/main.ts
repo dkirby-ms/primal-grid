@@ -12,7 +12,7 @@ import { ChatPanel } from './ui/ChatPanel.js';
 import { HelpScreen } from './ui/HelpScreen.js';
 import { Scoreboard } from './ui/Scoreboard.js';
 import { LobbyScreen } from './ui/LobbyScreen.js';
-import { connectToLobby, joinGameRoom, leaveGame, disconnect, onConnectionStatus, isDevMode, getRoom } from './network.js';
+import { connectToLobby, joinGameRoom, leaveGame, disconnect, onConnectionStatus, isDevMode, getRoom, loadReconnectToken, reconnectGameRoom } from './network.js';
 import type { GameLogPayload } from '@primal-grid/shared';
 
 const WIDTH = 600;
@@ -67,6 +67,20 @@ async function bootstrap(): Promise<void> {
 
   // --- Lobby screen ---
   const lobbyScreen = new LobbyScreen();
+
+  // --- Reconnection check (browser refresh recovery) ---
+  const reconnectToken = loadReconnectToken();
+  if (reconnectToken) {
+    console.log('[main] Found reconnection token — attempting to rejoin game…');
+    const room = await reconnectGameRoom();
+    if (room) {
+      console.log('[main] Reconnected to game room:', room.roomId);
+      setGameUIVisible(true);
+      setupGameSession(app, grid, camera, room, lobbyScreen);
+      return;
+    }
+    console.log('[main] Reconnection failed — falling through to lobby');
+  }
 
   // --- Connect to lobby ---
   connectToLobbyAndShow(app, grid, camera, lobbyScreen);

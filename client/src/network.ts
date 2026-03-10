@@ -82,7 +82,7 @@ function clearToken(): void {
 // Reconnect token helpers (sessionStorage — tab-scoped, survives refresh)
 // ---------------------------------------------------------------------------
 
-function loadReconnectToken(): string | null {
+export function loadReconnectToken(): string | null {
   try {
     return sessionStorage.getItem(RECONNECT_TOKEN_KEY);
   } catch {
