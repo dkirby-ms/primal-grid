@@ -1949,9 +1949,19 @@ Large-map rendering with PixiJS requires explicit culling—the scene graph does
 - **Secondary concern — `pageUnloading` never resets:** If a user triggers `beforeunload` but cancels navigation (e.g., "Stay on page" dialog), `pageUnloading` stays `true` forever. A subsequent real disconnect would incorrectly preserve the token and skip cleanup. Not the reported bug, but a latent defect.
 - **What needs to happen:** (1) Modify test setup to capture the `beforeunload` callback from `window.addEventListener` mock calls. (2) Add test: join room → invoke captured `beforeunload` callback → fire `onLeave(1006)` → assert token is preserved and `disconnected` is NOT emitted. (3) Optionally add test for the `pageUnloading` never-reset edge case.
 
-### Browser Refresh Guard — Issue #101, PR #103 Fix (2026-03-10)
+### Browser Refresh Guard — Issue #101, PR #103 (2026-03-10)
 
 - **Fixed `pageUnloading` one-way flag:** Added `window.addEventListener('pageshow', () => { pageUnloading = false; })` in `network.ts` right after the `beforeunload` listener. The `pageshow` event fires when a cancelled navigation returns to the page or on bfcache restore, resetting the flag so future disconnects clean up correctly.
 - **Fixed test coverage gap:** Updated `window.addEventListener` mock from no-op `vi.fn()` to a callback-capturing implementation that stores handlers by event name. Tests can now invoke `beforeunload` and `pageshow` callbacks directly.
+- **Window event mocking pattern (Decision: steeply-window-event-mocking.md):** When mocking `window.addEventListener` in tests that import modules registering callbacks at module load time, the mock MUST capture callbacks by event name using a record map. A no-op mock is not acceptable — it creates invisible coverage gaps. Example pattern:
+  ```typescript
+  const windowEventCallbacks: Record<string, Array<(...args: unknown[]) => void>> = {};
+  vi.stubGlobal('window', {
+    addEventListener: vi.fn((event: string, cb) => {
+      if (!windowEventCallbacks[event]) windowEventCallbacks[event] = [];
+      windowEventCallbacks[event].push(cb);
+    }),
+  });
+  ```
 - **3 new tests added** to `reconnection.test.ts` under "Browser refresh guard (pageUnloading)": (1) token preserved during refresh, (2) cancelled navigation resets flag via pageshow, (3) normal disconnect after pageshow still cleans up. Total: 21 tests in file, 696 across full suite.
-- **Pattern note:** When mocking `window.addEventListener`, always capture callbacks by event name — a no-op mock silently hides untested code paths. This was the root cause of the coverage gap Hal flagged in PR #103.
+- **Follow-up action items:** (1) @copilot's PR #103 still pending Hal review (flagged 🟡 needs-review), (2) New implementer needed to add `pageUnloading` reset fix (Pemulis/Gately locked out per protocol), (3) Steeply to write test coverage spec for `pageshow` event reset.
