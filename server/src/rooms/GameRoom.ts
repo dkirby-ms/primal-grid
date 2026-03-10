@@ -13,6 +13,7 @@ import type { PlayerStateRepository } from "../persistence/PlayerStateRepository
 import type { LobbyBridge } from "./LobbyBridge.js";
 import { serializePlayerState, deserializePlayerState } from "../persistence/playerStateSerde.js";
 import type { SerializedPlayerState } from "../persistence/playerStateSerde.js";
+import { tickCpuPlayers } from "./cpuPlayerAI.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
   SPAWN_PAWN, SET_NAME, CHAT, CHAT_MAX_LENGTH,
@@ -25,6 +26,7 @@ import {
   ENEMY_SPAWNING, ENEMY_BASE_TYPES,
   DayPhase,
   isEnemyBase,
+  CPU_PLAYER,
 } from "@primal-grid/shared";
 import type { SpawnPawnPayload, SetNamePayload, ChatPayload } from "@primal-grid/shared";
 import { spawnHQ } from "./territory.js";
@@ -62,6 +64,8 @@ export class GameRoom extends Room {
   private sessionUserMap = new Map<string, string>();
   /** Game session ID (from lobby). Empty for legacy direct-connect. */
   private gameId = "";
+  /** Set of session IDs belonging to CPU-controlled players. */
+  cpuPlayerIds = new Set<string>();
 
   override onCreate(options: Record<string, unknown>) {
     const seed = typeof options?.seed === "number" ? options.seed : DEFAULT_MAP_SEED;
@@ -74,6 +78,14 @@ export class GameRoom extends Room {
 
     this.generateMap(seed, mapSize);
     this.spawnCreatures();
+
+    // Spawn CPU players if requested
+    const cpuCount = typeof options?.cpuPlayers === "number"
+      ? Math.min(Math.max(Math.floor(options.cpuPlayers), 0), CPU_PLAYER.MAX_COUNT)
+      : 0;
+    for (let i = 0; i < cpuCount; i++) {
+      this.spawnCpuPlayer(i);
+    }
 
     this.setSimulationInterval((_deltaTime) => {
       this.state.tick += 1;
@@ -88,6 +100,7 @@ export class GameRoom extends Room {
       this.tickGraveDecay();
       this.tickFogOfWar();
       this.tickAutoSave();
+      this.tickCpuPlayers();
     }, 1000 / TICK_RATE);
 
     this.onMessage(SPAWN_PAWN, (client, message: SpawnPawnPayload) => {
@@ -204,9 +217,11 @@ export class GameRoom extends Room {
       client.send("game_log", { message: "Welcome to Primal Grid!", type: "info" });
     }
 
-    // Notify lobby of actual player count
+    // Notify lobby of actual player count (human only)
     if (this.gameId) {
-      this.lobbyBridge?.notifyPlayerCountChanged(this.gameId, this.state.players.size);
+      const cpuCount = this.cpuPlayerIds?.size ?? 0;
+      const humanCount = this.state.players.size - cpuCount;
+      this.lobbyBridge?.notifyPlayerCountChanged(this.gameId, humanCount);
     }
   }
 
@@ -245,9 +260,11 @@ export class GameRoom extends Room {
   }
 
   override async onDispose() {
-    // Save all connected players on room dispose
+    // Save all connected human players on room dispose (CPU players are ephemeral)
     for (const sessionId of this.state.players.keys()) {
-      await this.savePlayerState(sessionId);
+      if (!(this.cpuPlayerIds?.has(sessionId))) {
+        await this.savePlayerState(sessionId);
+      }
     }
 
     // Notify lobby that this game has ended
@@ -263,8 +280,8 @@ export class GameRoom extends Room {
     const userId = this.sessionUserMap?.get(sessionId);
     const player = this.state.players.get(sessionId);
 
-    // Persist state before removal
-    if (userId && player && this.playerStateRepo) {
+    // Persist state before removal (CPU players have no persistence)
+    if (userId && player && this.playerStateRepo && !(this.cpuPlayerIds?.has(sessionId))) {
       const serialized = serializePlayerState(player);
       const displayName = player.displayName;
       const repo = this.playerStateRepo;
@@ -280,8 +297,14 @@ export class GameRoom extends Room {
     this.sessionUserMap?.delete(sessionId);
 
     if (this.gameId) {
-      this.lobbyBridge?.notifyPlayerCountChanged(this.gameId, this.state.players.size);
+      // Only count human players for lobby display
+      const cpuCount = this.cpuPlayerIds?.size ?? 0;
+      const humanCount = this.state.players.size - cpuCount;
+      this.lobbyBridge?.notifyPlayerCountChanged(this.gameId, Math.max(0, humanCount));
     }
+
+    // If all human players have left, dispose the room
+    this.checkCpuOnlyRoom();
   }
 
   /** Save a player's state to the persistence layer (if configured). */
@@ -349,22 +372,35 @@ export class GameRoom extends Room {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
 
-    const pawnDef = PAWN_TYPES[message.pawnType];
-    if (!pawnDef) return;
+    this.spawnPawnCore(client.sessionId, player, message.pawnType, message.buildMode);
+  }
+
+  /**
+   * Core pawn spawning logic shared between human (handleSpawnPawn) and CPU players.
+   * Validates resources, pawn cap, finds spawn location, deducts cost, and creates the creature.
+   */
+  spawnPawnCore(
+    playerId: string,
+    player: PlayerState,
+    pawnType: string,
+    buildMode?: string,
+  ): CreatureState | null {
+    const pawnDef = PAWN_TYPES[pawnType];
+    if (!pawnDef) return null;
 
     // Validate resources
-    if (player.wood < pawnDef.cost.wood || player.stone < pawnDef.cost.stone) return;
+    if (player.wood < pawnDef.cost.wood || player.stone < pawnDef.cost.stone) return null;
 
     // Validate pawn cap (per pawn type)
     let pawnCount = 0;
     this.state.creatures.forEach((c) => {
-      if (c.ownerID === client.sessionId && c.pawnType === message.pawnType) pawnCount++;
+      if (c.ownerID === playerId && c.pawnType === pawnType) pawnCount++;
     });
-    if (pawnCount >= pawnDef.maxCount) return;
+    if (pawnCount >= pawnDef.maxCount) return null;
 
     // Find walkable tile within HQ zone
     const spawnPos = this.findHQWalkableTile(player);
-    if (!spawnPos) return;
+    if (!spawnPos) return null;
 
     // Deduct cost
     player.wood -= pawnDef.cost.wood;
@@ -380,9 +416,9 @@ export class GameRoom extends Room {
     creature.health = pawnDef.health;
     creature.hunger = 100;
     creature.currentState = "idle";
-    creature.ownerID = client.sessionId;
-    creature.pawnType = message.pawnType;
-    creature.buildMode = message.pawnType === "builder" ? (message.buildMode === "farm" ? "farm" : "outpost") : "";
+    creature.ownerID = playerId;
+    creature.pawnType = pawnType;
+    creature.buildMode = pawnType === "builder" ? (buildMode === "farm" ? "farm" : "outpost") : "";
     creature.targetX = -1;
     creature.targetY = -1;
     creature.buildProgress = 0;
@@ -396,6 +432,8 @@ export class GameRoom extends Room {
     this.creatureIdCounter.value = this.nextCreatureId;
 
     this.broadcast("game_log", { message: `${pawnDef.name} spawned`, type: "spawn" });
+
+    return creature;
   }
 
   /** Find a random walkable tile within the player's HQ zone. */
@@ -481,6 +519,59 @@ export class GameRoom extends Room {
       }
     }
     return { x: minCoord, y: minCoord };
+  }
+
+  /** Create a CPU-controlled player and add it to the game state. */
+  private spawnCpuPlayer(index: number): void {
+    const cpuId = `${CPU_PLAYER.SESSION_PREFIX}${index}`;
+    const player = new PlayerState();
+    player.id = cpuId;
+    player.displayName = CPU_PLAYER.NAMES[index] ?? `CPU ${index}`;
+    player.color = PLAYER_COLORS[(this.state.players.size) % PLAYER_COLORS.length];
+
+    this.state.players.set(cpuId, player);
+
+    // Spawn HQ
+    const hqPos = this.findHQSpawnLocation();
+    spawnHQ(this.state, player, hqPos.x, hqPos.y);
+
+    this.cpuPlayerIds.add(cpuId);
+
+    console.log(`[GameRoom] CPU player "${player.displayName}" spawned at (${hqPos.x}, ${hqPos.y})`);
+  }
+
+  /** Run CPU player AI decisions. */
+  private tickCpuPlayers(): void {
+    if (!this.cpuPlayerIds || this.cpuPlayerIds.size === 0) return;
+
+    tickCpuPlayers(
+      this.state,
+      this.cpuPlayerIds,
+      this,
+      (playerId, pawnType, buildMode) => {
+        const player = this.state.players.get(playerId);
+        if (!player) return;
+        this.spawnPawnCore(playerId, player, pawnType, buildMode);
+      },
+    );
+  }
+
+  /**
+   * Check if only CPU players remain. If so, dispose the room.
+   * CPU-only games should not persist.
+   */
+  private checkCpuOnlyRoom(): void {
+    if (!this.cpuPlayerIds || this.cpuPlayerIds.size === 0) return;
+
+    let humanCount = 0;
+    this.state.players.forEach((_player, id) => {
+      if (!this.cpuPlayerIds.has(id)) humanCount++;
+    });
+
+    if (humanCount === 0) {
+      console.log("[GameRoom] No human players remaining — disposing CPU-only room.");
+      this.disconnect();
+    }
   }
 
   private tickStructureIncome() {

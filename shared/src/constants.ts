@@ -390,6 +390,18 @@ export const WATCHTOWER = {
   BUILD_TICKS: 24,
 } as const;
 
+/** CPU player constants. */
+export const CPU_PLAYER = {
+  /** Maximum CPU players per game. */
+  MAX_COUNT: 7,
+  /** Ticks between CPU AI decision evaluations (~4 seconds at 4 ticks/sec). */
+  TICK_INTERVAL: 16,
+  /** Session ID prefix for CPU players. */
+  SESSION_PREFIX: "cpu_",
+  /** Display names assigned to CPU players in order. */
+  NAMES: ["Atlas", "Borealis", "Cypher", "Draco", "Echo", "Fenrir", "Golem"],
+} as const;
+
 /** Day/night cycle constants (Phase 1 — visual only). */
 export const DAY_NIGHT = {
   /** Total ticks for one full day/night cycle (480 ticks = 2 minutes at 4 ticks/sec). */
