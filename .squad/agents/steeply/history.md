@@ -1973,3 +1973,13 @@ Large-map rendering with PixiJS requires explicit culling—the scene graph does
 - **Key principle:** Performance tests in CI should catch algorithmic regressions (O(n²) → O(n³)), not benchmark absolute speed. Hard ceilings must tolerate 5x variance for different environments.
 - **Files modified:** `server/src/__tests__/map-size.test.ts`, `server/src/__tests__/water-depth.test.ts`
 - **Full suite:** 696 tests, 43 files, all passing.
+
+### Building Placement System — Issue #110 (2026-03-10)
+
+- **22 new tests** in `server/src/__tests__/buildings.test.ts`. Total suite: **738 tests, 45 files, all passing.**
+- **Coverage:** All 7 validation paths in `handlePlaceBuilding` (invalid player, out-of-bounds tile, unowned tile, existing structure, HQ structure, non-walkable terrain, insufficient resources), plus edge cases (enough wood but not stone, enough stone but not wood).
+- **Successful placement:** Farm and factory placement verified — structureType set correctly, resources deducted by exact `BUILDING_COSTS` values, broadcast fires with `type: "building"`. Outpost tiles can be replaced by buildings.
+- **Building income:** Farm (+1W/+1S), factory (+2W/+1S), stacking (2 farms + 1 factory), off-interval ticks produce no income, HQ-only baseline income verified against `STRUCTURE_INCOME` constants.
+- **Building removal:** Contestation clears farm/factory structureType when ownership transfers, but HQ structureType is preserved.
+- **Key discovery:** `spawnHQ()` sets `structureType = "hq"` on ALL 25 tiles in the starting territory, not just the center tile. This means buildings can only be placed on territory tiles claimed AFTER initial spawn (where structureType is ""). Test helper `prepareBuildableTile()` manually assigns ownership to a walkable unowned tile with empty structureType to simulate expanded territory.
+- **Test patterns:** Same `Object.create(GameRoom.prototype)` + `vi.fn()` mocking pattern as existing tests. `prepareBuildableTile()` is the key helper for setting up buildable tiles in a controlled way.
