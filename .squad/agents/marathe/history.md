@@ -624,3 +624,23 @@ Coordinator consolidated the triage system. The heartbeat-triggered triage steps
 - Always `git pull --rebase` before pushing to avoid divergence on protected branches
 - `prod` branch has branch protection requiring PRs, but direct pushes with bypass permissions are available for urgent CI fixes
 - Cherry-pick order matters — apply commits chronologically to avoid conflicts between dependent changes
+
+## Stage Label Automation (Issue #107, PR #108)
+
+**What:** New workflow `.github/workflows/squad-stage-label.yml` that auto-applies `stage:ready-for-uat` to linked issues when PRs merge to `dev`.
+
+**Design:**
+- Triggers on `pull_request` closed → `dev`, gated by `merged == true`
+- Uses `actions/github-script@v7` with regex parsing of PR body for `Closes/Fixes/Resolves #N`
+- Minimal permissions: `issues: write` only
+- No checkout step needed (pure API workflow)
+- Uses `Set` to deduplicate issue numbers
+
+**Also done:**
+- Manually applied `stage:ready-for-uat` to issue #101 (PR #103 already merged)
+- Created issue #107 to track this work
+
+**Learnings:**
+- Squad workflows that only interact with GitHub API don't need `actions/checkout` — saves ~3s per run
+- The `stage:ready-for-uat` label (green, ID: LA_kwDORYoTXc8AAAACayP45w) is part of the UAT pipeline tracking system
+- PR body parsing with regex is sufficient for issue linking — GitHub's auto-close syntax is well-defined and case-insensitive
