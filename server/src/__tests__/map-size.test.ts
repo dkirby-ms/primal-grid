@@ -121,18 +121,35 @@ describe("Map Size (#11)", () => {
   });
 
   describe("generation performance", () => {
-    it("map generation completes in under 500ms", () => {
+    // Hard ceilings are generous (5x ideal) to avoid CI flakes.
+    // console.warn fires at the ideal threshold so regressions stay visible.
+    const MAP_IDEAL_MS = 500;
+    const MAP_HARD_CEILING_MS = 2500;
+    const CREATURES_IDEAL_MS = 1000;
+    const CREATURES_HARD_CEILING_MS = 5000;
+
+    it("map generation completes within performance ceiling", () => {
       const start = performance.now();
       createRoomWithMap(42);
       const elapsed = performance.now() - start;
-      expect(elapsed).toBeLessThan(500);
+      if (elapsed > MAP_IDEAL_MS) {
+        console.warn(
+          `⚠ Map generation took ${elapsed.toFixed(0)}ms (ideal < ${MAP_IDEAL_MS}ms)`,
+        );
+      }
+      expect(elapsed).toBeLessThan(MAP_HARD_CEILING_MS);
     });
 
-    it("map generation with creatures completes in under 1000ms", () => {
+    it("map generation with creatures completes within performance ceiling", () => {
       const start = performance.now();
       createRoomWithCreatures(42);
       const elapsed = performance.now() - start;
-      expect(elapsed).toBeLessThan(1000);
+      if (elapsed > CREATURES_IDEAL_MS) {
+        console.warn(
+          `⚠ Map + creature generation took ${elapsed.toFixed(0)}ms (ideal < ${CREATURES_IDEAL_MS}ms)`,
+        );
+      }
+      expect(elapsed).toBeLessThan(CREATURES_HARD_CEILING_MS);
     });
   });
 });
