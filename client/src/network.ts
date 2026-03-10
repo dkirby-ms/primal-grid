@@ -152,6 +152,7 @@ function getClient(): Client {
 let reconnecting = false;
 let pageUnloading = false;
 window.addEventListener('beforeunload', () => { pageUnloading = true; });
+window.addEventListener('pageshow', () => { pageUnloading = false; });
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

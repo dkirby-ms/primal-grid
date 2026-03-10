@@ -25,9 +25,14 @@ vi.stubGlobal('localStorage', {
   removeItem: vi.fn((key: string) => { delete localStore[key]; }),
 });
 
+const windowEventCallbacks: Record<string, Array<(...args: unknown[]) => void>> = {};
+
 vi.stubGlobal('window', {
   location: { search: '', protocol: 'http:', host: 'localhost:3000' },
-  addEventListener: vi.fn(),
+  addEventListener: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
+    if (!windowEventCallbacks[event]) windowEventCallbacks[event] = [];
+    windowEventCallbacks[event].push(cb);
+  }),
   removeEventListener: vi.fn(),
 });
 
@@ -82,6 +87,9 @@ describe('Client reconnection lifecycle (#101)', () => {
     // Reset storage state
     for (const k of Object.keys(sessionStore)) delete sessionStore[k];
     for (const k of Object.keys(localStore)) delete localStore[k];
+
+    // Reset captured window event callbacks
+    for (const k of Object.keys(windowEventCallbacks)) delete windowEventCallbacks[k];
 
     // Default mock setup
     const defaultRoom = makeMockRoom();
@@ -312,6 +320,65 @@ describe('Client reconnection lifecycle (#101)', () => {
 
       expect(result).not.toBeNull();
       expect(mockClient.reconnect).toHaveBeenCalledWith('bootstrap-token');
+    });
+  });
+
+  // --- Browser refresh guard (pageUnloading flag) ---
+
+  describe('Browser refresh guard (pageUnloading)', () => {
+    function fireWindowEvent(event: string): void {
+      for (const cb of windowEventCallbacks[event] ?? []) cb();
+    }
+
+    it("browser refresh preserves reconnect token (beforeunload + 1006 keeps token)", async () => {
+      const room = makeMockRoom('refresh-token');
+      mockClient.joinById.mockResolvedValue(room);
+      await net.joinGameRoom('room-1');
+      expect(sessionStore['primal-grid-reconnect-token']).toBe('refresh-token');
+
+      const statuses: string[] = [];
+      net.onConnectionStatus((s) => statuses.push(s));
+
+      // Simulate browser refresh: beforeunload fires, then socket closes
+      fireWindowEvent('beforeunload');
+      leaveHandler?.(1006);
+
+      // Token should be preserved — page is unloading, so we keep it for reconnection
+      expect(sessionStore['primal-grid-reconnect-token']).toBe('refresh-token');
+      expect(statuses).not.toContain('disconnected');
+    });
+
+    it("cancelled navigation resets pageUnloading via pageshow", async () => {
+      const room = makeMockRoom('cancel-nav-token');
+      mockClient.joinById.mockResolvedValue(room);
+      await net.joinGameRoom('room-1');
+
+      // Simulate: user triggers navigation, then cancels ("Stay on page")
+      fireWindowEvent('beforeunload');
+      fireWindowEvent('pageshow');
+
+      // Now a real disconnect happens — should clean up normally
+      leaveHandler?.(1006);
+
+      expect(sessionStore['primal-grid-reconnect-token']).toBeUndefined();
+    });
+
+    it("normal disconnect after pageshow reset still cleans up", async () => {
+      const room = makeMockRoom('normal-after-pageshow');
+      mockClient.joinById.mockResolvedValue(room);
+      await net.joinGameRoom('room-1');
+
+      const statuses: string[] = [];
+      net.onConnectionStatus((s) => statuses.push(s));
+
+      // pageshow fires (e.g. bfcache restore) without prior beforeunload
+      fireWindowEvent('pageshow');
+
+      // Normal non-consented disconnect
+      leaveHandler?.(1006);
+
+      expect(sessionStore['primal-grid-reconnect-token']).toBeUndefined();
+      expect(statuses).toContain('disconnected');
     });
   });
 
