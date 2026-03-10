@@ -82,7 +82,7 @@ function clearToken(): void {
 // Reconnect token helpers (sessionStorage — tab-scoped, survives refresh)
 // ---------------------------------------------------------------------------
 
-function loadReconnectToken(): string | null {
+export function loadReconnectToken(): string | null {
   try {
     return sessionStorage.getItem(RECONNECT_TOKEN_KEY);
   } catch {
@@ -150,12 +150,23 @@ function getClient(): Client {
 // ---------------------------------------------------------------------------
 
 let reconnecting = false;
+let pageUnloading = false;
+window.addEventListener('beforeunload', () => { pageUnloading = true; });
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function attachGameRoomHandlers(room: Room): void {
+  room.onDrop(() => {
+    if (!pageUnloading) emitStatus('reconnecting');
+  });
+
+  room.onReconnect(() => {
+    if (room.reconnectionToken) saveReconnectToken(room.reconnectionToken);
+    emitStatus('connected');
+  });
+
   room.onLeave((code: number) => {
     console.log('[network] Left game room, code:', code);
     gameRoom = null;
@@ -164,7 +175,7 @@ function attachGameRoomHandlers(room: Room): void {
     if (consented) {
       clearReconnectToken();
       emitStatus('disconnected');
-    } else {
+    } else if (!pageUnloading) {
       emitStatus('reconnecting');
       reconnectGameRoom();
     }
