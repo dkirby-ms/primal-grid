@@ -106,6 +106,7 @@ jobs:
 
           # Generate changelog (last 10 commits, no merges, features/fixes first)
           RAW_LOG=$(git log --no-merges --pretty=format:'• %h %s (%an)' HEAD~10..HEAD 2>/dev/null | head -20)
+          RAW_LOG=$(echo "$RAW_LOG" | grep -v ' squad[:(]' || true)
           FEATURES=$(echo "$RAW_LOG" | grep -iE '^• [a-f0-9]+ (feat|fix)' || true)
           OTHER=$(echo "$RAW_LOG" | grep -viE '^• [a-f0-9]+ (feat|fix)' || true)
           CHANGELOG=$(printf '%s\n%s' "$FEATURES" "$OTHER" | sed '/^$/d' | head -10)
