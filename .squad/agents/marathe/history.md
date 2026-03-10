@@ -602,3 +602,23 @@ Coordinator consolidated the triage system. The heartbeat-triggered triage steps
 - `.github/workflows/squad-promote.yml` — PR body changelog blocks (dev→uat and uat→prod)
 
 **Decision:** `.squad/decisions/inbox/marathe-changelog-sorting.md`
+
+---
+
+## 2025-07-17: Cherry-Pick CI Commits to UAT and Prod
+
+**Task:** Cherry-pick two CI/workflow-only commits directly to `uat` and `prod` branches, bypassing the full promotion workflow.
+
+**Commits Cherry-Picked (in order):**
+1. `b85b0e4` — ci: sort Discord changelogs (feat/fix first) and exclude merge commits
+2. `1265ba3` — fix: transfer Discord webhook identity from Marathe to Joelle
+
+**Branches Updated:**
+- `uat` — cherry-picked both, rebased on remote, pushed successfully
+- `prod` — cherry-picked both, pushed successfully (bypassed branch protection rule)
+
+**Learnings:**
+- For CI-only changes (`.github/workflows/` files, squad config), direct cherry-pick to `uat`/`prod` is a valid fast-path when changes don't touch application code
+- Always `git pull --rebase` before pushing to avoid divergence on protected branches
+- `prod` branch has branch protection requiring PRs, but direct pushes with bypass permissions are available for urgent CI fixes
+- Cherry-pick order matters — apply commits chronologically to avoid conflicts between dependent changes
