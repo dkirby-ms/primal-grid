@@ -1,4 +1,4 @@
-import { Room, Client, CloseCode } from "colyseus";
+import { Room, Client } from "colyseus";
 import { StateView } from "@colyseus/schema";
 import { GameState, PlayerState, CreatureState } from "./GameState.js";
 import { generateProceduralMap } from "./mapGenerator.js";
@@ -8,9 +8,14 @@ import { tickCombat } from "./combat.js";
 import { tickGraveDecay } from "./graveDecay.js";
 import type { EnemyBaseTracker } from "./enemyBaseAI.js";
 import type { AttackerTracker } from "./attackerAI.js";
+import type { AuthProvider, AuthUser } from "../auth/AuthProvider.js";
+import type { PlayerStateRepository } from "../persistence/PlayerStateRepository.js";
+import type { LobbyBridge } from "./LobbyBridge.js";
+import { serializePlayerState, deserializePlayerState } from "../persistence/playerStateSerde.js";
+import type { SerializedPlayerState } from "../persistence/playerStateSerde.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
-  SPAWN_PAWN, SET_NAME,
+  SPAWN_PAWN, SET_NAME, CHAT, CHAT_MAX_LENGTH,
   ResourceType, TileType, isWaterTile,
   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
   CREATURE_AI, CREATURE_RESPAWN, TERRITORY,
@@ -21,7 +26,7 @@ import {
   DayPhase,
   isEnemyBase,
 } from "@primal-grid/shared";
-import type { SpawnPawnPayload, SetNamePayload } from "@primal-grid/shared";
+import type { SpawnPawnPayload, SetNamePayload, ChatPayload } from "@primal-grid/shared";
 import { spawnHQ } from "./territory.js";
 
 const PLAYER_COLORS = [
@@ -29,6 +34,12 @@ const PLAYER_COLORS = [
   "#911eb4", "#42d4f4", "#f032e6", "#bfef45",
   "#fabed4", "#469990", "#dcbeff", "#9a6324",
 ];
+
+/** Auto-save interval: every 120 ticks (30 seconds at 4 ticks/sec). */
+const AUTO_SAVE_INTERVAL_TICKS = 120;
+
+/** Grace period (seconds) for reconnection after non-consented disconnect. */
+const RECONNECT_GRACE_SECONDS = 60;
 
 export class GameRoom extends Room {
   state = new GameState();
@@ -41,10 +52,27 @@ export class GameRoom extends Room {
   private attackerState = new Map<string, AttackerTracker>();
   /** Shared mutable counter for creature IDs (passed to AI functions). */
   private creatureIdCounter = { value: 0 };
+  /** Auth provider for JWT validation on room join. */
+  authProvider?: AuthProvider;
+  /** Player state persistence repository. */
+  playerStateRepo?: PlayerStateRepository;
+  /** Bridge for notifying the LobbyRoom of lifecycle events. */
+  lobbyBridge?: LobbyBridge;
+  /** Maps Colyseus sessionId → authenticated userId for persistence. */
+  private sessionUserMap = new Map<string, string>();
+  /** Game session ID (from lobby). Empty for legacy direct-connect. */
+  private gameId = "";
 
   override onCreate(options: Record<string, unknown>) {
     const seed = typeof options?.seed === "number" ? options.seed : DEFAULT_MAP_SEED;
-    this.generateMap(seed);
+    const mapSize = typeof options?.mapSize === "number" ? options.mapSize : DEFAULT_MAP_SIZE;
+    const maxPlayers = typeof options?.maxPlayers === "number" ? options.maxPlayers : 8;
+
+    // Store game metadata for lifecycle tracking
+    this.gameId = typeof options?.gameId === "string" ? options.gameId : "";
+    this.maxClients = maxPlayers;
+
+    this.generateMap(seed, mapSize);
     this.spawnCreatures();
 
     this.setSimulationInterval((_deltaTime) => {
@@ -59,6 +87,7 @@ export class GameRoom extends Room {
       this.tickCombat();
       this.tickGraveDecay();
       this.tickFogOfWar();
+      this.tickAutoSave();
     }, 1000 / TICK_RATE);
 
     this.onMessage(SPAWN_PAWN, (client, message: SpawnPawnPayload) => {
@@ -69,19 +98,87 @@ export class GameRoom extends Room {
       this.handleSetName(client, message);
     });
 
+    this.onMessage(CHAT, (client, message: ChatPayload) => {
+      this.handleChat(client, message);
+    });
+
     console.log("[GameRoom] Room created.");
   }
 
-  override onJoin(client: Client, options?: Record<string, unknown>) {
+  override async onJoin(client: Client, options?: Record<string, unknown>) {
+    // Validate JWT if auth is configured
+    let authUser: AuthUser | undefined;
+    const token = typeof options?.token === "string" ? options.token : undefined;
+
+    if (this.authProvider && token) {
+      const result = await this.authProvider.validateToken(token);
+      if (result.valid && result.user) {
+        authUser = result.user;
+
+        // Reject if this user is already in the room (multi-tab guard)
+        for (const [existingSessionId, existingUserId] of this.sessionUserMap) {
+          if (existingUserId === authUser.id) {
+            // If old session is in reconnection grace period, evict it
+            const existingClient = this.clients.find(c => c.sessionId === existingSessionId);
+            if (!existingClient) {
+              this.saveAndRemovePlayer(existingSessionId);
+              break;
+            }
+            // Active duplicate — reject
+            client.send("game_log", { message: "You are already in this game from another tab.", type: "error" });
+            client.leave(4001);
+            return;
+          }
+        }
+
+        this.sessionUserMap.set(client.sessionId, authUser.id);
+      }
+    }
+
     const player = new PlayerState();
     player.id = client.sessionId;
     player.color = PLAYER_COLORS[this.state.players.size % PLAYER_COLORS.length];
 
+    // Restore saved state if authenticated and persistence is configured.
+    // Only displayName is set before spawnHQ (needed for client name-prompt skip).
+    // Progression stats (level, xp) and resources (wood, stone) are restored AFTER
+    // spawnHQ, which resets score/resources to starting values.
+    // Score is NOT restored — it reflects actual current territory, not historical totals.
+    let restored = false;
+    let savedState: SerializedPlayerState | null = null;
+    if (authUser && this.playerStateRepo) {
+      const saved = await this.playerStateRepo.load(authUser.id);
+      if (saved) {
+        savedState = deserializePlayerState(saved.gameState);
+        if (savedState) {
+          player.displayName = savedState.displayName;
+          restored = true;
+          console.log(`[GameRoom] Restored state for user ${authUser.username}`);
+        }
+      }
+    }
+
+    // If no saved displayName, use the name passed from the lobby
+    if (!player.displayName) {
+      const optName = typeof options?.displayName === "string" ? options.displayName.trim() : "";
+      if (optName) player.displayName = optName;
+    }
+
     this.state.players.set(client.sessionId, player);
 
-    // Spawn HQ and claim starting territory
+    // Spawn HQ and claim starting territory (sets score = tile count, resets resources)
     const hqPos = this.findHQSpawnLocation();
     spawnHQ(this.state, player, hqPos.x, hqPos.y);
+
+    // Restore earned progression and resources after HQ spawn.
+    // Territory is spatial and can't transfer across map seeds, so score stays
+    // at the actual tile count set by spawnHQ.
+    if (restored && savedState) {
+      player.wood = savedState.wood;
+      player.stone = savedState.stone;
+      player.level = savedState.level;
+      player.xp = savedState.xp;
+    }
 
     const devMode = options?.devMode === true;
 
@@ -97,27 +194,119 @@ export class GameRoom extends Room {
       }
     }
 
-    console.log(`[GameRoom] Client joined: ${client.sessionId}, HQ at (${hqPos.x}, ${hqPos.y})${devMode ? ' [DEV MODE]' : ''}`);
-    client.send("game_log", { message: "Welcome to Primal Grid!", type: "info" });
+    const userLabel = authUser ? ` (user: ${authUser.username})` : "";
+    console.log(`[GameRoom] Client joined: ${client.sessionId}${userLabel}, HQ at (${hqPos.x}, ${hqPos.y})${devMode ? ' [DEV MODE]' : ''}`);
+
+    if (restored && player.displayName) {
+      client.send("game_log", { message: `Welcome back, ${player.displayName}!`, type: "info" });
+      this.broadcast("game_log", { message: `${player.displayName} has returned`, type: "info" }, { except: client });
+    } else {
+      client.send("game_log", { message: "Welcome to Primal Grid!", type: "info" });
+    }
+
+    // Notify lobby of actual player count
+    if (this.gameId) {
+      this.lobbyBridge?.notifyPlayerCountChanged(this.gameId, this.state.players.size);
+    }
   }
 
-  override onLeave(client: Client, code: number) {
-    // Clean up fog of war StateView
+  override async onDrop(client: Client) {
+    console.log(`[GameRoom] Client dropped: ${client.sessionId}`);
+
+    // Clean up fog of war view immediately — no consumer during disconnect
     this.cleanupPlayerView(client.sessionId);
 
-    this.state.players.delete(client.sessionId);
-    const consented = code === CloseCode.CONSENTED;
-    console.log(
-      `[GameRoom] Client left: ${client.sessionId} (consented: ${consented})`
-    );
+    // Hold the slot — player, territory, creatures, sessionUserMap all stay
+    await this.allowReconnection(client, RECONNECT_GRACE_SECONDS);
   }
 
-  override onDispose() {
+  override onReconnect(client: Client) {
+    const player = this.state.players.get(client.sessionId);
+    if (player) {
+      const devMode = false;
+      this.initPlayerView(client, player, devMode);
+      client.send("game_log", { message: "Reconnected!", type: "info" });
+      this.broadcast("game_log", {
+        message: `${player.displayName || "A player"} reconnected`,
+        type: "info",
+      }, { except: client });
+    }
+    console.log(`[GameRoom] Client reconnected: ${client.sessionId}`);
+  }
+
+  override onLeave(client: Client) {
+    console.log(`[GameRoom] Client left: ${client.sessionId}`);
+    this.saveAndRemovePlayer(client.sessionId);
+  }
+
+  override async onDispose() {
+    // Save all connected players on room dispose
+    for (const sessionId of this.state.players.keys()) {
+      await this.savePlayerState(sessionId);
+    }
+
+    // Notify lobby that this game has ended
+    if (this.gameId) {
+      this.lobbyBridge?.notifyGameEnded(this.gameId);
+    }
+
     console.log("[GameRoom] Room disposed.");
   }
 
-  private generateMap(seed: number = DEFAULT_MAP_SEED) {
-    generateProceduralMap(this.state, seed, DEFAULT_MAP_SIZE, DEFAULT_MAP_SIZE);
+  /** Persist player state and remove from room. Idempotent — safe to call if already removed. */
+  private saveAndRemovePlayer(sessionId: string): void {
+    const userId = this.sessionUserMap?.get(sessionId);
+    const player = this.state.players.get(sessionId);
+
+    // Persist state before removal
+    if (userId && player && this.playerStateRepo) {
+      const serialized = serializePlayerState(player);
+      const displayName = player.displayName;
+      const repo = this.playerStateRepo;
+      void repo.save(userId, displayName, serialized).catch((err: unknown) => {
+        console.error(`[GameRoom] Failed to save state for ${sessionId}:`, err);
+      });
+    }
+
+    // Clean up fog of war (idempotent — may already be cleaned in grace period path)
+    this.cleanupPlayerView(sessionId);
+
+    this.state.players.delete(sessionId);
+    this.sessionUserMap?.delete(sessionId);
+
+    if (this.gameId) {
+      this.lobbyBridge?.notifyPlayerCountChanged(this.gameId, this.state.players.size);
+    }
+  }
+
+  /** Save a player's state to the persistence layer (if configured). */
+  private async savePlayerState(sessionId: string): Promise<void> {
+    const userId = this.sessionUserMap?.get(sessionId);
+    if (!userId || !this.playerStateRepo) return;
+
+    const player = this.state.players.get(sessionId);
+    if (!player) return;
+
+    try {
+      const serialized = serializePlayerState(player);
+      await this.playerStateRepo.save(userId, player.displayName, serialized);
+    } catch (err) {
+      console.error(`[GameRoom] Failed to save state for ${sessionId}:`, err);
+    }
+  }
+
+  /** Periodic auto-save checkpoint for all authenticated players. */
+  private tickAutoSave(): void {
+    if (this.state.tick % AUTO_SAVE_INTERVAL_TICKS !== 0) return;
+    if (!this.playerStateRepo) return;
+
+    for (const sessionId of this.sessionUserMap.keys()) {
+      void this.savePlayerState(sessionId);
+    }
+  }
+
+  private generateMap(seed: number = DEFAULT_MAP_SEED, mapSize: number = DEFAULT_MAP_SIZE) {
+    generateProceduralMap(this.state, seed, mapSize, mapSize);
   }
 
   private handleSetName(client: Client, message: SetNamePayload) {
@@ -130,6 +319,25 @@ export class GameRoom extends Room {
 
     player.displayName = sanitized;
     this.broadcast("game_log", { message: `${sanitized} has joined`, type: "info" });
+  }
+
+  /** Strip HTML tags to prevent injection in chat messages. */
+  private static stripHtml(input: string): string {
+    return input.replace(/<[^>]*>/g, "");
+  }
+
+  private handleChat(client: Client, message: ChatPayload) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+
+    if (typeof message.text !== "string") return;
+    const stripped = GameRoom.stripHtml(message.text).trim();
+    if (stripped.length === 0) return;
+    const text = stripped.slice(0, CHAT_MAX_LENGTH);
+
+    const sender = player.displayName || "Unknown";
+
+    this.broadcast(CHAT, { sender, text, timestamp: Date.now() });
   }
 
   private handleSpawnPawn(client: Client, message: SpawnPawnPayload) {

@@ -4,6 +4,7 @@ import type { HudDOM } from '../ui/HudDOM.js';
 import type { HelpScreen } from '../ui/HelpScreen.js';
 import type { Scoreboard } from '../ui/Scoreboard.js';
 import type { Camera } from '../renderer/Camera.js';
+import type { ChatPanel } from '../ui/ChatPanel.js';
 
 export class InputHandler {
   private room: Room;
@@ -14,6 +15,8 @@ export class InputHandler {
   private helpScreen: HelpScreen | null = null;
   private scoreboard: Scoreboard | null = null;
   private camera: Camera | null = null;
+  private chatPanel: ChatPanel | null = null;
+  private _keyHandler: ((e: KeyboardEvent) => void) | null = null;
 
   constructor(room: Room, worldContainer: Container, canvas: HTMLCanvasElement) {
     this.room = room;
@@ -43,8 +46,16 @@ export class InputHandler {
     this.camera = camera;
   }
 
+  /** Wire up the chat panel. */
+  public setChatPanel(chatPanel: ChatPanel): void {
+    this.chatPanel = chatPanel;
+  }
+
   private bindKeys(): void {
-    window.addEventListener('keydown', (e) => {
+    this._keyHandler = (e: KeyboardEvent) => {
+      // When chat input is focused, don't process game keys
+      if (this.chatPanel?.isFocused) return;
+
       // Help screen toggle
       if (e.key === '?' || e.key === '/') {
         this.helpScreen?.toggle();
@@ -58,12 +69,34 @@ export class InputHandler {
         return;
       }
 
+      // Chat toggle
+      if (e.key === 'c' || e.key === 'C') {
+        this.chatPanel?.toggle();
+        return;
+      }
+
+      // Focus chat on Enter
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this.chatPanel?.focus();
+        return;
+      }
+
       // Center camera on HQ
       if (e.key === ' ') {
         e.preventDefault();
         this.camera?.centerOnHQ(this.hud?.localHqX ?? 0, this.hud?.localHqY ?? 0);
         return;
       }
-    });
+    };
+    window.addEventListener('keydown', this._keyHandler);
+  }
+
+  /** Remove all event listeners. Call when leaving a game session. */
+  dispose(): void {
+    if (this._keyHandler) {
+      window.removeEventListener('keydown', this._keyHandler);
+      this._keyHandler = null;
+    }
   }
 }

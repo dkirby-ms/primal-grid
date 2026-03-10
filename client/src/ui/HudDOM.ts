@@ -1,10 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { xpForNextLevel, PAWN_TYPES, isEnemyBase } from '@primal-grid/shared';
-
-/** Cost to spawn a builder pawn. */
-const BUILDER_COST_WOOD = 10;
-const BUILDER_COST_STONE = 5;
-const MAX_BUILDERS = 5;
+import { PAWN_TYPES, isEnemyBase } from '@primal-grid/shared';
 
 /**
  * DOM-based HUD panel.
@@ -18,11 +13,7 @@ export class HudDOM {
   private invWood: HTMLElement;
   private invStone: HTMLElement;
   private creatureCounts: HTMLElement;
-  private levelVal: HTMLElement;
-  private xpText: HTMLElement;
-  private xpBarFill: HTMLElement;
   private dayPhaseDisplay: HTMLElement;
-  private currentLevel = 1;
 
   // Builder panel
   private spawnBuilderBtn: HTMLButtonElement;
@@ -45,9 +36,6 @@ export class HudDOM {
   public localHqX = 0;
   public localHqY = 0;
 
-  /** Callback when level changes. */
-  public onLevelChange: ((level: number) => void) | null = null;
-
   private room: Room | null = null;
 
   constructor(localSessionId: string) {
@@ -57,9 +45,6 @@ export class HudDOM {
     this.invWood = document.getElementById('inv-wood')!;
     this.invStone = document.getElementById('inv-stone')!;
     this.creatureCounts = document.getElementById('creature-counts')!;
-    this.levelVal = document.getElementById('level-val')!;
-    this.xpText = document.getElementById('xp-text')!;
-    this.xpBarFill = document.getElementById('xp-bar-fill')!;
     this.dayPhaseDisplay = document.getElementById('day-phase-display')!;
 
     // Builder panel elements
@@ -77,29 +62,13 @@ export class HudDOM {
     this.spawnAttackerBtn.addEventListener('click', () => this.onSpawnPawn('attacker'));
   }
 
-  /** Update the level/XP display. */
-  public updateLevelDisplay(level: number, xp: number): void {
-    this.levelVal.textContent = String(level);
-    const nextXp = xpForNextLevel(level);
-    if (nextXp !== null) {
-      const pct = Math.min(100, Math.round((xp / nextXp) * 100));
-      this.xpText.textContent = `${xp} / ${nextXp}`;
-      this.xpBarFill.style.width = `${pct}%`;
-    } else {
-      this.xpText.textContent = `${xp} (MAX)`;
-      this.xpBarFill.style.width = '100%';
-    }
-    if (level !== this.currentLevel) {
-      this.currentLevel = level;
-      this.onLevelChange?.(level);
-    }
-  }
-
   /** Handle spawn builder button click. */
   private onSpawnBuilder(): void {
     if (!this.room) return;
-    if (this.currentWood < BUILDER_COST_WOOD || this.currentStone < BUILDER_COST_STONE) return;
-    if (this.currentBuilderCount >= MAX_BUILDERS) return;
+    const builderDef = PAWN_TYPES['builder'];
+    if (!builderDef) return;
+    if (this.currentWood < builderDef.cost.wood || this.currentStone < builderDef.cost.stone) return;
+    if (this.currentBuilderCount >= builderDef.maxCount) return;
     this.room.send('spawn_pawn', { pawnType: 'builder' });
   }
 
@@ -116,8 +85,11 @@ export class HudDOM {
 
   /** Update spawn button enabled/disabled state. */
   private updateSpawnButton(): void {
-    const canAfford = this.currentWood >= BUILDER_COST_WOOD && this.currentStone >= BUILDER_COST_STONE;
-    const underCap = this.currentBuilderCount < MAX_BUILDERS;
+    const builderDef = PAWN_TYPES['builder'];
+    const canAfford = builderDef
+      ? this.currentWood >= builderDef.cost.wood && this.currentStone >= builderDef.cost.stone
+      : false;
+    const underCap = builderDef ? this.currentBuilderCount < builderDef.maxCount : false;
     this.spawnBuilderBtn.disabled = !canAfford || !underCap;
 
     // Defender button
@@ -184,11 +156,6 @@ export class HudDOM {
           const score = (player['score'] as number) ?? 0;
           this.territoryCount.textContent = String(score);
 
-          // Level / XP
-          const level = (player['level'] as number) ?? 1;
-          const xp = (player['xp'] as number) ?? 0;
-          this.updateLevelDisplay(level, xp);
-
           // Inventory (wood & stone only)
           this.currentWood = (player['wood'] as number) ?? 0;
           this.currentStone = (player['stone'] as number) ?? 0;
@@ -227,7 +194,7 @@ export class HudDOM {
         });
         this.creatureCounts.textContent = `🦕 ${herbs}  🦖 ${carns}`;
         this.currentBuilderCount = builders;
-        this.builderCountEl.textContent = `Builders: ${builders}/${MAX_BUILDERS}`;
+        this.builderCountEl.textContent = `Builders: ${builders}/${PAWN_TYPES['builder']?.maxCount ?? 5}`;
 
         // Combat counts
         const defDef = PAWN_TYPES['defender'];

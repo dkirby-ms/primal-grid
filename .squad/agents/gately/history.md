@@ -681,6 +681,14 @@ Previous pass removed some shape UI but missed significant remnants that were st
 
 ## Learnings
 
+### In-Game Chat UI (2026-03-06)
+- **ChatPanel** (`client/src/ui/ChatPanel.ts`): DOM-based overlay following overlay-panel skill pattern. Header, scrollable message area (120px), text input at bottom.
+- **Input isolation:** `e.stopPropagation()` on the input's keydown handler prevents game controls from firing when typing in chat. `isFocused` getter lets InputHandler bail early from game key processing.
+- **Keybindings:** `C` toggles chat visibility, `Enter` focuses chat input from game context, `Escape` blurs the input back to game.
+- **Colyseus protocol:** Client sends `room.send('chat', { text })`, listens `room.onMessage('chat', { sender, text, timestamp })`. Server broadcasts — Pemulis owns the server handler.
+- **CSS consistency:** Reused game-log dark theme styling (`#1a1a2e` bg, `#2a2a4a` borders, `#3a3a5a` scrollbar thumb, Courier New monospace). Chat sender names styled cyan (`#7ecfff`) to distinguish from log text.
+- **Integration pattern:** ChatPanel instantiated in `connectToServer()` after room join, wired to InputHandler via `setChatPanel()`. Same setter pattern as HelpScreen, Scoreboard, Camera.
+
 ### Resource Tile Tinting (2026-03-05)
 - Replaced per-tile `Graphics` resource dots with background color tinting via `lerpColor()` at 25% blend
 - Resource tiles now show a subtle inner border (1px, 40% alpha) in the resource color for extra contrast
@@ -1205,3 +1213,100 @@ Prevention (write clean first) > Cleanup (fix lint errors post-merge).
 Valid exceptions (e.g., E2E browser-context code) require documented decision in decisions.md.
 
 See: 2026-03-08: ESLint Override for E2E Browser Context Code
+
+### Status Panel Cleanup (2026-03-10)
+
+- **Upkeep remnant in GameLog:** The `upkeep` event type in GameLog.ts TYPE_CONFIG was dead code — no server events use it since the pawn upkeep system was removed. Removed the entry.
+- **Builder constant duplication:** HudDOM.ts had local `BUILDER_COST_WOOD`, `BUILDER_COST_STONE`, `MAX_BUILDERS` constants duplicating values from `PAWN_TYPES['builder']` in shared. Defender/attacker buttons already used `PAWN_TYPES` correctly. Unified all three to use the registry, preventing future drift.
+- **Panel audit result:** All remaining HUD sections (time of day, level/XP, territory, inventory, creatures, builders, combat) are backed by active game state and server schema. No explorer pawn type references exist (correctly absent — it's a feature request, not implemented). No upkeep display exists.
+- **CSS comment fix:** The stat-bar CSS was labeled "legacy" but is actively used by the XP progress bar. Updated the comment.
+
+---
+
+- **Level/XP removed from HUD:** Removed entire section-level (HTML), updateLevelDisplay method, onLevelChange callback, xpForNextLevel import, and stat-bar CSS. Level/XP has no gameplay element — was confusing testers. Can be re-added when progression unlocks something meaningful.
+- **Header renames:** "Inventory" → "Resources" (standard game term), "Creatures" → "Wildlife" (distinguishes from player pawns like builders/defenders/attackers).
+- **Section reorder:** Resources → Territory → Builders → Combat → Time of Day → Wildlife. Prioritizes actionable/frequently-checked info at top, ambient info at bottom.
+- **CSS cleanup:** Removed stat-bar-wrap, bar-label, stat-bar, stat-bar-fill CSS classes — they were only used by the XP progress bar.
+- **No test impact:** All 515 tests pass. Server HUD state contract tests don't reference level/XP display.
+## 2026-03-09: PR #68 Status Panel UX Redesign — MERGED
+
+**By:** Gately (Game Dev)  
+**Date:** 2026-03-09  
+**PR:** #68 (merged to dev)  
+
+### Changes
+
+1. **Removed Level/XP from HUD** — Confusing to testers (no gameplay purpose yet, no unlocks/gating)
+2. **Renamed headers:** "Inventory" → "Resources", "Creatures" → "Wildlife" (clearer in context)
+3. **Reordered sections by importance:** Resources > Territory > Builders > Combat > Time of Day > Wildlife
+
+### Code Cleanup
+
+- `HudDOM.updateLevelDisplay()` removed
+- `onLevelChange` callback removed
+- `xpForNextLevel` no longer imported in client code
+- Stat-bar CSS classes removed (re-add if progression re-implemented)
+
+### Impact
+
+Scope discipline maintained (HUD DOM only, no game logic). User-facing clarity improved. Clean merge with no issues.
+
+### Initiative Status
+
+**Ready for pickup:**
+- **#19 Rounded tiles** — Recommended next (quick 1-file win)
+- **#31 Game log UI** — After #19
+- **#30 Chat UI** — After #31 overlay pattern lands
+
+See `.squad/decisions.md` Initiative Triage & Execution Plan (2026-03-09) for full Wave 1/Wave 2 sequencing.
+
+### Game Log Overlay Panel — Issue #31 (2026-03-09)
+
+- **Rewrote GameLog.ts** with 5 event categories (Territory 🟢, Combat 🔴, Resources 🟡, Creatures 🔵, System ⚪) each with distinct color and dot icon.
+- **Timestamps** (HH:MM:SS) on every entry using `formatTimestamp()` helper.
+- **Smart auto-scroll** — tracks `userScrolledUp` flag via scroll event listener. Only auto-scrolls if user is within 30px of the bottom. Scroll up to read history without losing your place.
+- **Message pruning** cap raised from 50 → 200 entries.
+- **Panel structure** — `#game-log` container now uses flex column: `.game-log-header` (title bar) + `.game-log-scroll` (scrollable message area). Custom styled scrollbar.
+- **Shared types** — Added `GameLogPayload` interface and `GameLogCategory` type union to `shared/src/messages.ts`. Client uses shared type for `room.onMessage` handler.
+- **Reusable pattern** — Built as the overlay panel pattern that #30 (chat) will extract: header + scroll area + auto-scroll + entry pruning.
+- **PR:** #72 targeting dev.
+### Soften Grid Appearance — Rounded Corners & Natural Variation (2026-03-08)
+
+- **roundRect usage:** PixiJS 8 Graphics.roundRect() works identically to rect() but accepts a 5th radius parameter. Already used in CreatureRenderer for headstones. Now used for all terrain tiles.
+- **Per-tile deterministic hash:** Used a simple integer hash `tileHash(x, y, seed)` for noise-free per-tile variation. Deterministic (same tile always same result), zero allocations, pure arithmetic. Two separate seeds (7 for radius, 31 for color) ensure independent variation channels.
+- **Corner radius range:** 3–6px on 32px tiles — subtle enough to not look like buttons, visible enough to break up the rigid grid.
+- **Color jitter:** ±6% brightness shift per tile. Applied to both base biome colors and resource-tinted colors. Makes the terrain look natural without being distracting.
+- **Fog overlays kept as rect():** Fog needs full tile coverage to avoid light bleed at corners. Rounded fog would show terrain through corner gaps.
+- **Performance:** No measurable impact. Hash functions are 3 integer operations each. Viewport culling (~400 tiles/frame) unchanged.
+
+### Creature Stacking Fix — #74 (2026-03-XX)
+
+- **Bug:** Two creatures on the same tile rendered at the exact same pixel position (tile center), so one occluded the other — looked like they "merged" into one.
+- **Root cause:** `CreatureRenderer.tick()` targeted every creature at `tileX * TILE_SIZE + TILE_SIZE / 2` regardless of how many shared the tile. Pure rendering bug — server state correctly tracked multiple creatures per tile.
+- **Fix:** In `tick()`, group entries by tile key. When multiple creatures share a tile, apply small pixel offsets from `STACK_OFFSETS` array (up to 6 unique positions, ~5px from center). Single creatures render at exact tile center (no offset). Offsets interpolate smoothly via existing lerp.
+- **Key file:** `client/src/renderer/CreatureRenderer.ts` — `tick()` method and `STACK_OFFSETS` constant.
+- **Tests:** `client/src/__tests__/creature-stacking.test.ts` — 4 regression tests with PixiJS mocks.
+- **Pattern:** PixiJS mocking pattern reused from `camera-zoom.test.ts` — mock Container/Graphics/Text classes, stub `@primal-grid/shared` and `GridRenderer.js`.
+
+---
+
+### Cross-Agent Update: In-Game Chat #30 (2026-03-09, issue #30)
+
+**Feature completed** by Pemulis, Gately, and Steeply in coordinated sprint. PR #80 merged to dev.
+
+- **Pemulis (Systems):** Server-side chat message handler with HTML stripping, 200-char limit, server-auth sender/timestamp, shared types in messages.ts.
+- **Gately (Game Dev):** Client-side ChatPanel UI (completed above).
+- **Steeply (Tester):** 19-test suite covering both server and client sides. All tests passing. 663 total tests.
+
+**Impact on Gately:** Chat overlay pattern is reusable for future overlay features. InputHandler integration via `chatPanel.isFocused` guard pattern can be cloned for other overlays.
+
+### Client-Side Session Persistence — #77 (2026-03-XX)
+
+## Learnings
+- **Auth URL derivation:** Server runs Express (HTTP auth) and Colyseus (WS game) on the same host:port. Derived HTTP URL from WS URL with regex: `ws(s?)://` → `http$1://`. Handles both ws/wss correctly.
+- **Auth response shape:** `POST /auth/guest` returns `{ user: { id, username, isGuest }, token: { accessToken, expiresIn } }`. Token is a JWT with 24h expiry.
+- **SERVER_PORT is 2567** (not 3001 as sometimes referenced). Defined in `shared/src/constants.ts`.
+- **GameRoom.onJoin() is auth-optional:** Server silently allows join even with invalid/missing token — it just skips state restoration. No error thrown. This means the retry-on-expired pattern is defensive, not strictly required for basic play.
+- **Token stored under `primal-grid-token`** in localStorage. Wrapped in try/catch for private browsing compatibility.
+- **Key file:** `client/src/network.ts` — auth helpers (`ensureToken`, `createGuestSession`, `loadToken`, `saveToken`, `clearToken`) + `connect()` with token flow and retry logic.
+- **PR:** #78 targeting dev.

@@ -26,6 +26,33 @@ Thanks for your interest in contributing! Here's how to get started.
 - ESLint with `eslint-plugin-security` is enforced in CI
 - Keep comments minimal — only where clarification is needed
 
+## Branching Strategy
+
+```
+feature/* → dev → uat → prod
+```
+
+| Branch | Purpose | Deploys To |
+|--------|---------|------------|
+| `dev` | Active development | — |
+| `uat` | Staging / testing | UAT environment |
+| `prod` | Production (default branch) | Production environment |
+
+### PR Review Gates
+
+| PR Type | Target | Reviewer | Policy |
+|---------|--------|----------|--------|
+| Feature/fix branches → `dev` | `dev` | Hal (code review) | Merge after Hal approval |
+| `dev` → `uat` | `uat` | @copilot (automated review) | Merge after copilot approval |
+| `uat` → `prod` | `prod` | @dkirby-ms (manual) | Only created and merged by owner |
+
+### Workflow
+
+1. Create a feature branch from `dev`: `git checkout -b feature/your-feature`
+2. Open a PR targeting `dev` — Hal reviews for code quality
+3. After merge to `dev`, open a PR from `dev` → `uat` — @copilot reviews
+4. After UAT validation, open a PR from `uat` → `prod` — @dkirby-ms merges manually
+
 ## Pull Requests
 
 1. Make sure tests pass: `npx vitest run`
@@ -35,11 +62,13 @@ Thanks for your interest in contributing! Here's how to get started.
 
 ## Reporting Issues
 
-Use [GitHub Issues](https://github.com/dkirby-ms/primal-grid/issues) to report bugs or request features. Please include:
+Use [GitHub Issues](https://github.com/dkirby-ms/primal-grid/issues) to report bugs or request features.
 
-- Steps to reproduce (for bugs)
-- Expected vs actual behavior
-- Browser/Node version if relevant
+### Issue Templates
+
+- **Bug Report** — requires reproduction steps, expected vs actual, environment
+- **Feature Request** — requires problem statement, motivation, proposed solution
+- **Task / Chore** — lightweight template for internal maintenance work
 
 ## Architecture Notes
 

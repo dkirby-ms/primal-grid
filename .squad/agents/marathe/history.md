@@ -313,3 +313,205 @@ See: 2026-03-08: ESLint Override for E2E Browser Context Code
 - Changelogs provide valuable context about what changed in each deployment
 - Job outputs pattern: Add `id:` to step, expose via `outputs:` at job level, consume in dependent job
 - Always use `jq` for JSON construction in CI to avoid shell escaping issues
+
+---
+
+## 2026-03-08T23:49:23Z: PR #66 Merge — Deploy URL Fix (GitHub Actions Secret Masking)
+
+**Task:** Fix GitHub Actions secret masking breaking Discord deploy notifications  
+**Status:** ✅ MERGED to dev  
+**Issue:** #65 (Discord deploy notifications missing URL)  
+**PR:** #66
+
+### What Marathe Did
+- Identified root cause: GitHub Actions secret masking was stripping dynamic job output `FQDN` from workflows
+- Implemented fix: Hardcoded static custom domain URLs directly in workflow environments
+  - Production: `https://gridwar.kirbytoso.xyz`
+  - UAT: `https://gridtest.kirbytoso.xyz`
+- Updated `discord-notify` jobs in both deploy workflows to use hardcoded `DEPLOY_URL` env var
+- Improved Discord notification formatting (added emoji, fixed URL field)
+
+### Key Learnings
+- GitHub Actions secret masking is overly aggressive (blocks any job output matching known secrets)
+- Workaround: Hardcode static infrastructure values; use repo variables for dynamic configuration
+- Pattern established for CI/CD: Know when to hardcode vs. parameterize vs. use job outputs
+
+### Files Modified
+- `.github/workflows/deploy-uat.yml`
+- `.github/workflows/deploy.yml`
+
+### Decision Authored
+- "GitHub Actions Secret Masking & Job Output Patterns" merged to `.squad/decisions.md`
+- Binding for all future workflow changes
+
+### Approval Chain
+- Hal (Lead): Reviewed & approved
+- Coordinator (Ralph): Merged PR #66 squash-merge to dev
+- Issue #65: Closed as completed
+- Branch: Deleted
+
+### Related
+- Decision: `.squad/decisions.md` → "GitHub Actions Secret Masking & Job Output Patterns"
+- Orchestration log: `.squad/orchestration-log/2026-03-08T23-49-23Z-hal.md`
+- Session log: `.squad/log/2026-03-08T23-49-23Z-deploy-url-merged.md`
+## 2026-03-08T23:42:16Z: Deployed URL as Markdown Link in Discord Notifications
+
+**Task:** Fix #65 — Include deployed URL in Discord deploy notification  
+**Status:** ✅ Completed  
+**Branch:** `squad/65-deploy-url-discord-notify`  
+**PR:** #66 (opened against dev)
+
+### Changes
+
+Reformatted deployed URL in Discord notifications as clickable markdown links:
+- Pattern: `[🌐 Deployed to {ENV}]({FQDN})`
+- Applied to both `.github/workflows/deploy-uat.yml` and `.github/workflows/deploy.yml`
+- Both workflows already had discord-notify jobs from prior work (commit 984daef)
+
+### Implementation
+
+Modified the deployed URL field in the Discord embed to use markdown link syntax:
+```
+[🌐 Deployed to UAT](https://myapp-uat.azurecontainerapps.io)
+[🌐 Deployed to Production](https://myapp.azurecontainerapps.io)
+```
+
+This enables one-click access to the deployed application directly from Discord without copy-pasting URLs.
+
+### Coordination
+
+Ralph (Work Monitor) simultaneously performed board hygiene on #65:
+- Removed stale labels: squad:steeply, go:needs-research
+- Created and applied go:in-progress label
+
+### Next Steps
+
+PR #66 pending review and merge into dev branch.
+
+---
+
+---
+
+## 2026-03-09T23:29:38Z: Versioning Baseline & Workflow Hardening (Pemulis)
+
+**Context:** Pemulis (Systems Dev) fixed "vundefined" bug in promote/release workflows by adding `"version": "0.1.0"` to package.json and hardening both workflows.
+
+**DevOps Impact:** 
+- **Promote workflows now resilient** — if version field missing, falls back to git SHA (soft fallback). Promotion PRs always get created with meaningful identifiers.
+- **Release workflow now safe-fail** — if version field missing, step fails hard with clear error. Prevents malformed git tags and GitHub releases.
+- **Pattern established:** Promote uses soft fallback (process step useful without version), release uses hard fail (release artifacts must have proper semver).
+
+**Implication for CI/CD:** All future release workflows should require semver validation. If auto-increment of version is implemented in future (user directive captured), release workflows must handle version bumping in the CI context.
+
+**Decision reference:** `.squad/decisions.md` → "Versioning Baseline Established" & "User Directive — Auto-Increment Version on UAT Release"
+
+---
+
+## 2026-03-09T23:43:26Z: UAT→Prod Promotion Workflow Simplification (Pemulis)
+
+**Context:** Pemulis (Systems Dev) discovered and fixed the UAT→prod promotion workflow 403 push error.
+
+**Problem:** Original approach attempted to create staging branches and strip `.squad/` files before promotion — overly complex and causing permission issues.
+
+**DevOps Changes:**
+- `.github/workflows/squad-promote.yml` `uat-to-prod` job: removed staging branch creation, file stripping, and git push logic
+- Now creates **direct PR** from `uat` → `prod` (mirrors the `dev` → `uat` pattern)
+- Simplified from 42+ lines to 11 lines of promotion logic
+- Commit: 356fcf9 "ci: simplify uat-to-prod promotion to direct PR"
+
+**Key Decisions:**
+- **Default branch is `prod`** (not `master`)
+- **`.squad/` files are allowed in prod** — metadata persists through all tiers for audit trail
+
+**Pattern Consistency:**
+- All branch tier promotions (dev→uat, uat→prod) now follow uniform pattern
+- Removes unnecessary complexity, aligns with promotion architecture
+- Squad history and decisions fully traceable end-to-end
+
+**Decision reference:** `.squad/decisions.md` → "Prod Default Branch & Squad File Policy"
+
+---
+
+## 2026-03-09T23:32:55Z: Auto-Bump Patch Version on Dev→UAT Promotion (Pemulis)
+
+**Context:** Pemulis (Systems Dev) implemented automatic patch version bumping in the dev→uat promotion workflow.
+
+**DevOps Changes:**
+- `.github/workflows/squad-promote.yml` now includes "Bump patch version" step in `dev-to-uat` job
+- Step: `npm version patch --no-git-tag-version` — updates `package.json` + `package-lock.json`, no git tags
+- Bump commit is pushed to `dev` **before** the promotion PR is created
+- Workflow permissions upgraded from `contents: read` → `contents: write` to enable push access
+
+**Pattern Consistency:**
+- Aligns with versioning baseline (soft fallback for promote, hard fail for release)
+- Commit is clean: only JSON updates, no extraneous files
+- Manual control preserved: minor/major bumps still manual
+
+**Next Promotion:** When dev→uat is run, the new version will appear in the PR title automatically.
+
+**Decision reference:** `.squad/decisions.md` → "Automatic Patch Version Bump on UAT Promotion"
+
+
+---
+
+## 2026-03-10T00:25:00Z: Merge Conflict Resolution in Promotion Workflows (Pemulis)
+
+**Cross-Agent Update for Marathe (Release Ops)**
+
+Pemulis (Systems Dev) resolved merge conflicts in `.github/workflows/squad-ci.yml` and `.github/workflows/squad-promote.yml` blocking PRs #89 (dev→uat) and #90 (uat→prod).
+
+**What Changed:**
+
+1. **PR #89 (dev → uat):**
+   - Merged origin/uat into dev
+   - Kept dev's simplified version of squad-promote.yml (direct PR pattern, no staging)
+   - Conflict resolved; PR is clean and mergeable
+
+2. **PR #90 (uat → prod):**
+   - Merged origin/prod into uat
+   - Kept uat's versions of both squad-ci.yml (path filters) and squad-promote.yml (contents:write, patch bump)
+   - GitHub mergeable cache was stale; fixed via close-reopen
+   - PR is now clean and mergeable
+
+**Key Learning:** GitHub's merge status cache doesn't auto-invalidate after manual conflict resolution. **Close-and-reopen PR** is the reliable fix for stale "CONFLICTING" status that persists after resolving conflicts.
+
+**Commits:**
+- c661647 on dev: `merge: resolve conflict in squad-promote.yml (keep dev's simplified version)`
+- f0f5918 on uat: `merge: resolve conflicts in squad-ci.yml and squad-promote.yml (keep uat versions)`
+
+**Impact on Release Ops (Marathe):**
+- Both PRs are now unblocked and ready for merge
+- No action required from Release Ops — conflicts resolved by Pemulis
+- Promotion workflows remain consistent across all tiers (direct PR pattern)
+- .squad/ metadata preserved through all branches for audit trail
+
+**Next Promotion:** When ready, merge PR #89, then PR #90 to complete dev→uat→prod pipeline.
+
+**Decision Reference:** No new decisions. Follows established promotion architecture.
+
+**Session Log:** `.squad/log/2026-03-10T00-25-00Z-conflict-resolution.md`
+**Orchestration Log:** `.squad/orchestration-log/2026-03-10T00-25-00Z-pemulis.md`
+
+
+---
+
+## 2026-03-10T00:29:39Z: Prod Guard Updated for .squad/ Files (Pemulis)
+
+**Cross-Agent Update for Marathe (Release Ops)**
+
+Pemulis (Systems Dev) updated the prod branch guard to allow `.squad/` orchestration files through the protection mechanism.
+
+**What Changed:**
+
+- **File:** `.github/workflows/squad-prod-guard.yml`
+- **Action:** Removed `.squad/` from the `forbidden_paths` filter list
+- **Rationale:** Squad metadata (orchestration logs, decisions, session history) now flows through to prod, enabling full audit trail and cross-tier decision tracking
+
+**Impact on Release Ops (Marathe):**
+- No longer need to worry about guard rejections blocking .squad/ metadata in prod
+- Decision history and orchestration logs will be preserved through all promotion tiers
+- Future promotions can safely include squad metadata without triggering false positives
+
+**Commit:** 8b0fa46 on dev  
+**Session Log:** `.squad/log/2026-03-10T00-29-39Z-guard-update.md`  
+**Orchestration Log:** `.squad/orchestration-log/2026-03-10T00-29-39Z-pemulis.md`

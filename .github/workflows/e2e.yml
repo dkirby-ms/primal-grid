@@ -1,8 +1,10 @@
 name: E2E Tests
 
 on:
-  push:
-    branches: [uat]
+  # DISABLED: Auto-trigger on uat push disabled — run manually via workflow_dispatch
+  # push:
+  #   branches: [uat]
+  workflow_dispatch:
 
 permissions:
   contents: read

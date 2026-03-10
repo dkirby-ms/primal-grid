@@ -51,10 +51,15 @@ jobs:
 
       - name: Deploy to Container Apps
         run: |
+          az containerapp secret set \
+            --name ${{ secrets.CONTAINER_APP_NAME }} \
+            --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            --secrets jwt-secret=${{ secrets.JWT_SECRET }}
           az containerapp update \
             --name ${{ secrets.CONTAINER_APP_NAME }} \
             --resource-group ${{ secrets.RESOURCE_GROUP }} \
-            --image ${{ secrets.ACR_NAME }}.azurecr.io/primal-grid:${{ github.sha }}
+            --image ${{ secrets.ACR_NAME }}.azurecr.io/primal-grid:${{ github.sha }} \
+            --set-env-vars JWT_SECRET=secretref:jwt-secret
 
       - name: Output app URL
         id: get-url

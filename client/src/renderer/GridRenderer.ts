@@ -99,8 +99,9 @@ export class GridRenderer {
       this.lastIsHQTerritory[y] = [];
       for (let x = 0; x < this.mapSize; x++) {
         const g = new Graphics();
+        const color = TILE_COLORS[TileType.Grassland];
         g.rect(0, 0, TILE_SIZE, TILE_SIZE);
-        g.fill(TILE_COLORS[TileType.Grassland]);
+        g.fill(color);
         g.position.set(x * TILE_SIZE, y * TILE_SIZE);
         g.visible = false;
         this.container.addChild(g);
@@ -141,11 +142,9 @@ export class GridRenderer {
     const baseColor = TILE_COLORS[type] ?? TILE_COLORS[TileType.Grassland];
 
     if (resourceAmount && resourceAmount > 0 && resourceType !== undefined && resourceType in RESOURCE_COLORS) {
-      // Blend biome color toward resource color (~25%) so the biome stays recognizable
       const tinted = lerpColor(baseColor, RESOURCE_COLORS[resourceType], 0.25);
       g.rect(0, 0, TILE_SIZE, TILE_SIZE);
       g.fill(tinted);
-      // Thin inner border in the resource color for extra contrast
       const inset = 2;
       g.rect(inset, inset, TILE_SIZE - inset * 2, TILE_SIZE - inset * 2);
       g.stroke({ width: 1, color: RESOURCE_COLORS[resourceType], alpha: 0.4 });

@@ -27,6 +27,10 @@ jobs:
         id: version
         run: |
           VERSION=$(node -e "console.log(require('./package.json').version)")
+          if [ -z "$VERSION" ] || [ "$VERSION" = "undefined" ]; then
+            echo "::error::package.json is missing a valid 'version' field. Cannot create a release without a version."
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
           echo "📦 Version: $VERSION (tag: v$VERSION)"

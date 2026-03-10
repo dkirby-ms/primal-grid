@@ -1,4 +1,5 @@
 import { Application } from 'pixi.js';
+import { Room } from '@colyseus/sdk';
 import { GridRenderer } from './renderer/GridRenderer.js';
 import { CreatureRenderer } from './renderer/CreatureRenderer.js';
 import { CombatEffects } from './renderer/CombatEffects.js';
@@ -7,10 +8,12 @@ import { InputHandler } from './input/InputHandler.js';
 import { ConnectionStatusUI } from './ui/ConnectionStatus.js';
 import { HudDOM } from './ui/HudDOM.js';
 import { GameLog } from './ui/GameLog.js';
+import { ChatPanel } from './ui/ChatPanel.js';
 import { HelpScreen } from './ui/HelpScreen.js';
 import { Scoreboard } from './ui/Scoreboard.js';
-import { connect, disconnect, onConnectionStatus, isDevMode } from './network.js';
-import { SET_NAME } from '@primal-grid/shared';
+import { LobbyScreen } from './ui/LobbyScreen.js';
+import { connectToLobby, joinGameRoom, leaveGame, disconnect, onConnectionStatus, isDevMode, getRoom } from './network.js';
+import type { GameLogPayload } from '@primal-grid/shared';
 
 const WIDTH = 600;
 const HEIGHT = 600;
@@ -62,105 +65,164 @@ async function bootstrap(): Promise<void> {
     }
   });
 
-  // --- Connect to Colyseus (non-blocking) ---
-  connectToServer(app, grid, camera);
+  // --- Lobby screen ---
+  const lobbyScreen = new LobbyScreen();
+
+  // --- Connect to lobby ---
+  connectToLobbyAndShow(app, grid, camera, lobbyScreen);
 }
 
-/** Show the name prompt overlay and resolve with the entered name. */
-function promptForName(): Promise<string> {
-  return new Promise((resolve) => {
-    const overlay = document.getElementById('name-prompt-overlay')!;
-    const input = document.getElementById('name-prompt-input') as HTMLInputElement;
-    const btn = document.getElementById('name-prompt-submit')!;
-
-    overlay.classList.add('visible');
-    input.value = '';
-    input.focus();
-
-    const submit = () => {
-      const name = input.value.trim() || 'Explorer';
-      overlay.classList.remove('visible');
-      resolve(name);
-    };
-
-    btn.addEventListener('click', submit, { once: true });
-    const onKeydown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        input.removeEventListener('keydown', onKeydown);
-        submit();
-      }
-    };
-    input.addEventListener('keydown', onKeydown);
-  });
-}
-
-async function connectToServer(app: Application, grid: GridRenderer, camera: Camera): Promise<void> {
+async function connectToLobbyAndShow(
+  app: Application,
+  grid: GridRenderer,
+  camera: Camera,
+  lobbyScreen: LobbyScreen,
+): Promise<void> {
   try {
-    const room = await connect();
+    const lobby = await connectToLobby();
 
-    // Prompt for display name and send to server
-    const displayName = await promptForName();
-    room.send(SET_NAME, { name: displayName });
+    // Hide game UI, show lobby
+    setGameUIVisible(false);
+    lobbyScreen.bindToRoom(lobby);
+    lobbyScreen.show();
 
-    // Bind renderers to server state
-    grid.setLocalPlayerId(room.sessionId);
-    grid.bindToRoom(room);
-
-    const creatures = new CreatureRenderer();
-    grid.container.addChild(creatures.container);
-
-    // Combat effects layer above creatures for correct z-order
-    const combatEffects = new CombatEffects();
-    grid.container.addChild(combatEffects.container);
-    creatures.setCombatEffects(combatEffects);
-
-    creatures.bindToRoom(room);
-
-    // Drive smooth creature movement from the app ticker
-    app.ticker.add((ticker) => {
-      creatures.tick(ticker.deltaTime);
+    lobbyScreen.onEvent(async (event) => {
+      if (event.type === "join_game" || event.type === "game_started") {
+        try {
+          const gameRoom = await joinGameRoom(event.roomId, lobbyScreen.getDisplayName());
+          lobbyScreen.hide();
+          setGameUIVisible(true);
+          setupGameSession(app, grid, camera, gameRoom, lobbyScreen);
+        } catch (err) {
+          console.error('[main] Failed to join game room:', err);
+        }
+      } else if (event.type === "error") {
+        console.warn('[main] Lobby error:', event.message);
+      }
     });
+  } catch (err) {
+    console.error('[main] Lobby connection failed:', err);
+    const message = err instanceof Error ? err.message : "Connection failed";
+    lobbyScreen.showConnectionError(message);
+  }
+}
 
-    // Center camera on local player's HQ once state has synced
-    room.onStateChange.once(() => {
-      const localPlayer = room.state.players?.get(room.sessionId);
+/** Bind all renderers and UI to an active game room. */
+function setupGameSession(
+  app: Application,
+  grid: GridRenderer,
+  camera: Camera,
+  room: Room,
+  lobbyScreen: LobbyScreen,
+): void {
+  // Set up local player identity
+  grid.setLocalPlayerId(room.sessionId);
+
+  // Create persistent renderers (survive reconnection)
+  const creatures = new CreatureRenderer();
+  grid.container.addChild(creatures.container);
+
+  const combatEffects = new CombatEffects();
+  grid.container.addChild(combatEffects.container);
+  creatures.setCombatEffects(combatEffects);
+
+  const creatureTicker = (ticker: { deltaTime: number }) => {
+    creatures.tick(ticker.deltaTime);
+  };
+  app.ticker.add(creatureTicker);
+
+  const hud = new HudDOM(room.sessionId);
+  const scoreboard = new Scoreboard(room.sessionId);
+  const gameLog = new GameLog();
+  const logEl = document.getElementById('game-log');
+  if (logEl) gameLog.init(logEl);
+  const chatPanel = new ChatPanel();
+
+  const helpScreen = new HelpScreen(WIDTH, HEIGHT);
+  app.stage.addChild(helpScreen.container);
+
+  let input: InputHandler | null = null;
+
+  /** Bind (or re-bind) all room listeners to a given room. */
+  function bindGameRoom(r: Room): void {
+    grid.bindToRoom(r);
+    creatures.bindToRoom(r);
+    hud.bindToRoom(r);
+    scoreboard.bindToRoom(r);
+
+    r.onStateChange.once(() => {
+      const localPlayer = r.state.players?.get(r.sessionId);
       if (localPlayer) {
         camera.centerOnHQ(localPlayer.hqX, localPlayer.hqY);
       }
     });
 
-    // HUD (DOM-based side panel)
-    const hud = new HudDOM(room.sessionId);
-    hud.bindToRoom(room);
-
-    // Scoreboard (Tab key overlay)
-    const scoreboard = new Scoreboard(room.sessionId);
-    scoreboard.bindToRoom(room);
-
-    // Game log panel
-    const gameLog = new GameLog();
-    const logEl = document.getElementById('game-log');
     if (logEl) {
-      gameLog.init(logEl);
-      room.onMessage('game_log', (data: { message: string; type: string }) => {
+      r.onMessage('game_log', (data: GameLogPayload) => {
         gameLog.addEntry(data.message, data.type);
       });
     }
 
-    // Help screen overlay (screen-fixed, on top)
-    const helpScreen = new HelpScreen(WIDTH, HEIGHT);
-    app.stage.addChild(helpScreen.container);
+    const chatEl = document.getElementById('chat-panel');
+    if (chatEl) chatPanel.init(chatEl, r);
 
-    // Input handler (camera + keybindings)
-    const input = new InputHandler(room, grid.container, app.canvas);
+    // (Re)create input handler bound to new room
+    if (input) input.dispose();
+    input = new InputHandler(r, grid.container, app.canvas);
     input.setHud(hud);
     input.setHelpScreen(helpScreen);
     input.setScoreboard(scoreboard);
     input.setCamera(camera);
-  } catch (err) {
-    console.error('[main] Post-connect error:', err);
+    input.setChatPanel(chatPanel);
   }
+
+  // Initial bind
+  bindGameRoom(room);
+
+  // Subscribe to connection status for reconnection handling
+  const unsubscribe = onConnectionStatus((status) => {
+    if (status === 'disconnected') {
+      // Final disconnect — tear down game session and return to lobby
+      if (input) input.dispose();
+      input = null;
+      app.ticker.remove(creatureTicker);
+      if (creatures.container.parent) {
+        creatures.container.parent.removeChild(creatures.container);
+      }
+      if (combatEffects.container.parent) {
+        combatEffects.container.parent.removeChild(combatEffects.container);
+      }
+      if (helpScreen.container.parent) {
+        helpScreen.container.parent.removeChild(helpScreen.container);
+      }
+
+      setGameUIVisible(false);
+      lobbyScreen.leaveCurrentGame();
+      lobbyScreen.show();
+      unsubscribe();
+    } else if (status === 'connected') {
+      // Reconnection succeeded — re-bind to new room
+      const newRoom = getRoom();
+      if (newRoom) {
+        bindGameRoom(newRoom);
+      }
+    }
+    // 'reconnecting' — keep game UI frozen (do nothing)
+  });
+}
+
+/** Toggle visibility of game-specific UI elements. */
+function setGameUIVisible(visible: boolean): void {
+  const gameWrapper = document.getElementById('game-wrapper');
+  const gameLog = document.getElementById('game-log');
+  const chatPanel = document.getElementById('chat-panel');
+  const helpHint = document.getElementById('help-hint');
+
+  const display = visible ? '' : 'none';
+  if (gameWrapper) gameWrapper.style.display = visible ? 'flex' : 'none';
+  if (gameLog) gameLog.style.display = display;
+  if (chatPanel) chatPanel.style.display = display;
+  if (helpHint) helpHint.style.display = display;
 }
 
 bootstrap().catch(console.error);
@@ -170,4 +232,3 @@ if (import.meta.hot) {
     await disconnect();
   });
 }
-

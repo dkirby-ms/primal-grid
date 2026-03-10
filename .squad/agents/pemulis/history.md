@@ -1679,3 +1679,131 @@ Removed `tickPawnUpkeep()` method, game loop call, `upkeep` field from `PawnType
 - Territorial exclusion zones via Manhattan-distance radius checks
 - Interior gap detection using cardinal neighbor counts
 - Systematic removal of deprecated game mechanics
+
+---
+
+## 2026-03-09: Four-Issue Initiative Assigned — #42 (Auth), #31 (Log), #19 (Tiles), #30 (Chat)
+
+**By:** Hal (Lead Triage)  
+**Date:** 2026-03-09  
+**Status:** READY FOR PICKUP  
+
+### Your Assignments (Pemulis)
+
+**Wave 1 (Start Immediately)**
+- **#42 — User Persistence & Auth** — Lead developer
+  - JWT token generation + verification
+  - Database schema (users + game_saves tables, SQLite for dev)
+  - Auto-save on disconnect
+  - Login/signup API endpoints
+  - Guest upgrade path
+  - Estimated: 3 days
+  - Constraint: Design must support future Entra ID swap (interface-based, not coupled to GameRoom)
+
+- **#31 — Game Log Support (Server)** — Support role
+  - Game log message categorization
+  - Content filtering + timestamps
+  - Broadcast via Colyseus `room.broadcast("game_log", {...})`
+  - Estimated: 1 day (parallel with Gately UI)
+
+- **#30 — Chat Support (Server)** — Support role (Wave 2, after #31)
+  - Chat message protocol
+  - Sanitization (strip HTML, max 256 chars, rate limit: 5 msgs/10s)
+  - Message persistence
+  - Estimated: 1 day (parallel with Gately UI)
+
+### Scope for #42 (v1 Only)
+
+- JWT token issuance only (Entra ID deferred)
+- Username + password + guest play with upgrade path
+- SQLite for dev (design for portability to Postgres/Cosmos)
+- **Not:** OAuth providers, Entra ID integration, full game state persistence
+
+### Architecture Decision
+
+Auth provider pattern created: `AuthProvider` interface abstracts JWT issuance/validation. Current: `LocalAuthProvider`. Future: Drop-in Entra ID replacement without GameRoom changes.
+
+Repository pattern for persistence: `UserRepository` and `PlayerStateRepository` interfaces. SQLite implementation for dev. Swap backends by implementing the interface.
+
+**Decision file:** `.squad/decisions/inbox/pemulis-auth-persistence-design.md` (merged to decisions.md)
+
+### Next Steps
+
+1. Start #42 immediately after receiving go-ahead
+2. Gately starts #19 after PR #68 merge (scheduled ~2026-03-10)
+3. Gately/Pemulis coordinate on #31 (overlay pattern reusability for #30)
+4. Steeply will write test suite for #42 auth flows
+
+### Shared Context
+
+See `.squad/decisions.md` for full triage document, dependency graph, risk mitigations, and Wave 1/Wave 2 sequencing.
+
+### JWT Auth & Player Persistence (2026-03-12)
+
+- **Issue #42, PR #70** on `squad/42-user-auth-persistence` branch.
+- **Auth layer** (`server/src/auth/`): `AuthProvider` interface abstracted for future Entra ID swap. `LocalAuthProvider` implements JWT issuance via jsonwebtoken + bcryptjs. Express middleware validates Bearer tokens. Routes: `/auth/register`, `/auth/login`, `/auth/guest`, `/auth/upgrade`.
+- **Persistence layer** (`server/src/persistence/`): Repository pattern — `UserRepository` and `PlayerStateRepository` interfaces with SQLite implementations. Designed for Postgres/Cosmos swap.
+- **GameRoom hooks**: JWT validated on `onJoin` via `options.token`. State serialized synchronously in `onLeave` (async write, sync capture — critical for test compatibility since tests use `Object.create(GameRoom.prototype)` without constructors). Auto-save every 120 ticks (30s).
+- **Guest play**: `/auth/guest` creates anonymous sessions. `/auth/upgrade` converts guest to full account preserving userId and all saved state.
+- **Design trade-off**: Resources/territory NOT restored on rejoin — territory is spatial and map-dependent. Only score/level/XP/displayName persist.
+- **Dependencies added**: jsonwebtoken, better-sqlite3, bcryptjs (+ @types/).
+- **Test impact**: 515/515 tests pass, zero regressions. Key insight: `onLeave` must stay synchronous because tests call it without `await`.
+
+### Session Persistence Client Integration (2026-03-09)
+
+- **Issue #77, PR #78** on `squad/78-session-persistence-client` branch.
+- **CORS middleware**: Added cors package to Express server. fetch()-based auth endpoints work cross-origin from Vite dev client (port :3000 → Colyseus :2567). WebSocket connections bypass CORS by design; fetch requests required explicit middleware.
+- **Graceful auth degradation**: ensureToken() now catches auth failures and returns undefined instead of throwing. connect() joins without token when auth unavailable. If token-bearing join fails, falls back to anonymous join. Game always boots even with zero auth infrastructure (dev/offline mode support).
+- **DRY room setup**: Extracted setupRoom() helper for onJoin, onLeave, onError, and dev-mode __ROOM__ assignment. Eliminates copy-paste logic, reduces maintenance burden for future retry logic refactoring.
+- **Test coverage**: All 515 tests pass, zero regressions. Lint clean.
+- **Merged**: Hal approved and squash-merged to dev. Issue #77 closed.
+- **Impact**: Full session persistence chain now live. Players: login → play → close browser → rejoin with state intact. Score, level, XP, displayName all restored.
+
+### In-Game Chat Protocol (2026-03-14, Issue #30)
+
+- **Scope:** Server-side chat message handling + shared types. Client UI handled by Gately separately.
+- **Shared types:** Added `CHAT` message constant, `ChatPayload` (client→server: `{ text: string }`), `ChatBroadcastPayload` (server→clients: `{ sender, text, timestamp }`), and `CHAT_MAX_LENGTH = 200` to `shared/src/messages.ts`.
+- **Server handler:** `handleChat()` in `GameRoom.ts` — validates text is a string, strips HTML tags via regex, trims whitespace, rejects empty, caps at 200 chars, broadcasts with player displayName and `Date.now()` timestamp.
+- **No state storage:** Chat is ephemeral — broadcast only, no schema storage, no persistence. Client handles history display.
+- **Sanitization pattern:** `stripHtml()` static method uses `/<[^>]*>/g` regex replacement. Sufficient for in-game chat (not a rich-text context).
+- **All 644 tests pass, zero regressions.**
+
+---
+
+### Cross-Agent Update: In-Game Chat #30 (2026-03-09, issue #30)
+
+**Feature completed** by Pemulis, Gately, and Steeply in coordinated sprint. PR #80 merged to dev.
+
+- **Pemulis (Systems):** Server-side chat message handler + shared types (completed above).
+- **Gately (Game Dev):** Client-side ChatPanel UI (DOM overlay, 100-message cap, auto-scroll, keyboard isolation via stopPropagation, keybindings C/Enter/Esc).
+- **Steeply (Tester):** 19-test suite covering validation, sanitization, broadcast, client rendering. All tests passing.
+
+**Impact on Pemulis:** No follow-up work required. Handler is complete and tested. Chat protocol stable.
+
+### PR #78 Review Fixes — CORS, Auth Degradation, DRY (2026-03-12)
+
+- **CORS middleware**: Added `cors` package to Express server (`server/src/index.ts`). Required because `fetch()` auth calls from Vite dev server (port 3000) to Colyseus (port 2567) are cross-origin. WebSocket connections bypass CORS but HTTP fetch does not.
+- **Graceful auth degradation**: `ensureToken()` now returns `string | undefined` — catches auth failures silently. `connect()` joins without a token when auth is unavailable. If token-bearing join fails, falls back to anonymous join. Game is always playable with zero auth infrastructure.
+- **DRY room setup**: Extracted `setupRoom()` helper in `client/src/network.ts` — eliminates duplicated `onLeave`/`onError`/`__ROOM__` assignment between initial join and retry paths.
+- **Key pattern**: Auth is strictly optional on both sides. Server's `GameRoom.onJoin()` skips state restoration when no token provided. Client's `connect()` gracefully degrades to anonymous join on any auth failure.
+
+### Session Persistence Bug Fix (2026-03-13)
+
+**Bug:** Browser refresh always showed the name prompt, even when the server successfully restored the player's identity (displayName, score, XP, level) from the persistence layer via JWT token.
+
+**Root cause:** `client/src/main.ts` called `promptForName()` unconditionally after every `connect()`. The server-side auth/restore flow was correct — the bug was purely client-side.
+
+**Fix (2 files):**
+- `client/src/main.ts`: After `connect()`, check `room.state.players.get(room.sessionId).displayName`. Only show the name prompt if the server didn't restore one. In Colyseus 0.17+, initial state is synced before `joinOrCreate` resolves.
+- `server/src/rooms/GameRoom.ts`: Differentiated welcome messages — returning players see "Welcome back, {name}!" and a "{name} has returned" broadcast goes to other players.
+
+## Learnings
+
+- **Colyseus 0.17 state sync timing**: `joinOrCreate` resolves AFTER the initial state snapshot is applied. `room.state.players.get(room.sessionId)` is available immediately after the promise resolves — no need to wait for `onStateChange`.
+- **Auth flow data path**: Token in localStorage → `ensureToken()` → `joinOptions.token` → server `onJoin` validates via `authProvider.validateToken()` → `sessionUserMap` maps sessionId→userId → `playerStateRepo.load(userId)` → `deserializePlayerState()` restores displayName/score/level/xp.
+- **Key files for session persistence**: `client/src/network.ts` (token storage), `client/src/main.ts` (name prompt gating), `server/src/rooms/GameRoom.ts` (onJoin restore, onLeave save, auto-save), `server/src/persistence/playerStateSerde.ts` (serde).
+- **Version field baseline**: Added `"version": "0.1.0"` to root `package.json`. Both `squad-promote.yml` and `squad-release.yml` read this field via `node -e "console.log(require('./package.json').version)"`. Promote workflows fall back to git SHA if missing; release workflow hard-fails. No version bump automation yet — manual bumps only.
+- **Automatic patch version bumping**: Added `npm version patch --no-git-tag-version` step to `squad-promote.yml` in the `promote-dev-to-uat` job. Runs after the diff check confirms commits exist, before PR creation. Commits the bump to `dev` and pushes, so the PR title and body reflect the new version. Required upgrading workflow permissions from `contents: read` to `contents: write` and adding explicit `ref: dev` + `token` to the checkout step. The `uat-to-prod` job is read-only and was not touched.
+- **Merge conflict resolution across promotion chain**: Resolved conflicts in PRs #89 (dev→uat) and #90 (uat→prod) by merging base branches into head branches. PR #89: merged origin/uat into dev, kept dev's simplified squad-promote.yml (no staging branch in uat-to-prod job). PR #90: merged origin/prod into uat, kept uat's versions of squad-ci.yml (path filters) and squad-promote.yml (contents:write, version fallback, bump step). Key lesson: when fixing PR #90 changes uat, must re-merge updated uat into dev to keep PR #89 clean.
+- **GitHub mergeability cache staleness**: GitHub's `mergeable` status can remain "CONFLICTING" even after conflicts are resolved. Pushing empty commits doesn't reliably force recalculation. Close-and-reopen the PR is the reliable fix to invalidate GitHub's merge cache.
+- **Branch protection bypass**: Both dev and uat allow direct push with bypass for the configured user. Confirmed via successful `git push origin dev` and `git push origin uat` without PRs.

@@ -4,8 +4,24 @@ on:
   pull_request:
     branches: [dev, uat, prod]
     types: [opened, synchronize, reopened]
+    paths:
+      - 'client/src/**'
+      - 'server/src/**'
+      - 'shared/src/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - 'vitest.config.*'
   push:
     branches: [dev]
+    paths:
+      - 'client/src/**'
+      - 'server/src/**'
+      - 'shared/src/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - 'vitest.config.*'
 
 permissions:
   contents: read

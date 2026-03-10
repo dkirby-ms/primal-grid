@@ -32,7 +32,6 @@ Example: `squad/42-fix-login-validation`
 ## PR Guidelines
 
 When opening a PR:
-- PR into the dev branch unless otherwise instructed.
 - Reference the issue: `Closes #{issue-number}`
 - If the issue had a `squad:{member}` label, mention the member: `Working as {member} ({role})`
 - If this is a 🟡 needs-review task, add to the PR description: `⚠️ This task was flagged as "needs review" — please have a squad member review before merging.`
