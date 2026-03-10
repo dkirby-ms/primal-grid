@@ -147,22 +147,18 @@ describe('Client reconnection lifecycle (#101)', () => {
       expect(sessionStore['primal-grid-reconnect-token']).toBeUndefined();
     });
 
-    it("preserves token on unexpected disconnect (triggers reconnection)", async () => {
-      vi.useFakeTimers();
-
+    it("clears token on unexpected disconnect (SDK handles retries, no duplicate reconnect)", async () => {
       const room = makeMockRoom();
       mockClient.joinById.mockResolvedValue(room);
-      const freshRoom = makeMockRoom('rotated');
-      mockClient.reconnect.mockResolvedValue(freshRoom);
 
       await net.joinGameRoom('room-1');
       expect(sessionStore['primal-grid-reconnect-token']).toBe('mock-reconnect-token');
 
-      // Non-consented disconnect — token should NOT be cleared
+      // Non-consented disconnect — onLeave means SDK gave up.
+      // Token should be cleared and reconnectGameRoom() should NOT be called.
       leaveHandler?.(1006);
-      expect(sessionStore['primal-grid-reconnect-token']).toBeDefined();
-
-      await vi.runAllTimersAsync();
+      expect(sessionStore['primal-grid-reconnect-token']).toBeUndefined();
+      expect(mockClient.reconnect).not.toHaveBeenCalled();
     });
 
     it("clears token on explicit leaveGame()", async () => {

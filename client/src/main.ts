@@ -12,7 +12,7 @@ import { ChatPanel } from './ui/ChatPanel.js';
 import { HelpScreen } from './ui/HelpScreen.js';
 import { Scoreboard } from './ui/Scoreboard.js';
 import { LobbyScreen } from './ui/LobbyScreen.js';
-import { connectToLobby, joinGameRoom, leaveGame, disconnect, onConnectionStatus, isDevMode, getRoom, loadReconnectToken, reconnectGameRoom } from './network.js';
+import { connectToLobby, joinGameRoom, leaveGame, disconnect, onConnectionStatus, isDevMode, getRoom, loadReconnectToken, reconnectGameRoom, resetClient } from './network.js';
 import type { GameLogPayload } from '@primal-grid/shared';
 
 const WIDTH = 600;
@@ -76,6 +76,9 @@ async function bootstrap(): Promise<void> {
       setupGameSession(app, grid, camera, room, lobbyScreen);
       return;
     }
+    // Force fresh client for lobby — previous reconnect attempts
+    // may have left the Client instance in a bad state.
+    resetClient();
   }
 
   // --- Connect to lobby ---

@@ -172,12 +172,13 @@ function attachGameRoomHandlers(room: Room): void {
     gameRoom = null;
 
     const consented = code === 1000 || code === 4000;
-    if (consented) {
+    if (consented || !pageUnloading) {
+      // Consented leave OR SDK auto-reconnection exhausted → clean up
+      // and return to lobby. The SDK's onDrop/onReconnect handlers
+      // already handle transient disconnects; reaching onLeave means
+      // the session is truly over.
       clearReconnectToken();
       emitStatus('disconnected');
-    } else if (!pageUnloading) {
-      emitStatus('reconnecting');
-      reconnectGameRoom();
     }
   });
 
@@ -400,6 +401,11 @@ export function getLobbyRoom(): Room | null {
 
 export function getRoom(): Room | null {
   return gameRoom;
+}
+
+/** Reset the Colyseus client singleton (e.g. after failed reconnection). */
+export function resetClient(): void {
+  colyseusClient = null;
 }
 
 export async function leaveGame(): Promise<void> {
