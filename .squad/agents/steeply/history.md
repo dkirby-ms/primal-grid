@@ -1965,3 +1965,11 @@ Large-map rendering with PixiJS requires explicit culling—the scene graph does
   ```
 - **3 new tests added** to `reconnection.test.ts` under "Browser refresh guard (pageUnloading)": (1) token preserved during refresh, (2) cancelled navigation resets flag via pageshow, (3) normal disconnect after pageshow still cleans up. Total: 21 tests in file, 696 across full suite.
 - **Follow-up action items:** (1) @copilot's PR #103 still pending Hal review (flagged 🟡 needs-review), (2) New implementer needed to add `pageUnloading` reset fix (Pemulis/Gately locked out per protocol), (3) Steeply to write test coverage spec for `pageshow` event reset.
+
+### Flaky Mapgen Performance Tests — Issue #104, PR #106 (2026-03-10)
+
+- **Three perf tests across two files had tight timing thresholds** that flake on slow CI runners: `map-size.test.ts` (500ms map, 1000ms map+creatures) and `water-depth.test.ts` (500ms map).
+- **Fix:** Increased hard ceilings to 5x (2500ms map, 5000ms map+creatures) and added `console.warn` at the original ideal thresholds for regression visibility without CI breakage.
+- **Key principle:** Performance tests in CI should catch algorithmic regressions (O(n²) → O(n³)), not benchmark absolute speed. Hard ceilings must tolerate 5x variance for different environments.
+- **Files modified:** `server/src/__tests__/map-size.test.ts`, `server/src/__tests__/water-depth.test.ts`
+- **Full suite:** 696 tests, 43 files, all passing.
