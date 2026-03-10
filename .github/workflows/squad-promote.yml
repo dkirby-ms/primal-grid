@@ -103,12 +103,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: uat
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Fetch all branches
         run: git fetch --all
@@ -125,66 +121,40 @@ jobs:
             git log --oneline origin/prod..origin/uat
           fi
 
-      - name: Create staging branch (strip forbidden files)
-        if: steps.diff.outputs.commit_count != '0'
-        id: staging
-        run: |
-          VERSION=$(node -e "console.log(require('./package.json').version)")
-          if [ -z "$VERSION" ] || [ "$VERSION" = "undefined" ]; then
-            VERSION=$(git rev-parse --short HEAD)
-            echo "⚠️ package.json missing version field — falling back to git SHA: $VERSION"
-          fi
-          BRANCH="promote/prod-v${VERSION}"
-          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-          # Create staging branch from uat
-          git checkout -b "$BRANCH" origin/uat
-
-          # Strip forbidden paths
-          git rm -rf --cached --ignore-unmatch \
-            .ai-team/ \
-            .squad/ \
-            .ai-team-templates/ \
-            team-docs/ \
-            "docs/proposals/" || true
-
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: strip squad/team files for production"
-          fi
-
-          git push --force origin "$BRANCH"
-          echo "✅ Staging branch $BRANCH created"
 
       - name: Create promotion PR
         if: steps.diff.outputs.commit_count != '0'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Check for existing open PR from any promote/ branch
-          EXISTING=$(gh pr list --base prod --state open --json number,headRefName --jq '.[] | select(.headRefName | startswith("promote/")) | .number' 2>/dev/null | head -1)
+          # Check for existing open PR
+          EXISTING=$(gh pr list --base prod --head uat --state open --json number --jq '.[0].number' 2>/dev/null)
           if [ -n "$EXISTING" ]; then
             echo "ℹ️ PR #$EXISTING already exists for uat → prod"
             echo "### ℹ️ Existing PR #$EXISTING" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
+          VERSION=$(node -e "console.log(require('./package.json').version)")
+          if [ -z "$VERSION" ] || [ "$VERSION" = "undefined" ]; then
+            VERSION=$(git rev-parse --short HEAD)
+            echo "⚠️ package.json missing version field — falling back to git SHA: $VERSION"
+          fi
           CHANGELOG=$(git log --pretty=format:'- %h %s' origin/prod..origin/uat | head -20)
 
           gh pr create \
             --base prod \
-            --head "${{ steps.staging.outputs.branch }}" \
-            --title "Release: uat → prod (v${{ steps.staging.outputs.version }})" \
+            --head uat \
+            --title "Release: uat → prod (v${VERSION})" \
             --body "## Release: uat → prod
 
-          **Version:** v${{ steps.staging.outputs.version }}
+          **Version:** v${VERSION}
           **Commits:** ${{ steps.diff.outputs.commit_count }}
 
           ### Changes
           ${CHANGELOG}
 
           ---
-          > ⚠️ \`.squad/\` files have been stripped from this branch for production.
           > Reviewer: @dkirby-ms (manual production gate)
           > Created by \`squad-promote.yml\` workflow dispatch"
 

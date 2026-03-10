@@ -407,6 +407,31 @@ PR #66 pending review and merge into dev branch.
 
 ---
 
+## 2026-03-09T23:43:26Z: UAT→Prod Promotion Workflow Simplification (Pemulis)
+
+**Context:** Pemulis (Systems Dev) discovered and fixed the UAT→prod promotion workflow 403 push error.
+
+**Problem:** Original approach attempted to create staging branches and strip `.squad/` files before promotion — overly complex and causing permission issues.
+
+**DevOps Changes:**
+- `.github/workflows/squad-promote.yml` `uat-to-prod` job: removed staging branch creation, file stripping, and git push logic
+- Now creates **direct PR** from `uat` → `prod` (mirrors the `dev` → `uat` pattern)
+- Simplified from 42+ lines to 11 lines of promotion logic
+- Commit: 356fcf9 "ci: simplify uat-to-prod promotion to direct PR"
+
+**Key Decisions:**
+- **Default branch is `prod`** (not `master`)
+- **`.squad/` files are allowed in prod** — metadata persists through all tiers for audit trail
+
+**Pattern Consistency:**
+- All branch tier promotions (dev→uat, uat→prod) now follow uniform pattern
+- Removes unnecessary complexity, aligns with promotion architecture
+- Squad history and decisions fully traceable end-to-end
+
+**Decision reference:** `.squad/decisions.md` → "Prod Default Branch & Squad File Policy"
+
+---
+
 ## 2026-03-09T23:32:55Z: Auto-Bump Patch Version on Dev→UAT Promotion (Pemulis)
 
 **Context:** Pemulis (Systems Dev) implemented automatic patch version bumping in the dev→uat promotion workflow.
