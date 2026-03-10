@@ -1810,3 +1810,13 @@ See `.squad/decisions.md` for full triage document, dependency graph, risk mitig
 - **Colyseus 0.17.8 on("create") timing**: The `on("create")` hook fires AFTER `onCreate()` returns. Properties injected via the hook (like `lobbyBridge`, `authProvider`) are NOT available inside `onCreate()`. Any initialization that depends on injected properties must be called from the hook itself, not from `onCreate()`. Fixed in #95 / PR #96.
 - **LobbyRoom bridge pattern**: `LobbyBridge` is the event bus for GameRoom→LobbyRoom communication (player_count_changed, game_ended). `registerBridgeListeners()` is now public and must be called from `index.ts` after injection. Key files: `server/src/rooms/LobbyRoom.ts`, `server/src/rooms/LobbyBridge.ts`, `server/src/index.ts`.
 - **Lobby test gap**: No unit or integration tests exist for LobbyRoom, LobbyBridge, or GameSessionRepository as of PR #96.
+
+### Cross-Agent Update: Browser Refresh Session Drop #101 (2026-03-10, issue #101)
+
+**Root cause identified and resolved** by Steeply (Tester), with PR #102 (draft) pending review.
+
+- **Steeply (Tester):** Researched the session-drop-on-refresh bug, identified that `bootstrap()` never checks for a reconnection token on page load. The reconnection infrastructure (token storage, `reconnectGameRoom()`, server-side token validation) is fully implemented — the missing piece was the cold-start trigger.
+- **Fix:** On page load, `main.ts` checks `sessionStorage` for a reconnection token before connecting to the lobby. If found, attempts `reconnectGameRoom()` first; on success, skips lobby and goes straight to game session. On failure, clears token and falls through to normal lobby flow.
+- **Tests:** 27 TDD tests written (11 server, 16 client) covering token lifecycle, reconnection validation, and fallback paths. All 690 existing tests passing.
+- **Impact on Pemulis:** No follow-up work required. Session restoration plumbing was already complete and integrated into Pemulis' `GameRoom.onJoin()` logic. Token validation and `sessionUserMap` handoff remain stable.
+
