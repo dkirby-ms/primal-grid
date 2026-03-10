@@ -76,7 +76,7 @@ jobs:
             echo "⚠️ package.json missing version field — falling back to git SHA: $VERSION"
           fi
           RAW_LOG=$(git log --no-merges --pretty=format:'- %h %s' origin/uat..origin/dev | head -30)
-          RAW_LOG=$(echo "$RAW_LOG" | grep -v ' squad[:(]' || true)
+          RAW_LOG=$(echo "$RAW_LOG" | grep -vE ' (squad|ci|chore)[:(]' || true)
           FEATURES=$(echo "$RAW_LOG" | grep -iE '^- [a-f0-9]+ (feat|fix)' || true)
           OTHER=$(echo "$RAW_LOG" | grep -viE '^- [a-f0-9]+ (feat|fix)' || true)
           CHANGELOG=$(printf '%s\n%s' "$FEATURES" "$OTHER" | sed '/^$/d' | head -20)
@@ -145,7 +145,7 @@ jobs:
             echo "⚠️ package.json missing version field — falling back to git SHA: $VERSION"
           fi
           RAW_LOG=$(git log --no-merges --pretty=format:'- %h %s' origin/prod..origin/uat | head -30)
-          RAW_LOG=$(echo "$RAW_LOG" | grep -v ' squad[:(]' || true)
+          RAW_LOG=$(echo "$RAW_LOG" | grep -vE ' (squad|ci|chore)[:(]' || true)
           FEATURES=$(echo "$RAW_LOG" | grep -iE '^- [a-f0-9]+ (feat|fix)' || true)
           OTHER=$(echo "$RAW_LOG" | grep -viE '^- [a-f0-9]+ (feat|fix)' || true)
           CHANGELOG=$(printf '%s\n%s' "$FEATURES" "$OTHER" | sed '/^$/d' | head -20)
