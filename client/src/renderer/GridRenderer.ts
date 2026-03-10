@@ -679,9 +679,9 @@ export class GridRenderer {
     const owner = this.tileOwners.get(idx) ?? '';
     if (owner !== this.localPlayerId || this.localPlayerId === '') return false;
 
-    // Must have no existing structure
+    // Must have no existing structure (outposts can be replaced)
     const structure = this.tileStructures.get(idx) ?? '';
-    if (structure !== '') return false;
+    if (structure !== '' && structure !== 'outpost') return false;
 
     // Must not be water or rock
     const tileType = this.tileTypes.get(idx);

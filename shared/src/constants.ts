@@ -305,10 +305,7 @@ export const STRUCTURE_INCOME = {
   HQ_WOOD: 2,
   /** Stone income from HQ per tick. */
   HQ_STONE: 2,
-  /** Wood income per farm per tick. */
-  FARM_WOOD: 1,
-  /** Stone income per farm per tick. */
-  FARM_STONE: 1,
+
 } as const;
 
 /** Building placement costs (instant placement via PLACE_BUILDING). */
