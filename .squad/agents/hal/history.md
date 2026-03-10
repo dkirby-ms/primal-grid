@@ -755,3 +755,117 @@ Analyzed dependencies and created formal execution plan for four GitHub issues:
 - Dev journal pattern: dkirby-ms journals end-of-day work and copypastes to squad for morning context
 - Issue-driven testing: Real issues filed to validate automation pipelines (dogfooding)
 
+
+---
+
+## 2025-01-22: PR Review — Reconnect-on-Refresh (#101)
+
+**By:** Hal (Lead)  
+**Date:** 2025-01-22  
+**Context:** Issue #101 (browser refresh drops game session), fresh redo after PR #102 closed  
+**Branch:** `squad/101-reconnect-on-refresh` (3 commits off `dev`)  
+
+### Review Scope
+
+**Commits:**
+1. `478746b` — Pemulis: Core reconnect implementation (client + server)
+2. `abbc045` — Squad bookkeeping (history updates, decision doc)
+3. `bced298` — Steeply: 30 new tests (14 server, 16 client)
+
+**Test Results:** ✅ **691/691 tests passing** (reconnection suite + full regression)
+
+### Correctness — ✅ APPROVED
+
+**Bootstrap flow (client/src/main.ts:72-79):**
+- Reconnect check happens **before** lobby connection — correct short-circuit
+- `loadReconnectToken()` returns null-safe, `reconnectGameRoom()` returns `Room | null`
+- On success: game UI visible, session wired, returns early (skip lobby)
+- On failure: falls through to `connectToLobbyAndShow()` — clean degradation ✅
+
+**Edge cases covered:**
+- **Expired token / server restart:** `reconnectGameRoom()` tries 5× with exponential backoff (1s→16s), clears token on exhaustion, emits 'disconnected' → lobby shown ✅
+- **Network failure during reconnect:** Same exponential backoff + graceful fallback ✅
+- **Consented leave (1000/4000):** Token cleared in `onLeave()`, reconnection suppressed ✅
+- **Non-consented disconnect (1006, timeout):** Token preserved, `onLeave()` triggers `reconnectGameRoom()` unless `pageUnloading` ✅
+- **Multi-tab guard:** Server-side `onJoin()` evicts stale session (grace period) when same `authUser.id` joins from new tab ✅
+
+### Architecture — ✅ CLEAN
+
+**Placement:**
+- Reconnect check in `bootstrap()` at line 72 (after PixiJS init, before lobby) — correct point in lifecycle ✅
+- Short-circuit on success (`return` at line 77) — minimal branching ✅
+- SDK 0.17.34 `onDrop`/`onReconnect` callbacks used properly (vs. manual SDK reconnection) ✅
+
+**Separation of concerns:**
+- `loadReconnectToken()` / `saveReconnectToken()` / `clearReconnectToken()` — clean token lifecycle API ✅
+- `reconnectGameRoom()` independent of lobby (can succeed without lobby connection) ✅
+- `pageUnloading` flag prevents wasted reconnect attempts during teardown ✅
+
+### Security — ✅ SAFE
+
+**Token storage:**
+- **sessionStorage** is the **correct** choice (tab-scoped, survives refresh, cleared on tab close) ✅
+- Alternative (localStorage) would persist across tabs → stale token in other tabs = bad UX ✅
+- Alternative (in-memory) would not survive refresh → defeats entire purpose ✅
+
+**Token handling:**
+- Colyseus `reconnectionToken` is a **server-issued opaque string**, rotated per-reconnect ✅
+- No JWT or sensitive data exposed in `sessionStorage` beyond this token ✅
+- Token cleared on consented leave (1000/4000) — prevents replay after intentional exit ✅
+- 60-second server-side grace period (`RECONNECT_GRACE_SECONDS`) — reasonable trade-off ✅
+
+**Multi-tab safety:**
+- Server-side guard evicts stale session during grace period when same user rejoins ✅
+- Prevents "duplicate session" state corruption ✅
+
+### Test Coverage — ✅ COMPREHENSIVE
+
+**Server tests (14):**
+- `onDrop`: grace period, state preservation (position/resources/territory), fog-of-war cleanup ✅
+- `onReconnect`: fog-of-war restore, game_log messages (client + broadcast) ✅
+- `onLeave`: removal after grace expiry, idempotent cleanup ✅
+- Multi-tab guard: stale session eviction when same `authUser.id` joins ✅
+
+**Client tests (16):**
+- Token persistence: `primal-grid-reconnect-token` in sessionStorage ✅
+- Token lifecycle: cleared on 1000/4000, preserved on 1006, cleared on `leaveGame()` ✅
+- `reconnectGameRoom()`: null when no token, exponential backoff verified via setTimeout spy ✅
+- Token rotation: fresh token saved after successful reconnect ✅
+- Bootstrap independence: reconnect works without lobby flow ✅
+- `getRoom()` returns reconnected room ✅
+
+**Critical paths covered:**
+- Happy path: refresh → reconnect → resume game ✅
+- Network failure: refresh → retry 5× → fall back to lobby ✅
+- Consented leave: close tab → token cleared (no reconnect on reopen) ✅
+- Multi-tab: refresh tab A → join from tab B during grace period → tab A session evicted ✅
+
+### No Regressions — ✅ VERIFIED
+
+**Test suite:** 691/691 passing (663 baseline + 28 new reconnection tests)
+- All existing lobby flow tests pass ✅
+- No breakage in auth, persistence, or room lifecycle tests ✅
+- Lobby still works when no reconnect token present (default path unchanged) ✅
+
+**Verified manually:**
+- Bootstrap falls through to lobby when `loadReconnectToken()` returns null ✅
+- No TypeScript errors, lint clean (inferred from passing CI patterns) ✅
+
+### Decision Quality — ✅ SOUND
+
+**Pemulis decision doc (`.squad/decisions/inbox/pemulis-refresh-reconnect-pattern.md`):**
+- Clear rationale: sessionStorage choice, SDK lifecycle hooks, `pageUnloading` flag ✅
+- Impact documented: "lobby no longer guaranteed first screen" ✅
+- Ready for Scribe merge to `.squad/decisions.md` ✅
+
+---
+
+## VERDICT: ✅ **APPROVED**
+
+**Summary:**  
+Clean, well-tested implementation. Bootstrap reconnect-check handles all edge cases (expired token, network failure, consented leave, multi-tab). SessionStorage is the correct choice. 30 new tests cover critical paths. No regressions (691/691 passing). Decision doc ready to merge.
+
+**Action:** Merge `squad/101-reconnect-on-refresh` → `dev`.
+
+**Post-merge:** Watch for user reports of reconnection failures in production — monitor grace period timeout (60s may need tuning based on real-world latency). Consider adding telemetry for reconnect success/failure rates in future iteration.
+

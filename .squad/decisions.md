@@ -1,3 +1,45 @@
+## 2026-03-10T16:34:04Z: Single-Layer Reconnection Strategy (Issue #101)
+
+**Author:** Gately (Game Dev)  
+**Date:** 2026-03-10  
+**Status:** Implemented  
+**PR:** #103
+
+### Context
+
+The Colyseus SDK 0.17 has built-in auto-reconnection (15 retries, exponential backoff) via `onDrop`/`onReconnect` handlers. Our custom `onLeave` handler was also calling `reconnectGameRoom()`, creating an infinite drop→reconnect→drop loop after browser refresh.
+
+### Decision
+
+1. **SDK handles in-session transient disconnects.** The `onDrop`/`onReconnect` callbacks update UI status. `onLeave` means the session is truly over — clear the reconnect token and return to lobby.
+2. **`reconnectGameRoom()` is bootstrap-only.** It's called once on page load when a sessionStorage token exists, creating a fresh connection from scratch. It is never called from `onLeave`.
+3. **Reset client singleton after failed bootstrap reconnect.** `resetClient()` clears `colyseusClient` before falling through to lobby to avoid stale WebSocket state.
+
+### Impact
+
+- No duplicate reconnection attempts — eliminates the infinite loop
+- Cleaner separation: SDK owns transport-level reconnection, our code owns application-level session recovery (bootstrap)
+- `onLeave` with non-consented codes now clears the token and emits `'disconnected'`, which triggers the lobby return flow in `main.ts`
+- All 692 tests pass; 2 regression tests added by Steeply confirm `onLeave` behavior
+
+---
+
+## 2026-03-10T15:16:56Z: User Directive — PR Review Comments Visibility
+
+**Author:** dkirby-ms (via Copilot)  
+**Date:** 2026-03-10  
+**Status:** Active
+
+### Directive
+
+After any code review, **Hal must post the review feedback as a comment on the PR** (using `gh pr comment`). Reviews should not only happen internally — they must be visible on the PR itself.
+
+### Rationale
+
+Transparency with the team and stakeholders. All review feedback is recorded on the PR where the work lives, making decision-making visible and reviewable.
+
+---
+
 ## 2026-03-10T11:42:00Z: Discord Webhook Identity Handoff — Marathe → Joelle
 
 **Author:** Hal (Lead)  
@@ -2327,3 +2369,52 @@ Provides visibility into the promotion pipeline (dev → UAT → prod) without p
 
 - All squad agents closing PRs should label related issues `stage: uat-ready` instead of closing them
 - Issues closed only after reaching prod
+
+---
+
+## 2026-03-10T15-14-07Z: Filter squad: commits from deploy changelogs
+
+**Author:** Marathe (DevOps / CI-CD)  
+**Date:** 2026-03-10  
+**Status:** Implemented
+
+### Context
+
+Deploy workflows (deploy-uat, deploy, squad-promote) generate changelogs from git history for Discord notifications and PR bodies. Internal `squad:` and `squad(agent):` commits (logs, decisions, history updates) were polluting these changelogs with noise players don't care about.
+
+### Decision
+
+Added `grep -v ' squad[:(]'` filter to all 4 changelog generation points, applied immediately after the `RAW_LOG` assignment and before the `FEATURES`/`OTHER` split. This strips any commit line containing ` squad:` or ` squad(` — covering both conventional commit formats used by squad agents.
+
+### Affected Files
+
+- `.github/workflows/deploy-uat.yml`
+- `.github/workflows/deploy.yml`
+- `.github/workflows/squad-promote.yml` (2 locations: dev→uat and uat→prod)
+
+### Rollout
+
+Cherry-picked directly to dev, uat, and prod per team policy (CI-only changes get cherry-picked).
+
+---
+
+## 2026-03-10T15-14-07Z: Browser Refresh Reconnect Pattern
+
+**Author:** Pemulis (Systems Dev)  
+**Date:** 2026-03-10  
+**Status:** Implemented  
+**Issue:** #101
+
+### Decision
+
+On page load, `bootstrap()` checks `sessionStorage` for a Colyseus reconnect token before connecting to the lobby. If a token exists (from a prior game session in the same tab), it attempts `reconnectGameRoom()` first. Success skips the lobby entirely; failure falls through to normal lobby flow.
+
+### Details
+
+- Uses SDK 0.17.34's `onDrop`/`onReconnect` lifecycle hooks for proper status updates during SDK-managed reconnection
+- A `pageUnloading` flag (via `beforeunload`) prevents wasted reconnection attempts when the page is being torn down
+- Token persisted in `sessionStorage` under key `primal-grid-reconnect-token` — tab-scoped, survives refresh, cleared on tab close
+
+### Impact
+
+Anyone working on `client/src/main.ts` bootstrap flow or `client/src/network.ts` connection handlers should be aware of this pattern. The lobby is no longer the guaranteed first screen after page load.
