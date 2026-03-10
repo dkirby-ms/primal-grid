@@ -620,3 +620,31 @@ E2E workflow (`.github/workflows/e2e.yml`) was updated to trigger on `push: [uat
 
 ---
 
+## CI Cherry-Pick Directive
+
+**Date:** 2026-03-10T12:05:04Z  
+**By:** dkirby-ms (via Copilot)  
+**Status:** ACTIVE  
+**Context:** Deployment strategy for CI-only vs. feature changes
+
+### Directive
+
+CI-only changes (workflow fixes, pipeline updates) should be **cherry-picked directly to uat and prod** instead of running full promotion workflows. Full promos are reserved for feature/fix code changes.
+
+### Rationale
+
+- CI-only changes don't affect game logic or features — no risk in direct promotion
+- Full promotion workflows should be reserved for substantive code changes
+- Cherry-picks are faster and more direct for isolated CI improvements
+- Reduces unnecessary wait times and orchestration overhead
+
+### Implementation
+
+When you have CI-only commits (e.g., `.github/workflows/` changes, linter config fixes):
+1. Cherry-pick commits to `uat` first
+2. Cherry-pick commits to `prod` second
+3. Push both branches
+4. No need to trigger full promotion pipeline
+
+---
+
