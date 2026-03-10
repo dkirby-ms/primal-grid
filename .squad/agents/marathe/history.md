@@ -492,3 +492,26 @@ Pemulis (Systems Dev) resolved merge conflicts in `.github/workflows/squad-ci.ym
 **Session Log:** `.squad/log/2026-03-10T00-25-00Z-conflict-resolution.md`
 **Orchestration Log:** `.squad/orchestration-log/2026-03-10T00-25-00Z-pemulis.md`
 
+
+---
+
+## 2026-03-10T00:29:39Z: Prod Guard Updated for .squad/ Files (Pemulis)
+
+**Cross-Agent Update for Marathe (Release Ops)**
+
+Pemulis (Systems Dev) updated the prod branch guard to allow `.squad/` orchestration files through the protection mechanism.
+
+**What Changed:**
+
+- **File:** `.github/workflows/squad-prod-guard.yml`
+- **Action:** Removed `.squad/` from the `forbidden_paths` filter list
+- **Rationale:** Squad metadata (orchestration logs, decisions, session history) now flows through to prod, enabling full audit trail and cross-tier decision tracking
+
+**Impact on Release Ops (Marathe):**
+- No longer need to worry about guard rejections blocking .squad/ metadata in prod
+- Decision history and orchestration logs will be preserved through all promotion tiers
+- Future promotions can safely include squad metadata without triggering false positives
+
+**Commit:** 8b0fa46 on dev  
+**Session Log:** `.squad/log/2026-03-10T00-29-39Z-guard-update.md`  
+**Orchestration Log:** `.squad/orchestration-log/2026-03-10T00-29-39Z-pemulis.md`
