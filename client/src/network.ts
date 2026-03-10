@@ -150,12 +150,40 @@ function getClient(): Client {
 // ---------------------------------------------------------------------------
 
 let reconnecting = false;
+let pageUnloading = false;
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    pageUnloading = true;
+  });
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function attachGameRoomHandlers(room: Room): void {
+  // SDK fires onDrop for non-consented disconnects (network blips, page refresh).
+  // The SDK's built-in reconnection retries the WebSocket automatically after this.
+  room.onDrop((code: number) => {
+    console.log('[network] Connection dropped, code:', code);
+    if (!pageUnloading) {
+      emitStatus('reconnecting');
+    }
+  });
+
+  // SDK fires onReconnect after its built-in WebSocket reconnection succeeds.
+  // The server rotates the token on every rejoin, so persist the fresh value.
+  room.onReconnect(() => {
+    console.log('[network] SDK reconnected — saving rotated token');
+    if (room.reconnectionToken) {
+      saveReconnectToken(room.reconnectionToken);
+    }
+    emitStatus('connected');
+  });
+
+  // onLeave fires for consented disconnects, or when the SDK exhausts its
+  // built-in retry budget (code 4003) / uptime-too-short abort (code 1006).
   room.onLeave((code: number) => {
     console.log('[network] Left game room, code:', code);
     gameRoom = null;
@@ -164,7 +192,8 @@ function attachGameRoomHandlers(room: Room): void {
     if (consented) {
       clearReconnectToken();
       emitStatus('disconnected');
-    } else {
+    } else if (!pageUnloading) {
+      // SDK gave up — fall back to application-level reconnection via HTTP matchmaking.
       emitStatus('reconnecting');
       reconnectGameRoom();
     }
