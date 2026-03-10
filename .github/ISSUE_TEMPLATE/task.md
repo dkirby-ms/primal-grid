@@ -2,7 +2,7 @@
 name: Task / Chore
 about: Internal maintenance, refactoring, or cleanup work
 title: "[Task] "
-labels: type:chore
+labels: type:chore, squad
 assignees: ''
 ---
 
