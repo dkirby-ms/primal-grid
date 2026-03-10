@@ -1928,3 +1928,12 @@ Large-map rendering with PixiJS requires explicit culling—the scene graph does
 - **Pemulis updated `attachGameRoomHandlers`** to use `room.onDrop()` and `room.onReconnect()` callbacks (Colyseus SDK client-side reconnection events). Mock rooms must include these methods. Also added `pageUnloading` guard to suppress reconnection during `beforeunload`.
 - **Client test pattern:** `vi.resetModules()` in `beforeEach` + dynamic `await import('../network.js')` gives clean module-level state per test. Mock `@colyseus/sdk` Client as a regular function constructor (not `vi.fn(() => obj)` — arrow functions can't be `new`'d). Stub `sessionStorage`, `localStorage`, `window` (with `addEventListener`), and `fetch` globally.
 - **Server test pattern:** Continues the `Object.create(GameRoom.prototype)` pattern. Must stub `allowReconnection` and `broadcast` (Colyseus Room methods not on prototype). For multi-tab guard tests, manually set `authProvider`, `sessionUserMap`, and `clients` on the room instance.
+
+### Reconnection onLeave Fix — Issue #101 (Test Update)
+
+- **2 new tests** added to `client/src/__tests__/reconnection.test.ts`. Client tests now **18/18 passing**, server tests **12/12 unchanged**.
+- **Key behavior change:** `onLeave` handler in `attachGameRoomHandlers` no longer calls `reconnectGameRoom()` for non-consented disconnects. The Colyseus SDK 0.17 built-in auto-reconnection (`onDrop`/`onReconnect`) handles transient disconnects. `onLeave` now clears token and emits `'disconnected'` for both consented and non-consented (non-unloading) leaves.
+- **`reconnectGameRoom()` is bootstrap-only** — called from `main.ts` on page refresh to reconnect via stored `sessionStorage` token. Not triggered from `onLeave` anymore.
+- **Regression tests added:** (1) verify `onConnectionStatus` receives `'disconnected'` on non-consented leave, (2) verify `mockClient.reconnect` is NOT called from `onLeave`.
+- **`resetClient()` export added** to `network.ts` — allows `main.ts` to clear the Colyseus client singleton after failed bootstrap reconnection.
+- **Server tests unchanged** — server-side `onDrop`/`onReconnect`/`onLeave` lifecycle is unaffected by this client-side fix.
