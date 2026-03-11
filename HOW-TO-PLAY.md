@@ -16,37 +16,43 @@ Claim as much territory as possible, build a thriving colony, and outlast rival 
 
 When the game begins, click a tile on the map to place your **Headquarters**. This immediately claims a **5×5 area** around the chosen tile as your starting territory. Any Water or Rock tiles in that zone are converted to Grassland so everything is walkable.
 
-You start with **25 Wood** and **15 Stone**.
+You start with **25 Wood**, **15 Stone**, and **50 Food**.
 
 ### 2. Your HQ Generates Income
 
-Your HQ automatically produces **+2 Wood** and **+2 Stone** every 10 seconds. This steady income is your baseline economy — invest it wisely to grow faster than your opponents.
+Your HQ automatically produces **+2 Wood**, **+2 Stone**, and **+2 Food** every 10 seconds. This steady income is your baseline economy — invest it wisely to grow faster than your opponents.
 
 ---
 
-## Resources: Wood & Stone
+## Resources: Wood, Stone & Food
 
-Everything in Primal Grid costs **Wood** 🪵 and **Stone** 🪨.
+Primal Grid runs on three resources: **Wood** 🪵, **Stone** 🪨, and **Food** 🍖.
 
-| Source | Wood | Stone | Frequency |
-|--------|------|-------|-----------|
-| HQ | +2 | +2 | Every 10 seconds |
-| Farm | +1 | +1 | Every 10 seconds |
-| Factory | +2 | +1 | Every 10 seconds |
-| Pawns harvesting tiles | Varies | Varies | When gathering |
+| Source | Wood | Stone | Food | Frequency |
+|--------|------|-------|------|-----------|
+| HQ | +2 | +2 | +2 | Every 10 seconds |
+| 🌾 Farm | 0 | 0 | +2 | Every 10 seconds |
+| 🏭 Factory | +2 | +1 | 0 | Every 10 seconds |
+| Pawns harvesting tiles | Varies | Varies | — | When gathering |
 
 Tiles regenerate resources over time (1 resource every 20 seconds, up to 10 per tile), so the map never runs dry.
+
+### ⚠️ Starvation
+
+When your Food reaches **0 or below**, one random pawn takes **5 damage** each income tick (every 10 seconds). Keep your food positive by building Farms or you'll watch your army starve.
 
 ---
 
 ## Buildings
 
-Build structures on your territory to boost your economy. Click the **Build Farm** or **Build Factory** button in the HUD, then click a tile in your territory to place it.
+Build structures on your territory to shape your economy. Click the **Build Farm** or **Build Factory** button in the HUD, then click a tile in your territory to place it. Buildings have two bonuses:
+1. **Income** — Passive resources every 10 seconds
+2. **Unit Spawn Caps** — Farms add **+1** to all pawn type limits; Factories add **+2**
 
-| Building | Cost | Income per tick |
-|----------|------|-----------------|
-| 🌾 **Farm** | 12 Wood, 6 Stone | +1 Wood, +1 Stone |
-| 🏭 **Factory** | 20 Wood, 12 Stone | +2 Wood, +1 Stone |
+| Building | Cost | Income per tick | Spawn Cap Bonus |
+|----------|------|-----------------|-----------------|
+| 🌾 **Farm** | 12 Wood, 6 Stone | +2 Food | +1 |
+| 🏭 **Factory** | 20 Wood, 12 Stone | +2 Wood, +1 Stone | +2 |
 
 All your buildings combine their income and deposit it every **10 seconds**.
 
@@ -60,47 +66,47 @@ Pawns are your workers and warriors. Spawn them from the HUD panel on the right 
 
 | Stat | Value |
 |------|-------|
-| Cost | 10 Wood, 5 Stone |
-| Max | 5 |
+| Cost | 8 Wood, 4 Stone + 1 Food/tick |
+| Max | 5 (base) |
 | Health | 50 |
 | Vision | 4 tiles |
 
-Builders are your expansion force. They automatically scout for unclaimed tiles next to your territory, move to them, and claim them in about 2 seconds. Smart builders prioritize filling gaps in your territory first, then push outward. Each successful claim earns you **1 XP** toward leveling up.
+Builders are your expansion force. They automatically scout for unclaimed tiles next to your territory, move to them, and claim them in about 2 seconds. Smart builders prioritize filling gaps in your territory first, then push outward. Each successful claim earns you **1 XP** toward leveling up. Note: Each builder consumes 1 food per income tick.
 
 ### 🛡 Defender
 
 | Stat | Value |
 |------|-------|
-| Cost | 15 Wood, 10 Stone |
-| Max | 3 |
+| Cost | 12 Wood, 8 Stone + 2 Food/tick |
+| Max | 3 (base) |
 | Health | 80 |
 | Damage | 20 |
 | Detection | 5 tiles |
 
-Defenders patrol your territory and will fight off any threat that enters — whether it's an enemy raider or a hungry carnivore. They **never leave your territory**, so they're your reliable last line of defense. If pushed outside by an attacker, they automatically return home.
+Defenders patrol your territory and will fight off any threat that enters — whether it's an enemy raider or a hungry carnivore. They **never leave your territory**, so they're your reliable last line of defense. If pushed outside by an attacker, they automatically return home. Each defender costs 2 food per income tick.
 
 ### ⚔ Raider
 
 | Stat | Value |
 |------|-------|
-| Cost | 20 Wood, 15 Stone |
-| Max | 2 |
+| Cost | 16 Wood, 12 Stone + 3 Food/tick |
+| Max | 2 (base) |
 | Health | 60 |
 | Damage | 25 |
 | Detection | 6 tiles |
 
-Raiders are your offensive strike force. They venture beyond your territory to destroy enemy bases and take out hostile units. They'll patrol for about 50 seconds before heading home. Deploy them strategically once you've got defenders protecting your own base.
+Raiders are your offensive strike force. They venture beyond your territory to destroy enemy bases and take out hostile units. They'll patrol for about 50 seconds before heading home. Deploy them strategically once you've got defenders protecting your own base. Each raider is expensive and consumes 3 food per income tick.
 
 ### 🔭 Explorer
 
 | Stat | Value |
 |------|-------|
-| Cost | 12 Wood, 8 Stone |
-| Max | 3 |
+| Cost | 10 Wood, 6 Stone + 1 Food/tick |
+| Max | 3 (base) |
 | Health | 35 |
 | Vision | 6 tiles |
 
-Explorers roam the map to reveal the unknown. They're drawn to unexplored and unclaimed areas. They won't fight, but they'll show you what's out there — enemy bases, resources, creatures — before you commit your army.
+Explorers roam the map to reveal the unknown. They're drawn to unexplored and unclaimed areas. They won't fight, but they'll show you what's out there — enemy bases, resources, creatures — before you commit your army. Like builders, explorers consume 1 food per income tick.
 
 ---
 
@@ -146,9 +152,9 @@ Enemy bases appear on the map as the game progresses (the first one shows up aft
 
 | Base Type | Health | Spawns | Reward |
 |-----------|--------|--------|--------|
-| ⛺ Raider Camp | 200 | Scouts, Raiders | 15W, 10S |
-| 🪺 Hive | 150 | Swarms | 10W, 5S |
-| 🏰 Fortress | 400 | Raiders | 25W, 20S |
+| ⛺ Raider Camp | 200 | Scouts, Raiders | 15W, 10S, 5 Food |
+| 🪺 Hive | 150 | Swarms | 10W, 5S, 5 Food |
+| 🏰 Fortress | 400 | Raiders | 25W, 20S, 10 Food |
 
 Destroy them with **Raider pawns** to earn resource rewards and eliminate the threat.
 
@@ -202,14 +208,16 @@ CPU names: Atlas, Borealis, Cypher, Draco, Echo, Fenrir, Golem.
 
 ## Tips & Strategies
 
-1. **Build your economy first.** Place 1–2 Farms early and let them work before you expand too aggressively.
-2. **Protect your builders.** Raptors hunt builders, so always have at least one Defender running before expanding toward forests.
-3. **Let builders fill gaps.** Your territory will have interior gaps — builders prioritize filling them first, which is smart and efficient.
-4. **Scout before you strike.** Send an Explorer to locate enemy bases before committing your Raiders.
-5. **Fear the night.** Night cuts your vision in half. Either pull back to defend or fortify before dusk falls.
-6. **Eliminate enemy bases early.** The longer they sit, the more dangerous units they spawn. A neglected Raider Camp will slowly drain your defenses.
-7. **Keep expanding for XP.** Claiming tiles earns XP and levels — a handy way to track your colony's growth.
-8. **Factories beat Farms late game.** Factories cost more upfront but produce double the wood—when your economy is stable, the upgrade pays for itself.
+1. **Build your economy first.** Place 1–2 Farms early to generate food for your army before you expand too aggressively.
+2. **Watch your food.** Food is your unit limit — starvation kills your army one pawn at a time. Keep it positive.
+3. **Use building caps.** Factories boost your spawn caps by 2 each; use them to field more units once your wood/stone economy is stable.
+4. **Protect your builders.** Raptors hunt builders, so always have at least one Defender running before expanding toward forests.
+5. **Let builders fill gaps.** Your territory will have interior gaps — builders prioritize filling them first, which is smart and efficient.
+6. **Scout before you strike.** Send an Explorer to locate enemy bases before committing your Raiders.
+7. **Fear the night.** Night cuts your vision in half. Either pull back to defend or fortify before dusk falls.
+8. **Eliminate enemy bases early.** The longer they sit, the more dangerous units they spawn. A neglected Raider Camp will slowly drain your defenses.
+9. **Keep expanding for XP.** Claiming tiles earns XP and levels — a handy way to track your colony's growth.
+10. **Farms vs Factories.** Early game: spam Farms to feed builders. Late game: Factories beat Farms for raw resource output once you're established.
 
 ---
 

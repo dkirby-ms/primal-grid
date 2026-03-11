@@ -4,7 +4,7 @@
 
 ## Overview
 
-[Primal Grid](https://gridwar.kirbytoso.xyz) is a real-time strategy game where players build colonies on a procedurally generated world, manage resources, train pawn builders, and survive alongside (and against) AI-driven dinosaurs. Creatures have their own behavioral AI — herbivores graze and flee, carnivores hunt — and the world evolves every tick.
+[Primal Grid](https://gridwar.kirbytoso.xyz) is a real-time strategy game where players build colonies on a procedurally generated world, manage resources, train pawn builders, and survive alongside (and against) AI-driven dinosaurs. Creatures have their own behavioral AI — herbivores graze and flee, carnivores hunt — and the world evolves every tick. Your units consume food each turn, forcing you to balance expansion with production.
 
 The game is fully server-authoritative with multiplayer powered by [Colyseus](https://colyseus.io/). No client-side prediction; the server is the single source of truth.
 
@@ -24,9 +24,10 @@ The game is fully server-authoritative with multiplayer powered by [Colyseus](ht
 - **Procedural World Generation** — Dual-layer simplex noise (elevation + moisture) with cellular automata smoothing produces natural-looking biomes: Grassland, Forest, Swamp, Desert, Highland, Water, Rock, and Sand.
 - **Creature AI** — Tick-based finite state machines with per-creature timers. Herbivores (Parasaurolophus) graze, wander, and flee from predators. Carnivores (Raptors) hunt prey and player pawns.
 - **Stamina & Exhaustion** — Creatures spend stamina to move and must rest to recover. Exhaustion triggers a hysteresis cooldown, preventing rapid state toggling.
+- **Territory Ownership & Building System** — Claim tiles adjacent to your territory using pawn builders. Build Farms (boost food income) and Factories (boost wood/stone income). Each building type increases your unit spawn caps: +1 per Farm, +2 per Factory, allowing you to field larger armies.
 - **Territory Ownership** — Claim tiles adjacent to your territory using pawn builders. Your 5×5 HQ zone is your foothold; expand outward.
-- **Pawn Builder System** — Spawn pawns (cost: Wood + Stone) that autonomously find unclaimed land, move to it, and build structures. Pawns have upkeep costs — neglect them and they take damage.
-- **Resource Economy** — Two resources: **Wood** and **Stone**. Harvest from tiles, earn passive income from structures (HQ and Farms), and spend to expand your colony.
+- **Pawn Builder System** — Spawn pawns (cost: Wood + Stone + Food) that autonomously find unclaimed land, move to it, and build structures. Each pawn type consumes food per income tick — manage your food supply carefully or face starvation.
+- **Food Economy** — Three resources: **Wood**, **Stone**, and **Food**. Farms produce food; factories produce wood and stone. Your HQ generates all three. When food runs out, random pawns take damage each income tick until you recover.
 - **Progression System** — Earn XP, level up, and unlock new polyomino building shapes as you advance.
 - **Multiplayer** — Real-time multiplayer via Colyseus rooms with schema-based state synchronization.
 
