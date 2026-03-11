@@ -2740,3 +2740,28 @@ Changelog generation is now centralized in `.github/scripts/generate-changelog.s
 
 - Any new workflow that generates changelogs should call `.github/scripts/generate-changelog.sh` instead of writing inline logic.
 - Commit message conventions matter more now — `feat:`, `fix:`, `chore:` prefixes directly affect changelog quality.
+
+---
+
+## 2026-03-11T12-43-00Z: Builder Reservation Logic
+
+**Author:** Hal (Lead)  
+**Date:** 2026-03-11  
+**Status:** Accepted  
+**PRs:** #133 (closed), #134 (approved)
+
+### Decision
+
+Builder pawns now reserve their target tiles using the pattern from PR #134:
+1. Check `creatureType` (or `pawnType`)
+2. **Check `currentState`** (`move_to_site`, `building`) — crucial to filter out idle pawns
+3. Use integer tile indices (`Set<number>`) instead of strings
+
+### Rationale
+
+Two PRs (#133, #134) implemented competing solutions for preventing multiple builders from targeting the same tile. PR #134's approach is state-aware and handles idle pawns correctly.
+
+### Consequences
+- PR #133 has been closed (superseded by #134)
+- Future pawn logic should follow this state-aware pattern when coordinating target selection
+- The pattern is safe for defenders and attackers if they ever independently select from a shared pool
