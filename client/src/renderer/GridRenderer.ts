@@ -65,6 +65,8 @@ export class GridRenderer {
   private lastIsHQTerritory: boolean[][] = [];
   private claimingTiles: Map<string, { x: number; y: number }> = new Map();
   private localPlayerId: string = '';
+  private localHqX: number = -1;
+  private localHqY: number = -1;
 
   // Building icons rendered on visible tiles
   private buildingContainer: Container;
@@ -301,6 +303,11 @@ export class GridRenderer {
           const isCPU = !!(player['isCPU']);
           this.playerColors.set(id, color);
           currentPlayerIds.add(id);
+
+          if (id === this.localPlayerId && hqX >= 0 && hqY >= 0) {
+            this.localHqX = hqX;
+            this.localHqY = hqY;
+          }
 
           // Render HQ marker if player has an HQ
           if (hqX >= 0 && hqY >= 0) {
@@ -679,9 +686,12 @@ export class GridRenderer {
     const owner = this.tileOwners.get(idx) ?? '';
     if (owner !== this.localPlayerId || this.localPlayerId === '') return false;
 
-    // Must have no existing structure (outposts can be replaced)
+    // Must have no existing building (outposts/hq territory can be built on; farm/factory cannot)
     const structure = this.tileStructures.get(idx) ?? '';
-    if (structure !== '' && structure !== 'outpost') return false;
+    if (structure !== '' && structure !== 'outpost' && structure !== 'hq') return false;
+
+    // Protect the actual HQ building (center tile)
+    if (x === this.localHqX && y === this.localHqY) return false;
 
     // Must not be water or rock
     const tileType = this.tileTypes.get(idx);
