@@ -82,6 +82,8 @@ export const TERRITORY = {
   STARTING_WOOD: 25,
   /** Starting stone for new players. */
   STARTING_STONE: 15,
+  /** Starting food for new players (~4 income ticks runway with 2 builders). */
+  STARTING_FOOD: 50,
   /** Ticks to claim a tile (8 ticks ≈ 2 seconds at 4 ticks/sec). */
   CLAIM_TICKS: 8,
 } as const;
@@ -96,7 +98,7 @@ export interface EnemyBaseTypeDef {
   readonly maxMobiles: number;
   readonly color: number;
   /** Resources awarded to the player who destroys this base. */
-  readonly reward: { wood: number; stone: number };
+  readonly reward: { wood: number; stone: number; food: number };
 }
 
 /** Enemy mobile type definition. */
@@ -118,6 +120,7 @@ export interface PawnTypeDef {
   readonly creatureType: string;
   readonly health: number;
   readonly cost: { wood: number; stone: number };
+  readonly foodUpkeep: number;
   readonly maxCount: number;
   readonly damage: number;
   readonly detectionRadius: number;
@@ -138,7 +141,7 @@ export const ENEMY_BASE_TYPES: Record<string, EnemyBaseTypeDef> = {
     spawnType: "enemy_raider",
     maxMobiles: 3,
     color: 0xcc0000,
-    reward: { wood: 15, stone: 10 },
+    reward: { wood: 15, stone: 10, food: 5 },
   },
   enemy_base_hive: {
     name: "Hive",
@@ -148,7 +151,7 @@ export const ENEMY_BASE_TYPES: Record<string, EnemyBaseTypeDef> = {
     spawnType: "enemy_swarm",
     maxMobiles: 6,
     color: 0xcccc00,
-    reward: { wood: 10, stone: 5 },
+    reward: { wood: 10, stone: 5, food: 5 },
   },
   enemy_base_fortress: {
     name: "Fortress",
@@ -158,7 +161,7 @@ export const ENEMY_BASE_TYPES: Record<string, EnemyBaseTypeDef> = {
     spawnType: "enemy_raider",
     maxMobiles: 4,
     color: 0x880000,
-    reward: { wood: 25, stone: 20 },
+    reward: { wood: 25, stone: 20, food: 10 },
   },
 };
 
@@ -203,7 +206,8 @@ export const PAWN_TYPES: Record<string, PawnTypeDef> = {
     icon: "🔨",
     creatureType: "pawn_builder",
     health: 50,
-    cost: { wood: 10, stone: 5 },
+    cost: { wood: 8, stone: 4 },
+    foodUpkeep: 1,
     maxCount: 5,
     damage: 0,
     detectionRadius: 0,
@@ -218,7 +222,8 @@ export const PAWN_TYPES: Record<string, PawnTypeDef> = {
     icon: "🛡",
     creatureType: "pawn_defender",
     health: 80,
-    cost: { wood: 15, stone: 10 },
+    cost: { wood: 12, stone: 8 },
+    foodUpkeep: 2,
     maxCount: 3,
     damage: 20,
     detectionRadius: 5,
@@ -233,7 +238,8 @@ export const PAWN_TYPES: Record<string, PawnTypeDef> = {
     icon: "⚔",
     creatureType: "pawn_attacker",
     health: 60,
-    cost: { wood: 20, stone: 15 },
+    cost: { wood: 16, stone: 12 },
+    foodUpkeep: 3,
     maxCount: 2,
     damage: 25,
     detectionRadius: 6,
@@ -248,7 +254,8 @@ export const PAWN_TYPES: Record<string, PawnTypeDef> = {
     icon: "🔭",
     creatureType: "pawn_explorer",
     health: 35,
-    cost: { wood: 12, stone: 8 },
+    cost: { wood: 10, stone: 6 },
+    foodUpkeep: 1,
     maxCount: 3,
     damage: 0,
     detectionRadius: 0,
@@ -305,7 +312,8 @@ export const STRUCTURE_INCOME = {
   HQ_WOOD: 2,
   /** Stone income from HQ per tick. */
   HQ_STONE: 2,
-
+  /** Food income from HQ per tick. */
+  HQ_FOOD: 2,
 } as const;
 
 /** Building placement costs (instant placement via PLACE_BUILDING). */
@@ -315,9 +323,9 @@ export const BUILDING_COSTS: Record<string, { wood: number; stone: number }> = {
 } as const;
 
 /** Per-building income awarded each structure income tick. */
-export const BUILDING_INCOME: Record<string, { wood: number; stone: number }> = {
-  farm: { wood: 1, stone: 1 },
-  factory: { wood: 2, stone: 1 },
+export const BUILDING_INCOME: Record<string, { wood: number; stone: number; food: number }> = {
+  farm: { wood: 0, stone: 0, food: 2 },
+  factory: { wood: 2, stone: 1, food: 0 },
 } as const;
 
 /** Per-building bonus to each pawn type's spawn cap (applied globally). */
@@ -346,10 +354,6 @@ export const MIN_OUTPOST_SPACING = 4;
 
 /** Pawn system constants. */
 export const PAWN = {
-  /** Wood cost to spawn a builder. */
-  BUILDER_COST_WOOD: 10,
-  /** Stone cost to spawn a builder. */
-  BUILDER_COST_STONE: 5,
   /** Builder starting health. */
   BUILDER_HEALTH: 50,
   /** Ticks to complete a build (16 ticks = 4 seconds at 4 ticks/sec). */
@@ -358,10 +362,6 @@ export const PAWN = {
   MAX_PER_PLAYER: 5,
   /** Radius to scan for build sites. */
   BUILD_SITE_SCAN_RADIUS: 8,
-  /** Wood cost to build a farm structure. */
-  FARM_COST_WOOD: 8,
-  /** Stone cost to build a farm structure. */
-  FARM_COST_STONE: 3,
   /** Builder maximum stamina pool. */
   BUILDER_MAX_STAMINA: 20,
   /** Builder stamina cost per tile moved. */
@@ -431,4 +431,10 @@ export const DAY_NIGHT = {
     { name: "dusk",  startPercent: 50, endPercent: 65 },
     { name: "night", startPercent: 65, endPercent: 100 },
   ],
+} as const;
+
+/** Starvation mechanic constants (food <= 0 penalty). */
+export const STARVATION = {
+  /** HP damage dealt to one random pawn per income tick when food <= 0. */
+  DAMAGE_PER_TICK: 5,
 } as const;

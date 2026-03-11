@@ -21,6 +21,8 @@
 
 - **GitHub Auto-Close Issue Process Gap Fixed (2026-03-12):** Four issues (#19, #31, #42, #74) had PRs merged to dev but stayed OPEN. Root cause: "Closes #N" syntax was placed in commit messages or PR titles, not PR bodies. GitHub only auto-closes on squash+merge when the close keyword appears in the PR body. Investigation found agents were ambiguous on placement. Fix: (1) Updated `.squad/copilot-instructions.md` to emphasize PR BODY as the only reliable location for auto-close keywords, (2) Added Rule 8 to `.squad/routing.md` explicitly requiring "Closes #N" in PR body, (3) Created decision file `.squad/decisions/inbox/hal-issue-auto-close.md` documenting the gap and enforcement points. Key learning: Single authoritative location (PR body) prevents process gaps — GitHub only reads PR body for squash merges, regardless of commit message content.
 
+- **Footer Feature UI Scoped (2026-03-13):** Issue #150 requests footer with version (from root package.json v0.1.6), published date, and link to submit issues. Research found: (1) Client HTML is flex-centered with game wrapper + HUD panel; footer naturally sits below in document flow. (2) No existing footer infrastructure. (3) Build-time injection via Vite is the minimal approach (version from package.json, date from git commit, link hardcoded to GitHub issues). Decision: This is client-side UI work — assigned to Gately. Key learning: Client structure is flex-based with centered game wrapper, making footer placement straightforward (no grid/absolute positioning needed). Build-time injection avoids runtime lookups and keeps the frontend lean.
+
 
 
 - **Pawn Builder Architecture proposed (2026-03-04):** dkirby-ms rejected all conquest mechanics (Influence Flooding, Resource Pressure, Creature Siege, Shape Overlap Invasion) in favor of autonomous pawn-based expansion. Architected full builder system: pawns reuse CreatureState schema (creatureType="builder", ownerID=player.id — same pattern as removed Phase B worker), 3-state FSM (IDLE→SEEK_SITE→BUILDING), 1×1 structures claim single tiles, builders spawned at HQ for 5W+5S cost. Direct shape placement removed — player role shifts from "Tetris player" to "commander" (spawn pawns, manage economy). PawnTypeDef registry enables future pawn types (gatherer, scout, soldier). MVP: ~255 lines added, ~200 removed, 2–3 days. Key trade-off: no rally points in MVP (builders pick their own targets). Deferred: multi-tile structures, pawn upgrades, rally points, population caps. Filed to `.squad/decisions/inbox/hal-pawn-builder-architecture.md`.
@@ -1094,3 +1096,25 @@ Used Gemini 3 Pro for this review task to leverage an alternate model for indepe
 - **Verdict:** Approved.
 - **Analysis:** Smart use of ray-casting ("frontier scan") to solve the "local minimum" problem where explorers got stuck in owned territory.
 - **Note:** Implementation is efficient enough (O(radius) per tick).
+
+### Footer Feature Research & Handoff (#150)
+- **Task:** Research and scope footer UI placement for game version, build date, and issues link
+- **Outcome:** Recommended Vite build-time injection approach; assigned implementation to Gately
+- **Analysis:** Client HTML uses flex-centered layout; footer naturally sits below game wrapper. No grid/absolute positioning needed.
+- **Decision:** Build-time injection via Vite `define` for version (package.json) and date. Minimal overhead.
+- **Handoff:** Relabeled issue from squad:hal to squad:gately; removed go:needs-research label.
+
+### PR #151 Review (Footer Implementation)
+- **Verdict:** Approved.
+- **Implementation:** Gately added footer `<div>` in index.html; Vite config exposes `__VERSION__` and `__BUILD_DATE__`; main.ts populates footer on startup.
+- **Quality:** Non-intrusive; no changes to game render or HUD. All 877 tests pass.
+- **Merge:** PR #151 merged to dev (squash). Issue #150 advanced to stage:ready-for-uat.
+
+### Food Economy Design (#21)
+- **Task:** Design food as third resource type with unit allowance mechanic
+- **Audit:** Current economy has wood/stone only. HQ gives 2W/2S per 10s tick. Farm gives 1W/1S. Pawn spawn costs range 10-20W, 5-15S.
+- **Design:** Food = unit allowance. Each pawn costs food per income tick (builder/explorer: 1, defender: 2, attacker: 3). Farms repurposed to produce food (2/tick) instead of wood/stone. HQ gives 2 food/tick passive. Starting food: 50. Starvation at food ≤ 0 blocks spawning + deals 5 HP/tick to random pawn.
+- **Rebalance:** Pawn spawn costs reduced ~20% (wood/stone) since food adds ongoing cost. Enemy base rewards now include food (5-10).
+- **Balance check:** Early game break-even with 2 builders + HQ income. Mid game balanced with 3 farms + 5 units. Max army (13 units) needs 9 farms — correct investment tension.
+- **Scope cuts:** No food tiles, no granary, no food trading, no food upgrades. CPU food AI is automatic via spawnPawnCore check.
+- **Handoff:** Spec at `.squad/decisions/inbox/hal-food-economy-design.md`. Labeled for Pemulis (server) + Gately (client).

@@ -131,8 +131,9 @@ export function tickCombat(
           if (player) {
             player.wood += baseDef.reward.wood;
             player.stone += baseDef.reward.stone;
+            player.food += baseDef.reward.food;
             room.broadcast?.("game_log", {
-              message: `${baseDef.name} destroyed! +${baseDef.reward.wood}W +${baseDef.reward.stone}S`,
+              message: `${baseDef.name} destroyed! +${baseDef.reward.wood}W +${baseDef.reward.stone}S +${baseDef.reward.food}F`,
               type: "combat",
             });
           }

@@ -13,6 +13,7 @@ export class HudDOM {
   private territoryCount: HTMLElement;
   private invWood: HTMLElement;
   private invStone: HTMLElement;
+  private invFood: HTMLElement;
   private creatureCounts: HTMLElement;
   private dayPhaseDisplay: HTMLElement;
 
@@ -21,6 +22,7 @@ export class HudDOM {
   private builderCountEl: HTMLElement;
   private currentWood = 0;
   private currentStone = 0;
+  private currentFood = 0;
   private currentBuilderCount = 0;
 
   // Combat panel
@@ -57,6 +59,7 @@ export class HudDOM {
     this.territoryCount = document.getElementById('territory-count-val')!;
     this.invWood = document.getElementById('inv-wood')!;
     this.invStone = document.getElementById('inv-stone')!;
+    this.invFood = document.getElementById('inv-food')!;
     this.creatureCounts = document.getElementById('creature-counts')!;
     this.dayPhaseDisplay = document.getElementById('day-phase-display')!;
 
@@ -91,6 +94,7 @@ export class HudDOM {
     const builderDef = PAWN_TYPES['builder'];
     if (!builderDef) return;
     if (this.currentWood < builderDef.cost.wood || this.currentStone < builderDef.cost.stone) return;
+    if (this.currentFood <= 0) return;
     if (this.currentBuilderCount >= builderDef.maxCount) return;
     this.room.send('spawn_pawn', { pawnType: 'builder' });
   }
@@ -101,6 +105,7 @@ export class HudDOM {
     const def = PAWN_TYPES[pawnType];
     if (!def) return;
     if (this.currentWood < def.cost.wood || this.currentStone < def.cost.stone) return;
+    if (this.currentFood <= 0) return;
     let count: number;
     switch (pawnType) {
       case 'defender': count = this.currentDefenderCount; break;
@@ -158,33 +163,34 @@ export class HudDOM {
   /** Update spawn button enabled/disabled state. */
   private updateSpawnButton(): void {
     const cap = this.currentCapBonus;
+    const starving = this.currentFood <= 0;
 
     const builderDef = PAWN_TYPES['builder'];
     const canAfford = builderDef
       ? this.currentWood >= builderDef.cost.wood && this.currentStone >= builderDef.cost.stone
       : false;
     const underCap = builderDef ? this.currentBuilderCount < builderDef.maxCount + cap : false;
-    this.spawnBuilderBtn.disabled = !canAfford || !underCap;
+    this.spawnBuilderBtn.disabled = !canAfford || !underCap || starving;
 
     // Defender button
     const defDef = PAWN_TYPES['defender'];
     if (defDef) {
       const canAffordDef = this.currentWood >= defDef.cost.wood && this.currentStone >= defDef.cost.stone;
-      this.spawnDefenderBtn.disabled = !canAffordDef || this.currentDefenderCount >= defDef.maxCount + cap;
+      this.spawnDefenderBtn.disabled = !canAffordDef || this.currentDefenderCount >= defDef.maxCount + cap || starving;
     }
 
     // Attacker button
     const atkDef = PAWN_TYPES['attacker'];
     if (atkDef) {
       const canAffordAtk = this.currentWood >= atkDef.cost.wood && this.currentStone >= atkDef.cost.stone;
-      this.spawnAttackerBtn.disabled = !canAffordAtk || this.currentAttackerCount >= atkDef.maxCount + cap;
+      this.spawnAttackerBtn.disabled = !canAffordAtk || this.currentAttackerCount >= atkDef.maxCount + cap || starving;
     }
 
     // Explorer button
     const expDef = PAWN_TYPES['explorer'];
     if (expDef) {
       const canAffordExp = this.currentWood >= expDef.cost.wood && this.currentStone >= expDef.cost.stone;
-      this.spawnExplorerBtn.disabled = !canAffordExp || this.currentExplorerCount >= expDef.maxCount + cap;
+      this.spawnExplorerBtn.disabled = !canAffordExp || this.currentExplorerCount >= expDef.maxCount + cap || starving;
     }
 
     // Building buttons
@@ -247,11 +253,13 @@ export class HudDOM {
           const score = (player['score'] as number) ?? 0;
           this.territoryCount.textContent = String(score);
 
-          // Inventory (wood & stone only)
+          // Inventory (wood, stone & food)
           this.currentWood = (player['wood'] as number) ?? 0;
           this.currentStone = (player['stone'] as number) ?? 0;
+          this.currentFood = (player['food'] as number) ?? 0;
           this.invWood.textContent = String(this.currentWood);
           this.invStone.textContent = String(this.currentStone);
+          this.invFood.textContent = String(this.currentFood);
           this.updateSpawnButton();
         });
       }

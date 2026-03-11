@@ -2074,3 +2074,37 @@ Reused `createRoomWithMap()` + `joinPlayer()` + `addBuilder()` + `tickAI()` help
 - Paired with Gately PR #134 (outpost structure fix)
 - All 836 tests passing; no blockers
 
+
+## Food Economy Tests (Issue #21)
+
+**Date:** 2025-07-24
+**File:** `server/src/__tests__/food-economy.test.ts`
+**Test count:** 25 tests across 11 describe blocks
+
+### Coverage
+
+Written against Hal's food economy design spec (`hal-food-economy-design.md`). Tests validate:
+- Starting food (50), HQ food income (2/tick), farm food income (2/tick, no wood/stone)
+- Factory produces no food, food upkeep per pawn type (builder:1, explorer:1, defender:2, attacker:3)
+- Net food calculation with mixed army, spawn blocked at food ≤ 0
+- Starvation damage (5 HP per tick to random pawn at food ≤ 0), negative food debt
+- Rebalanced spawn costs (builder 8W/4S, defender 12W/8S, attacker 16W/12S, explorer 10W/6S)
+- Enemy base food rewards (raider:5, hive:5, fortress:10)
+
+### Learnings
+
+- Tests written in parallel with Pemulis implementation on `squad/21-food-resource`; new file avoids merge conflicts
+- Imports new constants: `STARVATION`, `STRUCTURE_INCOME.HQ_FOOD`, `PAWN_TYPES[x].foodUpkeep`, `BUILDING_INCOME.farm.food`
+- `addPawn()` helper manually creates creatures without going through spawnPawnCore — useful for testing income/upkeep without spawn validation
+- `handleSpawnPawn()` is the client-facing handler (takes client + message), while `spawnPawnCore()` is internal
+- Farm income test uses `toBeGreaterThanOrEqual` to tolerate upkeep deduction order; constant-value assertions are strict
+
+### Review Fix Session (PR #153 feedback from Hal)
+
+Fixed 3 issues flagged by Hal's review on the food economy PR:
+
+1. **Starvation logic bug** — `GameRoom.ts` starvation check now filters for `c.health > 0` before selecting a random pawn to damage. Dead pawns awaiting cleanup are skipped.
+2. **Spawn button upkeep indicators** — Added `+N🍖` inline labels and `title` tooltips to all 4 spawn buttons in `client/index.html` showing per-tick food upkeep cost.
+3. **Legacy constants cleanup** — Removed stale `BUILDER_COST_WOOD`, `BUILDER_COST_STONE`, `FARM_COST_WOOD`, `FARM_COST_STONE` from `PAWN` object. Updated `builderAI.ts` to use `BUILDING_COSTS.farm.*` and tests (`pawnBuilder.test.ts`, `gameLog.test.ts`) to use `PAWN_TYPES.builder.cost.*`.
+
+All 903 tests pass. Committed as `b070b15` on `squad/21-food-resource`.
