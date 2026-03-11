@@ -210,7 +210,7 @@ export class GridRenderer {
       this.claimingTiles.delete(key);
       overlay.alpha = 1.0;
       const isLocal = ownerID === this.localPlayerId;
-      const color = isLocal ? 0xffd700 : 0xe6194b;
+      const color = isLocal ? 0xffd700 : parseColor(this.playerColors.get(ownerID) ?? '#e6194b');
 
       // HQ territory gets a subtle fill to visually distinguish from expansion territory
       if (isHQTerritory) {
