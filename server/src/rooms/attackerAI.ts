@@ -130,14 +130,28 @@ export function stepAttacker(
   }
 }
 
-/** Find nearest enemy base or enemy mobile. Prefers bases. */
+/** Find nearest enemy base or enemy mobile. Prefers bases. Deprioritizes targets
+ *  already pursued by another same-owner attacker to encourage target spreading. */
 function findNearestEnemyTarget(
   creature: CreatureState,
   state: GameState,
   detectionRadius: number,
 ): { x: number; y: number; id: string } | null {
+  // Collect positions already pursued by other same-owner attackers
+  const claimedKeys = new Set<string>();
+  state.creatures.forEach((other) => {
+    if (other.id === creature.id) return;
+    if (other.pawnType !== "attacker") return;
+    if (other.ownerID !== creature.ownerID) return;
+    if (other.targetX < 0 || other.targetY < 0) return;
+    if (other.currentState !== "move_to_target" && other.currentState !== "attacking") return;
+    claimedKeys.add(`${other.targetX},${other.targetY}`);
+  });
+
   let nearestBase: { x: number; y: number; id: string; dist: number } | null = null;
   let nearestMobile: { x: number; y: number; id: string; dist: number } | null = null;
+  let nearestClaimedBase: { x: number; y: number; id: string; dist: number } | null = null;
+  let nearestClaimedMobile: { x: number; y: number; id: string; dist: number } | null = null;
 
   state.creatures.forEach((other) => {
     if (other.id === creature.id || other.health <= 0) return;
@@ -147,20 +161,33 @@ function findNearestEnemyTarget(
     // Only consider targets within detection radius
     if (dist > detectionRadius) return;
 
+    const claimed = claimedKeys.has(`${other.x},${other.y}`);
+
     if (isEnemyBase(other.creatureType)) {
-      if (!nearestBase || dist < nearestBase.dist) {
-        nearestBase = { x: other.x, y: other.y, id: other.id, dist };
+      if (claimed) {
+        if (!nearestClaimedBase || dist < nearestClaimedBase.dist) {
+          nearestClaimedBase = { x: other.x, y: other.y, id: other.id, dist };
+        }
+      } else {
+        if (!nearestBase || dist < nearestBase.dist) {
+          nearestBase = { x: other.x, y: other.y, id: other.id, dist };
+        }
       }
     } else if (isEnemyMobile(other.creatureType)) {
-      if (!nearestMobile || dist < nearestMobile.dist) {
-        nearestMobile = { x: other.x, y: other.y, id: other.id, dist };
+      if (claimed) {
+        if (!nearestClaimedMobile || dist < nearestClaimedMobile.dist) {
+          nearestClaimedMobile = { x: other.x, y: other.y, id: other.id, dist };
+        }
+      } else {
+        if (!nearestMobile || dist < nearestMobile.dist) {
+          nearestMobile = { x: other.x, y: other.y, id: other.id, dist };
+        }
       }
     }
   });
 
-  // Prefer bases over mobiles
-  if (nearestBase) return nearestBase;
-  return nearestMobile;
+  // Prefer unclaimed targets, then fall back to already-claimed ones
+  return nearestBase ?? nearestMobile ?? nearestClaimedBase ?? nearestClaimedMobile;
 }
 
 /** Find a creature at the given tile position. */

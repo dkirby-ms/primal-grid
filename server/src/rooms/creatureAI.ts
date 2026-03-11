@@ -266,23 +266,62 @@ function wanderRandom(creature: CreatureState, state: GameState): boolean {
   return false;
 }
 
-/** Greedy Manhattan movement toward target. Returns true if creature moved. */
+/** Greedy Manhattan movement toward target. Returns true if creature moved.
+ *  Pawns avoid stacking on tiles occupied by same-owner pawns when possible. */
 export function moveToward(creature: CreatureState, tx: number, ty: number, state: GameState): boolean {
   const dx = Math.sign(tx - creature.x);
   const dy = Math.sign(ty - creature.y);
 
   // Try primary axis first (larger delta), then secondary
   const candidates = getCandidateMoves(dx, dy);
+
+  const avoidFriendly = creature.pawnType !== "";
+  let fallbackX = -1;
+  let fallbackY = -1;
+
   for (const [mx, my] of candidates) {
     const nx = creature.x + mx;
     const ny = creature.y + my;
-    if (isTileOpenForCreature(state, creature, nx, ny)) {
+    if (!isTileOpenForCreature(state, creature, nx, ny)) continue;
+
+    if (!avoidFriendly) {
+      creature.x = nx;
+      creature.y = ny;
+      return true;
+    }
+
+    // For pawns: save first valid move as fallback
+    if (fallbackX < 0) { fallbackX = nx; fallbackY = ny; }
+
+    // Prefer tiles without a friendly pawn
+    if (!hasFriendlyPawnAt(state, creature, nx, ny)) {
       creature.x = nx;
       creature.y = ny;
       return true;
     }
   }
+
+  // All valid tiles had a friendly pawn — take the fallback anyway
+  if (avoidFriendly && fallbackX >= 0) {
+    creature.x = fallbackX;
+    creature.y = fallbackY;
+    return true;
+  }
+
   return false;
+}
+
+/** Check if a same-owner pawn occupies the given tile. */
+function hasFriendlyPawnAt(state: GameState, creature: CreatureState, x: number, y: number): boolean {
+  let found = false;
+  state.creatures.forEach((other) => {
+    if (found) return;
+    if (other.id === creature.id) return;
+    if (other.pawnType === "") return;
+    if (other.ownerID !== creature.ownerID) return;
+    if (other.x === x && other.y === y) found = true;
+  });
+  return found;
 }
 
 /** Greedy Manhattan movement away from threat. Returns true if creature moved. */

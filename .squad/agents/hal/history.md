@@ -956,3 +956,39 @@ Clean, well-tested implementation. Bootstrap reconnect-check handles all edge ca
 
 Used Gemini 3 Pro for this review task to leverage an alternate model for independent validation perspective. Model performed well on procedural code review.
 
+
+### PRs Reviewed & Approved (Wave 2)
+
+| PR | Author | Issue | Work | Status |
+|----|--------|-------|------|--------|
+| #132 | Marathe | #120 | Changelog generation script | ✅ APPROVED |
+| #133 | Pemulis | #127 | Builder pawn clustering fix | 🔴 REQUEST CHANGES |
+| #134 | Gately | #125 | Outpost rendering & builder stability | ✅ APPROVED |
+
+### Review Findings
+
+- **PR #132 (Changelog)**: Excellent consolidation of shell logic. Moving to a dedicated script reduces duplication across 3 workflows.
+- **PR #133 vs #134 (Builder Logic)**: Both PRs attempted to fix builder clustering by checking `pawnType` or `creatureType`. #134 was superior because it also checked `currentState` (move_to_site/building), preventing idle builders from falsely reserving tiles. I requested changes on #133 in favor of #134.
+- **Rendering**: #134 correctly handles outpost icon visibility in fog-of-war, preventing "ghost" icons.
+
+## Learnings
+
+- Always check `currentState` when filtering pawns for reservation logic — idle pawns can have stale targets.
+- Prefer integer-based tile indices (`y * width + x`) over string coordinates (`"x,y"`) for performance in tight loops.
+
+### PRs Reviewed & Approved (Wave 3)
+
+| PR | Author | Issue | Work | Status |
+|----|--------|-------|------|--------|
+| #129 | Marathe | #122 | Stage label swap automation (dev→uat) | ✅ APPROVED |
+| #130 | Gately | #128 | Fix phantom buildings in fog-of-war | ✅ APPROVED |
+| #131 | Pemulis | #126 | Fix map size timeout for non-128x128 maps | ✅ APPROVED |
+
+### Review Findings
+
+- **PR #129 (Stage Labels)**: Clean job split with branch conditions. Correctly handles label removal (404-safe) and addition. Added `contents: read` permission for checkout — appropriate.
+- **PR #130 (Phantom Buildings)**: Surgical two-line fix. Hides building icons on visible→explored transition and clears stale fog silhouette icons. Good root-cause analysis in PR description. No tests needed — rendering layer.
+- **PR #131 (Map Size Timeout)**: Three-pronged fix (buffer, error handling, timeout). Encoder buffer increase from 768KB to 4MB is proportional to 4x tile count. Try-catch in LobbyRoom uses existing `sendError` pattern. Tests cover 64×64 and 256×256 with correctness + perf ceilings. `package-lock.json` changes are formatting-only (version field relocation).
+
+- Encoder.BUFFER_SIZE now at 4 MB — ceiling for 256×256 maps. If larger maps are ever introduced, this needs revisiting.
+- Client-side game creation timeout is now 30s (was 15s). LobbyScreen.ts line 216.

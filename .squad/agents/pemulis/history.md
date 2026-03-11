@@ -1941,3 +1941,14 @@ Classic "greedy allocation without coordination" pattern. Multiple agents runnin
 - Steeply's 19 anticipatory tests for pawn clustering validation
 - Gately's concurrent outpost fix (shares `getReservedTargets()` pattern)
 
+
+### Pawn Anti-Clustering — Root Cause Fix (2026-03-12)
+
+- **Problem:** PR #134's `getReservedTiles()` prevented same-tile builder targeting but clustering persisted. Four deeper root causes identified:
+  1. **Builder proximity clustering:** `findBuildSite` only excluded exact-tile matches. Builders at similar positions picked adjacent tiles, visually clustering. Fixed with `MIN_BUILDER_SEPARATION = 3` as soft priority in site scoring via `getReservedTargets()`.
+  2. **Movement stacking:** `moveToward()` had no collision avoidance — multiple pawns stacked on same tile. Fixed with `hasFriendlyPawnAt()` soft preference (pawns prefer unoccupied tiles, fall back if all occupied). Wildlife unaffected.
+  3. **Attacker convergence:** `findNearestEnemyTarget` returned same target for all attackers. Fixed with claimed-target tracking — prefer unclaimed targets, fall back to claimed.
+  4. **Explorer convergence:** `wanderExplore` had frontier bias but no mutual avoidance. Fixed with proximity repulsion scoring (tiles near other explorers get lower score).
+- **Architecture pattern:** Soft-preference anti-clustering (never hard-blocks movement, prevents deadlocks). All 790 tests pass.
+- **Key files:** `builderAI.ts`, `creatureAI.ts`, `attackerAI.ts`, `explorerAI.ts`
+- **Branch:** `squad/127-fix-pawn-clustering-root-causes`
