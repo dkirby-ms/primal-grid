@@ -1,7 +1,7 @@
 import { test, expect } from '../fixtures/game.fixture.js';
 import { waitForPlayerCount } from '../helpers/player.helper.js';
 import { getPlayerState } from '../helpers/state.helper.js';
-import { getTile, getTilesWhere } from '../helpers/tile.helper.js';
+import { getTile } from '../helpers/tile.helper.js';
 import { takeSnapshot, waitTicksAndSnapshot, diffSnapshots } from '../helpers/snapshot.helper.js';
 import {
   installMessageRecorder,
@@ -12,14 +12,6 @@ import {
 } from '../helpers/websocket.helper.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────
-
-/** Get the Colyseus sessionId for this client. */
-async function getSessionId(page: import('@playwright/test').Page): Promise<string> {
-  return page.evaluate(() => {
-    const room = (window as unknown as { __ROOM__?: any }).__ROOM__;
-    return room?.sessionId ?? '';
-  });
-}
 
 /**
  * Find an owned tile suitable for building placement:
@@ -98,7 +90,7 @@ async function placeBuilding(
 
 test.describe('Building Placement — Success', () => {
   test('player can place a farm on owned territory', async ({ playerOne }) => {
-    const { page, playerName } = playerOne;
+    const { page } = playerOne;
     await waitForPlayerCount(page, 1);
     await waitForResources(page, 12, 6);
 
@@ -468,7 +460,7 @@ test.describe('Building Placement — Rejection', () => {
   });
 
   test('cannot place when insufficient resources', async ({ playerOne }) => {
-    const { page, playerName } = playerOne;
+    const { page } = playerOne;
     await waitForPlayerCount(page, 1);
     await waitForResources(page, 12, 6);
 

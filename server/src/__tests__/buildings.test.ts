@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { GameState, PlayerState, TileState } from "../rooms/GameState.js";
+import { GameState, PlayerState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import {
   BUILDING_COSTS,
@@ -9,8 +9,6 @@ import {
   TileType,
   isWaterTile,
 } from "@primal-grid/shared";
-import type { PlaceBuildingPayload } from "@primal-grid/shared";
-
 // ── Test types ──────────────────────────────────────────────────────
 
 interface MockClient {

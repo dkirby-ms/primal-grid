@@ -1863,3 +1863,14 @@ See `.squad/decisions.md` for full triage document, dependency graph, risk mitig
 - Used `Record<string, { wood: number; stone: number }>` for BUILDING_COSTS/INCOME to make adding new building types trivial
 
 **Tests:** 716/716 passing, 0 regressions. No new tests added — that's Parker's domain per charter.
+
+### Lint Cleanup — Issue #117 (2026-03-12)
+
+- **PR:** #118 on `squad/117-lint-cleanup` branch
+- **Scope:** Fixed all 56 ESLint errors across 8 files (client, server, shared, e2e). Zero lint config changes.
+- **Patterns found:**
+  - Unused imports are the most common lint issue (8 instances across 6 files) — likely from incremental refactoring where exports get removed but imports linger.
+  - `reconnection.test.ts` was the worst offender (41 `no-explicit-any` errors) because it mocks Colyseus Room internals. Fixed with typed helper functions (`asClient()`, `roomInternals()`) and a `RoomTestInternals` interface rather than file-level eslint-disable.
+  - The `as unknown as Type` pattern (already used in cpuPlayerAI.test.ts) is the established codebase convention for test mocking of Colyseus types.
+- **Key files touched:** `client/src/ui/LobbyScreen.ts`, `server/src/rooms/LobbyState.ts`, `server/src/rooms/cpuPlayerAI.ts`, `server/src/__tests__/reconnection.test.ts`, `server/src/__tests__/buildings.test.ts`, `server/src/__tests__/chat.test.ts`, `server/src/__tests__/cpuPlayerAI.test.ts`, `e2e/tests/buildings.spec.ts`
+- **Tests:** 738/738 passing after changes.

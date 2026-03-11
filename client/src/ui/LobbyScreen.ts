@@ -10,7 +10,7 @@ import type {
   CreateGamePayload,
 } from "@primal-grid/shared";
 import {
-  CREATE_GAME, JOIN_GAME, LEAVE_GAME, START_GAME,
+  CREATE_GAME, JOIN_GAME, LEAVE_GAME,
   GAME_LIST, GAME_UPDATED, GAME_REMOVED, GAME_JOINED,
   GAME_STARTED, LOBBY_ERROR,
 } from "@primal-grid/shared";
@@ -235,8 +235,6 @@ export class LobbyScreen {
       cancelBtn.disabled = !enabled;
     }
     if (enabled) {
-      // Reset form visibility
-      const form = document.getElementById("lobby-create-form");
       const gameNameInput = document.getElementById("lobby-game-name") as HTMLInputElement | null;
       if (gameNameInput) gameNameInput.value = "";
     }
