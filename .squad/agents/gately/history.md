@@ -1419,3 +1419,11 @@ When adding new structure types: check ALL paths — visible tile icons, fog sil
 - Steeply's 23 anticipatory tests for outpost stability
 - Pemulis's concurrent pawn clustering fix (shares `getReservedTargets()` pattern)
 
+
+### Non-Local Pawn Rendering Fix — #136 (2026-03-11)
+
+- **Root cause:** `isLocalBuilder` flag in `CreatureRenderer.getIcon()` returned `'⬜'` for non-local builders, and `drawStateBackground()` used `0x888888` gray for their background. This made all non-local player builders appear as gray blocks.
+- **Fix:** Removed the `isLocalBuilder` concept entirely. All pawn types always render their correct type icon. Background colors now use the owner's player color from the room state (parsed via `playerColors` map), with a subtle border stroke on non-local pawns for visual distinction.
+- **Key pattern:** `CreatureRenderer` now self-caches player colors from `state['players']` in `onStateChange`, keeping it decoupled from `GridRenderer` which also tracks player colors.
+- **Files:** `client/src/renderer/CreatureRenderer.ts`
+- **PR:** #138
