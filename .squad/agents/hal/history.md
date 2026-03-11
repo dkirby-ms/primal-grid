@@ -354,3 +354,87 @@ Hal architected pawn-based territory expansion system per user directive (dkirby
 
 **Next Steps:** Await user approval to begin implementation (Bicep changes → workflow creation → one-time UAT deployment → testing → documentation).
 
+
+---
+
+### Issue #154 — Outpost Upgrade System Design (2025-01-24)
+
+**Scope:** Design spec for outpost upgrade feature — scoping, constants, logic, UI/UX.
+
+**Design Decisions:**
+1. **Single-tier upgrade (v1):** Regular outpost → upgraded outpost. No multi-tier complexity.
+2. **Cost:** 40 wood + 30 stone (significant late-game investment, ~4× farm cost).
+3. **Attack range:** 5 tiles (Manhattan) — matches defender detection radius, prevents OP coverage.
+4. **Damage:** 12 per attack (kills swarm in 2 hits, raider in 4 hits — effective but not OP).
+5. **Attack interval:** 8 ticks (2 sec) — same as TILE_ATTACK_COOLDOWN_TICKS, slower than pawns.
+6. **Targeting:** Closest enemy (Manhattan distance) — simplest algorithm, predictable behavior.
+7. **UI trigger:** Right-click outpost → upgrade modal — keeps HUD clean, follows "interact with structure" pattern.
+8. **Visual:** Icon change 🗼 → 🏹 — clear ranged attack signal, minimal rendering change.
+
+**Constants Pattern:**
+```typescript
+export const OUTPOST_UPGRADE = {
+  COST_WOOD: 40,
+  COST_STONE: 30,
+  ATTACK_RANGE: 5,
+  DAMAGE: 12,
+  ATTACK_COOLDOWN_TICKS: 8,
+} as const;
+```
+Follows existing pattern: `BUILDING_COSTS`, `STRUCTURE_INCOME`, `WATCHTOWER`, `FOG_OF_WAR`.
+
+**Schema Change:**
+- Add `upgraded: boolean = false` to `TileState` (Colyseus schema syncs to client automatically).
+
+**Server Logic:**
+1. **Upgrade handler:** `handleUpgradeOutpost(client, message)` validates ownership, structure type, resources → deduct cost, set `tile.upgraded = true`.
+2. **Attack tick loop:** `tickOutpostAttacks()` runs every 8 ticks, scans upgraded outposts, finds closest enemy in range, deals damage.
+3. **Helper:** `findClosestEnemyInRange(x, y, range)` iterates creatures, filters enemy mobiles, returns closest by Manhattan.
+
+**Client Rendering:**
+- Update `STRUCTURE_ICONS['outpost_upgraded'] = '🏹'`
+- `updateBuildingIcon()` checks `tile.upgraded` flag and picks icon key accordingly.
+
+**Client UI:**
+- Right-click handler in `InputHandler.ts` detects owned regular outpost → shows upgrade modal.
+- Modal shows cost, validates resources, sends `UPGRADE_OUTPOST` message on confirm.
+
+**Message Protocol:**
+```typescript
+export const UPGRADE_OUTPOST = "UPGRADE_OUTPOST";
+export interface UpgradeOutpostPayload { x: number; y: number; }
+```
+
+**Deferred (v2+):**
+- Multi-tier upgrades
+- Target priority options (lowest HP, attackers first)
+- Attack visual effects (projectiles, muzzle flash)
+- Sound effects
+- Outpost durability (enemies damaging structures)
+- Upgrade other buildings
+
+**Key Files:**
+- `shared/src/constants.ts` — Upgrade costs, range, damage, tick intervals follow existing patterns (BUILDING_COSTS, WATCHTOWER, COMBAT).
+- `server/src/rooms/GameRoom.ts` — Building placement handler pattern (`handlePlaceBuilding`) used for upgrade handler; structure income tick pattern used for attack tick loop.
+- `server/src/rooms/GameState.ts` — TileState schema with @type decorators for Colyseus sync.
+- `server/src/rooms/combat.ts` — Combat tick pattern: cooldown tracking, adjacency checks, damage application. Outpost attacks follow same tick interval pattern.
+- `client/src/renderer/GridRenderer.ts` — Building icon rendering: `STRUCTURE_ICONS` map, `updateBuildingIcon()` checks structure type and sets Text emoji.
+- `client/src/ui/HudDOM.ts` — Building placement pattern: button triggers placement mode, sends `PLACE_BUILDING` message. Upgrade uses right-click modal instead (no HUD button).
+
+**Codebase Patterns Observed:**
+- **Constants:** Grouped in const objects with `as const`, SCREAMING_SNAKE_CASE keys, descriptive comments with tick→time conversions.
+- **Tick loops:** `if (state.tick % INTERVAL_TICKS !== 0) return;` guard at top, then iterate state and apply logic.
+- **Validation:** Handler checks player exists → resource ownership → structure type → resource sufficiency → deduct and apply.
+- **Emoji rendering:** Text objects with fontSize 14-16, anchor (0.5, 0.5), positioned at tile center, added to dedicated container.
+- **Right-click for structure interaction:** Natural extension of existing input patterns (left-click for pawn orders, right-click for structure actions).
+
+**Architecture Notes:**
+- **Colyseus state sync:** @type decorators on schema fields auto-sync to clients. No manual serialization needed.
+- **Tick-based simulation:** 4 ticks/sec. All timing constants expressed in ticks with human-readable comments (e.g., "40 ticks = 10 seconds at 4 ticks/sec").
+- **Combat cooldowns:** Server-side Map tracks cooldowns by creature ID, not synced to client. Same pattern applies to outpost attacks.
+- **Building rendering layers:** HQ has dedicated renderer, other buildings (farm, factory, outpost) use shared `buildingContainer` with emoji Text objects.
+
+**Deliverable:** `.squad/decisions/inbox/hal-outpost-upgrade-design.md` (comprehensive spec, 13KB, implementation-ready).
+
+**Next Steps:** Implementer (Gately or Pemulis) can proceed directly from spec. All open questions resolved. Issue #154 ready for `go:yes` (label updated).
+

@@ -26,6 +26,8 @@
 
 Next: **2026-03-04 — Territory Control Redesign** (awaiting user mechanic selection)
 
+**Phase 6 Preparation (2026-03-11):** Hal completed design spec for Outpost Upgrade System (issue #154). Single-tier upgrade, 40W/30S cost, 5-tile attack range, 12 damage, closest-enemy targeting, 🏹 icon. Full implementation roadmap provided in `.squad/decisions.md`. You and Gately can begin Phase 6 when ready.
+
 ## Core Context
 
 **Pre-2026-03 Work Summary:**
