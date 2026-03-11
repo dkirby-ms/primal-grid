@@ -18,6 +18,10 @@ on:
         default: 'uat'
         type: string
 
+concurrency:
+  group: deploy-uat
+  cancel-in-progress: true
+
 permissions:
   id-token: write
   contents: read

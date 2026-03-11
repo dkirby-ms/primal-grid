@@ -87,6 +87,11 @@ export class GameRoom extends Room {
       this.spawnCpuPlayer(i);
     }
 
+    // Notify lobby of initial player count (includes CPU players)
+    if (this.gameId && cpuCount > 0) {
+      this.lobbyBridge?.notifyPlayerCountChanged(this.gameId, this.state.players.size);
+    }
+
     this.setSimulationInterval((_deltaTime) => {
       this.state.tick += 1;
       this.tickDayNightCycle();
@@ -221,11 +226,9 @@ export class GameRoom extends Room {
       client.send("game_log", { message: "Welcome to Primal Grid!", type: "info" });
     }
 
-    // Notify lobby of actual player count (human only)
+    // Notify lobby of player count (includes CPU players)
     if (this.gameId) {
-      const cpuCount = this.cpuPlayerIds?.size ?? 0;
-      const humanCount = this.state.players.size - cpuCount;
-      this.lobbyBridge?.notifyPlayerCountChanged(this.gameId, humanCount);
+      this.lobbyBridge?.notifyPlayerCountChanged(this.gameId, this.state.players.size);
     }
   }
 
@@ -301,10 +304,7 @@ export class GameRoom extends Room {
     this.sessionUserMap?.delete(sessionId);
 
     if (this.gameId) {
-      // Only count human players for lobby display
-      const cpuCount = this.cpuPlayerIds?.size ?? 0;
-      const humanCount = this.state.players.size - cpuCount;
-      this.lobbyBridge?.notifyPlayerCountChanged(this.gameId, Math.max(0, humanCount));
+      this.lobbyBridge?.notifyPlayerCountChanged(this.gameId, this.state.players.size);
     }
 
     // If all human players have left, dispose the room
