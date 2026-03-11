@@ -2098,3 +2098,13 @@ Written against Hal's food economy design spec (`hal-food-economy-design.md`). T
 - `addPawn()` helper manually creates creatures without going through spawnPawnCore — useful for testing income/upkeep without spawn validation
 - `handleSpawnPawn()` is the client-facing handler (takes client + message), while `spawnPawnCore()` is internal
 - Farm income test uses `toBeGreaterThanOrEqual` to tolerate upkeep deduction order; constant-value assertions are strict
+
+### Review Fix Session (PR #153 feedback from Hal)
+
+Fixed 3 issues flagged by Hal's review on the food economy PR:
+
+1. **Starvation logic bug** — `GameRoom.ts` starvation check now filters for `c.health > 0` before selecting a random pawn to damage. Dead pawns awaiting cleanup are skipped.
+2. **Spawn button upkeep indicators** — Added `+N🍖` inline labels and `title` tooltips to all 4 spawn buttons in `client/index.html` showing per-tick food upkeep cost.
+3. **Legacy constants cleanup** — Removed stale `BUILDER_COST_WOOD`, `BUILDER_COST_STONE`, `FARM_COST_WOOD`, `FARM_COST_STONE` from `PAWN` object. Updated `builderAI.ts` to use `BUILDING_COSTS.farm.*` and tests (`pawnBuilder.test.ts`, `gameLog.test.ts`) to use `PAWN_TYPES.builder.cost.*`.
+
+All 903 tests pass. Committed as `b070b15` on `squad/21-food-resource`.
