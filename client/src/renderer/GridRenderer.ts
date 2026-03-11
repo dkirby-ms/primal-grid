@@ -376,7 +376,7 @@ export class GridRenderer {
         this.tileStructures.set(tileIdx2, structureType);
         this.tileTypes.set(tileIdx2, type);
 
-        // Render building icon on visible tiles (farm, factory — not hq/outpost which have their own renderers)
+        // Render building icon on visible tiles (farm, factory, outpost — not hq which has its own renderer)
         this.updateBuildingIcon(tx, ty, structureType);
       });
 
@@ -386,6 +386,9 @@ export class GridRenderer {
           const px = prevIdx % this.mapSize;
           const py = Math.floor(prevIdx / this.mapSize);
           this.setFogState(px, py, 'explored');
+          // Hide building icon so it doesn't bleed through semi-transparent fog
+          const bIcon = this.buildingIcons.get(prevIdx);
+          if (bIcon) bIcon.visible = false;
         }
       }
       this.visibleTiles = currentVisible;
@@ -616,7 +619,7 @@ export class GridRenderer {
   /** Update or create a building icon on a visible tile. */
   private updateBuildingIcon(x: number, y: number, structureType: string): void {
     const idx = y * this.mapSize + x;
-    const isBuildingType = structureType === 'farm' || structureType === 'factory';
+    const isBuildingType = structureType === 'farm' || structureType === 'factory' || structureType === 'outpost';
 
     if (!isBuildingType) {
       // Remove icon if structure was cleared
