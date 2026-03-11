@@ -193,6 +193,7 @@ export class LobbyScreen {
     const gameNameInput = document.getElementById("lobby-game-name") as HTMLInputElement;
     const maxPlayersInput = document.getElementById("lobby-max-players") as HTMLSelectElement;
     const mapSizeInput = document.getElementById("lobby-map-size") as HTMLSelectElement;
+    const cpuPlayersInput = document.getElementById("lobby-cpu-players") as HTMLSelectElement;
 
     const gameName = gameNameInput.value.trim() || gameNameInput.placeholder || "My Colony";
 
@@ -200,6 +201,7 @@ export class LobbyScreen {
       name: gameName,
       maxPlayers: parseInt(maxPlayersInput.value, 10) || 8,
       mapSize: parseInt(mapSizeInput.value, 10) || 128,
+      cpuPlayers: parseInt(cpuPlayersInput.value, 10) || 0,
     };
 
     this.isCreatingGame = true;

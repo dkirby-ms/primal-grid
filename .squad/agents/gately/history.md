@@ -1310,3 +1310,38 @@ See `.squad/decisions.md` Initiative Triage & Execution Plan (2026-03-09) for fu
 - **Token stored under `primal-grid-token`** in localStorage. Wrapped in try/catch for private browsing compatibility.
 - **Key file:** `client/src/network.ts` — auth helpers (`ensureToken`, `createGuestSession`, `loadToken`, `saveToken`, `clearToken`) + `connect()` with token flow and retry logic.
 - **PR:** #78 targeting dev.
+
+### Fix Reconnection Infinite Loop — #101 (2026-07-XX)
+
+## Learnings
+- **Colyseus SDK 0.17 auto-reconnection:** The SDK has built-in reconnection via `Room.mjs` → `retryReconnection()` with 15 retries and exponential backoff. Handlers: `onDrop` (connection lost, retrying), `onReconnect` (reconnected), `onLeave` (gave up or consented).
+- **minUptime = 5000ms:** If room drops within 5s of joining, SDK fires `onLeave` immediately without attempting auto-reconnection. This is what causes the infinite loop when our custom `onLeave` handler also tries to reconnect.
+- **Reconnection boundary:** `reconnectGameRoom()` should ONLY be called for bootstrap (page refresh with saved sessionStorage token). In-session transient disconnects are handled by the SDK's own `onDrop`/`onReconnect` cycle.
+- **Client reset on failure:** After `reconnectGameRoom()` exhausts its 5 attempts and returns null, reset the `colyseusClient` singleton (`resetClient()`) before falling through to lobby. The Client instance may be in a bad state after repeated failed reconnects.
+- **Key files:** `client/src/network.ts` (onLeave handler, reconnection logic, client singleton), `client/src/main.ts` (bootstrap flow).
+- **Test files:** `client/src/__tests__/reconnection.test.ts` (16 client tests), `server/src/__tests__/reconnection.test.ts` (14 server tests).
+
+### CPU Player Labels — Schema + UI (2026-03-11)
+
+- **isCPU schema field:** Added `@type("boolean") isCPU: boolean = false` to PlayerState in GameState.ts. Server sets it `true` in `spawnCpuPlayer()`. This is the canonical way for clients to identify CPU-controlled players — no need to parse session ID prefixes client-side.
+- **Scoreboard:** CPU players show a 🤖 emoji after their name and render at 0.75 opacity to visually distinguish them from human players. Human player still sees "(you)" suffix.
+- **Grid HQ labels:** CPU player HQ name labels on the map append " 🤖" to the display name. Computed in the state-sync loop before passing to `updateHQMarker()`.
+- **No breaking changes:** All existing tests pass (715/716 — 1 pre-existing timeout in water-depth test unrelated to this work).
+
+### Building Placement UI & Rendering — Issue #110 (2026-03-11)
+
+- **Building buttons:** Added "Buildings" HUD section between Pawns and Combat with "Build Farm (12W, 6S)" and "Build Factory (20W, 12S)" buttons. Buttons auto-disable when player can't afford them. Uses same CSS pattern as spawn buttons.
+- **Placement mode:** Clicking a build button toggles placement mode. Active button gets green highlight (`.build-btn.active`). Valid tiles show green semi-transparent overlay (alpha 0.2 fill + alpha 0.5 stroke border). ESC cancels placement. Click on valid tile sends `PLACE_BUILDING` message and exits placement mode.
+- **Client-side validation:** `GridRenderer.isValidPlacementTile()` checks: owned by local player, no existing structureType, not water/rock. Server does final validation.
+- **Building rendering:** Building icons (🌾 farm, ⚙️ factory) rendered on visible tiles via `buildingContainer` + `buildingIcons` Map keyed by tile index. Same Text + anchor pattern as HQ markers. Added `factory: '⚙️'` to STRUCTURE_ICONS for fog silhouettes.
+- **Screen-to-tile conversion:** `InputHandler.screenToTile()` uses `worldContainer.worldTransform` to invert camera pan/zoom and convert screen coords to tile coordinates. This pattern is reusable for any future click-to-tile features.
+- **Placement highlights:** Dynamic Graphics objects created on-demand in `showPlacementHighlights()`, destroyed on clear. Not pre-allocated like territory overlays — placement mode is brief and infrequent, so allocation overhead is acceptable.
+- **Wiring:** `InputHandler.setGridRenderer(grid)` called from main.ts. HudDOM fires `onPlacementModeChange` callback that InputHandler subscribes to for showing/hiding highlights.
+- **Pre-existing server test failures:** 16 server-side test failures in buildings.test.ts and water-depth.test.ts — all pre-existing from Pemulis's server code, not caused by client changes. All 29 client tests pass.
+
+### Help Screen & How to Play Documentation (Issue #113)
+
+- **HelpScreen.ts redesign:** Expanded the PixiJS help overlay from keybindings-only to a two-section panel: "⌨ CONTROLS" + "🦖 HOW TO PLAY". Panel widened from 420px to 520px. Added `SECTION_SIZE` (14px) constant for subsection headers. How-to-play rows use green labels (#66ff99) to visually distinguish from yellow keybinding labels (#ffcc00). Section header "HOW TO PLAY" uses cyan (#7ecfff) consistent with existing level/XP HUD color scheme.
+- **HOW-TO-PLAY.md:** Comprehensive gameplay guide created at repo root. Documents all building costs (Farm 12W+6S, Factory 20W+12S), pawn stats (builder/defender/attacker/explorer with costs, health, damage, detection), territory expansion rules, creature behavior, enemy bases, day/night cycle vision modifiers, XP/leveling table (7 levels), and CPU opponent info. All numbers verified against shared/src/constants.ts.
+- **README.md link:** Added "🎮 How to Play" section above Contributing, linking to HOW-TO-PLAY.md.
+- **Key pattern:** Help screen content is data-driven via `[label, description][]` tuples, making it easy to add/remove rows without touching layout code.

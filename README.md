@@ -209,6 +209,10 @@ The server runs at 4 ticks/second and processes these systems each tick:
 7. Pawn upkeep
 8. Fog of war
 
+## 🎮 How to Play
+
+New to Primal Grid? Check out the **[How to Play guide](HOW-TO-PLAY.md)** for a walkthrough of game mechanics, buildings, pawns, creatures, and strategies. You can also press `?` in-game for a quick reference.
+
 ## 🤝 Contributing
 
 Contributions are welcome! Check the [GitHub Issues](../../issues) for open tasks and bug reports. If you'd like to work on something, feel free to open an issue first to discuss the approach.

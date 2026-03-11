@@ -10,6 +10,252 @@
 **Decision:**
 
 All `git log` commands in deployment/promotion workflows now exclude `ci:`, `chore:`, and `squad:` prefixed commits from Discord changelogs.
+## 2026-03-10T18:23:36Z: Window Event Mocks Must Capture Callbacks
+
+**Author:** Steeply (Tester)  
+**Date:** 2026-03-10  
+**Context:** PR #103 review revealed that `window.addEventListener` was mocked as a no-op `vi.fn()`, silently hiding the entire `pageUnloading` code path from test coverage.
+
+**Decision:** In client-side tests that import modules registering `window.addEventListener` callbacks at module load time, the mock must capture callbacks by event name so they can be invoked in tests. A no-op mock is not acceptable — it creates invisible coverage gaps.
+
+**Pattern:**
+```typescript
+const windowEventCallbacks: Record<string, Array<(...args: unknown[]) => void>> = {};
+vi.stubGlobal('window', {
+  addEventListener: vi.fn((event: string, cb) => {
+    if (!windowEventCallbacks[event]) windowEventCallbacks[event] = [];
+    windowEventCallbacks[event].push(cb);
+  }),
+  // ...
+});
+```
+
+Reset `windowEventCallbacks` in `beforeEach` to avoid cross-test leakage.
+
+---
+
+## 2026-03-10T18:23:36Z: PR #103 Rejected — pageUnloading One-Way Flag Bug
+
+**Author:** Hal (Lead)  
+**Date:** 2026-03-10  
+**Status:** Pending remediation  
+**PR:** #103  
+**Issue:** #101
+
+### Context
+
+PR #103 introduced a `pageUnloading` flag to distinguish browser refresh (preserve reconnect token) from genuine disconnects (clear token). The `onLeave` condition `consented || !pageUnloading` is logically correct, but the flag is never reset after being set to `true`.
+
+### Problems Found
+
+1. **One-way flag:** `pageUnloading = true` in `beforeunload` is never reset. If navigation is cancelled (e.g., by a future `beforeunload` prompt), all subsequent non-consented disconnects silently skip token clearing and `'disconnected'` emission, stranding the user.
+2. **Zero test coverage:** Mock `window.addEventListener` is a no-op `vi.fn()`, preventing the `beforeunload` handler from registering. The central mechanism of the fix is untested.
+
+### Required Fixes
+
+1. Add `window.addEventListener('pageshow', () => { pageUnloading = false; })` to reset the flag after cancelled navigation or BFCache restore.
+2. Add tests that set `pageUnloading = true` before firing `onLeave` and verify token preservation.
+3. Add test that verifies `pageshow` resets the flag.
+
+### Ownership
+
+- **pageUnloading reset fix:** New implementer (Pemulis and Gately locked out per reviewer protocol)
+- **Test coverage:** Steeply (Tester)
+
+### Impact
+
+Anyone working on `client/src/network.ts` reconnection logic must understand that `pageUnloading` guards the token lifecycle during browser refresh. Tests must exercise this path.
+
+---
+
+## 2026-03-10T18:23:36Z: Reconnect Handler Registration Gap
+
+**Author:** Hal (Lead)  
+**Date:** 2026-03-10  
+**Context:** PR #103 / Issue #101 — Browser refresh drops user session  
+**Status:** Implemented with Combined Fix (Option C)
+
+### Problem
+
+After browser refresh, the reconnect succeeds at the transport level (server logs confirm "Client dropped" → "Client reconnected"), but the browser console shows:
+
+```
+@colyseus/sdk: onMessage() not registered for type 'game_log'
+```
+
+The user reports the session appears dropped despite successful reconnection.
+
+### Root Cause Analysis
+
+There is a race condition between the Colyseus SDK completing the reconnect and the client registering `onMessage` handlers.
+
+**Bootstrap reconnect flow (`main.ts:72-78`):**
+
+1. `loadReconnectToken()` — finds saved token ✅
+2. `reconnectGameRoom()` → `client.reconnect(token)` — transport reconnects
+3. **Server `onReconnect()` fires** → immediately sends `client.send("game_log", { message: "Reconnected!" })` (`GameRoom.ts:228`)
+4. **SDK receives `game_log` message** → no handler registered → **warning logged** ⚠️
+5. `client.reconnect()` Promise resolves → returns Room object
+6. `attachGameRoomHandlers(room)` runs → registers `onDrop`, `onReconnect`, `onLeave`, `onError` — **but NOT `onMessage`**
+7. `reconnectGameRoom()` returns room to `main.ts`
+8. `setupGameSession()` → `bindGameRoom(room)` → **`onMessage('game_log', ...)` finally registered** (too late)
+
+The console output confirms this timing — the SDK warning appears *between* the "Reconnection attempt 1/5" log (step 2) and the "Reconnected to game room" log (step 5):
+
+```
+network.ts:210 [network] Reconnection attempt 1/5…
+@colyseus/sdk: onMessage() not registered for type 'game_log'.    ← during client.reconnect()
+network.ts:212 [network] Reconnected to game room: iAwP_PDDM     ← after promise resolves
+```
+
+This proves the `game_log` message arrives *during* the `client.reconnect()` call, before the Promise resolves — so even registering handlers immediately after `client.reconnect()` resolves would still be too late.
+
+### What Gets Sent During `onReconnect` (Server-Side)
+
+`GameRoom.ts:223-234`:
+- `this.initPlayerView(client, player, devMode)` — restores fog-of-war visibility
+- `client.send("game_log", { message: "Reconnected!" })` — direct to client
+- `this.broadcast("game_log", { message: "X reconnected" })` — to all other clients
+
+All three happen synchronously in `onReconnect`, which fires as part of the reconnect handshake — before the client SDK resolves its `client.reconnect()` Promise.
+
+### Impact Assessment
+
+**What's lost:** The "Reconnected!" toast in the game log. This is cosmetic — the actual game state (player position, resources, territory, creatures) is synchronized via Colyseus Schema, which works independently of `onMessage`.
+
+**Why "session appears dropped":** Two possible explanations:
+
+1. **Console noise misleads the user.** The SDK warning suggests something is broken, even though the session is functional.
+2. **Camera centering may be delayed.** `bindGameRoom()` uses `r.onStateChange.once(...)` to center the camera on the player's HQ (`main.ts:166-170`). After a bootstrap reconnect, the full state may have already been synced during `client.reconnect()`. The `.once()` handler would fire on the *next* game tick rather than immediately — a brief moment where the player sees the wrong viewport, creating the impression of a dropped session.
+
+### Secondary Issue: Duplicate Handlers on In-Session Reconnect
+
+During in-session reconnects (network drops), `bindGameRoom()` is called again on the *same* Room object via the `onConnectionStatus('connected')` callback (`main.ts:216-222`). Colyseus `onMessage` is additive — each call adds another listener. After N reconnects, there are N duplicate `game_log` handlers, causing duplicate log entries. This doesn't cause the reported bug but is a code quality issue.
+
+### Fix Implemented (Option C: Combined Fix)
+
+1. **Server:** Defer `game_log` in `GameRoom.onReconnect()` by one tick — eliminates the primary race.
+2. **Client:** In `bindGameRoom()`, replace `r.onStateChange.once(...)` with an immediate check: if the player's state already exists, center the camera immediately instead of waiting for the next state change.
+3. **Client:** Clean up duplicate handler registration — `bindGameRoom()` should remove previous `onMessage` listeners before adding new ones (or use a flag to skip re-registration on the same Room).
+
+**Files changed:**
+- `server/src/rooms/GameRoom.ts` — defer `game_log` in `onReconnect` (1 change)
+- `client/src/main.ts` — fix `onStateChange.once` to handle pre-synced state; deduplicate handlers (2 changes)
+
+### Results
+
+- No `onMessage() not registered` warning in console after browser refresh reconnect ✅
+- Camera centers on player HQ immediately after reconnect ✅
+- No duplicate `game_log` entries after in-session reconnects ✅
+- All 692 tests pass ✅
+- 2 regression tests added by Steeply confirm `onLeave` behavior ✅
+
+---
+
+## 2026-03-10T16:34:04Z: Single-Layer Reconnection Strategy (Issue #101)
+
+**Author:** Gately (Game Dev)  
+**Date:** 2026-03-10  
+**Status:** Implemented  
+**PR:** #103
+
+### Context
+
+The Colyseus SDK 0.17 has built-in auto-reconnection (15 retries, exponential backoff) via `onDrop`/`onReconnect` handlers. Our custom `onLeave` handler was also calling `reconnectGameRoom()`, creating an infinite drop→reconnect→drop loop after browser refresh.
+
+### Decision
+
+1. **SDK handles in-session transient disconnects.** The `onDrop`/`onReconnect` callbacks update UI status. `onLeave` means the session is truly over — clear the reconnect token and return to lobby.
+2. **`reconnectGameRoom()` is bootstrap-only.** It's called once on page load when a sessionStorage token exists, creating a fresh connection from scratch. It is never called from `onLeave`.
+3. **Reset client singleton after failed bootstrap reconnect.** `resetClient()` clears `colyseusClient` before falling through to lobby to avoid stale WebSocket state.
+
+### Impact
+
+- No duplicate reconnection attempts — eliminates the infinite loop
+- Cleaner separation: SDK owns transport-level reconnection, our code owns application-level session recovery (bootstrap)
+- `onLeave` with non-consented codes now clears the token and emits `'disconnected'`, which triggers the lobby return flow in `main.ts`
+- All 692 tests pass; 2 regression tests added by Steeply confirm `onLeave` behavior
+
+---
+
+## 2026-03-10T15:16:56Z: User Directive — PR Review Comments Visibility
+
+**Author:** dkirby-ms (via Copilot)  
+**Date:** 2026-03-10  
+**Status:** Active
+
+### Directive
+
+After any code review, **Hal must post the review feedback as a comment on the PR** (using `gh pr comment`). Reviews should not only happen internally — they must be visible on the PR itself.
+
+### Rationale
+
+Transparency with the team and stakeholders. All review feedback is recorded on the PR where the work lives, making decision-making visible and reviewable.
+
+---
+
+## 2026-03-10T11:42:00Z: Discord Webhook Identity Handoff — Marathe → Joelle
+
+**Author:** Hal (Lead)  
+**Date:** 2026-03-10  
+**Status:** Accepted
+
+**Context:**
+
+Joelle joined the team as Community/DevRel specialist and owns Discord deployment notifications — tone, formatting, and community voice. However, three GitHub Actions workflows still hardcoded `"username": "Squad: Marathe"` in Discord webhook payloads:
+
+1. `.github/workflows/deploy.yml` (line 169) — production deployments
+2. `.github/workflows/deploy-uat.yml` (line 169) — UAT deployments
+3. `.github/workflows/e2e.yml` (line 95) — E2E test results
+
+This meant Joelle's first community announcement shipped as Marathe instead of her own identity.
+
+**Root Cause:**
+
+When Joelle was added, the deploy workflows were not updated to reflect the ownership transfer. The changelog mechanics (commit fetching, sorting, filtering) remain Marathe's domain as CI/CD infrastructure, but the **Discord identity** is Joelle's.
+
+**Decision:**
+
+### Change webhook username from "Squad: Marathe" to "Squad: Joelle" in:
+- `deploy.yml` line 169
+- `deploy-uat.yml` line 169
+- `e2e.yml` line 95
+
+### Ownership split:
+- **Joelle owns:** Discord identity, message tone, changelog formatting/curation, what goes in the message
+- **Marathe owns:** CI/CD mechanics (workflow structure, changelog generation scripts, build/deploy logic)
+
+### Rationale:
+1. **Charter alignment:** Joelle's charter explicitly lists "Discord deployment notifications" as owned by her
+2. **Community voice:** Deployment announcements are player-facing communications — Joelle's domain
+3. **Clear boundary:** The infrastructure (workflow YAML, bash scripts) stays with Marathe; the community identity and voice belongs to Joelle
+4. **Consistency:** All deployment/test notifications come from the same community voice
+
+### Future Pattern:
+If new Discord notifications are added:
+- Workflow mechanics → Marathe (or relevant CI/CD owner)
+- Discord identity/message content → Joelle
+- Joelle may request changes to Marathe's changelog scripts if the format doesn't serve community needs
+
+### Implementation:
+Update all three workflows to use `"username": "Squad: Joelle"`. No other changes needed — the changelog generation logic, embed structure, and webhook mechanics remain Marathe's work.
+
+---
+
+## 2026-03-10T01:49:40Z: Changelog Sorting & Merge Commit Exclusion
+
+**Author:** Marathe (DevOps / CI-CD)  
+**Date:** 2026-03-10  
+**Status:** Accepted
+
+**Directive Source:** User request by dkirby-ms (2026-03-10T01:49:40Z)
+> Discord notification changelogs should always sort with features/bugfix commits first, chores or non-gameplay related things after. Merge commits should not be included in the changelog at all.
+
+**Decision:**
+
+1. **Exclude merge commits** — all `git log` commands in deployment/promotion workflows now use `--no-merges`.
+2. **Sort by significance** — `feat` and `fix` prefixed commits appear first, followed by everything else (`chore`, `refactor`, `ci`, `docs`, `squad`, etc.).
+3. **Pure bash** — sorting uses `grep -iE` to partition lines, no external dependencies.
 
 **Affected Workflows:**
 
@@ -96,6 +342,13 @@ If new Discord notifications are added:
 - `.github/workflows/deploy.yml`
 - `.github/workflows/deploy-uat.yml`
 - `.github/workflows/e2e.yml`
+OTHER=$(echo "$RAW_LOG" | grep -viE '^• [a-f0-9]+ (feat|fix)' || true)
+CHANGELOG=$(printf '%s\n%s' "$FEATURES" "$OTHER" | sed '/^$/d' | head -N)
+```
+
+**Rationale:**
+
+Features and bugfixes are what stakeholders care about most. Putting them first surfaces the signal. Excluding merge commits removes noise from fast-forward and squash-merge workflows.
 
 ---
 
@@ -2319,3 +2572,156 @@ Custom domain binding and managed TLS certificates are now declared in `infra/ma
 - All deploy workflows will now provision/maintain the custom domain and cert automatically
 - No more manual Azure portal configuration after deployments
 - DNS records (CNAME + TXT verification) must already exist at the registrar before deployment
+
+---
+
+## 2026-03-10: Issue Lifecycle & UAT Readiness Tagging
+
+**By:** dkirby-ms (User Directive)  
+**Date:** 2026-03-10  
+**Captured by:** Copilot
+
+### Decision
+
+Issues stay **open until the fix reaches production**. When a fix merges to `dev`:
+1. Label the issue to indicate it's ready for UAT testing (e.g., `stage: uat-ready`)
+2. Remove workflow-stage labels that are no longer relevant (e.g., `go:needs-research`, `go:in-progress`)
+
+This applies to all squad work, not just individual issues.
+
+### Rationale
+
+Provides visibility into the promotion pipeline (dev → UAT → prod) without prematurely closing issues. Stakeholders can track where a fix is in the release cycle.
+
+### Impact
+
+- All squad agents closing PRs should label related issues `stage: uat-ready` instead of closing them
+- Issues closed only after reaching prod
+
+---
+
+## 2026-03-10T15-14-07Z: Filter squad: commits from deploy changelogs
+
+**Author:** Marathe (DevOps / CI-CD)  
+**Date:** 2026-03-10  
+**Status:** Implemented
+
+### Context
+
+Deploy workflows (deploy-uat, deploy, squad-promote) generate changelogs from git history for Discord notifications and PR bodies. Internal `squad:` and `squad(agent):` commits (logs, decisions, history updates) were polluting these changelogs with noise players don't care about.
+
+### Decision
+
+Added `grep -v ' squad[:(]'` filter to all 4 changelog generation points, applied immediately after the `RAW_LOG` assignment and before the `FEATURES`/`OTHER` split. This strips any commit line containing ` squad:` or ` squad(` — covering both conventional commit formats used by squad agents.
+
+### Affected Files
+
+- `.github/workflows/deploy-uat.yml`
+- `.github/workflows/deploy.yml`
+- `.github/workflows/squad-promote.yml` (2 locations: dev→uat and uat→prod)
+
+### Rollout
+
+Cherry-picked directly to dev, uat, and prod per team policy (CI-only changes get cherry-picked).
+
+---
+
+## 2026-03-10T15-14-07Z: Browser Refresh Reconnect Pattern
+
+**Author:** Pemulis (Systems Dev)  
+**Date:** 2026-03-10  
+**Status:** Implemented  
+**Issue:** #101
+
+### Decision
+
+On page load, `bootstrap()` checks `sessionStorage` for a Colyseus reconnect token before connecting to the lobby. If a token exists (from a prior game session in the same tab), it attempts `reconnectGameRoom()` first. Success skips the lobby entirely; failure falls through to normal lobby flow.
+
+### Details
+
+- Uses SDK 0.17.34's `onDrop`/`onReconnect` lifecycle hooks for proper status updates during SDK-managed reconnection
+- A `pageUnloading` flag (via `beforeunload`) prevents wasted reconnection attempts when the page is being torn down
+- Token persisted in `sessionStorage` under key `primal-grid-reconnect-token` — tab-scoped, survives refresh, cleared on tab close
+
+### Impact
+
+Anyone working on `client/src/main.ts` bootstrap flow or `client/src/network.ts` connection handlers should be aware of this pattern. The lobby is no longer the guaranteed first screen after page load.
+
+---
+
+## 2026-03-12T00:00:00Z: CPU Opponent Architecture
+
+**Author:** Pemulis (Systems Dev)  
+**Date:** 2026-03-12  
+**Context:** Issue #105 — Computer controlled player-opponents
+
+### Decision
+
+CPU opponents are first-class `PlayerState` entries added at `GameRoom.onCreate()` time. They use synthetic session IDs (`cpu_0` through `cpu_6`), receive income/scoring from existing tick functions for free, and make strategic decisions via a flat priority-based AI loop in `cpuPlayerAI.ts`. Tactical behavior is delegated entirely to existing pawn AIs (builder, defender, attacker, explorer).
+
+### Key Design Points
+
+1. **`spawnPawnCore()` is now a public method on GameRoom** — extracted from `handleSpawnPawn` so CPU AI can spawn pawns without a Client reference. Any future system that needs to spawn pawns programmatically should use this method.
+2. **`cpuPlayerIds` Set on GameRoom** — tracks which session IDs are CPU-controlled. Must be null-guarded (`?.`) in methods that tests invoke via `Object.create()`.
+3. **`CreateGamePayload.cpuPlayers`** — new optional field in the lobby payload. LobbyRoom passes it through to GameRoom options.
+4. **Room auto-disposal** — `checkCpuOnlyRoom()` runs after every human player removal. If only CPU players remain, the room calls `this.disconnect()`.
+5. **CPU players skip StateView** — no `initPlayerView()` call, zero rendering cost.
+
+### Impact
+
+- **Gately (Frontend):** The client's create-game UI should expose a `cpuPlayers` number input (0–7) in the lobby.
+- **Steeply (Testing):** 20 new tests cover CPU AI decisions, spawn mechanics, and room cleanup. Existing 716 tests pass with no regressions.
+- **All:** New shared constant `CPU_PLAYER` in `constants.ts`. New pawn type names in `CPU_PLAYER.NAMES`.
+
+---
+
+## 2026-03-10T00:00:00Z: Performance Test Threshold Policy
+
+**Author:** Steeply (Tester)  
+**Date:** 2026-03-10  
+**Issue:** #104  
+**PR:** #106
+
+### Decision
+
+Performance tests in CI use a **two-tier threshold** pattern:
+
+1. **Ideal threshold** — the expected runtime on a fast machine. Exceeding this emits a `console.warn` so regressions are visible in logs.
+2. **Hard ceiling** — 5x the ideal threshold. Only this value is asserted with `expect()`. Failing this means an actual algorithmic regression, not environment variance.
+
+### Rationale
+
+CI runners vary in speed (shared VMs, load spikes, cold caches). Hard-asserting tight thresholds creates flaky tests that erode trust in the suite. The goal of perf tests in CI is to catch algorithmic regressions (O(n²) → O(n³)), not to benchmark absolute speed. The warn-at-ideal / fail-at-ceiling pattern gives us both visibility and stability.
+
+### Applies To
+
+All timing-based performance assertions in the test suite.
+
+---
+
+## 2026-03-11T00:57:00Z: Help Screen Implementation (Issue #113)
+
+**Author:** Gately (Game Dev)  
+**Date:** 2026-03-11  
+**Issue:** #113  
+**Status:** Completed  
+**PR:** #114 (targeting dev)
+
+### Summary
+
+Enhanced in-game help screen with comprehensive gameplay section and created full HOW-TO-PLAY.md guide for new players. Help system now covers controls, mechanics, strategy, and FAQs.
+
+### Impact
+
+- **Players:** Improved onboarding with accessible in-game + written documentation
+- **Documentation:** HOW-TO-PLAY.md now canonical source for gameplay questions
+- **README:** Updated with link to new guide for discoverability
+
+### Test Coverage
+
+- 738 tests passing, no regressions detected
+
+### Notes
+
+Standard feature delivery. No cross-agent dependencies. Lead to review PR #114.
+

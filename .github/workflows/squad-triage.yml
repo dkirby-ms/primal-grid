@@ -161,6 +161,22 @@ jobs:
             if (!assignedMember) {
               for (const member of members) {
                 const role = member.role.toLowerCase();
+                // Game Dev role (rendering, UI, input, camera, sprites, HUD, menus)
+                if (role.includes('game') &&
+                    (issueText.includes('render') || issueText.includes('canvas') ||
+                     issueText.includes('sprite') || issueText.includes('animation') ||
+                     issueText.includes('camera') || issueText.includes('viewport') ||
+                     issueText.includes('hud') || issueText.includes('menu') ||
+                     issueText.includes('overlay') || issueText.includes('lobby') ||
+                     issueText.includes('screen') || issueText.includes('display') ||
+                     issueText.includes('visual') || issueText.includes('pixel') ||
+                     issueText.includes('input') || issueText.includes('keyboard') ||
+                     issueText.includes('mouse') || issueText.includes('ui') ||
+                     issueText.includes('frontend'))) {
+                  assignedMember = member;
+                  triageReason = 'Issue relates to game rendering/UI/input work';
+                  break;
+                }
                 if ((role.includes('frontend') || role.includes('ui')) &&
                     (issueText.includes('ui') || issueText.includes('frontend') ||
                      issueText.includes('css') || issueText.includes('component') ||
@@ -168,6 +184,27 @@ jobs:
                      issueText.includes('layout') || issueText.includes('design'))) {
                   assignedMember = member;
                   triageReason = 'Issue relates to frontend/UI work';
+                  break;
+                }
+                // Systems/Simulation role (creature AI, world gen, tile systems, combat, pawn logic)
+                if ((role.includes('systems') || role.includes('simulation')) &&
+                    (issueText.includes('pawn') || issueText.includes('creature') ||
+                     issueText.includes('ai') || issueText.includes('spawn') ||
+                     issueText.includes('tile') || issueText.includes('biome') ||
+                     issueText.includes('terrain') || issueText.includes('combat') ||
+                     issueText.includes('resource') || issueText.includes('income') ||
+                     issueText.includes('score') || issueText.includes('simulation') ||
+                     issueText.includes('world') || issueText.includes('map') ||
+                     issueText.includes('generation') || issueText.includes('weather') ||
+                     issueText.includes('ecosystem') || issueText.includes('cpu') ||
+                     issueText.includes('opponent') || issueText.includes('player') ||
+                     issueText.includes('fog') || issueText.includes('visibility') ||
+                     issueText.includes('explorer') || issueText.includes('builder') ||
+                     issueText.includes('defender') || issueText.includes('attacker') ||
+                     issueText.includes('backend') || issueText.includes('server') ||
+                     issueText.includes('game logic') || issueText.includes('tick'))) {
+                  assignedMember = member;
+                  triageReason = 'Issue relates to systems/simulation work';
                   break;
                 }
                 if ((role.includes('backend') || role.includes('api') || role.includes('server')) &&

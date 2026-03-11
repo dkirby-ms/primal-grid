@@ -46,6 +46,8 @@ export interface CreateGamePayload {
   maxPlayers?: number;
   mapSize?: number;
   mapSeed?: number;
+  /** Number of CPU-controlled opponents to add at room creation (0–7). */
+  cpuPlayers?: number;
 }
 
 /** Client → Server: join an existing game. */

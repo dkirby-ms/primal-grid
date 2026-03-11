@@ -42,15 +42,18 @@ export async function installMessageRecorder(page: Page): Promise<void> {
       return originalSend(type, data);
     };
 
-    // Record incoming messages by listening on the room's onMessage
-    room.onMessage('*', (type: string | number, message: unknown) => {
+    // Intercept incoming messages at the dispatchMessage level
+    // (onMessage('*') only fires when no specific handler exists)
+    const originalDispatch = room.dispatchMessage.bind(room);
+    room.dispatchMessage = (type: string | number, message: unknown) => {
       win.__WS_MESSAGES__!.push({
         direction: 'received',
         type: String(type),
         data: message ?? null,
         timestamp: Date.now(),
       });
-    });
+      return originalDispatch(type, message);
+    };
   });
 }
 

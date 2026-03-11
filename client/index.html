@@ -77,15 +77,54 @@
         cursor: not-allowed;
       }
       #spawn-defender-btn:not(:disabled):hover,
-      #spawn-attacker-btn:not(:disabled):hover {
+      #spawn-attacker-btn:not(:disabled):hover,
+      #spawn-explorer-btn:not(:disabled):hover {
         background: #3a3a5a;
         border-color: #7ecfff;
         color: #ffffff;
       }
       #spawn-defender-btn:disabled,
-      #spawn-attacker-btn:disabled {
+      #spawn-attacker-btn:disabled,
+      #spawn-explorer-btn:disabled {
         opacity: 0.4;
         cursor: not-allowed;
+      }
+      /* Building buttons */
+      .build-btn {
+        width: 100%;
+        padding: 6px 4px;
+        font-size: 11px;
+        font-family: 'Courier New', monospace;
+        background: #2a2a4a;
+        color: #cccccc;
+        border: 1px solid #444466;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-bottom: 4px;
+      }
+      .build-btn:not(:disabled):hover {
+        background: #3a3a5a;
+        border-color: #7ecfff;
+        color: #ffffff;
+      }
+      .build-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .build-btn.active {
+        background: #3a5a3a;
+        border-color: #88ff88;
+        color: #88ff88;
+      }
+      #build-placement-hint {
+        display: none;
+        font-size: 10px;
+        color: #88ff88;
+        text-align: center;
+        padding: 2px 0;
+      }
+      #build-placement-hint.visible {
+        display: block;
       }
       /* Outer container for centering game-wrapper + log together */
       #game-outer {
@@ -615,12 +654,20 @@
           ">🔨 Spawn Builder (10W, 5S)</button>
         </div>
 
+        <div class="hud-section" id="section-buildings">
+          <h3>Buildings</h3>
+          <button id="build-farm-btn" class="build-btn" disabled>🌾 Build Farm (12W, 6S)</button>
+          <button id="build-factory-btn" class="build-btn" disabled>⚙️ Build Factory (20W, 12S)</button>
+          <div id="build-placement-hint">Click a tile to place · ESC to cancel</div>
+        </div>
+
         <div class="hud-section" id="section-combat">
           <h3>Combat</h3>
           <div id="enemy-base-count" style="font-size:12px;margin-bottom:6px;color:#ff6666;">No threats</div>
           <div style="display:flex;gap:4px;font-size:11px;margin-bottom:6px;">
             <span id="defender-count">🛡 0/3</span>
             <span id="attacker-count">⚔ 0/2</span>
+            <span id="explorer-count">🔭 0/3</span>
           </div>
           <button id="spawn-defender-btn" disabled style="
             width:100%;
@@ -645,6 +692,18 @@
             border-radius:4px;
             cursor:pointer;
           ">⚔ Spawn Attacker (20W, 15S)</button>
+          <button id="spawn-explorer-btn" disabled style="
+            width:100%;
+            padding:6px 4px;
+            font-size:11px;
+            font-family:'Courier New',monospace;
+            background:#2a2a4a;
+            color:#cccccc;
+            border:1px solid #444466;
+            border-radius:4px;
+            cursor:pointer;
+            margin-top:4px;
+          ">🔭 Spawn Explorer (12W, 8S)</button>
         </div>
         <div class="hud-section" id="section-day-phase">
           <h3>Time of Day</h3>
@@ -709,6 +768,19 @@
               <option value="64">Small (64×64)</option>
               <option value="128" selected>Medium (128×128)</option>
               <option value="256">Large (256×256)</option>
+            </select>
+          </div>
+          <div class="lobby-form-row">
+            <label>CPU Opponents</label>
+            <select id="lobby-cpu-players">
+              <option value="0" selected>None</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
             </select>
           </div>
           <div class="lobby-form-actions">
