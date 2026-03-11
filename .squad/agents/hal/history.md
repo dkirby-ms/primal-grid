@@ -1007,3 +1007,22 @@ Used Gemini 3 Pro for this review task to leverage an alternate model for indepe
 **Decision:** Approved for merge. Performance optimization deferred to future refactor as non-blocking.
 
 **Outcome:** PR #137 merged to dev. Issue #127 closed. Issue #136 filed.
+
+
+### Latest Session: PR #138 Review (2026-03-11)
+
+**Task:** Review PR #138 "Fix non-player unit rendering" (#136).
+
+**Review Notes:**
+- **Correctness:** Verified removal of `isLocalBuilder` gate. All pawns now render correct emoji regardless of owner.
+- **Completeness:** `isPlayerPawn` utility ensures coverage for all types: builder, defender, attacker, explorer.
+- **Consistency:** `drawStateBackground` correctly implements player color rendering with type-based fallback. Ownership border adds necessary visual distinction for non-local units.
+- **No Regressions:** Local player rendering logic preserved.
+- **Tests:** 843/843 passed. New `lastOwnerID` tracking ensures re-render on ownership change.
+
+**Verdict:** **APPROVE**. Code is clean, correct, and safe to merge.
+
+## Learnings
+- Renderer uses `playerColors` cache in `CreatureRenderer` to avoid repeated map lookups during draw calls.
+- `isPlayerPawn` utility covers all `pawn_*` types.
+- Rendering logic is centralized in `getIcon` and `drawStateBackground`, good for consistency.
