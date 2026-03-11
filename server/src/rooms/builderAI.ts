@@ -136,11 +136,32 @@ function isInteriorGap(
 }
 
 /**
+ * Collect the set of tiles already targeted by other builders of the same owner.
+ * Prevents multiple builders from converging on the same tile.
+ */
+function getReservedTiles(
+  creature: CreatureState,
+  state: GameState,
+): Set<number> {
+  const reserved = new Set<number>();
+  state.creatures.forEach((other: CreatureState) => {
+    if (other.id === creature.id) return;
+    if (other.creatureType !== "pawn_builder") return;
+    if (other.ownerID !== creature.ownerID) return;
+    if (other.targetX < 0 || other.targetY < 0) return;
+    if (other.currentState !== "move_to_site" && other.currentState !== "building") return;
+    reserved.add(other.targetY * state.mapWidth + other.targetX);
+  });
+  return reserved;
+}
+
+/**
  * Find the best unclaimed walkable tile adjacent to the builder's owner's territory.
  * Scans within BUILD_SITE_SCAN_RADIUS.
  * Prioritizes interior gaps (tiles surrounded on 3+ sides by owned territory)
  * before expanding outward. Within each priority tier, prefers closest tiles
  * with a tiebreaker favoring outward expansion (further from HQ).
+ * Skips tiles already targeted by another builder of the same owner.
  */
 function findBuildSite(
   creature: CreatureState,
@@ -148,6 +169,7 @@ function findBuildSite(
 ): { x: number; y: number } | null {
   const radius = PAWN.BUILD_SITE_SCAN_RADIUS;
   const player = state.players.get(creature.ownerID);
+  const reserved = getReservedTiles(creature, state);
   let best: { x: number; y: number } | null = null;
   let bestDist = Infinity;
   let bestHqDist = -1;
@@ -162,6 +184,9 @@ function findBuildSite(
       if (tile.ownerID !== "") continue;
       if (!isValidBuildTile(tile)) continue;
       if (!isAdjacentToTerritory(state, creature.ownerID, tx, ty)) continue;
+
+      const tileIdx = ty * state.mapWidth + tx;
+      if (reserved.has(tileIdx)) continue;
 
       const dist = Math.abs(dx) + Math.abs(dy);
       if (dist === 0) continue;
