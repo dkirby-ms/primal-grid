@@ -37,4 +37,12 @@ O(N) where N = number of same-team agents. For Primal Grid's max-5 builders, neg
 
 ## Applied In
 
-- `server/src/rooms/builderAI.ts` — PR #133, Issue #127
+- `server/src/rooms/builderAI.ts` — PR #133, Issue #127 (exact-tile reservation)
+- `server/src/rooms/builderAI.ts` — Issue #127 follow-up (proximity-aware reservation with `MIN_BUILDER_SEPARATION`)
+- `server/src/rooms/attackerAI.ts` — attacker target distribution (claimed-target deprioritization)
+- `server/src/rooms/creatureAI.ts` — movement collision avoidance via `hasFriendlyPawnAt()` (soft preference)
+- `server/src/rooms/explorerAI.ts` — explorer mutual repulsion scoring
+
+## Anti-Pattern: Hard Blocks
+
+Never hard-block movement based on friendly pawn presence. Use **soft preferences** — try unoccupied tiles first, fall back to occupied if no alternatives. Hard blocks cause deadlocks when pawns cluster in narrow corridors.
