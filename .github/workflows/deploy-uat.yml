@@ -125,14 +125,10 @@ jobs:
           cd repo
           git fetch --depth 50 origin uat
 
-          # Generate changelog (last 10 commits, no merges, features/fixes first)
-          RAW_LOG=$(git log --no-merges --pretty=format:'• %h %s (%an)' HEAD~10..HEAD 2>/dev/null | head -20)
-          RAW_LOG=$(echo "$RAW_LOG" | grep -vE ' (squad|ci|chore)[:(]' || true)
-          FEATURES=$(echo "$RAW_LOG" | grep -iE '^• [a-f0-9]+ (feat|fix)' || true)
-          OTHER=$(echo "$RAW_LOG" | grep -viE '^• [a-f0-9]+ (feat|fix)' || true)
-          CHANGELOG=$(printf '%s\n%s' "$FEATURES" "$OTHER" | sed '/^$/d' | head -10)
+          # Generate categorized changelog (features/fixes first, chores excluded)
+          CHANGELOG=$(bash .github/scripts/generate-changelog.sh "HEAD~10..HEAD" --format discord --max-lines 10)
           if [ -z "$CHANGELOG" ]; then
-            CHANGELOG="• No recent commits available"
+            CHANGELOG="• No recent changes"
           fi
 
           # Truncate changelog if too long (Discord field limit ~1024 chars)
