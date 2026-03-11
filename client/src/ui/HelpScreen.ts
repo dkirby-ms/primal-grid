@@ -1,9 +1,10 @@
 import { Container, Graphics, Text } from 'pixi.js';
 
-const PANEL_WIDTH = 420;
+const PANEL_WIDTH = 520;
 const PANEL_PADDING = 24;
 const ROW_HEIGHT = 22;
 const HEADER_SIZE = 16;
+const SECTION_SIZE = 14;
 const BODY_SIZE = 12;
 
 const KEYBINDINGS: [string, string][] = [
@@ -11,6 +12,18 @@ const KEYBINDINGS: [string, string][] = [
   ['Scroll', 'Zoom in / out'],
   ['Space', 'Center on castle'],
   ['?', 'Toggle this help screen'],
+];
+
+const HOW_TO_PLAY: [string, string][] = [
+  ['🏰 Place HQ', 'Click the map to found your colony (5×5 territory)'],
+  ['🪵 Gather', 'Pawns harvest Wood & Stone from terrain tiles'],
+  ['🔨 Builders', 'Spawn (10W 5S) to claim adjacent tiles & expand'],
+  ['🏗 Buildings', 'Farm (12W 6S → +1W +1S) · Factory (20W 12S → +2W +1S)'],
+  ['🛡 Defenders', 'Spawn (15W 10S) to patrol and guard your territory'],
+  ['⚔ Attackers', 'Spawn (20W 15S) to raid enemy bases'],
+  ['🔭 Explorers', 'Spawn (12W 8S) to scout with 6-tile vision'],
+  ['⭐ Level up', 'Earn XP by claiming tiles → unlock building shapes'],
+  ['🌙 Day/night', 'Vision shrinks at night — stay alert for predators'],
 ];
 
 export class HelpScreen {
@@ -38,22 +51,20 @@ export class HelpScreen {
     this.panel = new Graphics();
     this.container.addChild(this.panel);
 
-    // Title
-    const title = new Text({
-      text: '⌨ KEYBINDINGS',
+    // ── Controls section ──
+    const controlsTitle = new Text({
+      text: '⌨ CONTROLS',
       style: { fontSize: HEADER_SIZE, fill: '#ffffff', fontFamily: 'monospace', fontWeight: 'bold' },
     });
-    title.position.set(PANEL_PADDING, PANEL_PADDING);
-    this.panel.addChild(title);
+    controlsTitle.position.set(PANEL_PADDING, PANEL_PADDING);
+    this.panel.addChild(controlsTitle);
 
-    // Separator
     const sepY = PANEL_PADDING + HEADER_SIZE + 8;
     const sep = new Graphics();
     sep.rect(PANEL_PADDING, sepY, PANEL_WIDTH - PANEL_PADDING * 2, 1);
     sep.fill({ color: 0x888888, alpha: 0.5 });
     this.panel.addChild(sep);
 
-    // Key rows
     let y = sepY + 10;
     for (const [key, desc] of KEYBINDINGS) {
       const keyText = new Text({
@@ -62,6 +73,40 @@ export class HelpScreen {
       });
       keyText.position.set(PANEL_PADDING, y);
       this.panel.addChild(keyText);
+
+      const descText = new Text({
+        text: desc,
+        style: { fontSize: BODY_SIZE, fill: '#cccccc', fontFamily: 'monospace' },
+      });
+      descText.position.set(PANEL_PADDING + 130, y);
+      this.panel.addChild(descText);
+
+      y += ROW_HEIGHT;
+    }
+
+    // ── How to Play section ──
+    y += 12;
+    const htpTitle = new Text({
+      text: '🦖 HOW TO PLAY',
+      style: { fontSize: SECTION_SIZE, fill: '#7ecfff', fontFamily: 'monospace', fontWeight: 'bold' },
+    });
+    htpTitle.position.set(PANEL_PADDING, y);
+    this.panel.addChild(htpTitle);
+
+    y += SECTION_SIZE + 8;
+    const sep2 = new Graphics();
+    sep2.rect(PANEL_PADDING, y, PANEL_WIDTH - PANEL_PADDING * 2, 1);
+    sep2.fill({ color: 0x888888, alpha: 0.5 });
+    this.panel.addChild(sep2);
+
+    y += 10;
+    for (const [label, desc] of HOW_TO_PLAY) {
+      const labelText = new Text({
+        text: label,
+        style: { fontSize: BODY_SIZE, fill: '#66ff99', fontFamily: 'monospace', fontWeight: 'bold' },
+      });
+      labelText.position.set(PANEL_PADDING, y);
+      this.panel.addChild(labelText);
 
       const descText = new Text({
         text: desc,
