@@ -216,15 +216,21 @@ export class LobbyRoom extends Room {
     }
 
     // Create the Colyseus GameRoom
-    const gameRoom = await matchMaker.createRoom("game", {
-      gameId: gameInfo.id,
-      gameName: name,
-      mapSize,
-      seed: mapSeed,
-      maxPlayers,
-      hostId: session.userId,
-      cpuPlayers,
-    });
+    let gameRoom;
+    try {
+      gameRoom = await matchMaker.createRoom("game", {
+        gameId: gameInfo.id,
+        gameName: name,
+        mapSize,
+        seed: mapSeed,
+        maxPlayers,
+        hostId: session.userId,
+        cpuPlayers,
+      });
+    } catch (err) {
+      console.error(`[LobbyRoom] Failed to create GameRoom:`, err);
+      return this.sendError(client, "Failed to create game room. Please try again.");
+    }
 
     this.gameRoomIds.set(gameInfo.id, gameRoom.roomId);
 

@@ -8,16 +8,16 @@ import {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function createRoomWithMap(seed?: number): GameRoom {
+function createRoomWithMap(seed?: number, mapSize?: number): GameRoom {
   const room = Object.create(GameRoom.prototype) as GameRoom;
   room.state = new GameState();
-  room.generateMap(seed);
+  room.generateMap(seed, mapSize);
   room.broadcast = () => {};
   return room;
 }
 
-function createRoomWithCreatures(seed?: number): GameRoom {
-  const room = createRoomWithMap(seed);
+function createRoomWithCreatures(seed?: number, mapSize?: number): GameRoom {
+  const room = createRoomWithMap(seed, mapSize);
   room.spawnCreatures();
   return room;
 }
@@ -120,6 +120,66 @@ describe("Map Size (#11)", () => {
     });
   });
 
+  describe("non-default map sizes", () => {
+    it("generates a 64×64 map correctly", () => {
+      const room = createRoomWithMap(42, 64);
+      expect(room.state.mapWidth).toBe(64);
+      expect(room.state.mapHeight).toBe(64);
+      expect(room.state.tiles.length).toBe(64 * 64);
+    });
+
+    it("generates a 256×256 map correctly", () => {
+      const room = createRoomWithMap(42, 256);
+      expect(room.state.mapWidth).toBe(256);
+      expect(room.state.mapHeight).toBe(256);
+      expect(room.state.tiles.length).toBe(256 * 256);
+    });
+
+    it("tiles have correct coordinates on a 64×64 map", () => {
+      const room = createRoomWithMap(42, 64);
+      const w = room.state.mapWidth;
+      for (let i = 0; i < room.state.tiles.length; i++) {
+        const tile = room.state.tiles.at(i)!;
+        expect(tile.x).toBe(i % w);
+        expect(tile.y).toBe(Math.floor(i / w));
+      }
+    });
+
+    it("getTile works correctly on a 256×256 map", () => {
+      const room = createRoomWithMap(42, 256);
+      const corner = room.state.getTile(255, 255);
+      expect(corner).toBeDefined();
+      expect(corner!.x).toBe(255);
+      expect(corner!.y).toBe(255);
+      expect(room.state.getTile(256, 0)).toBeUndefined();
+      expect(room.state.getTile(0, 256)).toBeUndefined();
+    });
+
+    it("spawns creatures on a 64×64 map", () => {
+      const room = createRoomWithCreatures(42, 64);
+      const expectedTotal = CREATURE_SPAWN.HERBIVORE_COUNT + CREATURE_SPAWN.CARNIVORE_COUNT;
+      expect(room.state.creatures.size).toBe(expectedTotal);
+      room.state.creatures.forEach((c: CreatureState) => {
+        expect(c.x).toBeGreaterThanOrEqual(0);
+        expect(c.x).toBeLessThan(64);
+        expect(c.y).toBeGreaterThanOrEqual(0);
+        expect(c.y).toBeLessThan(64);
+      });
+    });
+
+    it("spawns creatures on a 256×256 map", () => {
+      const room = createRoomWithCreatures(42, 256);
+      const expectedTotal = CREATURE_SPAWN.HERBIVORE_COUNT + CREATURE_SPAWN.CARNIVORE_COUNT;
+      expect(room.state.creatures.size).toBe(expectedTotal);
+      room.state.creatures.forEach((c: CreatureState) => {
+        expect(c.x).toBeGreaterThanOrEqual(0);
+        expect(c.x).toBeLessThan(256);
+        expect(c.y).toBeGreaterThanOrEqual(0);
+        expect(c.y).toBeLessThan(256);
+      });
+    });
+  });
+
   describe("generation performance", () => {
     // Hard ceilings are generous (5x ideal) to avoid CI flakes.
     // console.warn fires at the ideal threshold so regressions stay visible.
@@ -150,6 +210,18 @@ describe("Map Size (#11)", () => {
         );
       }
       expect(elapsed).toBeLessThan(CREATURES_HARD_CEILING_MS);
+    });
+
+    it("256×256 map generation completes within 15 seconds", () => {
+      const start = performance.now();
+      createRoomWithCreatures(42, 256);
+      const elapsed = performance.now() - start;
+      if (elapsed > 5000) {
+        console.warn(
+          `⚠ 256×256 map + creatures took ${elapsed.toFixed(0)}ms (ideal < 5000ms)`,
+        );
+      }
+      expect(elapsed).toBeLessThan(15_000);
     });
   });
 });
