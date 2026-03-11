@@ -17,6 +17,10 @@
 - E2E tests use `workers: 1` (serial) with a single shared Colyseus server instance
 - Deploy changelogs filter out `squad:` and `squad(agent):` commits using `grep -v ' squad[:(]'` — keeps player-facing changelogs clean of internal bookkeeping noise
 - Expanded changelog filter pattern: use `grep -vE ' (squad|ci|chore)[:(]'` to exclude multiple internal commit prefixes from Discord changelogs in a single regex (squad, ci, chore)
+- Changelog generation centralized in `.github/scripts/generate-changelog.sh` — shared by deploy-uat.yml, deploy.yml, and squad-promote.yml (replaces duplicated inline grep logic)
+- Script classifies commits by conventional commit type, strips prefixes for human readability, and groups into prioritized categories (features → fixes → improvements → maintenance)
+- Discord format excludes maintenance/chore/CI commits entirely; markdown format (for PR bodies) includes all categories
+- Script supports `--format discord|markdown` and `--max-lines N` flags for output control
 
 ## CI/CD Audit Findings (2024-01-29)
 
@@ -647,3 +651,79 @@ Coordinator consolidated the triage system. The heartbeat-triggered triage steps
 - Keyword routing must evolve with team composition — generic web-app categories don't cover game dev roles
 - Order matters in the matcher loop: domain-specific matchers must precede generic fallbacks
 - CI-only changes to squad-triage.yml can be cherry-picked directly to prod without a PR
+
+## Issue #122 — Stage Label Swap (dev→uat)
+
+**Date:** 2025-07-24
+**PR:** #129
+**Branch:** squad/122-stage-label-swap
+
+**Problem:** When a promotion PR merged dev→uat, issues kept `stage:ready-for-uat` instead of being updated to `stage:live-uat`.
+
+**Fix:** Extended `squad-stage-label.yml` with a second job (`label-linked-issues-uat`) that triggers on uat merges. The UAT job scans both the PR body and commit messages for `Closes/Fixes/Resolves #N` patterns — important because promotion PRs aggregate many commits. It removes `stage:ready-for-uat` (graceful 404 handling) and adds `stage:live-uat`. Also added `contents: read` permission for the commits API call.
+
+**Learnings:**
+- Promotion PRs created by `squad-promote.yml` have auto-generated bodies with changelogs, not `Closes #N` — commit message scanning is essential for finding linked issues
+- Stage label workflows should use `github.event.pull_request.base.ref` to distinguish target branches, not separate workflow files
+- `github.rest.pulls.listCommits` requires `contents: read` permission
+
+## 2026-03-11: Wave 1 Bug Fix (Issue #122)
+
+- **Status:** COMPLETED, PR #129 merged
+- **Task:** Extended `.github/workflows/squad-stage-label.yml` with UAT label automation
+- **What Fixed:** Stage label swap on uat branch merge (`stage:ready-for-uat` → `stage:live-uat`)
+- **Pattern:** Scans commit messages for issue refs (promotion PRs use commits, not PR body)
+- **Impact:** Automated label lifecycle for dev→uat→prod promotions; no manual label management needed
+- **Related:** Steeply/Hal no longer manually update issue stage labels after promotions
+
+---
+
+## 2026-03-11: Wave 2 Automation — Changelog Centralization (#120)
+
+**PR:** #132  
+**Status:** COMPLETED, in review  
+**Orchestration:** [2026-03-11T12-10-00Z-marathe.md](.squad/orchestration-log/2026-03-11T12-10-00Z-marathe.md)
+
+### Work Summary
+
+Centralized changelog generation into shared script. Eliminated inline grep-based changelog logic duplicated across `deploy-uat.yml`, `deploy.yml`, and `squad-promote.yml` workflows.
+
+### Changes Made
+
+- Created `.github/scripts/generate-changelog.sh` (canonical generator)
+- Updated 3 workflows to call shared script with format parameter
+- Implemented 2 formats: `discord` (player-facing), `markdown` (full history)
+
+### Changelog Rules Established
+
+1. All changelog generation must use `.github/scripts/generate-changelog.sh` (no inline logic)
+2. Discord changelogs exclude maintenance/CI/chore/squad commits — only player-facing changes
+3. Markdown changelogs include all categories, prioritized by impact
+4. Conventional commit prefixes (feat:, fix:, chore:) required for proper classification
+5. Squad-internal commits (`squad:`, `squad(...):`) always excluded from all output
+
+### Impact
+
+- Commit message conventions directly affect changelog quality
+- Future workflows should call shared script instead of writing inline parsing logic
+- Discord announcements now show only changes players care about (cleaner comms)
+
+### Routing Note
+
+Issue #120 re-labeled from `squad:pemulis` to `squad:marathe` (release automation scope, not simulation)
+
+
+---
+
+## 2026-03-12: Merge Conflict Resolution — PR #143
+
+- **Status:** COMPLETED
+- **Task:** Resolved merge conflicts on PR #143 (Promote dev → uat, v0.1.5)
+- **Conflicts:** `package.json` and `package-lock.json` — version field (0.1.5 vs 0.1.4)
+- **Resolution:** Dev wins on all code conflicts (source of truth for promotion). `.squad/decisions.md` auto-merged cleanly.
+- **Result:** PR #143 now MERGEABLE
+
+**Learnings:**
+- In dev→uat promotions, conflicts are typically version bumps — dev always wins since it's the source being promoted
+- `git merge origin/uat --no-commit` is the right pattern to inspect conflicts before committing
+- Remember: `--ours` = HEAD (current branch), `--theirs` = branch being merged in

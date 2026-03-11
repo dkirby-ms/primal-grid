@@ -1,4 +1,48 @@
+<<<<<<< uat
+## 2026-03-12: Soft-Preference Anti-Clustering for All Pawn Types
+
+**Author:** Pemulis  
+**Date:** 2026-03-12  
+**Status:** Implemented  
+
+### Context
+
+PR #134 added `getReservedTiles()` to prevent builders from targeting the same tile. Clustering persisted because:
+1. Builders picked adjacent tiles (not just the same tile)
+2. `moveToward()` let pawns stack on the same tile
+3. Attackers all targeted the same enemy
+4. Explorers converged on the same frontier
+
+### Decision
+
+All pawn anti-clustering uses **soft preferences**, never hard blocks:
+- Target reservation: deprioritize (don't exclude) nearby targets when better options exist
+- Movement: prefer unoccupied tiles but always fall back to any valid tile
+- This prevents deadlocks in narrow corridors or small territories
+
+### Implications
+
+- Any new pawn type should follow this pattern: check `hasFriendlyPawnAt()` during movement, add target-spreading to selection logic
+- `moveToward()` now has different behavior for pawns vs wildlife — wildlife takes first valid move, pawns try unoccupied first
+- Performance: O(P) per pawn per movement candidate where P = same-owner pawns. Negligible for max ~13 pawns per player
+
+---
+
+## 2026-03-11T12:57:00Z: User Directive — No Autonomous Production Promotions
+
+**Author:** Copilot  
+**Date:** 2026-03-11  
+**Source:** User request  
+
+**Directive:** Never initiate PRs into uat or prod autonomously. Promotion PRs are human-initiated only.
+
+**Reason:** Ensures human oversight on deployment decisions. Captured for team memory.
+
+---
+
+=======
 ## 2026-03-09T23:43:26Z: Prod Default Branch & Squad File Policy
+>>>>>>> prod
 ## 2026-03-10T12:14Z: Filter CI, Chore & Squad Commits from Changelogs
 
 **Author:** dkirby-ms (via Copilot)  
@@ -2726,3 +2770,152 @@ Enhanced in-game help screen with comprehensive gameplay section and created ful
 
 Standard feature delivery. No cross-agent dependencies. Lead to review PR #114.
 
+
+---
+
+## 2026-03-11T12-02-00Z: Stage Label Lifecycle: dev→uat
+
+**Author:** Marathe (DevOps / CI-CD)  
+**Date:** 2026-03-11  
+**PR:** #129  
+**Issue:** #122
+
+### Decision
+
+`squad-stage-label.yml` now manages the full stage label lifecycle for dev→uat promotion:
+
+1. **PR merged to `dev`** → linked issues get `stage:ready-for-uat`
+2. **PR merged to `uat`** → linked issues swap `stage:ready-for-uat` → `stage:live-uat`
+
+The UAT job scans both PR body and commit messages for issue references, since promotion PRs created by `squad-promote.yml` carry issue references in commit messages, not the PR body.
+
+### Impact
+
+- **Steeply / Hal:** Issues will now automatically reflect UAT status — no manual label changes needed after promotion merges.
+- **Future:** If we add uat→prod promotion, the same pattern can be extended with a `stage:live-prod` label and a third job.
+
+---
+
+## 2026-03-11T12-02-00Z: Anticipatory Test Pattern for Bug Fixes
+
+**Author:** Steeply (Tester)  
+**Context:** Bugs #126 (map size timeout) and #128 (phantom buildings)
+
+### Decision
+
+When bugs are filed and implementation is in-flight, Steeply writes anticipatory test cases against the *server state model* to establish the expected behavior contract. These tests validate that the underlying data layer is correct — if they pass, the bug is in a higher layer (rendering, serialization, networking). If they fail after a fix, the fix changed server-side behavior and needs test updates.
+
+### Files
+
+- `server/src/__tests__/phantom-buildings.test.ts` (20 tests, bug #128)
+- `server/src/__tests__/map-size-timeout.test.ts` (43 tests, bug #126)
+
+### Impact
+
+- **Gately/Pemulis:** If your fixes change `generateMap`, `tickFogOfWar`, `computeVisibleTiles`, or `TileState.structureType` behavior, re-run these tests and flag failures for Steeply to adjust.
+
+---
+
+## 2026-03-11T11-52-40Z: User Directive — Prior Session Lockouts Dropped
+
+**Author:** Copilot (via session user request)  
+**Date:** 2026-03-11  
+**What:** All pending issues from the previous session are dropped. This includes PR #103 remediation (pageUnloading one-way flag bug) and any associated lockouts. The team starts fresh with the current open issue backlog.  
+**Why:** User request — captured for team memory
+
+---
+
+## 2026-03-11T12-10-00Z: Pawn Target Reservation
+
+**Author:** Pemulis (Systems Dev)  
+**Date:** 2026-03-11  
+**Context:** Issue #127 — Builder pawns clustering together  
+**PR:** #133
+
+### Decision
+
+Builder pawns now reserve their target tiles — `findBuildSite()` skips tiles already targeted by other same-owner builders. This prevents multiple builders from converging on the same destination.
+
+### Rationale
+
+The clustering was caused by deterministic scoring without coordination. All builders evaluated the same game state with the same function and picked the same tile. Adding a reservation set is the minimal fix — no schema changes, no new network messages, no performance cost.
+
+### Impact
+
+- **Defenders and attackers** should use the same pattern if they ever independently select targets from a shared pool.
+- **CPU player AI** benefits automatically since CPU builders use the same `stepBuilder()` code path.
+- The reservation is soft (based on `targetX/targetY` fields already in CreatureState) — no new schema fields were needed.
+
+---
+
+## 2026-03-11T12-10-00Z: Centralized Changelog Generation Script
+
+**Author:** Marathe (DevOps / CI-CD)  
+**Date:** 2026-03-11  
+**PR:** #132  
+**Issue:** #120
+
+### Decision
+
+Changelog generation is now centralized in `.github/scripts/generate-changelog.sh` and shared across all deploy and promotion workflows. The inline grep-based changelog logic that was duplicated in `deploy-uat.yml`, `deploy.yml`, and `squad-promote.yml` has been replaced with calls to this shared script.
+
+### Rules
+
+1. **All changelog generation must use the shared script** — no inline commit-log parsing in workflows.
+2. **Discord changelogs** (`--format discord`) exclude maintenance/CI/chore/squad commits — only player-facing changes shown.
+3. **PR/markdown changelogs** (`--format markdown`) include all categories, ordered by priority.
+4. **Conventional commit prefixes are required** for proper classification. Commits without prefixes fall back to keyword matching, which is less reliable.
+5. **Squad-internal commits** (`squad:`, `squad(...):`) are always excluded from all changelog output.
+
+### Impact
+
+- Any new workflow that generates changelogs should call `.github/scripts/generate-changelog.sh` instead of writing inline logic.
+- Commit message conventions matter more now — `feat:`, `fix:`, `chore:` prefixes directly affect changelog quality.
+
+---
+
+## 2026-03-11T12-43-00Z: Builder Reservation Logic
+
+**Author:** Hal (Lead)  
+**Date:** 2026-03-11  
+**Status:** Accepted  
+**PRs:** #133 (closed), #134 (approved)
+
+### Decision
+
+Builder pawns now reserve their target tiles using the pattern from PR #134:
+1. Check `creatureType` (or `pawnType`)
+2. **Check `currentState`** (`move_to_site`, `building`) — crucial to filter out idle pawns
+3. Use integer tile indices (`Set<number>`) instead of strings
+
+### Rationale
+
+Two PRs (#133, #134) implemented competing solutions for preventing multiple builders from targeting the same tile. PR #134's approach is state-aware and handles idle pawns correctly.
+
+### Consequences
+- PR #133 has been closed (superseded by #134)
+- Future pawn logic should follow this state-aware pattern when coordinating target selection
+- The pattern is safe for defenders and attackers if they ever independently select from a shared pool
+
+## 2026-03-11T15-44-00Z: Minimum Outpost Spacing
+
+**Author:** Gately (Game Dev)  
+**Date:** 2026-03-11  
+**PR:** #140  
+**Issue:** #139  
+
+### Context
+
+Builders placed outposts on every claimed tile, visually cluttering the map.
+
+### Decision
+
+Added `MIN_OUTPOST_SPACING = 4` (Manhattan distance) in `shared/src/constants.ts`. The `hasNearbyOutpost()` function in `builderAI.ts` checks proximity before placing an outpost structure. Tiles are still claimed — only the outpost icon is suppressed when too close.
+
+### Impact
+
+- **Rendering:** Fewer outpost markers on map — cleaner visuals
+- **Client:** No changes needed — already renders based on `structureType`
+- **Balance:** Spacing of 4 tiles means roughly 1 outpost per ~20 tiles of territory. Tunable via constant.
+
+---

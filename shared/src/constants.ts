@@ -335,6 +335,9 @@ export const PROGRESSION = {
   ],
 } as const;
 
+/** Minimum Manhattan distance between outpost structures for the same player. */
+export const MIN_OUTPOST_SPACING = 4;
+
 /** Pawn system constants. */
 export const PAWN = {
   /** Wood cost to spawn a builder. */

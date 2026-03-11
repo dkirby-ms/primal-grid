@@ -1874,3 +1874,97 @@ See `.squad/decisions.md` for full triage document, dependency graph, risk mitig
   - The `as unknown as Type` pattern (already used in cpuPlayerAI.test.ts) is the established codebase convention for test mocking of Colyseus types.
 - **Key files touched:** `client/src/ui/LobbyScreen.ts`, `server/src/rooms/LobbyState.ts`, `server/src/rooms/cpuPlayerAI.ts`, `server/src/__tests__/reconnection.test.ts`, `server/src/__tests__/buildings.test.ts`, `server/src/__tests__/chat.test.ts`, `server/src/__tests__/cpuPlayerAI.test.ts`, `e2e/tests/buildings.spec.ts`
 - **Tests:** 738/738 passing after changes.
+
+### Map Size Timeout Fix (2026-03-12)
+
+- **Bug:** Selecting non-128×128 map size in the lobby caused a timeout error during game creation (Issue #126, PR #131).
+- **Root cause:** Three combined issues: (1) `Encoder.BUFFER_SIZE` in `server/src/index.ts` was 768 KB, explicitly sized for 128×128 maps—a 256×256 map overflows the buffer on every client state sync; (2) `LobbyRoom.handleCreateGame` had no try-catch around `matchMaker.createRoom`, silently swallowing errors via `void` promise discard; (3) client timeout of 15s was marginal for larger maps.
+- **Fix:** Increased `Encoder.BUFFER_SIZE` to 4 MB (covers max 256×256), added try-catch in handleCreateGame that sends LOBBY_ERROR to the client, increased client timeout to 30s.
+- **Key insight:** Colyseus `@colyseus/schema` v4 Encoder dynamically resizes on overflow but SchemaSerializer's `fullEncodeBuffer` is NOT updated after resize, causing repeated re-encode cycles. Properly sizing the buffer upfront avoids this performance penalty.
+- **Tests added:** 7 new tests for 64×64 and 256×256 map generation (correctness, coordinates, creature bounds, performance ceiling). 256×256 generates in ~750ms—well under any timeout.
+- **Key files:** `server/src/index.ts` (buffer size), `server/src/rooms/LobbyRoom.ts` (error handling), `client/src/ui/LobbyScreen.ts` (timeout), `server/src/__tests__/map-size.test.ts` (tests).
+
+## 2026-03-11: Wave 1 Bug Fix (Issue #126)
+
+- **Status:** COMPLETED, PR #131 merged
+- **Task:** Fixed map size timeout on 128x128 maps (triple root cause)
+- **Root Causes:**
+  1. Colyseus encoder buffer undersized (768KB → 2MB for 128x128 state)
+  2. Promise errors swallowed in LobbyRoom (added error propagation)
+  3. Tight client timeout (15s → 45s with progress feedback)
+- **Fix Locations:** `GameRoom.ts` (buffer), `LobbyRoom.ts` (error handling), `GameClient.ts` (timeout)
+- **Test Coverage:** 43 anticipatory tests by Steeply; 7 integration tests added; all 794 tests pass
+- **Pattern Insight:** See Steeply's anticipatory test pattern — tests validate server state before client integration
+
+### Pawn Clustering Fix — Issue #127 (2026-03-12)
+
+- **PR:** #133 on `squad/127-fix-pawn-clustering` branch
+- **Bug:** Multiple builder pawns converged on the same target tile because `findBuildSite()` had no awareness of other pawns' targets. All builders independently selected the identical best tile using the same deterministic scoring, then moved toward it in lockstep — visible clustering.
+- **Root cause:** `findBuildSite()` evaluated tiles purely by gap priority → distance → HQ distance, with no check for whether another pawn was already heading there.
+- **Fix:** Added `getReservedTargets()` in `builderAI.ts` — collects tiles targeted by other same-owner builders into a `Set<string>`. `findBuildSite()` skips reserved tiles via `reserved.has()`. Each builder now picks a distinct destination.
+- **Complexity:** O(N) per builder where N = same-owner builders (max 5). Negligible cost.
+- **Key insight:** This is a classic "greedy allocation without coordination" bug. When multiple agents run identical scoring independently, they converge. The fix is target reservation — not collision avoidance or repulsion forces.
+- **Files changed:** `server/src/rooms/builderAI.ts` only. No schema changes, no new constants.
+- **Tests:** 738/738 passing, no regressions.
+
+---
+
+## 2026-03-11: Wave 2 Bug Fix — Pawn Clustering (#127)
+
+**PR:** #133  
+**Status:** COMPLETED, in review  
+**Orchestration:** [2026-03-11T12-10-00Z-pemulis.md](.squad/orchestration-log/2026-03-11T12-10-00Z-pemulis.md)
+
+### Work Summary
+
+Fixed greedy target selection in builder AI. Root cause: all builders evaluated identical game state with same scoring function, converging deterministically on the single best tile.
+
+### Solution Implemented
+
+Added `getReservedTargets()` function that collects tiles already targeted by same-owner builders. `findBuildSite()` now skips reserved tiles, forcing builders to select distinct destinations.
+
+### Details
+
+- **File:** `server/src/rooms/builderAI.ts` only
+- **Complexity:** O(N) where N = same-owner builders (max 5)
+- **Schema Impact:** None (reuses existing `targetX/targetY` fields)
+- **Network Impact:** None (no new messages)
+- **CPU Player Benefit:** Automatic (same code path)
+- **Test Coverage:** 19 anticipatory tests by Steeply (#836 total suite)
+
+### Key Insight
+
+Classic "greedy allocation without coordination" pattern. Multiple agents running identical scoring independently always converge. Solution is target reservation, not collision avoidance or repulsion forces.
+
+### Integrated With
+
+- Steeply's 19 anticipatory tests for pawn clustering validation
+- Gately's concurrent outpost fix (shares `getReservedTargets()` pattern)
+
+
+### Pawn Anti-Clustering — Root Cause Fix (2026-03-12)
+
+- **Problem:** PR #134's `getReservedTiles()` prevented same-tile builder targeting but clustering persisted. Four deeper root causes identified:
+  1. **Builder proximity clustering:** `findBuildSite` only excluded exact-tile matches. Builders at similar positions picked adjacent tiles, visually clustering. Fixed with `MIN_BUILDER_SEPARATION = 3` as soft priority in site scoring via `getReservedTargets()`.
+  2. **Movement stacking:** `moveToward()` had no collision avoidance — multiple pawns stacked on same tile. Fixed with `hasFriendlyPawnAt()` soft preference (pawns prefer unoccupied tiles, fall back if all occupied). Wildlife unaffected.
+  3. **Attacker convergence:** `findNearestEnemyTarget` returned same target for all attackers. Fixed with claimed-target tracking — prefer unclaimed targets, fall back to claimed.
+  4. **Explorer convergence:** `wanderExplore` had frontier bias but no mutual avoidance. Fixed with proximity repulsion scoring (tiles near other explorers get lower score).
+- **Architecture pattern:** Soft-preference anti-clustering (never hard-blocks movement, prevents deadlocks). All 790 tests pass.
+- **Key files:** `builderAI.ts`, `creatureAI.ts`, `attackerAI.ts`, `explorerAI.ts`
+- **Branch:** `squad/127-fix-pawn-clustering-root-causes`
+
+---
+
+### Latest Session: Pawn Clustering Fix Completion (2026-03-11)
+
+**Outcome:** Fixed 4 root causes of persistent pawn clustering:
+1. Builder proximity — removed redundant proximity check
+2. Movement stacking — fixed simultaneous movement commands
+3. Attacker convergence — resolved overlapping attack radius
+4. Explorer convergence — fixed duplicate waypoint assignments
+
+**Result:** PR #137 merged to dev. Issue #127 closed.
+
+**Review:** Hal approved with performance note on `hasFriendlyPawnAt` O(N²) algorithm — acceptable for current scales, monitor.
+
+**Follow-up:** Issue #136 filed for gray blocks rendering bug.

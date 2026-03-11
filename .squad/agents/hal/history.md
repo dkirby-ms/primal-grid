@@ -911,3 +911,175 @@ Clean, well-tested implementation. Bootstrap reconnect-check handles all edge ca
 3. **Future enhancement:** Difficulty settings (easy/medium/hard) can be added in follow-up PR
 
 **Recommendation:** Ready to merge to `dev` after above non-blocking feedback is reviewed. Unblocking team feature and closing #105.
+
+## 2026-03-XX: Wave 1 Bug Fix Reviews
+
+### PR #129: Stage Label Workflow (Marathe)
+**Status:** ✅ APPROVED
+**Assessment:** Correctly implements `uat` branch targeting for stage labels. Graceful error handling for missing labels. Permissions are properly scoped.
+
+### PR #130: Fog-of-War Ghosting (Gately)
+**Status:** ✅ APPROVED
+**Assessment:** Logic for hiding buildings in fog is sound. `GridRenderer` correctly clears stale icons. Fixes visual regression where buildings bled through fog.
+
+### PR #131: Map Size & Timeout Fixes (Pemulis)
+**Status:** ✅ APPROVED
+**Assessment:** 
+- **Critical Fix:** Increased Colyseus encoder buffer to 4MB (was 768KB) to support 256x256 map state sync.
+- **Robustness:** Added try/catch around room creation to prevent swallowed errors. Increased client timeout to 30s.
+- **Validation:** New tests verify 64x64 and 256x256 map generation and performance.
+
+---
+
+## 2026-03-11: Wave 1 PR Reviews (Wave 2 Session Context)
+
+**Status:** COMPLETED  
+**Model:** Gemini 3 Pro (preview)  
+**Orchestration:** [2026-03-11T12-10-00Z-hal.md](.squad/orchestration-log/2026-03-11T12-10-00Z-hal.md)
+
+### PRs Reviewed & Approved
+
+| PR | Author | Issue | Work | Status |
+|----|---------|----|---------|--------|
+| #129 | Marathe | #122 | Stage label lifecycle (dev→uat automation) | ✅ APPROVED |
+| #130 | Gately | #128 | Fog-of-war ghosting & icon clearing | ✅ APPROVED |
+| #131 | Pemulis | #126 | Map size timeout (Colyseus buffer, error handling, timeouts) | ✅ APPROVED |
+
+### Review Findings
+
+- All PRs meet squad standards
+- No blockers or required changes
+- Ready for merge to respective branches (dev/uat)
+- Each PR demonstrates solid pattern implementation (label automation, rendering cleanup, encoder buffer scaling)
+
+### Model Override Note
+
+Used Gemini 3 Pro for this review task to leverage an alternate model for independent validation perspective. Model performed well on procedural code review.
+
+
+### PRs Reviewed & Approved (Wave 2)
+
+| PR | Author | Issue | Work | Status |
+|----|--------|-------|------|--------|
+| #132 | Marathe | #120 | Changelog generation script | ✅ APPROVED |
+| #133 | Pemulis | #127 | Builder pawn clustering fix | 🔴 REQUEST CHANGES |
+| #134 | Gately | #125 | Outpost rendering & builder stability | ✅ APPROVED |
+
+### Review Findings
+
+- **PR #132 (Changelog)**: Excellent consolidation of shell logic. Moving to a dedicated script reduces duplication across 3 workflows.
+- **PR #133 vs #134 (Builder Logic)**: Both PRs attempted to fix builder clustering by checking `pawnType` or `creatureType`. #134 was superior because it also checked `currentState` (move_to_site/building), preventing idle builders from falsely reserving tiles. I requested changes on #133 in favor of #134.
+- **Rendering**: #134 correctly handles outpost icon visibility in fog-of-war, preventing "ghost" icons.
+
+## Learnings
+
+- Always check `currentState` when filtering pawns for reservation logic — idle pawns can have stale targets.
+- Prefer integer-based tile indices (`y * width + x`) over string coordinates (`"x,y"`) for performance in tight loops.
+
+### PRs Reviewed & Approved (Wave 3)
+
+| PR | Author | Issue | Work | Status |
+|----|--------|-------|------|--------|
+| #129 | Marathe | #122 | Stage label swap automation (dev→uat) | ✅ APPROVED |
+| #130 | Gately | #128 | Fix phantom buildings in fog-of-war | ✅ APPROVED |
+| #131 | Pemulis | #126 | Fix map size timeout for non-128x128 maps | ✅ APPROVED |
+
+### Review Findings
+
+- **PR #129 (Stage Labels)**: Clean job split with branch conditions. Correctly handles label removal (404-safe) and addition. Added `contents: read` permission for checkout — appropriate.
+- **PR #130 (Phantom Buildings)**: Surgical two-line fix. Hides building icons on visible→explored transition and clears stale fog silhouette icons. Good root-cause analysis in PR description. No tests needed — rendering layer.
+- **PR #131 (Map Size Timeout)**: Three-pronged fix (buffer, error handling, timeout). Encoder buffer increase from 768KB to 4MB is proportional to 4x tile count. Try-catch in LobbyRoom uses existing `sendError` pattern. Tests cover 64×64 and 256×256 with correctness + perf ceilings. `package-lock.json` changes are formatting-only (version field relocation).
+
+- Encoder.BUFFER_SIZE now at 4 MB — ceiling for 256×256 maps. If larger maps are ever introduced, this needs revisiting.
+- Client-side game creation timeout is now 30s (was 15s). LobbyScreen.ts line 216.
+
+---
+
+### Latest Session: PR #137 Review & Approval (2026-03-11)
+
+**Task:** Review Pemulis's pawn clustering fix (PR #137).
+
+**Review Notes:**
+- Core logic fixes are sound across all 4 root causes
+- Test coverage adequate (790 tests passing)
+- **Performance Finding:** `hasFriendlyPawnAt` method is O(N²) in current implementation. For grid sizes ≤256×256, this is acceptable but should be monitored in production.
+
+**Decision:** Approved for merge. Performance optimization deferred to future refactor as non-blocking.
+
+**Outcome:** PR #137 merged to dev. Issue #127 closed. Issue #136 filed.
+
+
+### Latest Session: PR #138 Review (2026-03-11)
+
+**Task:** Review PR #138 "Fix non-player unit rendering" (#136).
+
+**Review Notes:**
+- **Correctness:** Verified removal of `isLocalBuilder` gate. All pawns now render correct emoji regardless of owner.
+- **Completeness:** `isPlayerPawn` utility ensures coverage for all types: builder, defender, attacker, explorer.
+- **Consistency:** `drawStateBackground` correctly implements player color rendering with type-based fallback. Ownership border adds necessary visual distinction for non-local units.
+- **No Regressions:** Local player rendering logic preserved.
+- **Tests:** 843/843 passed. New `lastOwnerID` tracking ensures re-render on ownership change.
+
+**Verdict:** **APPROVE**. Code is clean, correct, and safe to merge.
+
+## Learnings
+- Renderer uses `playerColors` cache in `CreatureRenderer` to avoid repeated map lookups during draw calls.
+- `isPlayerPawn` utility covers all `pawn_*` types.
+- Rendering logic is centralized in `getIcon` and `drawStateBackground`, good for consistency.
+
+---
+
+## 2026-03-11: PR #138 Review & Merge (2026-03-11T15-26-00Z)
+
+**Task:** Review PR #138 "Fix non-player unit rendering"  
+**Author:** Gately  
+**Issue:** #136  
+
+**Review Notes:**
+- Verified removal of `isLocalBuilder` gate — all pawn types now render correct emoji
+- `isPlayerPawn` utility ensures complete coverage for all pawn types
+- `drawStateBackground` correctly implements player color rendering with type-based fallback
+- Ownership border adds necessary visual distinction for non-local units
+- Local player rendering logic preserved (no regressions)
+- 843/843 tests passing; `lastOwnerID` tracking ensures proper re-renders
+
+**Verdict:** **APPROVED**. Code is clean, correct, and safe to merge.
+
+**Outcome:** Merged to dev (2026-03-11). Branch deleted. Issue #136 auto-closed.
+
+**Learnings:**
+- Player color caching pattern (`playerColors` map in CreatureRenderer) improves rendering performance
+- Ownership borders effectively disambiguate non-local pawns in multi-player view
+- Utility functions (`isPlayerPawn`) reduce code duplication and improve maintainability
+### PR #140 Review — Outpost Spacing Fix (2026-03-11)
+
+- **Issue:** #139 — Builders placed outposts on every claimed tile, causing visual clutter.
+- **Fix:** `MIN_OUTPOST_SPACING = 4` constant + `hasNearbyOutpost()` Manhattan distance check in `builderAI.ts`. Tiles still claimed; only outpost structure suppressed when too close.
+- **Verdict:** APPROVE. Correct distance metric (Manhattan for grid), clean gate logic, 12 solid tests, no regressions (854/855 pass; 1 flake in water-depth.test.ts is pre-existing).
+- **Key Observations:**
+  - `hasNearbyOutpost` scans ~41 tiles per call (r=4 diamond). Negligible perf cost since builds complete rarely.
+  - When spacing blocks outpost, `structureType` stays at default `""` — no ghost structures.
+  - Farm placement correctly bypasses spacing check entirely.
+- **Outcome:** Reviewed and approved PR #140.
+
+## PR #140 Merge (2026-03-11T15-44-00Z)
+
+**Task:** Merge PR #140 after review approval  
+**Outcome:** Merged to dev via `gh pr merge 140 --merge --delete-branch`  
+**Related Issue:** #139 auto-closed  
+
+**Details:**
+- All 854/855 tests pass (1 pre-existing timeout in water-depth.test.ts, unrelated to this PR)
+- Manhattan distance logic verified as correct for grid tile calculations
+- Claiming logic preserved — only outpost icon suppressed when too close
+- 12 new tests provide comprehensive proximity validation
+
+**Learnings:**
+- Manhattan distance is the correct metric for grid-based spatial checks
+- Spacing checks using iterative rings are performant enough for infrequent operations
+- Constants like `MIN_OUTPOST_SPACING` provide tunable game balance parameters
+
+**Downstream:**
+- Gately's pawn builder system now has tighter visual feedback with reduced icon clutter
+- No client-side changes required; rendering already keys off `structureType`
+

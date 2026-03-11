@@ -25,6 +25,7 @@ export function stepExplorer(creature: CreatureState, state: GameState): boolean
  * Wander with bias toward unclaimed tiles (tiles not owned by any player).
  * Shuffles cardinal directions, then scores candidates: unclaimed tiles get
  * priority over owned tiles, encouraging the explorer toward the frontier.
+ * Penalizes tiles near other same-owner explorers to encourage spreading out.
  */
 function wanderExplore(creature: CreatureState, state: GameState): boolean {
   const dirs: [number, number][] = [[0, -1], [0, 1], [-1, 0], [1, 0]];
@@ -35,7 +36,16 @@ function wanderExplore(creature: CreatureState, state: GameState): boolean {
     [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
   }
 
-  // Score each candidate: prefer unclaimed tiles
+  // Collect positions of other same-owner explorers for repulsion
+  const otherExplorers: { x: number; y: number }[] = [];
+  state.creatures.forEach((other) => {
+    if (other.id === creature.id) return;
+    if (other.pawnType !== "explorer") return;
+    if (other.ownerID !== creature.ownerID) return;
+    otherExplorers.push({ x: other.x, y: other.y });
+  });
+
+  // Score each candidate: prefer unclaimed tiles and tiles away from other explorers
   let bestX = -1;
   let bestY = -1;
   let bestScore = -1;
@@ -49,7 +59,14 @@ function wanderExplore(creature: CreatureState, state: GameState): boolean {
     if (!tile) continue;
 
     // Unclaimed tiles score higher — explorer prefers the frontier
-    const score = tile.ownerID === "" ? 2 : 1;
+    let score = tile.ownerID === "" ? 2 : 1;
+
+    // Bonus for tiles away from other same-owner explorers
+    const nearExplorer = otherExplorers.some(
+      (e) => Math.abs(nx - e.x) + Math.abs(ny - e.y) <= 2,
+    );
+    if (!nearExplorer) score += 1;
+
     if (score > bestScore) {
       bestScore = score;
       bestX = nx;
