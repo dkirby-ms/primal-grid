@@ -1481,3 +1481,24 @@ When adding new structure types: check ALL paths — visible tile icons, fog sil
 - No client-side changes required — rendering already keys off `structureType`
 - Pattern can be reused for other structure-to-structure spacing rules (defense structures, farms, etc.)
 
+
+---
+
+### Latest Session: Building Cap Dynamics Feature (2026-03-11T18:25Z)
+
+**Outcome:** PR #148 opened — Server computes dynamic building spawn caps from tech bonuses.
+
+**Feature:** Dynamic building cap system scaled by `BUILDING_CAP_BONUS` (tech level dependent). HUD displays effective cap with visual (+N) indicator.
+
+**Implementation:**
+- Server-side cap computation in `buildingCaps.ts`
+- Client HUD update in `BuildingHUD.tsx` shows base cap + bonus
+- Full O(N) tile scan on Colyseus state change (16,384 tiles) — accepted with performance risk noted
+
+**Tests:** 12 new test cases in `buildingCaps.test.ts`. All 869 tests pass.
+
+**Design decision logged:** HUD Performance decision in decisions.md (Task #5 candidate for optimization if frame drops occur).
+
+**Status:** Awaiting review from Hal (Lead).
+
+**Cross-agent note:** Parallel with Pemulis's explorer frontier scanning (PR #149) — no dependencies or conflicts.
