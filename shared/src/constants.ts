@@ -320,6 +320,12 @@ export const BUILDING_INCOME: Record<string, { wood: number; stone: number }> = 
   factory: { wood: 2, stone: 1 },
 } as const;
 
+/** Per-building bonus to each pawn type's spawn cap (applied globally). */
+export const BUILDING_CAP_BONUS: Record<string, number> = {
+  farm: 1,
+  factory: 2,
+} as const;
+
 /** Progression level definitions. */
 export const PROGRESSION = {
   MAX_LEVEL: 7,

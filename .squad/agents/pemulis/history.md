@@ -1990,3 +1990,9 @@ Classic "greedy allocation without coordination" pattern. Multiple agents runnin
 **Status:** Awaiting review from Hal (Lead).
 
 **Cross-agent note:** Works alongside Gately's building cap dynamics (PR #148) — no conflicts.
+### Explorer AI Frontier Scanning (2026-03-12)
+
+- **Issue:** #147 — Explorers moved randomly when deep inside owned territory because the AI only scored 4 adjacent tiles. When all neighbors are owned, scores tie and movement is aimless.
+- **Fix:** Added `countFrontierInDirection()` — a ray scan (up to 6 tiles, matching vision radius) that counts unclaimed tiles in each cardinal direction. This score bonus steers explorers through owned territory toward the frontier. Also raised unclaimed base score (2→3) and repulsion bonus (1→2).
+- **Tests:** 9 new tests in `explorer-ai.test.ts` — FSM transitions, frontier counting, directed movement through territory, repulsion, fallback.
+- **PR:** #149 on `squad/147-explorer-ai-movement`. 878/878 tests passing.

@@ -1,5 +1,9 @@
 import { GameState, CreatureState } from "./GameState.js";
+import { PAWN_TYPES } from "@primal-grid/shared";
 import { isTileOpenForCreature } from "./creatureAI.js";
+
+/** How far ahead an explorer scans to detect frontier tiles. */
+const FRONTIER_SCAN_RADIUS = PAWN_TYPES.explorer.visionRadius;
 
 /**
  * Explorer pawn FSM: idle → wander
@@ -22,15 +26,44 @@ export function stepExplorer(creature: CreatureState, state: GameState): boolean
 }
 
 /**
+ * Count unclaimed tiles along a ray from (fromX, fromY) in direction (dx, dy).
+ * Used to give explorers a sense of which direction leads toward the frontier,
+ * even when all immediately adjacent tiles are owned.
+ */
+export function countFrontierInDirection(
+  state: GameState,
+  fromX: number,
+  fromY: number,
+  dx: number,
+  dy: number,
+  radius: number,
+): number {
+  let count = 0;
+  for (let dist = 1; dist <= radius; dist++) {
+    const tx = fromX + dx * dist;
+    const ty = fromY + dy * dist;
+    const tile = state.getTile(tx, ty);
+    if (!tile) break;
+    if (tile.ownerID === "") count++;
+  }
+  return count;
+}
+
+/**
  * Wander with bias toward unclaimed tiles (tiles not owned by any player).
- * Shuffles cardinal directions, then scores candidates: unclaimed tiles get
- * priority over owned tiles, encouraging the explorer toward the frontier.
- * Penalizes tiles near other same-owner explorers to encourage spreading out.
+ * Shuffles cardinal directions, then scores candidates:
+ *  - Immediate tile: unclaimed = +3, owned = +1
+ *  - Frontier scan: +1 per unclaimed tile in that direction (up to SCAN_RADIUS)
+ *  - Explorer repulsion: +2 if no same-owner explorer within Manhattan distance 2
+ *
+ * The frontier scan is the key improvement: when an explorer is deep inside
+ * owned territory and all adjacent tiles score equally, the scan detects which
+ * direction leads toward unexplored territory and biases movement that way.
  */
 function wanderExplore(creature: CreatureState, state: GameState): boolean {
   const dirs: [number, number][] = [[0, -1], [0, 1], [-1, 0], [1, 0]];
 
-  // Shuffle directions for randomness
+  // Shuffle directions for randomness (tie-breaking when scores are equal)
   for (let i = dirs.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
@@ -45,7 +78,6 @@ function wanderExplore(creature: CreatureState, state: GameState): boolean {
     otherExplorers.push({ x: other.x, y: other.y });
   });
 
-  // Score each candidate: prefer unclaimed tiles and tiles away from other explorers
   let bestX = -1;
   let bestY = -1;
   let bestScore = -1;
@@ -58,14 +90,19 @@ function wanderExplore(creature: CreatureState, state: GameState): boolean {
     const tile = state.getTile(nx, ny);
     if (!tile) continue;
 
-    // Unclaimed tiles score higher — explorer prefers the frontier
-    let score = tile.ownerID === "" ? 2 : 1;
+    // Immediate tile: unclaimed tiles get a strong base score
+    let score = tile.ownerID === "" ? 3 : 1;
 
-    // Bonus for tiles away from other same-owner explorers
+    // Frontier scan: count unclaimed tiles ahead in this direction
+    score += countFrontierInDirection(
+      state, creature.x, creature.y, dx, dy, FRONTIER_SCAN_RADIUS,
+    );
+
+    // Explorer repulsion: prefer tiles away from other same-owner explorers
     const nearExplorer = otherExplorers.some(
       (e) => Math.abs(nx - e.x) + Math.abs(ny - e.y) <= 2,
     );
-    if (!nearExplorer) score += 1;
+    if (!nearExplorer) score += 2;
 
     if (score > bestScore) {
       bestScore = score;
