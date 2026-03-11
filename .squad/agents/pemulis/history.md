@@ -1952,3 +1952,19 @@ Classic "greedy allocation without coordination" pattern. Multiple agents runnin
 - **Architecture pattern:** Soft-preference anti-clustering (never hard-blocks movement, prevents deadlocks). All 790 tests pass.
 - **Key files:** `builderAI.ts`, `creatureAI.ts`, `attackerAI.ts`, `explorerAI.ts`
 - **Branch:** `squad/127-fix-pawn-clustering-root-causes`
+
+---
+
+### Latest Session: Pawn Clustering Fix Completion (2026-03-11)
+
+**Outcome:** Fixed 4 root causes of persistent pawn clustering:
+1. Builder proximity — removed redundant proximity check
+2. Movement stacking — fixed simultaneous movement commands
+3. Attacker convergence — resolved overlapping attack radius
+4. Explorer convergence — fixed duplicate waypoint assignments
+
+**Result:** PR #137 merged to dev. Issue #127 closed.
+
+**Review:** Hal approved with performance note on `hasFriendlyPawnAt` O(N²) algorithm — acceptable for current scales, monitor.
+
+**Follow-up:** Issue #136 filed for gray blocks rendering bug.
