@@ -712,3 +712,18 @@ Centralized changelog generation into shared script. Eliminated inline grep-base
 
 Issue #120 re-labeled from `squad:pemulis` to `squad:marathe` (release automation scope, not simulation)
 
+
+---
+
+## 2026-03-12: Merge Conflict Resolution — PR #143
+
+- **Status:** COMPLETED
+- **Task:** Resolved merge conflicts on PR #143 (Promote dev → uat, v0.1.5)
+- **Conflicts:** `package.json` and `package-lock.json` — version field (0.1.5 vs 0.1.4)
+- **Resolution:** Dev wins on all code conflicts (source of truth for promotion). `.squad/decisions.md` auto-merged cleanly.
+- **Result:** PR #143 now MERGEABLE
+
+**Learnings:**
+- In dev→uat promotions, conflicts are typically version bumps — dev always wins since it's the source being promoted
+- `git merge origin/uat --no-commit` is the right pattern to inspect conflicts before committing
+- Remember: `--ours` = HEAD (current branch), `--theirs` = branch being merged in
