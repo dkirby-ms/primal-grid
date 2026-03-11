@@ -1518,3 +1518,26 @@ Added `div#app-footer` fixed to bottom of viewport with version, build date, and
 - **Vite `define`:** Used `define` block in `client/vite.config.ts` to inject `__APP_VERSION__` (from root `package.json`) and `__BUILD_DATE__` (generated at build time) as compile-time string constants. This avoids runtime JSON imports and works cleanly with TypeScript (`declare const` in main.ts).
 - **Non-intrusive styling:** Footer uses `pointer-events: none` on the container so it never blocks game canvas clicks; only the issues link has `pointer-events: auto`. Fixed position at bottom, 10px monospace, muted #555 color.
 - **Footer populated in main.ts:** Runs after `bootstrap()` call, uses IIFE to keep scope clean. Gracefully falls back to "dev" if build constants aren't defined (e.g., in test environments).
+
+### Footer Feature Implementation (#150, PR #151)
+
+**Task:** Implement footer UI with version, build date, and issues link.
+
+**Outcome:** PR #151 opened and merged to dev. Issue #150 advanced to stage:ready-for-uat. All 877 tests pass.
+
+**Implementation Details:**
+- Added footer `<div id="footer">` in `client/index.html`
+- Configured Vite `define` in `vite.config.ts` to inject `__VERSION__` (from package.json) and `__BUILD_DATE__` (build timestamp)
+- Populated footer in `client/src/main.ts` on app startup with version, date, and GitHub issues link
+- CSS: flex layout, bottom-aligned, non-intrusive to game canvas and HUD
+- No regressions; all tests pass
+
+**Design Rationale:**
+- Build-time injection avoids runtime lookups and keeps frontend lean
+- Vite integration is idiomatic for modern frontend tooling
+- Minimal footprint; leverages existing document flow (no absolute positioning)
+
+**Quality Assurance:**
+- Reviewed and approved by Hal (Lead)
+- No conflicts with game rendering or HUD panel
+- Footer automatically updates with each build (version and date always current)

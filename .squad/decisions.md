@@ -2978,3 +2978,87 @@ Accepted this O(N) approach for now to keep implementation simple and stateless.
 - **Mitigation:** If performance becomes an issue, we will refactor to:
   1. Maintain a `buildingCount` in the `Player` schema (server-side tracking).
   2. Or cache the value in `HudDOM` and only update when `tiles` change specifically (using `tiles.onAdd`/`onRemove`).
+
+---
+
+## Building Cap Bonus — Global Per-Type Pattern
+
+**Author:** Gately  
+**Date:** 2026-03-14  
+**Status:** Implemented (PR #148)
+
+### Decision
+
+Building cap bonuses apply **globally to all pawn types equally** (not per-type). The effective cap is `baseCap + totalBuildingBonus` where bonus sums across all buildings regardless of type.
+
+### Implications
+
+- Any new building type that grants cap bonus should add an entry to `BUILDING_CAP_BONUS` in `shared/src/constants.ts`
+- `getBuildingCapBonus()` in GameRoom.ts handles the server-side sum; client mirrors it by iterating tiles
+- Both server (`spawnPawnCore`) and client (`updateSpawnButton` + HUD display) must use the same formula
+- Starting cap (13 total across types) is unchanged — progression through buildings is optional
+
+---
+
+## Explorer AI: Frontier Ray Scanning
+
+**Author:** Pemulis  
+**Date:** 2026-03-12  
+**Status:** Implemented  
+**PR:** #149  
+**Issue:** #147
+
+### Context
+
+Explorers scored only the 4 adjacent tiles. Deep inside owned territory, all neighbors are owned and score equally — resulting in random wandering that doesn't explore.
+
+### Decision
+
+Added a **frontier ray scan** to explorer scoring: for each candidate direction, cast a ray of up to `PAWN_TYPES.explorer.visionRadius` (6) tiles and count unclaimed tiles. This bonus steers explorers through owned territory toward the frontier.
+
+Scoring weights:
+- Unclaimed adjacent tile: +3 (was +2)
+- Owned adjacent tile: +1
+- Unclaimed tiles along ray: +1 each (0-6 range)
+- Away from same-owner explorers: +2 (was +1)
+
+### Implications
+
+- `countFrontierInDirection()` is exported from `explorerAI.ts` for direct testing
+- Performance: O(4 × scan_radius) per explorer per tick — negligible for max 3 explorers per player
+- If future pawn types need frontier awareness, reuse `countFrontierInDirection`
+
+---
+
+## Footer: Build-Time Injection via Vite
+
+**Author:** Hal (Lead)  
+**Date:** 2026-03-14  
+**Status:** Implemented (PR #151, merged to dev)  
+**Issue:** #150
+
+### Decision
+
+Footer UI is populated at build time via Vite `define` plugin:
+- **Version:** Injected from root `package.json` version field
+- **Date:** Injected from build timestamp (ISO 8601)
+- **Issues link:** Hardcoded to GitHub issues page
+
+### Implementation
+
+- Footer `<div id="footer">` in `client/index.html` (no additional markup)
+- Vite `define` config in `vite.config.ts` exposes `__VERSION__` and `__BUILD_DATE__`
+- Footer populated in `client/src/main.ts` on app startup
+- CSS styling: flex, bottom-aligned, minimal footprint
+
+### Rationale
+
+- **Build-time injection:** Avoids runtime lookups; version/date are immutable per build
+- **Vite integration:** Standard approach for frontend metadata; no extra API/config needed
+- **Non-intrusive:** Footer uses document flow; no changes to game canvas or HUD layout
+
+### Implications
+
+- Deployments include updated footer automatically
+- Version in footer always matches package.json of that build
+- Future additions (commit hash, branch name) reuse same pattern
