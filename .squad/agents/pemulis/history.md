@@ -1996,3 +1996,20 @@ Classic "greedy allocation without coordination" pattern. Multiple agents runnin
 - **Fix:** Added `countFrontierInDirection()` — a ray scan (up to 6 tiles, matching vision radius) that counts unclaimed tiles in each cardinal direction. This score bonus steers explorers through owned territory toward the frontier. Also raised unclaimed base score (2→3) and repulsion bonus (1→2).
 - **Tests:** 9 new tests in `explorer-ai.test.ts` — FSM transitions, frontier counting, directed movement through territory, repulsion, fallback.
 - **PR:** #149 on `squad/147-explorer-ai-movement`. 878/878 tests passing.
+
+### Food Economy System (2026-03-14)
+
+- **Issue:** #21 — New resource type: food
+- **Design:** Implemented Hal's food economy design spec exactly. Food is the third resource — acts as unit allowance via per-income-tick upkeep.
+- **Changes (8 files, shared/ + server/ only):**
+  - `shared/src/types.ts`: Added `Food = 2` to ResourceType enum, `food: number` to IPlayerState
+  - `shared/src/constants.ts`: TERRITORY.STARTING_FOOD=50, PawnTypeDef.foodUpkeep field, rebalanced pawn costs (builder 8W/4S, defender 12W/8S, attacker 16W/12S, explorer 10W/6S), STRUCTURE_INCOME.HQ_FOOD=2, BUILDING_INCOME farm={0W,0S,2F}, EnemyBaseTypeDef.reward includes food, STARVATION.DAMAGE_PER_TICK=5
+  - `server/src/rooms/GameState.ts`: `food: number` field with @type("number") on PlayerState
+  - `server/src/rooms/territory.ts`: `player.food = TERRITORY.STARTING_FOOD` in spawnHQ
+  - `server/src/rooms/GameRoom.ts`: HQ food income, farm food income, food upkeep deduction (iterate pawns, sum foodUpkeep), starvation check (random pawn damage), spawn block when food<=0, food restore on reconnect
+  - `server/src/rooms/combat.ts`: Enemy base reward includes food
+  - `server/src/persistence/playerStateSerde.ts`: food field in SerializedPlayerState
+  - `server/src/__tests__/pawnBuilder.test.ts`: Updated spawn cost test to use PAWN_TYPES instead of legacy PAWN constants
+- **Key design points:** Food can go negative (debt from upkeep). Starvation damages one random pawn per income tick. Farms produce only food now (0W/0S/2F). Factory unchanged (2W/1S/0F).
+- **Tests:** 903/903 passing. No client/ files touched (Gately handles HUD).
+- **Branch:** `squad/21-food-resource` pushed to origin. No PR opened — waiting for Gately's client changes.
