@@ -1427,3 +1427,19 @@ When adding new structure types: check ALL paths — visible tile icons, fog sil
 - **Key pattern:** `CreatureRenderer` now self-caches player colors from `state['players']` in `onStateChange`, keeping it decoupled from `GridRenderer` which also tracks player colors.
 - **Files:** `client/src/renderer/CreatureRenderer.ts`
 - **PR:** #138
+
+---
+
+## 2026-03-11: PR #138 Merge & Issue #136 Closure (2026-03-11T15-26-00Z)
+
+**Status:** MERGED  
+**Issue Closed:** #136  
+**Review:** Hal (Lead)  
+
+**Summary:** PR #138 approved and merged to dev. Non-player unit rendering now works correctly — all pawn types display proper icons and player colors with ownership borders distinguishing non-local pawns.
+
+**Outcome:** Issue #136 auto-closed. Branch deleted. 843/843 tests passing.
+
+**Impact for Gately:** This completes the non-local rendering fix that Gately implemented. The rendering layer is now consistent across all player perspectives — a key step toward multiplayer gameplay visibility.
+
+**Related Work:** Integrates cleanly with Gately's earlier fog-of-war and outpost rendering fixes (#128, #125).

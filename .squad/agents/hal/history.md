@@ -1026,3 +1026,28 @@ Used Gemini 3 Pro for this review task to leverage an alternate model for indepe
 - Renderer uses `playerColors` cache in `CreatureRenderer` to avoid repeated map lookups during draw calls.
 - `isPlayerPawn` utility covers all `pawn_*` types.
 - Rendering logic is centralized in `getIcon` and `drawStateBackground`, good for consistency.
+
+---
+
+## 2026-03-11: PR #138 Review & Merge (2026-03-11T15-26-00Z)
+
+**Task:** Review PR #138 "Fix non-player unit rendering"  
+**Author:** Gately  
+**Issue:** #136  
+
+**Review Notes:**
+- Verified removal of `isLocalBuilder` gate — all pawn types now render correct emoji
+- `isPlayerPawn` utility ensures complete coverage for all pawn types
+- `drawStateBackground` correctly implements player color rendering with type-based fallback
+- Ownership border adds necessary visual distinction for non-local units
+- Local player rendering logic preserved (no regressions)
+- 843/843 tests passing; `lastOwnerID` tracking ensures proper re-renders
+
+**Verdict:** **APPROVED**. Code is clean, correct, and safe to merge.
+
+**Outcome:** Merged to dev (2026-03-11). Branch deleted. Issue #136 auto-closed.
+
+**Learnings:**
+- Player color caching pattern (`playerColors` map in CreatureRenderer) improves rendering performance
+- Ownership borders effectively disambiguate non-local pawns in multi-player view
+- Utility functions (`isPlayerPawn`) reduce code duplication and improve maintainability
