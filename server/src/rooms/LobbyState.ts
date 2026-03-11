@@ -1,4 +1,4 @@
-import { Schema, type, ArraySchema, MapSchema } from "@colyseus/schema";
+import { Schema, type, MapSchema } from "@colyseus/schema";
 
 /** A single game session entry visible in the lobby. */
 export class LobbyGameEntry extends Schema {

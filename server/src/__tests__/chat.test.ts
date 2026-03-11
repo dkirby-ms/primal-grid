@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GameState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import { CHAT, CHAT_MAX_LENGTH } from "@primal-grid/shared";
-import type { ChatPayload, ChatBroadcastPayload } from "@primal-grid/shared";
+import type { ChatBroadcastPayload } from "@primal-grid/shared";
 
 // ── Test types ──────────────────────────────────────────────────────
 

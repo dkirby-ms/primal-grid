@@ -3,7 +3,7 @@ import { GameState, PlayerState, CreatureState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import { evaluateCpuDecision, tickCpuPlayers } from "../rooms/cpuPlayerAI.js";
 import {
-  PAWN_TYPES, CPU_PLAYER, TERRITORY, CREATURE_AI,
+  PAWN_TYPES, CPU_PLAYER, TERRITORY,
 } from "@primal-grid/shared";
 import { spawnHQ } from "../rooms/territory.js";
 
@@ -147,7 +147,7 @@ describe("evaluateCpuDecision", () => {
 describe("tickCpuPlayers", () => {
   it("only evaluates on TICK_INTERVAL boundaries", () => {
     const room = createRoomWithMap();
-    const player = addPlayerWithHQ(room, "cpu_0", { wood: 100, stone: 100 });
+    addPlayerWithHQ(room, "cpu_0", { wood: 100, stone: 100 });
     const cpuIds = new Set(["cpu_0"]);
     const spawnFn = vi.fn();
 
@@ -165,7 +165,7 @@ describe("tickCpuPlayers", () => {
   it("calls spawnPawnForCpu when decision is made", () => {
     const room = createRoomWithMap();
     const builderDef = PAWN_TYPES["builder"];
-    const player = addPlayerWithHQ(room, "cpu_0", {
+    addPlayerWithHQ(room, "cpu_0", {
       wood: builderDef.cost.wood,
       stone: builderDef.cost.stone,
     });
