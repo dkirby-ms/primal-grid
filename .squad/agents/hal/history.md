@@ -1083,3 +1083,14 @@ Used Gemini 3 Pro for this review task to leverage an alternate model for indepe
 - Gately's pawn builder system now has tighter visual feedback with reduced icon clutter
 - No client-side changes required; rendering already keys off `structureType`
 
+
+### PR #148 Review (Building Spawn Caps)
+- **Verdict:** Approved.
+- **Analysis:** Correct logic. Simple implementation.
+- **Risk:** Client-side O(N) map scan in `HudDOM` on every state update. Accepted as "simplest thing that works" but flagged for monitoring.
+- **Decision:** Documented performance risk in `hal-hud-tile-scan-performance.md`.
+
+### PR #149 Review (Explorer AI)
+- **Verdict:** Approved.
+- **Analysis:** Smart use of ray-casting ("frontier scan") to solve the "local minimum" problem where explorers got stuck in owned territory.
+- **Note:** Implementation is efficient enough (O(radius) per tick).

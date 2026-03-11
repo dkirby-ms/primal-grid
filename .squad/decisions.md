@@ -2915,3 +2915,66 @@ Added `MIN_OUTPOST_SPACING = 4` (Manhattan distance) in `shared/src/constants.ts
 - **Balance:** Spacing of 4 tiles means roughly 1 outpost per ~20 tiles of territory. Tunable via constant.
 
 ---
+
+---
+
+## Territory Color Rendering: Local Gold + Dynamic Player Colors
+
+**Author:** Gately (Game Dev)  
+**Date:** 2026-03-12  
+**PR:** #142  
+
+### Decision
+
+Territory borders and HQ fills use a two-tier color scheme:
+- **Local player:** Always gold (`0xffd700`) — special "your territory" highlight
+- **Other players:** Their actual assigned color from `playerColors` map (populated from server state sync)
+- **Fallback:** Red (`#e6194b`) if a player's color is missing (defensive)
+
+### Rationale
+
+Previously, all non-local territory was hard-coded red. This made multiplayer unreadable — you couldn't tell which opponent owned which territory. The `playerColors` map was already populated and used correctly for claiming animations, just not for owned territory rendering.
+
+### Implications
+
+- Any new territory visual (influence zones, contested tiles, etc.) should use `playerColors.get(ownerID)` for non-local players, not a hard-coded color.
+- Gold is reserved for local player territory rendering. Don't assign gold as a player color on the server side.
+
+---
+
+## Decision: Explicit Map Setup in Tests
+
+**Date:** 2024-10-24
+**Status:** Proposed
+**Author:** Hal (Lead)
+
+## Context
+Tests relying on `generateMap(seed)` were flaky because specific tile properties (like `shapeHP` or `TileType`) at specific coordinates depended on random generation logic, which changes with algorithm tweaks.
+
+## Decision
+When testing game logic (like building placement or pathfinding) that depends on specific tile states, tests MUST explicitly set the tile properties rather than hoping a seeded map provides them.
+
+## Consequences
+- Tests become deterministic and resilient to map generation changes.
+- Reduces "flaky" failures in CI.
+
+---
+
+## HUD Performance: Full Tile Scan for Cap Bonus
+
+**Author:** Hal  
+**Date:** 2026-03-12  
+**Status:** Accepted (with risk)  
+**PR:** #148  
+
+### Context
+PR #148 implements building spawn cap bonuses. To display the bonus in the HUD (`HudDOM.ts`), the client iterates over all map tiles (`128x128 = 16,384`) on every Colyseus state change to count the player's buildings.
+
+### Decision
+Accepted this O(N) approach for now to keep implementation simple and stateless.
+
+### Risks
+- **Performance:** Iterating 16k schema objects on the main thread every state patch could cause frame drops on lower-end devices or if the update rate is high.
+- **Mitigation:** If performance becomes an issue, we will refactor to:
+  1. Maintain a `buildingCount` in the `Player` schema (server-side tracking).
+  2. Or cache the value in `HudDOM` and only update when `tiles` change specifically (using `tiles.onAdd`/`onRemove`).

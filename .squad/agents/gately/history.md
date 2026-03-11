@@ -1482,6 +1482,26 @@ When adding new structure types: check ALL paths — visible tile icons, fog sil
 - Pattern can be reused for other structure-to-structure spacing rules (defense structures, farms, etc.)
 
 
+---
+
+### Latest Session: Building Cap Dynamics Feature (2026-03-11T18:25Z)
+
+**Outcome:** PR #148 opened — Server computes dynamic building spawn caps from tech bonuses.
+
+**Feature:** Dynamic building cap system scaled by `BUILDING_CAP_BONUS` (tech level dependent). HUD displays effective cap with visual (+N) indicator.
+
+**Implementation:**
+- Server-side cap computation in `buildingCaps.ts`
+- Client HUD update in `BuildingHUD.tsx` shows base cap + bonus
+- Full O(N) tile scan on Colyseus state change (16,384 tiles) — accepted with performance risk noted
+
+**Tests:** 12 new test cases in `buildingCaps.test.ts`. All 869 tests pass.
+
+**Design decision logged:** HUD Performance decision in decisions.md (Task #5 candidate for optimization if frame drops occur).
+
+**Status:** Awaiting review from Hal (Lead).
+
+**Cross-agent note:** Parallel with Pemulis's explorer frontier scanning (PR #149) — no dependencies or conflicts.
 ### Building Spawn Caps — Issue #115 (PR #148)
 
 - **BUILDING_CAP_BONUS**: Farm +1, Factory +2 per building, applied globally to all pawn types
@@ -1490,3 +1510,11 @@ When adding new structure types: check ALL paths — visible tile icons, fog sil
 - **Edge case**: Building destruction immediately decreases cap; over-cap units survive but no new spawns allowed
 - **Shared package rebuild required**: Adding constants to `shared/src/constants.ts` requires `npm run build --workspace=shared` before tests can import them
 - **Tests**: 12 tests in `building-spawn-caps.test.ts` covering bonus calculation, spawn enforcement, destruction cap decrease, and over-cap survival
+
+### Footer with Version & Build Date (2026-03-13)
+
+Added `div#app-footer` fixed to bottom of viewport with version, build date, and issues link (PR #151, issue #150).
+
+- **Vite `define`:** Used `define` block in `client/vite.config.ts` to inject `__APP_VERSION__` (from root `package.json`) and `__BUILD_DATE__` (generated at build time) as compile-time string constants. This avoids runtime JSON imports and works cleanly with TypeScript (`declare const` in main.ts).
+- **Non-intrusive styling:** Footer uses `pointer-events: none` on the container so it never blocks game canvas clicks; only the issues link has `pointer-events: auto`. Fixed position at bottom, 10px monospace, muted #555 color.
+- **Footer populated in main.ts:** Runs after `bootstrap()` call, uses IIFE to keep scope clean. Gracefully falls back to "dev" if build constants aren't defined (e.g., in test environments).

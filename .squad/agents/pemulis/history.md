@@ -1969,6 +1969,27 @@ Classic "greedy allocation without coordination" pattern. Multiple agents runnin
 
 **Follow-up:** Issue #136 filed for gray blocks rendering bug.
 
+---
+
+### Latest Session: Explorer Frontier Scanning Feature (2026-03-11T18:25Z)
+
+**Outcome:** PR #149 opened — Explorer AI now intelligently scans for unclaimed territory.
+
+**Feature:** Frontier ray scanning up to `PAWN_TYPES.explorer.visionRadius` (6 tiles) steers explorers through owned territory toward contested zones.
+
+**Scoring weights:**
+- Unclaimed adjacent tile: +3 (was +2)
+- Owned adjacent tile: +1
+- Unclaimed tiles along ray: +1 each (0-6 range)
+- Away from same-owner explorers: +2 (was +1)
+
+**Tests:** 9 new test cases in `explorerAI.test.ts`. All 878 tests pass.
+
+**Exported for reuse:** `countFrontierInDirection()` available for other pawn types needing frontier awareness.
+
+**Status:** Awaiting review from Hal (Lead).
+
+**Cross-agent note:** Works alongside Gately's building cap dynamics (PR #148) — no conflicts.
 ### Explorer AI Frontier Scanning (2026-03-12)
 
 - **Issue:** #147 — Explorers moved randomly when deep inside owned territory because the AI only scored 4 adjacent tiles. When all neighbors are owned, scores tie and movement is aimless.
