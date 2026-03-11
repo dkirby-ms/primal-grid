@@ -1,7 +1,7 @@
 import { GameState, CreatureState } from "./GameState.js";
 import { moveToward } from "./creatureAI.js";
 import { isAdjacentToTerritory } from "./territory.js";
-import { PAWN, SHAPE, TileType, PROGRESSION, MIN_OUTPOST_SPACING, isWaterTile } from "@primal-grid/shared";
+import { PAWN, SHAPE, TileType, PROGRESSION, MIN_OUTPOST_SPACING, BUILDING_COSTS, isWaterTile } from "@primal-grid/shared";
 
 /**
  * Builder pawn FSM: idle → find_build_site → move_to_site → building → idle
@@ -73,15 +73,15 @@ export function stepBuilder(creature: CreatureState, state: GameState): void {
         // Farm builds cost resources; abort if owner can't afford
         if (creature.buildMode === "farm") {
           const farmOwner = state.players.get(creature.ownerID);
-          if (!farmOwner || farmOwner.wood < PAWN.FARM_COST_WOOD || farmOwner.stone < PAWN.FARM_COST_STONE) {
+          if (!farmOwner || farmOwner.wood < BUILDING_COSTS.farm.wood || farmOwner.stone < BUILDING_COSTS.farm.stone) {
             creature.targetX = -1;
             creature.targetY = -1;
             creature.buildProgress = 0;
             creature.currentState = "idle";
             break;
           }
-          farmOwner.wood -= PAWN.FARM_COST_WOOD;
-          farmOwner.stone -= PAWN.FARM_COST_STONE;
+          farmOwner.wood -= BUILDING_COSTS.farm.wood;
+          farmOwner.stone -= BUILDING_COSTS.farm.stone;
         }
 
         // Build complete — claim the tile

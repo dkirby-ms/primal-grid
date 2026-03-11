@@ -171,9 +171,9 @@ function manhattan(x1: number, y1: number, x2: number, y2: number): number {
 describe("Builder spawning (cost, cap, validation)", () => {
 
   // ★ contract — passes before runtime implementation
-  it("spawn cost constants are 10 Wood / 5 Stone", () => {
-    expect(PAWN.BUILDER_COST_WOOD).toBe(10);
-    expect(PAWN.BUILDER_COST_STONE).toBe(5);
+  it("spawn cost constants match PAWN_TYPES (8 Wood / 4 Stone)", () => {
+    expect(PAWN_TYPES.builder.cost.wood).toBe(8);
+    expect(PAWN_TYPES.builder.cost.stone).toBe(4);
   });
 
   // ★ contract — passes before runtime implementation
@@ -257,8 +257,8 @@ describe("Builder AI FSM (idle, move_to_site, building)", () => {
     const room = createRoomWithMap(42);
     const { client, player } = joinPlayer(room, "p1");
 
-    player.wood = PAWN.BUILDER_COST_WOOD;
-    player.stone = PAWN.BUILDER_COST_STONE;
+    player.wood = PAWN_TYPES.builder.cost.wood;
+    player.stone = PAWN_TYPES.builder.cost.stone;
     room.handleSpawnPawn(client, { pawnType: "builder" });
 
     let builder: CreatureState | null = null;

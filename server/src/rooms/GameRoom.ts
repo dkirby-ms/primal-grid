@@ -724,16 +724,16 @@ export class GameRoom extends Room {
       });
       player.food -= totalUpkeep;
 
-      // Starvation: deal damage to one random pawn when food <= 0
+      // Starvation: deal damage to one random living pawn when food <= 0
       if (player.food <= 0) {
-        const ownedPawns: CreatureState[] = [];
+        const livingPawns: CreatureState[] = [];
         this.state.creatures.forEach((c) => {
-          if (c.ownerID === playerId && c.pawnType !== "") {
-            ownedPawns.push(c);
+          if (c.ownerID === playerId && c.pawnType !== "" && c.health > 0) {
+            livingPawns.push(c);
           }
         });
-        if (ownedPawns.length > 0) {
-          const victim = ownedPawns[Math.floor(Math.random() * ownedPawns.length)];
+        if (livingPawns.length > 0) {
+          const victim = livingPawns[Math.floor(Math.random() * livingPawns.length)];
           victim.health -= STARVATION.DAMAGE_PER_TICK;
         }
       }

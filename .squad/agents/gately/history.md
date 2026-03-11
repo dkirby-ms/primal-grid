@@ -1541,3 +1541,12 @@ Added `div#app-footer` fixed to bottom of viewport with version, build date, and
 - Reviewed and approved by Hal (Lead)
 - No conflicts with game rendering or HUD panel
 - Footer automatically updates with each build (version and date always current)
+
+### Food Resource HUD — Issue #21 (PR #153)
+
+- **Food display**: Added `🍖 Food` row in `index.html` inventory section (`id="inv-food"`), matching wood/stone pattern
+- **HudDOM.ts**: Added `invFood` DOM ref, `currentFood` tracking field, Colyseus state binding for `player.food`
+- **Starvation spawn gate**: All spawn buttons disabled when `currentFood <= 0` — both in `updateSpawnButton()` (visual) and `onSpawnBuilder()`/`onSpawnPawn()` (click handler)
+- **Rebalanced costs**: Updated button labels to reflect new spawn costs (8W/4S, 12W/8S, 16W/12S, 10W/6S)
+- **Committed Steeply's tests**: 25 food economy test cases in `server/src/__tests__/food-economy.test.ts`
+- **All 903 tests pass** after changes

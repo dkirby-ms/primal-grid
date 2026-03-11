@@ -354,10 +354,6 @@ export const MIN_OUTPOST_SPACING = 4;
 
 /** Pawn system constants. */
 export const PAWN = {
-  /** Wood cost to spawn a builder. */
-  BUILDER_COST_WOOD: 10,
-  /** Stone cost to spawn a builder. */
-  BUILDER_COST_STONE: 5,
   /** Builder starting health. */
   BUILDER_HEALTH: 50,
   /** Ticks to complete a build (16 ticks = 4 seconds at 4 ticks/sec). */
@@ -366,10 +362,6 @@ export const PAWN = {
   MAX_PER_PLAYER: 5,
   /** Radius to scan for build sites. */
   BUILD_SITE_SCAN_RADIUS: 8,
-  /** Wood cost to build a farm structure. */
-  FARM_COST_WOOD: 8,
-  /** Stone cost to build a farm structure. */
-  FARM_COST_STONE: 3,
   /** Builder maximum stamina pool. */
   BUILDER_MAX_STAMINA: 20,
   /** Builder stamina cost per tile moved. */

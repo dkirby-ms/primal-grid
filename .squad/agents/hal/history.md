@@ -1109,3 +1109,12 @@ Used Gemini 3 Pro for this review task to leverage an alternate model for indepe
 - **Implementation:** Gately added footer `<div>` in index.html; Vite config exposes `__VERSION__` and `__BUILD_DATE__`; main.ts populates footer on startup.
 - **Quality:** Non-intrusive; no changes to game render or HUD. All 877 tests pass.
 - **Merge:** PR #151 merged to dev (squash). Issue #150 advanced to stage:ready-for-uat.
+
+### Food Economy Design (#21)
+- **Task:** Design food as third resource type with unit allowance mechanic
+- **Audit:** Current economy has wood/stone only. HQ gives 2W/2S per 10s tick. Farm gives 1W/1S. Pawn spawn costs range 10-20W, 5-15S.
+- **Design:** Food = unit allowance. Each pawn costs food per income tick (builder/explorer: 1, defender: 2, attacker: 3). Farms repurposed to produce food (2/tick) instead of wood/stone. HQ gives 2 food/tick passive. Starting food: 50. Starvation at food ≤ 0 blocks spawning + deals 5 HP/tick to random pawn.
+- **Rebalance:** Pawn spawn costs reduced ~20% (wood/stone) since food adds ongoing cost. Enemy base rewards now include food (5-10).
+- **Balance check:** Early game break-even with 2 builders + HQ income. Mid game balanced with 3 farms + 5 units. Max army (13 units) needs 9 farms — correct investment tension.
+- **Scope cuts:** No food tiles, no granary, no food trading, no food upgrades. CPU food AI is automatic via spawnPawnCore check.
+- **Handoff:** Spec at `.squad/decisions/inbox/hal-food-economy-design.md`. Labeled for Pemulis (server) + Gately (client).
