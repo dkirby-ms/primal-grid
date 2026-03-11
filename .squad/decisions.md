@@ -2610,3 +2610,32 @@ CI runners vary in speed (shared VMs, load spikes, cold caches). Hard-asserting 
 ### Applies To
 
 All timing-based performance assertions in the test suite.
+
+---
+
+## 2026-03-11T00:57:00Z: Help Screen Implementation (Issue #113)
+
+**Author:** Gately (Game Dev)  
+**Date:** 2026-03-11  
+**Issue:** #113  
+**Status:** Completed  
+**PR:** #114 (targeting dev)
+
+### Summary
+
+Enhanced in-game help screen with comprehensive gameplay section and created full HOW-TO-PLAY.md guide for new players. Help system now covers controls, mechanics, strategy, and FAQs.
+
+### Impact
+
+- **Players:** Improved onboarding with accessible in-game + written documentation
+- **Documentation:** HOW-TO-PLAY.md now canonical source for gameplay questions
+- **README:** Updated with link to new guide for discoverability
+
+### Test Coverage
+
+- 738 tests passing, no regressions detected
+
+### Notes
+
+Standard feature delivery. No cross-agent dependencies. Lead to review PR #114.
+

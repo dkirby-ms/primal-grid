@@ -1338,3 +1338,10 @@ See `.squad/decisions.md` Initiative Triage & Execution Plan (2026-03-09) for fu
 - **Placement highlights:** Dynamic Graphics objects created on-demand in `showPlacementHighlights()`, destroyed on clear. Not pre-allocated like territory overlays — placement mode is brief and infrequent, so allocation overhead is acceptable.
 - **Wiring:** `InputHandler.setGridRenderer(grid)` called from main.ts. HudDOM fires `onPlacementModeChange` callback that InputHandler subscribes to for showing/hiding highlights.
 - **Pre-existing server test failures:** 16 server-side test failures in buildings.test.ts and water-depth.test.ts — all pre-existing from Pemulis's server code, not caused by client changes. All 29 client tests pass.
+
+### Help Screen & How to Play Documentation (Issue #113)
+
+- **HelpScreen.ts redesign:** Expanded the PixiJS help overlay from keybindings-only to a two-section panel: "⌨ CONTROLS" + "🦖 HOW TO PLAY". Panel widened from 420px to 520px. Added `SECTION_SIZE` (14px) constant for subsection headers. How-to-play rows use green labels (#66ff99) to visually distinguish from yellow keybinding labels (#ffcc00). Section header "HOW TO PLAY" uses cyan (#7ecfff) consistent with existing level/XP HUD color scheme.
+- **HOW-TO-PLAY.md:** Comprehensive gameplay guide created at repo root. Documents all building costs (Farm 12W+6S, Factory 20W+12S), pawn stats (builder/defender/attacker/explorer with costs, health, damage, detection), territory expansion rules, creature behavior, enemy bases, day/night cycle vision modifiers, XP/leveling table (7 levels), and CPU opponent info. All numbers verified against shared/src/constants.ts.
+- **README.md link:** Added "🎮 How to Play" section above Contributing, linking to HOW-TO-PLAY.md.
+- **Key pattern:** Help screen content is data-driven via `[label, description][]` tuples, making it easy to add/remove rows without touching layout code.
