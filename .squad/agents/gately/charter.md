@@ -28,7 +28,7 @@
 
 **I handle:** Rendering, UI, game loop, input, camera, visual effects, sprites, tiles on screen.
 
-**I don't handle:** Game simulation logic (that's Lambert), testing (that's Parker), architecture decisions (that's Ripley).
+**I don't handle:** Game simulation logic (that's Pemulis), testing (that's Steeply), architecture decisions (that's Hal).
 
 **When I'm unsure:** I say so and suggest who might know.
 

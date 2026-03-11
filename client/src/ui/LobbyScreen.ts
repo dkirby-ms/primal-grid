@@ -213,7 +213,7 @@ export class LobbyScreen {
       this.clearCreateGameState();
       this.setCreateFormEnabled(true);
       this.showNotification("Game creation timed out. Please try again.", "error");
-    }, 15_000);
+    }, 30_000);
   }
 
   private clearCreateGameState(): void {

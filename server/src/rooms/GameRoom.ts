@@ -66,6 +66,8 @@ export class GameRoom extends Room {
   private gameId = "";
   /** Set of session IDs belonging to CPU-controlled players. */
   cpuPlayerIds = new Set<string>();
+  /** Session IDs with devMode enabled — persists across drop/reconnect. */
+  private devModeSessions = new Set<string>();
 
   override onCreate(options: Record<string, unknown>) {
     const seed = typeof options?.seed === "number" ? options.seed : DEFAULT_MAP_SEED;
@@ -203,6 +205,10 @@ export class GameRoom extends Room {
     }
 
     const devMode = options?.devMode === true;
+    if (devMode) {
+      this.devModeSessions ??= new Set();
+      this.devModeSessions.add(client.sessionId);
+    }
 
     // Initialize per-player StateView for fog of war
     this.initPlayerView(client, player, devMode);
@@ -245,7 +251,7 @@ export class GameRoom extends Room {
   override onReconnect(client: Client) {
     const player = this.state.players.get(client.sessionId);
     if (player) {
-      const devMode = false;
+      const devMode = this.devModeSessions?.has(client.sessionId) ?? false;
       this.initPlayerView(client, player, devMode);
       // Defer game_log to next tick — the client registers onMessage
       // handlers after the reconnect Promise resolves, so sending
@@ -302,6 +308,7 @@ export class GameRoom extends Room {
 
     this.state.players.delete(sessionId);
     this.sessionUserMap?.delete(sessionId);
+    this.devModeSessions?.delete(sessionId);
 
     if (this.gameId) {
       this.lobbyBridge?.notifyPlayerCountChanged(this.gameId, this.state.players.size);

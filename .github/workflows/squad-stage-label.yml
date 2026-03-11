@@ -2,15 +2,17 @@ name: Squad Stage Label
 
 on:
   pull_request:
-    branches: [dev]
+    branches: [dev, uat]
     types: [closed]
 
 permissions:
   issues: write
+  contents: read
 
 jobs:
-  label-linked-issues:
-    if: github.event.pull_request.merged == true
+  label-linked-issues-dev:
+    name: "stage:ready-for-uat on dev merge"
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'dev'
     runs-on: ubuntu-latest
     steps:
       - name: Apply stage:ready-for-uat to linked issues
@@ -46,5 +48,88 @@ jobs:
                 core.info(`Applied stage:ready-for-uat to #${issueNumber}`);
               } catch (err) {
                 core.warning(`Failed to label #${issueNumber}: ${err.message}`);
+              }
+            }
+
+  label-linked-issues-uat:
+    name: "stage:live-uat on uat merge"
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'uat'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: uat
+
+      - name: Swap stage:ready-for-uat → stage:live-uat on linked issues
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const body = pr.body || '';
+            const { owner, repo } = context.repo;
+
+            const issueNumbers = new Set();
+            const pattern = /(?:closes|fixes|resolves)\s+#(\d+)/gi;
+
+            // 1. Parse issue numbers from PR body
+            let match;
+            while ((match = pattern.exec(body)) !== null) {
+              issueNumbers.add(parseInt(match[1], 10));
+            }
+
+            // 2. Parse issue numbers from commit messages in this PR
+            const commits = await github.rest.pulls.listCommits({
+              owner,
+              repo,
+              pull_number: pr.number,
+              per_page: 100
+            });
+
+            for (const commit of commits.data) {
+              const msg = commit.commit.message || '';
+              let m;
+              const commitPattern = /(?:closes|fixes|resolves)\s+#(\d+)/gi;
+              while ((m = commitPattern.exec(msg)) !== null) {
+                issueNumbers.add(parseInt(m[1], 10));
+              }
+            }
+
+            if (issueNumbers.size === 0) {
+              core.info('No linked issues found in PR body or commits — nothing to label');
+              return;
+            }
+
+            core.info(`Found linked issues: ${[...issueNumbers].join(', ')}`);
+
+            for (const issueNumber of issueNumbers) {
+              try {
+                // Remove stage:ready-for-uat (ignore error if label not present)
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    name: 'stage:ready-for-uat'
+                  });
+                  core.info(`Removed stage:ready-for-uat from #${issueNumber}`);
+                } catch (removeErr) {
+                  if (removeErr.status === 404) {
+                    core.info(`#${issueNumber} did not have stage:ready-for-uat — skipping removal`);
+                  } else {
+                    core.warning(`Failed to remove label from #${issueNumber}: ${removeErr.message}`);
+                  }
+                }
+
+                // Add stage:live-uat
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  labels: ['stage:live-uat']
+                });
+                core.info(`Applied stage:live-uat to #${issueNumber}`);
+              } catch (err) {
+                core.warning(`Failed to update labels on #${issueNumber}: ${err.message}`);
               }
             }

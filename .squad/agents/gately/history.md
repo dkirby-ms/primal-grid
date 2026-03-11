@@ -1345,3 +1345,137 @@ See `.squad/decisions.md` Initiative Triage & Execution Plan (2026-03-09) for fu
 - **HOW-TO-PLAY.md:** Comprehensive gameplay guide created at repo root. Documents all building costs (Farm 12W+6S, Factory 20W+12S), pawn stats (builder/defender/attacker/explorer with costs, health, damage, detection), territory expansion rules, creature behavior, enemy bases, day/night cycle vision modifiers, XP/leveling table (7 levels), and CPU opponent info. All numbers verified against shared/src/constants.ts.
 - **README.md link:** Added "🎮 How to Play" section above Contributing, linking to HOW-TO-PLAY.md.
 - **Key pattern:** Help screen content is data-driven via `[label, description][]` tuples, making it easy to add/remove rows without touching layout code.
+
+### Fog-of-War Phantom Buildings Fix (Issue #128, PR #130)
+
+- **Bug:** Tiles in fog-of-war displayed phantom building icons (farms, factories) that didn't correspond to real server structures.
+- **Root cause:** Two rendering bugs in `GridRenderer.ts`:
+  1. Building icons on `buildingContainer` were not hidden when tiles transitioned from visible → explored (fog). Since fog overlay is alpha 0.6, full-opacity building icons bled through as phantom structures.
+  2. Missing `else` branch in `setFogState('explored')` to hide stale fog structure silhouette icons when cache had no structure.
+- **Fix:** Hide building icons in the visible→explored transition loop; add else branch to explicitly hide fog silhouette icons when cache has no structure data.
+- **Key insight:** `buildingContainer` renders BELOW `fogContainer` (z-order in constructor). Semi-transparent fog doesn't fully occlude building icons — they must be explicitly hidden when tiles enter fog state.
+- **Pattern:** When hiding tile content behind fog, all renderers (building icons, territory overlays, etc.) that use separate containers must be explicitly managed during fog transitions. Don't rely on fog opacity to fully hide underlying visuals.
+
+## 2026-03-11: Wave 1 Bug Fix (Issue #128)
+
+- **Status:** COMPLETED, PR #130 merged
+- **Task:** Fixed phantom buildings visible in fog-of-war
+- **Root Cause:** Building icons rendered in fog before `FogOfWar.ts` hid them; stale silhouettes not cleared
+- **Fix Location:** `client/src/ui/GridRenderer.ts` (7-line surgical fix)
+- **Test Coverage:** 20 anticipatory tests by Steeply; all 794 tests pass
+- **Related Work:** See Steeply's anticipatory test pattern decision — server state model tests validate rendering fixes
+
+## Learnings
+
+### Outpost Placement & Rendering Fix (Issue #125, PR #134)
+
+- **Status:** COMPLETED, PR #134 opened against dev
+- **Bug:** Outpost structures clustered together, disappeared after construction, and appeared to shift position.
+- **Root causes (3):**
+  1. **Clustering:** `findBuildSite()` in `builderAI.ts` didn't check if another builder was already targeting the same tile. Multiple builders converged on identical tiles.
+  2. **Disappearing:** `updateBuildingIcon()` in `GridRenderer.ts` only rendered `farm` and `factory` icons. Outpost was excluded with a comment claiming it had "its own renderer" — but no outpost renderer existed. Outposts were invisible after construction.
+  3. **Moving:** Without a persistent outpost icon, the builder creature was the only visual signal. When it finished and moved to its next target, the "outpost" appeared to shift.
+- **Fix:**
+  - Added `getReservedTiles()` to collect active builder targets and skip them during site selection (prevents clustering).
+  - Included `outpost` in `updateBuildingIcon()` building type check (renders 🗼 icon).
+  - Added building icon hiding during visible→explored fog transitions (same #128 pattern).
+- **Key insight:** Always verify "has its own renderer" comments — cross-reference with actual renderer files. The outpost renderer claim was stale/false.
+- **Pattern:** When adding new structure types to the renderer, check ALL rendering paths: visible tile icons, fog silhouettes, fog transition cleanup. Miss any one and you get phantom or invisible structures.
+
+---
+
+## 2026-03-11: Wave 2 Bug Fix — Outpost Structure Issues (#125)
+
+**PR:** #134  
+**Status:** COMPLETED, in review  
+**Orchestration:** [2026-03-11T12-10-00Z-gately.md](.squad/orchestration-log/2026-03-11T12-10-00Z-gately.md)
+
+### Work Summary
+
+Fixed triple-layer outpost structure issues: builder tile clustering, missing outpost icon rendering, and fog-of-war bleed-through.
+
+### Issues Fixed
+
+1. **Builder Tile Reservation** — Multiple builders now properly reserve tiles, preventing construction of multiple buildings on same location
+2. **Outpost Icon Rendering** — Added 🗼 emoji rendering in `GridRenderer.ts` (was missing from building type check)
+3. **Fog Bleed-Through** — Outpost visuals now properly hidden during visible→explored fog transitions
+
+### Details
+
+- **Primary File:** `client/src/ui/GridRenderer.ts` (building type inclusion + fog cleanup)
+- **Secondary:** `server/src/rooms/builderAI.ts` (tile reservation coordination with Pemulis)
+- **Test Coverage:** 23 anticipatory tests by Steeply (#836 total suite)
+
+### Key Learning
+
+Stale comments in code ("has its own renderer") can hide bugs. The outpost renderer claim was false — no separate renderer existed. Always verify such comments with reality checks (grep, renderer file inspection).
+
+### Rendering Pattern Established
+
+When adding new structure types: check ALL paths — visible tile icons, fog silhouettes, fog transition cleanup. Missing any one causes phantom/invisible structures.
+
+### Integrated With
+
+- Steeply's 23 anticipatory tests for outpost stability
+- Pemulis's concurrent pawn clustering fix (shares `getReservedTargets()` pattern)
+
+
+### Non-Local Pawn Rendering Fix — #136 (2026-03-11)
+
+- **Root cause:** `isLocalBuilder` flag in `CreatureRenderer.getIcon()` returned `'⬜'` for non-local builders, and `drawStateBackground()` used `0x888888` gray for their background. This made all non-local player builders appear as gray blocks.
+- **Fix:** Removed the `isLocalBuilder` concept entirely. All pawn types always render their correct type icon. Background colors now use the owner's player color from the room state (parsed via `playerColors` map), with a subtle border stroke on non-local pawns for visual distinction.
+- **Key pattern:** `CreatureRenderer` now self-caches player colors from `state['players']` in `onStateChange`, keeping it decoupled from `GridRenderer` which also tracks player colors.
+- **Files:** `client/src/renderer/CreatureRenderer.ts`
+- **PR:** #138
+
+---
+
+## 2026-03-11: PR #138 Merge & Issue #136 Closure (2026-03-11T15-26-00Z)
+
+**Status:** MERGED  
+**Issue Closed:** #136  
+**Review:** Hal (Lead)  
+
+**Summary:** PR #138 approved and merged to dev. Non-player unit rendering now works correctly — all pawn types display proper icons and player colors with ownership borders distinguishing non-local pawns.
+
+**Outcome:** Issue #136 auto-closed. Branch deleted. 843/843 tests passing.
+
+**Impact for Gately:** This completes the non-local rendering fix that Gately implemented. The rendering layer is now consistent across all player perspectives — a key step toward multiplayer gameplay visibility.
+
+**Related Work:** Integrates cleanly with Gately's earlier fog-of-war and outpost rendering fixes (#128, #125).
+### Outpost Spacing — Bug #139 (2026-03-11)
+
+- **Problem:** Builders placed an outpost structure on every claimed tile, causing visual clutter on the map.
+- **Fix:** Added `MIN_OUTPOST_SPACING = 4` constant (shared/constants.ts) and `hasNearbyOutpost()` helper (builderAI.ts). Before setting `structureType = "outpost"`, the builder checks if any existing outpost owned by the same player is within 4 Manhattan distance. If too close, the tile is still claimed (ownerID, shapeHP, score, XP all applied) but no outpost structure is placed. Farm placement is unaffected.
+- **Key pattern:** Spacing check scans a diamond-shaped area using Manhattan distance, only checking tiles with `structureType === "outpost"` and matching `ownerID`. Exported for testability.
+- **Files:** `shared/src/constants.ts`, `server/src/rooms/builderAI.ts`, `server/src/__tests__/outpost-spacing.test.ts`
+- **PR:** #140
+
+## PR #140 Merge & Issue #139 Closure (2026-03-11T15-44-00Z)
+
+**Status:** MERGED  
+**Issue Closed:** #139  
+**Reviewed by:** Hal (Lead)  
+
+**Summary:** PR #140 approved and merged to dev. Outpost spacing fix is complete — builders now skip placing outposts when another player-owned outpost exists within 4 Manhattan distance, eliminating visual clutter while preserving tile claiming.
+
+**Test Coverage:** 12 new tests in `server/src/__tests__/outpost-spacing.test.ts` validate proximity detection, edge cases, and farm interaction. All 854/855 tests passing (1 pre-existing flake in water-depth.test.ts unrelated to this PR).
+
+**Technical Details:**
+- `hasNearbyOutpost()` scans ~41 tiles per call (4-tile Manhattan diamond) — negligible perf cost since builds complete infrequently
+- When spacing blocks outpost placement, `structureType` remains `""` (default) — no ghost structures
+- Farm placement unaffected (bypasses spacing check entirely)
+- Tunable via `MIN_OUTPOST_SPACING` constant in shared config
+
+**Outcome:** Issue #139 auto-closed. Branch deleted. Ready for next phase work.
+
+**Learnings:**
+- Manhattan distance is the correct metric for grid-based spatial queries
+- Spacing rules can be efficiently checked by scanning bounded tile regions rather than iterating all tiles
+- Rendering behavior automatically correct when `structureType` field is properly managed server-side
+
+**Integration Points:**
+- Pawn builder system now provides better visual feedback with reduced icon density
+- No client-side changes required — rendering already keys off `structureType`
+- Pattern can be reused for other structure-to-structure spacing rules (defense structures, farms, etc.)
+

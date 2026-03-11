@@ -192,6 +192,35 @@ describe("Server reconnection lifecycle (#101)", () => {
       expect(player!.hqX).toBe(originalHqX);
       expect(player!.hqY).toBe(originalHqY);
     });
+
+    it("preserves devMode across drop→reconnect cycle", async () => {
+      const client = fakeClient("p1");
+      await room.onJoin(asClient(client), { devMode: true });
+
+      // devMode should be set in the player view
+      expect(room.playerViews.get("p1")!.devMode).toBe(true);
+
+      await room.onDrop(asClient(client));
+      expect(room.playerViews.has("p1")).toBe(false);
+
+      room.onReconnect(asClient(client));
+
+      // devMode should be restored after reconnection
+      expect(room.playerViews.has("p1")).toBe(true);
+      expect(room.playerViews.get("p1")!.devMode).toBe(true);
+    });
+
+    it("does not grant devMode on reconnect when original join was not devMode", async () => {
+      const client = fakeClient("p1");
+      await room.onJoin(asClient(client));
+
+      expect(room.playerViews.get("p1")!.devMode).toBe(false);
+
+      await room.onDrop(asClient(client));
+      room.onReconnect(asClient(client));
+
+      expect(room.playerViews.get("p1")!.devMode).toBe(false);
+    });
   });
 
   // --- onLeave (grace period expiry) ---
