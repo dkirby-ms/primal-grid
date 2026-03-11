@@ -8,6 +8,7 @@ export interface SerializedPlayerState {
   displayName: string;
   wood: number;
   stone: number;
+  food: number;
   score: number;
   level: number;
   xp: number;
@@ -19,6 +20,7 @@ export function serializePlayerState(player: PlayerState): string {
     displayName: player.displayName,
     wood: player.wood,
     stone: player.stone,
+    food: player.food,
     score: player.score,
     level: player.level,
     xp: player.xp,
@@ -37,6 +39,7 @@ export function deserializePlayerState(json: string): SerializedPlayerState | nu
       displayName: typeof data.displayName === "string" ? data.displayName : "",
       wood: data.wood,
       stone: data.stone,
+      food: typeof data.food === "number" ? data.food : 0,
       score: typeof data.score === "number" ? data.score : 0,
       level: typeof data.level === "number" ? data.level : 1,
       xp: typeof data.xp === "number" ? data.xp : 0,

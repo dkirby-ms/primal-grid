@@ -4,7 +4,7 @@ import { GameRoom } from "../rooms/GameRoom.js";
 import {
   DEFAULT_MAP_SIZE,
   CREATURE_AI, CREATURE_TYPES,
-  PAWN,
+  PAWN, PAWN_TYPES,
 } from "@primal-grid/shared";
 import type { SpawnPawnPayload } from "@primal-grid/shared";
 
@@ -157,8 +157,8 @@ describe("Game Log Events", () => {
       const room = createRoomWithMap(42);
       const { client, player } = joinPlayer(room, "p1");
 
-      player.wood = PAWN.BUILDER_COST_WOOD;
-      player.stone = PAWN.BUILDER_COST_STONE;
+      player.wood = PAWN_TYPES.builder.cost.wood;
+      player.stone = PAWN_TYPES.builder.cost.stone;
 
       room.handleSpawnPawn(client, { pawnType: "builder" } as SpawnPawnPayload);
 

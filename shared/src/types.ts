@@ -20,6 +20,7 @@ export function isWaterTile(tileType: TileType): boolean {
 export enum ResourceType {
   Wood = 0,
   Stone = 1,
+  Food = 2,
 }
 
 /** State of a single tile on the grid. */
@@ -128,6 +129,7 @@ export interface IPlayerState {
   color: string;
   wood: number;
   stone: number;
+  food: number;
   /** X coordinate of player's HQ tile. */
   hqX: number;
   /** Y coordinate of player's HQ tile. */

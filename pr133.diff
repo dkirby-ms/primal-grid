@@ -1,0 +1,59 @@
+diff --git a/server/src/rooms/builderAI.ts b/server/src/rooms/builderAI.ts
+index c9f8c10..82d246b 100644
+--- a/server/src/rooms/builderAI.ts
++++ b/server/src/rooms/builderAI.ts
+@@ -135,12 +135,38 @@ function isInteriorGap(
+   return ownedNeighbors >= 3;
+ }
+ 
++/**
++ * Collect the set of tiles already targeted by other same-owner builders,
++ * so we can avoid sending multiple pawns to the same location.
++ */
++function getReservedTargets(
++  creature: CreatureState,
++  state: GameState,
++): Set<string> {
++  const reserved = new Set<string>();
++  state.creatures.forEach((other) => {
++    if (
++      other !== creature &&
++      other.ownerID === creature.ownerID &&
++      other.pawnType === "builder" &&
++      other.targetX >= 0 &&
++      other.targetY >= 0
++    ) {
++      reserved.add(`${other.targetX},${other.targetY}`);
++    }
++  });
++  return reserved;
++}
++
+ /**
+  * Find the best unclaimed walkable tile adjacent to the builder's owner's territory.
+  * Scans within BUILD_SITE_SCAN_RADIUS.
+  * Prioritizes interior gaps (tiles surrounded on 3+ sides by owned territory)
+  * before expanding outward. Within each priority tier, prefers closest tiles
+  * with a tiebreaker favoring outward expansion (further from HQ).
++ *
++ * Skips tiles already targeted by other same-owner builders to prevent
++ * multiple pawns from clustering toward the same destination.
+  */
+ function findBuildSite(
+   creature: CreatureState,
+@@ -148,6 +174,7 @@ function findBuildSite(
+ ): { x: number; y: number } | null {
+   const radius = PAWN.BUILD_SITE_SCAN_RADIUS;
+   const player = state.players.get(creature.ownerID);
++  const reserved = getReservedTargets(creature, state);
+   let best: { x: number; y: number } | null = null;
+   let bestDist = Infinity;
+   let bestHqDist = -1;
+@@ -162,6 +189,7 @@ function findBuildSite(
+       if (tile.ownerID !== "") continue;
+       if (!isValidBuildTile(tile)) continue;
+       if (!isAdjacentToTerritory(state, creature.ownerID, tx, ty)) continue;
++      if (reserved.has(`${tx},${ty}`)) continue;
+ 
+       const dist = Math.abs(dx) + Math.abs(dy);
+       if (dist === 0) continue;

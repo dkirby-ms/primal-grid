@@ -1,0 +1,88 @@
+diff --git a/client/src/renderer/GridRenderer.ts b/client/src/renderer/GridRenderer.ts
+index 67238f6..59e30e6 100644
+--- a/client/src/renderer/GridRenderer.ts
++++ b/client/src/renderer/GridRenderer.ts
+@@ -376,7 +376,7 @@ export class GridRenderer {
+         this.tileStructures.set(tileIdx2, structureType);
+         this.tileTypes.set(tileIdx2, type);
+ 
+-        // Render building icon on visible tiles (farm, factory — not hq/outpost which have their own renderers)
++        // Render building icon on visible tiles (farm, factory, outpost — not hq which has its own renderer)
+         this.updateBuildingIcon(tx, ty, structureType);
+       });
+ 
+@@ -386,6 +386,9 @@ export class GridRenderer {
+           const px = prevIdx % this.mapSize;
+           const py = Math.floor(prevIdx / this.mapSize);
+           this.setFogState(px, py, 'explored');
++          // Hide building icon so it doesn't bleed through semi-transparent fog
++          const bIcon = this.buildingIcons.get(prevIdx);
++          if (bIcon) bIcon.visible = false;
+         }
+       }
+       this.visibleTiles = currentVisible;
+@@ -616,7 +619,7 @@ export class GridRenderer {
+   /** Update or create a building icon on a visible tile. */
+   private updateBuildingIcon(x: number, y: number, structureType: string): void {
+     const idx = y * this.mapSize + x;
+-    const isBuildingType = structureType === 'farm' || structureType === 'factory';
++    const isBuildingType = structureType === 'farm' || structureType === 'factory' || structureType === 'outpost';
+ 
+     if (!isBuildingType) {
+       // Remove icon if structure was cleared
+diff --git a/server/src/rooms/builderAI.ts b/server/src/rooms/builderAI.ts
+index c9f8c10..7cfc637 100644
+--- a/server/src/rooms/builderAI.ts
++++ b/server/src/rooms/builderAI.ts
+@@ -135,12 +135,33 @@ function isInteriorGap(
+   return ownedNeighbors >= 3;
+ }
+ 
++/**
++ * Collect the set of tiles already targeted by other builders of the same owner.
++ * Prevents multiple builders from converging on the same tile.
++ */
++function getReservedTiles(
++  creature: CreatureState,
++  state: GameState,
++): Set<number> {
++  const reserved = new Set<number>();
++  state.creatures.forEach((other: CreatureState) => {
++    if (other.id === creature.id) return;
++    if (other.creatureType !== "pawn_builder") return;
++    if (other.ownerID !== creature.ownerID) return;
++    if (other.targetX < 0 || other.targetY < 0) return;
++    if (other.currentState !== "move_to_site" && other.currentState !== "building") return;
++    reserved.add(other.targetY * state.mapWidth + other.targetX);
++  });
++  return reserved;
++}
++
+ /**
+  * Find the best unclaimed walkable tile adjacent to the builder's owner's territory.
+  * Scans within BUILD_SITE_SCAN_RADIUS.
+  * Prioritizes interior gaps (tiles surrounded on 3+ sides by owned territory)
+  * before expanding outward. Within each priority tier, prefers closest tiles
+  * with a tiebreaker favoring outward expansion (further from HQ).
++ * Skips tiles already targeted by another builder of the same owner.
+  */
+ function findBuildSite(
+   creature: CreatureState,
+@@ -148,6 +169,7 @@ function findBuildSite(
+ ): { x: number; y: number } | null {
+   const radius = PAWN.BUILD_SITE_SCAN_RADIUS;
+   const player = state.players.get(creature.ownerID);
++  const reserved = getReservedTiles(creature, state);
+   let best: { x: number; y: number } | null = null;
+   let bestDist = Infinity;
+   let bestHqDist = -1;
+@@ -163,6 +185,9 @@ function findBuildSite(
+       if (!isValidBuildTile(tile)) continue;
+       if (!isAdjacentToTerritory(state, creature.ownerID, tx, ty)) continue;
+ 
++      const tileIdx = ty * state.mapWidth + tx;
++      if (reserved.has(tileIdx)) continue;
++
+       const dist = Math.abs(dx) + Math.abs(dy);
+       if (dist === 0) continue;
+ 
