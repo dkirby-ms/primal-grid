@@ -1,7 +1,7 @@
 {
   "name": "@primal-grid/root",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.1.4",
   "type": "module",
   "workspaces": [
     "client",

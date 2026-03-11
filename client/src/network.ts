@@ -82,7 +82,7 @@ function clearToken(): void {
 // Reconnect token helpers (sessionStorage — tab-scoped, survives refresh)
 // ---------------------------------------------------------------------------
 
-function loadReconnectToken(): string | null {
+export function loadReconnectToken(): string | null {
   try {
     return sessionStorage.getItem(RECONNECT_TOKEN_KEY);
   } catch {
@@ -150,23 +150,36 @@ function getClient(): Client {
 // ---------------------------------------------------------------------------
 
 let reconnecting = false;
+let pageUnloading = false;
+window.addEventListener('beforeunload', () => { pageUnloading = true; });
+window.addEventListener('pageshow', () => { pageUnloading = false; });
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function attachGameRoomHandlers(room: Room): void {
+  room.onDrop(() => {
+    if (!pageUnloading) emitStatus('reconnecting');
+  });
+
+  room.onReconnect(() => {
+    if (room.reconnectionToken) saveReconnectToken(room.reconnectionToken);
+    emitStatus('connected');
+  });
+
   room.onLeave((code: number) => {
     console.log('[network] Left game room, code:', code);
     gameRoom = null;
 
     const consented = code === 1000 || code === 4000;
-    if (consented) {
+    if (consented || !pageUnloading) {
+      // Consented leave OR SDK auto-reconnection exhausted → clean up
+      // and return to lobby. The SDK's onDrop/onReconnect handlers
+      // already handle transient disconnects; reaching onLeave means
+      // the session is truly over.
       clearReconnectToken();
       emitStatus('disconnected');
-    } else {
-      emitStatus('reconnecting');
-      reconnectGameRoom();
     }
   });
 
@@ -389,6 +402,11 @@ export function getLobbyRoom(): Room | null {
 
 export function getRoom(): Room | null {
   return gameRoom;
+}
+
+/** Reset the Colyseus client singleton (e.g. after failed reconnection). */
+export function resetClient(): void {
+  colyseusClient = null;
 }
 
 export async function leaveGame(): Promise<void> {

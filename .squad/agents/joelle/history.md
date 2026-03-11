@@ -16,3 +16,8 @@
 - Design document lives at `docs/design-sketch.md`
 
 ## Learnings
+
+### 2026-03-10: Dev Journal — Discord Identity Handoff
+- dkirby-ms confirmed Joelle should be the Discord announcement voice, not Marathe
+- Deploy workflows (`deploy-uat.yml`, `deploy.yml`) currently hardcode "Squad: Marathe" as webhook username
+- Hal is investigating the fix — Joelle's charter already lists Discord notifications as her responsibility

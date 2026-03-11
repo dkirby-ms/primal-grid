@@ -243,6 +243,21 @@ export const PAWN_TYPES: Record<string, PawnTypeDef> = {
     exhaustedThreshold: 5,
     visionRadius: 5,
   },
+  explorer: {
+    name: "Explorer",
+    icon: "🔭",
+    creatureType: "pawn_explorer",
+    health: 35,
+    cost: { wood: 12, stone: 8 },
+    maxCount: 3,
+    damage: 0,
+    detectionRadius: 0,
+    maxStamina: 30,
+    staminaCostPerMove: 1,
+    staminaRegenPerTick: 2,
+    exhaustedThreshold: 5,
+    visionRadius: 6,
+  },
 };
 
 /** Grave marker constants. */
@@ -290,10 +305,19 @@ export const STRUCTURE_INCOME = {
   HQ_WOOD: 2,
   /** Stone income from HQ per tick. */
   HQ_STONE: 2,
-  /** Wood income per farm per tick. */
-  FARM_WOOD: 1,
-  /** Stone income per farm per tick. */
-  FARM_STONE: 1,
+
+} as const;
+
+/** Building placement costs (instant placement via PLACE_BUILDING). */
+export const BUILDING_COSTS: Record<string, { wood: number; stone: number }> = {
+  farm: { wood: 12, stone: 6 },
+  factory: { wood: 20, stone: 12 },
+} as const;
+
+/** Per-building income awarded each structure income tick. */
+export const BUILDING_INCOME: Record<string, { wood: number; stone: number }> = {
+  farm: { wood: 1, stone: 1 },
+  factory: { wood: 2, stone: 1 },
 } as const;
 
 /** Progression level definitions. */
@@ -373,6 +397,18 @@ export const WATCHTOWER = {
   MAX_PER_PLAYER: 3,
   /** Ticks to complete watchtower construction. */
   BUILD_TICKS: 24,
+} as const;
+
+/** CPU player constants. */
+export const CPU_PLAYER = {
+  /** Maximum CPU players per game. */
+  MAX_COUNT: 7,
+  /** Ticks between CPU AI decision evaluations (~4 seconds at 4 ticks/sec). */
+  TICK_INTERVAL: 16,
+  /** Session ID prefix for CPU players. */
+  SESSION_PREFIX: "cpu_",
+  /** Display names assigned to CPU players in order. */
+  NAMES: ["Atlas", "Borealis", "Cypher", "Draco", "Echo", "Fenrir", "Golem"],
 } as const;
 
 /** Day/night cycle constants (Phase 1 — visual only). */

@@ -38,11 +38,12 @@ function parseColor(color: string): number {
   return parseInt(color, 16) || 0xffffff;
 }
 
-/** Structure type → silhouette icon for explored fog tiles. */
+/** Structure type → icon for rendering on tiles and fog silhouettes. */
 const STRUCTURE_ICONS: Record<string, string> = {
   hq: '🏰',
   outpost: '🗼',
   farm: '🌾',
+  factory: '⚙️',
 };
 
 export class GridRenderer {
@@ -64,6 +65,21 @@ export class GridRenderer {
   private lastIsHQTerritory: boolean[][] = [];
   private claimingTiles: Map<string, { x: number; y: number }> = new Map();
   private localPlayerId: string = '';
+  private localHqX: number = -1;
+  private localHqY: number = -1;
+
+  // Building icons rendered on visible tiles
+  private buildingContainer: Container;
+  private buildingIcons: Map<number, Text> = new Map();
+
+  // Placement highlight overlays
+  private placementContainer: Container;
+  private placementOverlays: Map<number, Graphics> = new Map();
+
+  // Cached tile metadata for placement validation
+  private tileOwners: Map<number, string> = new Map();
+  private tileStructures: Map<number, string> = new Map();
+  private tileTypes: Map<number, TileType> = new Map();
 
   // Viewport culling: tracks the last visible tile range to diff updates
   private lastCullBounds = { minX: 0, minY: 0, maxX: -1, maxY: -1 };
@@ -77,12 +93,16 @@ export class GridRenderer {
     this.container = new Container();
     this.territoryContainer = new Container();
     this.hqContainer = new Container();
+    this.buildingContainer = new Container();
+    this.placementContainer = new Container();
     this.fogContainer = new Container();
     this.mapSize = mapSize;
     this.exploredCache = new ExploredTileCache(mapSize);
     this.buildGrid();
     this.container.addChild(this.territoryContainer);
     this.container.addChild(this.hqContainer);
+    this.container.addChild(this.buildingContainer);
+    this.container.addChild(this.placementContainer);
     // Fog renders ABOVE terrain/territory but BELOW creatures (added before creatures in main.ts)
     this.container.addChild(this.fogContainer);
   }
@@ -280,12 +300,19 @@ export class GridRenderer {
           const hqX = (player['hqX'] as number) ?? -1;
           const hqY = (player['hqY'] as number) ?? -1;
           const displayName = (player['displayName'] as string) || '';
+          const isCPU = !!(player['isCPU']);
           this.playerColors.set(id, color);
           currentPlayerIds.add(id);
 
+          if (id === this.localPlayerId && hqX >= 0 && hqY >= 0) {
+            this.localHqX = hqX;
+            this.localHqY = hqY;
+          }
+
           // Render HQ marker if player has an HQ
           if (hqX >= 0 && hqY >= 0) {
-            this.updateHQMarker(id, hqX, hqY, displayName, color);
+            const hqLabel = isCPU ? `${displayName} 🤖` : displayName;
+            this.updateHQMarker(id, hqX, hqY, hqLabel, color);
           } else {
             this.removeHQMarker(id);
           }
@@ -342,6 +369,15 @@ export class GridRenderer {
         }
 
         this.updateTerritoryOverlay(tx, ty, ownerID, shapeHP, claimingPlayerID, claimProgress, isHQTerritory);
+
+        // Cache tile metadata for placement validation
+        const tileIdx2 = ty * this.mapSize + tx;
+        this.tileOwners.set(tileIdx2, ownerID);
+        this.tileStructures.set(tileIdx2, structureType);
+        this.tileTypes.set(tileIdx2, type);
+
+        // Render building icon on visible tiles (farm, factory — not hq/outpost which have their own renderers)
+        this.updateBuildingIcon(tx, ty, structureType);
       });
 
       // Tiles that were visible last frame but aren't now → explored fog
@@ -575,5 +611,94 @@ export class GridRenderer {
       this.hqMarkers.delete(playerId);
     }
     this.hqNameLabels.delete(playerId);
+  }
+
+  /** Update or create a building icon on a visible tile. */
+  private updateBuildingIcon(x: number, y: number, structureType: string): void {
+    const idx = y * this.mapSize + x;
+    const isBuildingType = structureType === 'farm' || structureType === 'factory';
+
+    if (!isBuildingType) {
+      // Remove icon if structure was cleared
+      const existing = this.buildingIcons.get(idx);
+      if (existing) {
+        existing.visible = false;
+      }
+      return;
+    }
+
+    const iconChar = STRUCTURE_ICONS[structureType] ?? '?';
+    let icon = this.buildingIcons.get(idx);
+    if (!icon) {
+      icon = new Text({
+        text: iconChar,
+        style: { fontSize: 16, fontFamily: 'sans-serif' },
+      });
+      icon.anchor?.set?.(0.5, 0.5);
+      icon.position.set(x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE / 2);
+      this.buildingContainer.addChild(icon);
+      this.buildingIcons.set(idx, icon);
+    } else {
+      if (icon.text !== iconChar) icon.text = iconChar;
+    }
+    icon.alpha = 1.0;
+    icon.visible = true;
+  }
+
+  /**
+   * Show placement highlight overlays on valid tiles.
+   * Valid = owned by local player, no existing structure, not water/rock.
+   */
+  public showPlacementHighlights(): void {
+    this.clearPlacementHighlights();
+
+    for (const tileIdx of this.visibleTiles) {
+      const tx = tileIdx % this.mapSize;
+      const ty = Math.floor(tileIdx / this.mapSize);
+      if (this.isValidPlacementTile(tx, ty)) {
+        const g = new Graphics();
+        g.rect(0, 0, TILE_SIZE, TILE_SIZE);
+        g.fill({ color: 0x00ff88, alpha: 0.2 });
+        g.rect(1, 1, TILE_SIZE - 2, TILE_SIZE - 2);
+        g.stroke({ width: 1, color: 0x00ff88, alpha: 0.5 });
+        g.position.set(tx * TILE_SIZE, ty * TILE_SIZE);
+        this.placementContainer.addChild(g);
+        this.placementOverlays.set(tileIdx, g);
+      }
+    }
+  }
+
+  /** Remove all placement highlight overlays. */
+  public clearPlacementHighlights(): void {
+    for (const g of this.placementOverlays.values()) {
+      this.placementContainer.removeChild(g);
+      g.destroy();
+    }
+    this.placementOverlays.clear();
+  }
+
+  /** Check if a tile is valid for building placement. */
+  public isValidPlacementTile(x: number, y: number): boolean {
+    if (x < 0 || x >= this.mapSize || y < 0 || y >= this.mapSize) return false;
+    const idx = y * this.mapSize + x;
+
+    // Must be owned by local player
+    const owner = this.tileOwners.get(idx) ?? '';
+    if (owner !== this.localPlayerId || this.localPlayerId === '') return false;
+
+    // Must have no existing building (outposts/hq territory can be built on; farm/factory cannot)
+    const structure = this.tileStructures.get(idx) ?? '';
+    if (structure !== '' && structure !== 'outpost' && structure !== 'hq') return false;
+
+    // Protect the actual HQ building (center tile)
+    if (x === this.localHqX && y === this.localHqY) return false;
+
+    // Must not be water or rock
+    const tileType = this.tileTypes.get(idx);
+    if (tileType === TileType.ShallowWater || tileType === TileType.DeepWater || tileType === TileType.Rock) {
+      return false;
+    }
+
+    return true;
   }
 }

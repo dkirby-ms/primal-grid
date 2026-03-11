@@ -1919,3 +1919,78 @@ Large-map rendering with PixiJS requires explicit culling—the scene graph does
 - **Fix:** Move `registerBridgeListeners()` call from `LobbyRoom.onCreate()` to the `on("create")` hook in `index.ts` after `lobbyBridge` injection. Make method public.
 - **Test gap:** ZERO lobby tests exist. LobbyRoom, LobbyBridge, GameSessionRepository, and lobby client UI are all untested. Need bridge lifecycle test, LobbyRoom unit tests, GameSessionRepository tests, and e2e lobby flow tests.
 - **Colyseus gotcha:** Never rely on properties being available in `onCreate()` if they're injected via Colyseus `on("create")` hooks — those hooks fire AFTER `onCreate()` returns (Colyseus 0.17.x).
+
+### Reconnection Lifecycle Tests — Issue #101 (Redo)
+
+- **30 new tests** across 2 files: `server/src/__tests__/reconnection.test.ts` (14 tests), `client/src/__tests__/reconnection.test.ts` (16 tests). Total suite: **690+ tests, all passing** (map-size perf test is pre-existing flaky).
+- **Server tests cover:** `onDrop` calls `allowReconnection(client, 60)`, player state preservation during grace period (position, resources, territory, sessionUserMap), fog-of-war view cleanup on drop + restore on reconnect, game_log messages to client and broadcast, `onLeave` removal after grace expiry, multi-tab guard (stale session eviction when same auth user joins during grace period).
+- **Client tests cover:** Token persistence to `sessionStorage` under `primal-grid-reconnect-token`, token lifecycle (saved on join, cleared on consented leave codes 1000/4000, preserved on unexpected disconnect), `reconnectGameRoom()` exponential backoff (5 attempts with 1s/2s/4s/8s delays verified via setTimeout spy), token rotation after successful reconnect, bootstrap independence (reconnect works without lobby flow), `getRoom()` returns reconnected room.
+- **Pemulis updated `attachGameRoomHandlers`** to use `room.onDrop()` and `room.onReconnect()` callbacks (Colyseus SDK client-side reconnection events). Mock rooms must include these methods. Also added `pageUnloading` guard to suppress reconnection during `beforeunload`.
+- **Client test pattern:** `vi.resetModules()` in `beforeEach` + dynamic `await import('../network.js')` gives clean module-level state per test. Mock `@colyseus/sdk` Client as a regular function constructor (not `vi.fn(() => obj)` — arrow functions can't be `new`'d). Stub `sessionStorage`, `localStorage`, `window` (with `addEventListener`), and `fetch` globally.
+- **Server test pattern:** Continues the `Object.create(GameRoom.prototype)` pattern. Must stub `allowReconnection` and `broadcast` (Colyseus Room methods not on prototype). For multi-tab guard tests, manually set `authProvider`, `sessionUserMap`, and `clients` on the room instance.
+
+### Reconnection onLeave Fix — Issue #101 (Test Update)
+
+- **2 new tests** added to `client/src/__tests__/reconnection.test.ts`. Client tests now **18/18 passing**, server tests **12/12 unchanged**.
+- **Key behavior change:** `onLeave` handler in `attachGameRoomHandlers` no longer calls `reconnectGameRoom()` for non-consented disconnects. The Colyseus SDK 0.17 built-in auto-reconnection (`onDrop`/`onReconnect`) handles transient disconnects. `onLeave` now clears token and emits `'disconnected'` for both consented and non-consented (non-unloading) leaves.
+- **`reconnectGameRoom()` is bootstrap-only** — called from `main.ts` on page refresh to reconnect via stored `sessionStorage` token. Not triggered from `onLeave` anymore.
+- **Regression tests added:** (1) verify `onConnectionStatus` receives `'disconnected'` on non-consented leave, (2) verify `mockClient.reconnect` is NOT called from `onLeave`.
+- **`resetClient()` export added** to `network.ts` — allows `main.ts` to clear the Colyseus client singleton after failed bootstrap reconnection.
+- **Server tests unchanged** — server-side `onDrop`/`onReconnect`/`onLeave` lifecycle is unaffected by this client-side fix.
+
+### Issue #101 — Test Gap Analysis (Browser Refresh Guard Untested)
+
+- **User report (dkirby-ms):** Bug still exists after PR #103. Tests don't verify the fix.
+- **All 18 client tests pass**, but NONE test the actual browser refresh scenario. Zero references to `pageUnloading` or `beforeunload` in the test file.
+- **Critical missing test:** No test simulates `beforeunload` → `pageUnloading = true` → `onLeave(non-consented-code)` → assert token is NOT cleared. This is the ENTIRE point of the #101 fix.
+- **Root cause of gap:** `window.addEventListener` is mocked as a no-op `vi.fn()`. When `network.ts` module loads and calls `window.addEventListener('beforeunload', ...)`, the callback is captured in mock history but never actually registered. So `pageUnloading` is ALWAYS `false` in every test. The `pageUnloading = true` code path has zero coverage.
+- **What existing tests actually verify:** Token CRUD, consented leave, non-consented leave WITHOUT page unload (which clears the token — correct), backoff retries, token rotation, bootstrap independence. All real but all tangential to the refresh guard.
+- **The `onLeave` condition `if (consented || !pageUnloading)` is correct on paper:** During refresh, `beforeunload` sets `pageUnloading = true` first, then `onLeave` fires with `consented=false, pageUnloading=true` → `false || false` = `false` → token preserved. But this logic has never been exercised in a test.
+- **Secondary concern — `pageUnloading` never resets:** If a user triggers `beforeunload` but cancels navigation (e.g., "Stay on page" dialog), `pageUnloading` stays `true` forever. A subsequent real disconnect would incorrectly preserve the token and skip cleanup. Not the reported bug, but a latent defect.
+- **What needs to happen:** (1) Modify test setup to capture the `beforeunload` callback from `window.addEventListener` mock calls. (2) Add test: join room → invoke captured `beforeunload` callback → fire `onLeave(1006)` → assert token is preserved and `disconnected` is NOT emitted. (3) Optionally add test for the `pageUnloading` never-reset edge case.
+
+### Browser Refresh Guard — Issue #101, PR #103 (2026-03-10)
+
+- **Fixed `pageUnloading` one-way flag:** Added `window.addEventListener('pageshow', () => { pageUnloading = false; })` in `network.ts` right after the `beforeunload` listener. The `pageshow` event fires when a cancelled navigation returns to the page or on bfcache restore, resetting the flag so future disconnects clean up correctly.
+- **Fixed test coverage gap:** Updated `window.addEventListener` mock from no-op `vi.fn()` to a callback-capturing implementation that stores handlers by event name. Tests can now invoke `beforeunload` and `pageshow` callbacks directly.
+- **Window event mocking pattern (Decision: steeply-window-event-mocking.md):** When mocking `window.addEventListener` in tests that import modules registering callbacks at module load time, the mock MUST capture callbacks by event name using a record map. A no-op mock is not acceptable — it creates invisible coverage gaps. Example pattern:
+  ```typescript
+  const windowEventCallbacks: Record<string, Array<(...args: unknown[]) => void>> = {};
+  vi.stubGlobal('window', {
+    addEventListener: vi.fn((event: string, cb) => {
+      if (!windowEventCallbacks[event]) windowEventCallbacks[event] = [];
+      windowEventCallbacks[event].push(cb);
+    }),
+  });
+  ```
+- **3 new tests added** to `reconnection.test.ts` under "Browser refresh guard (pageUnloading)": (1) token preserved during refresh, (2) cancelled navigation resets flag via pageshow, (3) normal disconnect after pageshow still cleans up. Total: 21 tests in file, 696 across full suite.
+- **Follow-up action items:** (1) @copilot's PR #103 still pending Hal review (flagged 🟡 needs-review), (2) New implementer needed to add `pageUnloading` reset fix (Pemulis/Gately locked out per protocol), (3) Steeply to write test coverage spec for `pageshow` event reset.
+
+### Flaky Mapgen Performance Tests — Issue #104, PR #106 (2026-03-10)
+
+- **Three perf tests across two files had tight timing thresholds** that flake on slow CI runners: `map-size.test.ts` (500ms map, 1000ms map+creatures) and `water-depth.test.ts` (500ms map).
+- **Fix:** Increased hard ceilings to 5x (2500ms map, 5000ms map+creatures) and added `console.warn` at the original ideal thresholds for regression visibility without CI breakage.
+- **Key principle:** Performance tests in CI should catch algorithmic regressions (O(n²) → O(n³)), not benchmark absolute speed. Hard ceilings must tolerate 5x variance for different environments.
+- **Files modified:** `server/src/__tests__/map-size.test.ts`, `server/src/__tests__/water-depth.test.ts`
+- **Full suite:** 696 tests, 43 files, all passing.
+
+### Building Placement System — Issue #110 (2026-03-10)
+
+- **22 new tests** in `server/src/__tests__/buildings.test.ts`. Total suite: **738 tests, 45 files, all passing.**
+- **Coverage:** All 7 validation paths in `handlePlaceBuilding` (invalid player, out-of-bounds tile, unowned tile, existing structure, HQ structure, non-walkable terrain, insufficient resources), plus edge cases (enough wood but not stone, enough stone but not wood).
+- **Successful placement:** Farm and factory placement verified — structureType set correctly, resources deducted by exact `BUILDING_COSTS` values, broadcast fires with `type: "building"`. Outpost tiles can be replaced by buildings.
+- **Building income:** Farm (+1W/+1S), factory (+2W/+1S), stacking (2 farms + 1 factory), off-interval ticks produce no income, HQ-only baseline income verified against `STRUCTURE_INCOME` constants.
+- **Building removal:** Contestation clears farm/factory structureType when ownership transfers, but HQ structureType is preserved.
+- **Key discovery:** `spawnHQ()` sets `structureType = "hq"` on ALL 25 tiles in the starting territory, not just the center tile. This means buildings can only be placed on territory tiles claimed AFTER initial spawn (where structureType is ""). Test helper `prepareBuildableTile()` manually assigns ownership to a walkable unowned tile with empty structureType to simulate expanded territory.
+- **Test patterns:** Same `Object.create(GameRoom.prototype)` + `vi.fn()` mocking pattern as existing tests. `prepareBuildableTile()` is the key helper for setting up buildable tiles in a controlled way.
+
+### E2E Building Placement Tests (2026-03-11)
+
+- **Created `e2e/tests/buildings.spec.ts`** — 10 E2E tests covering building placement for farm and factory.
+- **Key E2E finding:** All 25 starting territory tiles have `structureType = "hq"`, so `findPlaceableTile()` must filter for `structureType === ''`. In E2E, territory expands via income ticks — placeable tiles appear as the guard zone grows.
+- **Starting resources (25W/15S)** are enough for 1 farm (12W+6S) or 1 factory (20W+12S) immediately. For 2 farms (24W+12S), must wait for income.
+- **Resource deduction timing:** Between `getPlayerState` reads, income ticks may fire. Assert `woodBefore - woodAfter >= cost` (not exact equality) to avoid flakiness.
+- **Unowned tile testing:** Corner coordinates (0,0 etc.) work for rejection tests since HQ is procedurally placed away from edges. Fog of war means the tile may be null — assert rejection via error game_log rather than tile state.
+- **Income verification:** Use `takeSnapshot` + `waitTicksAndSnapshot(44+)` + `diffSnapshots` to verify resource increases. 44 ticks guarantees at least 1 income cycle (every 40 ticks).
+- **WebSocket recording:** `installMessageRecorder` must be called after `waitForPlayerCount` (room connected). Use `sendAndRecord` for outgoing, `waitForMessage` for incoming `game_log` responses.
+- **Existing test compilation:** Standalone `tsc` on e2e test files produces `never` type errors from `page.evaluate` return inference — same as existing tests. Not a real issue; project builds via its own pipeline.
