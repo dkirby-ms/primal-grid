@@ -2639,3 +2639,55 @@ Enhanced in-game help screen with comprehensive gameplay section and created ful
 
 Standard feature delivery. No cross-agent dependencies. Lead to review PR #114.
 
+
+---
+
+## 2026-03-11T12-02-00Z: Stage Label Lifecycle: dev→uat
+
+**Author:** Marathe (DevOps / CI-CD)  
+**Date:** 2026-03-11  
+**PR:** #129  
+**Issue:** #122
+
+### Decision
+
+`squad-stage-label.yml` now manages the full stage label lifecycle for dev→uat promotion:
+
+1. **PR merged to `dev`** → linked issues get `stage:ready-for-uat`
+2. **PR merged to `uat`** → linked issues swap `stage:ready-for-uat` → `stage:live-uat`
+
+The UAT job scans both PR body and commit messages for issue references, since promotion PRs created by `squad-promote.yml` carry issue references in commit messages, not the PR body.
+
+### Impact
+
+- **Steeply / Hal:** Issues will now automatically reflect UAT status — no manual label changes needed after promotion merges.
+- **Future:** If we add uat→prod promotion, the same pattern can be extended with a `stage:live-prod` label and a third job.
+
+---
+
+## 2026-03-11T12-02-00Z: Anticipatory Test Pattern for Bug Fixes
+
+**Author:** Steeply (Tester)  
+**Context:** Bugs #126 (map size timeout) and #128 (phantom buildings)
+
+### Decision
+
+When bugs are filed and implementation is in-flight, Steeply writes anticipatory test cases against the *server state model* to establish the expected behavior contract. These tests validate that the underlying data layer is correct — if they pass, the bug is in a higher layer (rendering, serialization, networking). If they fail after a fix, the fix changed server-side behavior and needs test updates.
+
+### Files
+
+- `server/src/__tests__/phantom-buildings.test.ts` (20 tests, bug #128)
+- `server/src/__tests__/map-size-timeout.test.ts` (43 tests, bug #126)
+
+### Impact
+
+- **Gately/Pemulis:** If your fixes change `generateMap`, `tickFogOfWar`, `computeVisibleTiles`, or `TileState.structureType` behavior, re-run these tests and flag failures for Steeply to adjust.
+
+---
+
+## 2026-03-11T11-52-40Z: User Directive — Prior Session Lockouts Dropped
+
+**Author:** Copilot (via session user request)  
+**Date:** 2026-03-11  
+**What:** All pending issues from the previous session are dropped. This includes PR #103 remediation (pageUnloading one-way flag bug) and any associated lockouts. The team starts fresh with the current open issue backlog.  
+**Why:** User request — captured for team memory

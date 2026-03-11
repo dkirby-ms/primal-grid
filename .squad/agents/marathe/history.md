@@ -647,3 +647,27 @@ Coordinator consolidated the triage system. The heartbeat-triggered triage steps
 - Keyword routing must evolve with team composition — generic web-app categories don't cover game dev roles
 - Order matters in the matcher loop: domain-specific matchers must precede generic fallbacks
 - CI-only changes to squad-triage.yml can be cherry-picked directly to prod without a PR
+
+## Issue #122 — Stage Label Swap (dev→uat)
+
+**Date:** 2025-07-24
+**PR:** #129
+**Branch:** squad/122-stage-label-swap
+
+**Problem:** When a promotion PR merged dev→uat, issues kept `stage:ready-for-uat` instead of being updated to `stage:live-uat`.
+
+**Fix:** Extended `squad-stage-label.yml` with a second job (`label-linked-issues-uat`) that triggers on uat merges. The UAT job scans both the PR body and commit messages for `Closes/Fixes/Resolves #N` patterns — important because promotion PRs aggregate many commits. It removes `stage:ready-for-uat` (graceful 404 handling) and adds `stage:live-uat`. Also added `contents: read` permission for the commits API call.
+
+**Learnings:**
+- Promotion PRs created by `squad-promote.yml` have auto-generated bodies with changelogs, not `Closes #N` — commit message scanning is essential for finding linked issues
+- Stage label workflows should use `github.event.pull_request.base.ref` to distinguish target branches, not separate workflow files
+- `github.rest.pulls.listCommits` requires `contents: read` permission
+
+## 2026-03-11: Wave 1 Bug Fix (Issue #122)
+
+- **Status:** COMPLETED, PR #129 merged
+- **Task:** Extended `.github/workflows/squad-stage-label.yml` with UAT label automation
+- **What Fixed:** Stage label swap on uat branch merge (`stage:ready-for-uat` → `stage:live-uat`)
+- **Pattern:** Scans commit messages for issue refs (promotion PRs use commits, not PR body)
+- **Impact:** Automated label lifecycle for dev→uat→prod promotions; no manual label management needed
+- **Related:** Steeply/Hal no longer manually update issue stage labels after promotions

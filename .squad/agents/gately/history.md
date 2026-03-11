@@ -1345,3 +1345,22 @@ See `.squad/decisions.md` Initiative Triage & Execution Plan (2026-03-09) for fu
 - **HOW-TO-PLAY.md:** Comprehensive gameplay guide created at repo root. Documents all building costs (Farm 12W+6S, Factory 20W+12S), pawn stats (builder/defender/attacker/explorer with costs, health, damage, detection), territory expansion rules, creature behavior, enemy bases, day/night cycle vision modifiers, XP/leveling table (7 levels), and CPU opponent info. All numbers verified against shared/src/constants.ts.
 - **README.md link:** Added "🎮 How to Play" section above Contributing, linking to HOW-TO-PLAY.md.
 - **Key pattern:** Help screen content is data-driven via `[label, description][]` tuples, making it easy to add/remove rows without touching layout code.
+
+### Fog-of-War Phantom Buildings Fix (Issue #128, PR #130)
+
+- **Bug:** Tiles in fog-of-war displayed phantom building icons (farms, factories) that didn't correspond to real server structures.
+- **Root cause:** Two rendering bugs in `GridRenderer.ts`:
+  1. Building icons on `buildingContainer` were not hidden when tiles transitioned from visible → explored (fog). Since fog overlay is alpha 0.6, full-opacity building icons bled through as phantom structures.
+  2. Missing `else` branch in `setFogState('explored')` to hide stale fog structure silhouette icons when cache had no structure.
+- **Fix:** Hide building icons in the visible→explored transition loop; add else branch to explicitly hide fog silhouette icons when cache has no structure data.
+- **Key insight:** `buildingContainer` renders BELOW `fogContainer` (z-order in constructor). Semi-transparent fog doesn't fully occlude building icons — they must be explicitly hidden when tiles enter fog state.
+- **Pattern:** When hiding tile content behind fog, all renderers (building icons, territory overlays, etc.) that use separate containers must be explicitly managed during fog transitions. Don't rely on fog opacity to fully hide underlying visuals.
+
+## 2026-03-11: Wave 1 Bug Fix (Issue #128)
+
+- **Status:** COMPLETED, PR #130 merged
+- **Task:** Fixed phantom buildings visible in fog-of-war
+- **Root Cause:** Building icons rendered in fog before `FogOfWar.ts` hid them; stale silhouettes not cleared
+- **Fix Location:** `client/src/ui/GridRenderer.ts` (7-line surgical fix)
+- **Test Coverage:** 20 anticipatory tests by Steeply; all 794 tests pass
+- **Related Work:** See Steeply's anticipatory test pattern decision — server state model tests validate rendering fixes

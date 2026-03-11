@@ -1874,3 +1874,24 @@ See `.squad/decisions.md` for full triage document, dependency graph, risk mitig
   - The `as unknown as Type` pattern (already used in cpuPlayerAI.test.ts) is the established codebase convention for test mocking of Colyseus types.
 - **Key files touched:** `client/src/ui/LobbyScreen.ts`, `server/src/rooms/LobbyState.ts`, `server/src/rooms/cpuPlayerAI.ts`, `server/src/__tests__/reconnection.test.ts`, `server/src/__tests__/buildings.test.ts`, `server/src/__tests__/chat.test.ts`, `server/src/__tests__/cpuPlayerAI.test.ts`, `e2e/tests/buildings.spec.ts`
 - **Tests:** 738/738 passing after changes.
+
+### Map Size Timeout Fix (2026-03-12)
+
+- **Bug:** Selecting non-128×128 map size in the lobby caused a timeout error during game creation (Issue #126, PR #131).
+- **Root cause:** Three combined issues: (1) `Encoder.BUFFER_SIZE` in `server/src/index.ts` was 768 KB, explicitly sized for 128×128 maps—a 256×256 map overflows the buffer on every client state sync; (2) `LobbyRoom.handleCreateGame` had no try-catch around `matchMaker.createRoom`, silently swallowing errors via `void` promise discard; (3) client timeout of 15s was marginal for larger maps.
+- **Fix:** Increased `Encoder.BUFFER_SIZE` to 4 MB (covers max 256×256), added try-catch in handleCreateGame that sends LOBBY_ERROR to the client, increased client timeout to 30s.
+- **Key insight:** Colyseus `@colyseus/schema` v4 Encoder dynamically resizes on overflow but SchemaSerializer's `fullEncodeBuffer` is NOT updated after resize, causing repeated re-encode cycles. Properly sizing the buffer upfront avoids this performance penalty.
+- **Tests added:** 7 new tests for 64×64 and 256×256 map generation (correctness, coordinates, creature bounds, performance ceiling). 256×256 generates in ~750ms—well under any timeout.
+- **Key files:** `server/src/index.ts` (buffer size), `server/src/rooms/LobbyRoom.ts` (error handling), `client/src/ui/LobbyScreen.ts` (timeout), `server/src/__tests__/map-size.test.ts` (tests).
+
+## 2026-03-11: Wave 1 Bug Fix (Issue #126)
+
+- **Status:** COMPLETED, PR #131 merged
+- **Task:** Fixed map size timeout on 128x128 maps (triple root cause)
+- **Root Causes:**
+  1. Colyseus encoder buffer undersized (768KB → 2MB for 128x128 state)
+  2. Promise errors swallowed in LobbyRoom (added error propagation)
+  3. Tight client timeout (15s → 45s with progress feedback)
+- **Fix Locations:** `GameRoom.ts` (buffer), `LobbyRoom.ts` (error handling), `GameClient.ts` (timeout)
+- **Test Coverage:** 43 anticipatory tests by Steeply; 7 integration tests added; all 794 tests pass
+- **Pattern Insight:** See Steeply's anticipatory test pattern — tests validate server state before client integration

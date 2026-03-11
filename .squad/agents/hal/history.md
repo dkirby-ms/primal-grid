@@ -911,3 +911,20 @@ Clean, well-tested implementation. Bootstrap reconnect-check handles all edge ca
 3. **Future enhancement:** Difficulty settings (easy/medium/hard) can be added in follow-up PR
 
 **Recommendation:** Ready to merge to `dev` after above non-blocking feedback is reviewed. Unblocking team feature and closing #105.
+
+## 2026-03-XX: Wave 1 Bug Fix Reviews
+
+### PR #129: Stage Label Workflow (Marathe)
+**Status:** ✅ APPROVED
+**Assessment:** Correctly implements `uat` branch targeting for stage labels. Graceful error handling for missing labels. Permissions are properly scoped.
+
+### PR #130: Fog-of-War Ghosting (Gately)
+**Status:** ✅ APPROVED
+**Assessment:** Logic for hiding buildings in fog is sound. `GridRenderer` correctly clears stale icons. Fixes visual regression where buildings bled through fog.
+
+### PR #131: Map Size & Timeout Fixes (Pemulis)
+**Status:** ✅ APPROVED
+**Assessment:** 
+- **Critical Fix:** Increased Colyseus encoder buffer to 4MB (was 768KB) to support 256x256 map state sync.
+- **Robustness:** Added try/catch around room creation to prevent swallowed errors. Increased client timeout to 30s.
+- **Validation:** New tests verify 64x64 and 256x256 map generation and performance.
