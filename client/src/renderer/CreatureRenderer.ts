@@ -44,6 +44,12 @@ const CARNIVORE_HUNT_COLOR = 0xc62828;
 // Exhausted state color (gray/muted)
 const EXHAUSTED_COLOR = 0x9e9e9e;
 
+/** Parse a CSS hex color string (e.g. "#FF0000") to a numeric color. */
+function parseHexColor(color: string): number {
+  if (color.startsWith('#')) return parseInt(color.slice(1), 16);
+  return parseInt(color, 16) || 0xffffff;
+}
+
 interface CreatureEntry {
   container: Container;
   graphic: Graphics;
@@ -53,6 +59,7 @@ interface CreatureEntry {
   hpBar: Graphics | null;
   lastType: string;
   lastState: string;
+  lastOwnerID: string;
   lastHealthLow: boolean;
   lastBuildProgress: number;
   lastHealthPct: number;
@@ -67,6 +74,7 @@ export class CreatureRenderer {
   private entries: Map<string, CreatureEntry> = new Map();
   private localSessionId = '';
   private combatEffects: CombatEffects | null = null;
+  private playerColors = new Map<string, number>();
 
   /** Latest creature counts, readable by HUD. */
   public herbivoreCount = 0;
@@ -89,6 +97,18 @@ export class CreatureRenderer {
     this.localSessionId = room.sessionId;
 
     room.onStateChange((state: Record<string, unknown>) => {
+      // Cache player colors for ownership-based pawn tinting
+      const players = state['players'] as
+        | { forEach: (cb: (p: Record<string, unknown>, k: string) => void) => void }
+        | undefined;
+      if (players && typeof players.forEach === 'function') {
+        players.forEach((player, key) => {
+          const id = (player['id'] as string) ?? String(key);
+          const color = (player['color'] as string) ?? '#ffffff';
+          this.playerColors.set(id, parseHexColor(color));
+        });
+      }
+
       const creatures = state['creatures'] as
         | { forEach: (cb: (creature: Record<string, unknown>, key: string) => void) => void }
         | undefined;
@@ -122,7 +142,7 @@ export class CreatureRenderer {
         if (isEnemyBase(creatureType)) enemyBases++;
 
         const isBuilder = creatureType === 'pawn_builder';
-        const isLocalBuilder = isBuilder && ownerID === this.localSessionId;
+        const isLocal = ownerID === this.localSessionId;
         const isCombatEntity = !isGrave && (isEnemyBase(creatureType) || isEnemyMobile(creatureType) || creatureType === 'pawn_defender' || creatureType === 'pawn_attacker' || creatureType === 'pawn_explorer');
 
         let entry = this.entries.get(id);
@@ -130,7 +150,7 @@ export class CreatureRenderer {
           if (isGrave) {
             entry = this.createGraveMarkerEntry();
           } else {
-            entry = this.createCreatureEntry(creatureType, currentState, isLocalBuilder);
+            entry = this.createCreatureEntry(creatureType, currentState, isLocal, ownerID);
           }
           this.entries.set(id, entry);
           this.container.addChild(entry.container);
@@ -154,9 +174,9 @@ export class CreatureRenderer {
           return; // forEach continue
         }
 
-        // Rebuild graphic if state or type changed
-        if (entry.lastType !== creatureType || entry.lastState !== currentState) {
-          this.rebuildGraphic(entry, creatureType, currentState, isLocalBuilder);
+        // Rebuild graphic if state, type, or ownership changed
+        if (entry.lastType !== creatureType || entry.lastState !== currentState || entry.lastOwnerID !== ownerID) {
+          this.rebuildGraphic(entry, creatureType, currentState, isLocal, ownerID);
         }
 
         // Health-based opacity
@@ -260,6 +280,7 @@ export class CreatureRenderer {
       hpBar: null,
       lastType: 'grave_marker',
       lastState: 'idle',
+      lastOwnerID: '',
       lastHealthLow: false,
       lastBuildProgress: 0,
       lastHealthPct: 1,
@@ -270,18 +291,18 @@ export class CreatureRenderer {
     };
   }
 
-  private createCreatureEntry(creatureType: string, currentState: string, isLocalBuilder: boolean): CreatureEntry {
+  private createCreatureEntry(creatureType: string, currentState: string, isLocal: boolean, ownerID: string): CreatureEntry {
     const container = new Container();
 
     // State-colored background circle (subtle indicator behind emoji)
     const graphic = new Graphics();
-    this.drawStateBackground(graphic, creatureType, currentState, isLocalBuilder);
+    this.drawStateBackground(graphic, creatureType, currentState, isLocal, ownerID);
     container.addChild(graphic);
 
     // Emoji icon as primary visual (enemy bases render 1.5× larger)
     const isBase = isEnemyBase(creatureType);
     const fontSize = isBase ? ENEMY_BASE_RADIUS * 2.5 : CREATURE_RADIUS * 2.5;
-    const icon = this.getIcon(creatureType, isLocalBuilder);
+    const icon = this.getIcon(creatureType);
     const emojiText = new Text({
       text: icon,
       style: { fontSize, fontFamily: 'sans-serif' },
@@ -308,6 +329,7 @@ export class CreatureRenderer {
       hpBar: null,
       lastType: creatureType,
       lastState: currentState,
+      lastOwnerID: ownerID,
       lastHealthLow: false,
       lastBuildProgress: 0,
       lastHealthPct: 1,
@@ -318,23 +340,21 @@ export class CreatureRenderer {
     };
   }
 
-  private rebuildGraphic(entry: CreatureEntry, creatureType: string, currentState: string, isLocalBuilder: boolean): void {
+  private rebuildGraphic(entry: CreatureEntry, creatureType: string, currentState: string, isLocal: boolean, ownerID: string): void {
     entry.graphic.clear();
-    this.drawStateBackground(entry.graphic, creatureType, currentState, isLocalBuilder);
-    const icon = this.getIcon(creatureType, isLocalBuilder);
+    this.drawStateBackground(entry.graphic, creatureType, currentState, isLocal, ownerID);
+    const icon = this.getIcon(creatureType);
     if (entry.emojiText.text !== icon) {
       entry.emojiText.text = icon;
     }
     this.updateIndicator(entry.indicator, currentState, creatureType);
     entry.lastType = creatureType;
     entry.lastState = currentState;
+    entry.lastOwnerID = ownerID;
   }
 
-  private getIcon(creatureType: string, isLocalBuilder: boolean): string {
-    if (creatureType === 'pawn_builder') {
-      return isLocalBuilder ? '🔨' : '⬜';
-    }
-    // Combat pawn icons from PAWN_TYPES registry
+  private getIcon(creatureType: string): string {
+    if (creatureType === 'pawn_builder') return PAWN_TYPES['builder']?.icon ?? '🔨';
     if (creatureType === 'pawn_defender') return PAWN_TYPES['defender']?.icon ?? '🛡';
     if (creatureType === 'pawn_attacker') return PAWN_TYPES['attacker']?.icon ?? '⚔';
     if (creatureType === 'pawn_explorer') return PAWN_TYPES['explorer']?.icon ?? '🔭';
@@ -345,27 +365,37 @@ export class CreatureRenderer {
     return CREATURE_TYPES[creatureType]?.icon ?? '🦕';
   }
 
-  private drawStateBackground(g: Graphics, creatureType: string, currentState: string, isLocalBuilder: boolean): void {
-    // Player pawns — square backgrounds
+  private drawStateBackground(g: Graphics, creatureType: string, currentState: string, isLocal: boolean, ownerID: string): void {
+    // Player pawns — square backgrounds colored by ownership
     if (isPlayerPawn(creatureType)) {
       let color: number;
       let alpha = 0.4;
-      if (creatureType === 'pawn_builder') {
-        color = currentState === 'exhausted' ? EXHAUSTED_COLOR : (isLocalBuilder ? BUILDER_COLOR : 0x888888);
-        alpha = currentState === 'exhausted' ? 0.3 : 0.4;
-      } else if (creatureType === 'pawn_defender') {
-        color = currentState === 'exhausted' ? EXHAUSTED_COLOR : DEFENDER_COLOR;
-        alpha = currentState === 'exhausted' ? 0.3 : 0.4;
-      } else if (creatureType === 'pawn_explorer') {
-        color = currentState === 'exhausted' ? EXHAUSTED_COLOR : EXPLORER_COLOR;
-        alpha = currentState === 'exhausted' ? 0.3 : 0.4;
+      if (currentState === 'exhausted') {
+        color = EXHAUSTED_COLOR;
+        alpha = 0.3;
       } else {
-        // pawn_attacker
-        color = currentState === 'exhausted' ? EXHAUSTED_COLOR : ATTACKER_COLOR;
-        alpha = currentState === 'exhausted' ? 0.3 : 0.4;
+        // Use player color if available, fall back to type-based color
+        const playerColor = this.playerColors.get(ownerID);
+        if (playerColor !== undefined) {
+          color = playerColor;
+        } else if (creatureType === 'pawn_builder') {
+          color = BUILDER_COLOR;
+        } else if (creatureType === 'pawn_defender') {
+          color = DEFENDER_COLOR;
+        } else if (creatureType === 'pawn_explorer') {
+          color = EXPLORER_COLOR;
+        } else {
+          color = ATTACKER_COLOR;
+        }
+        alpha = isLocal ? 0.4 : 0.35;
       }
       g.rect(-CREATURE_RADIUS, -CREATURE_RADIUS, CREATURE_RADIUS * 2, CREATURE_RADIUS * 2);
       g.fill({ color, alpha });
+      // Add ownership border for non-local pawns so they're distinguishable
+      if (!isLocal && currentState !== 'exhausted') {
+        g.rect(-CREATURE_RADIUS, -CREATURE_RADIUS, CREATURE_RADIUS * 2, CREATURE_RADIUS * 2);
+        g.stroke({ color, width: 1.5, alpha: 0.6 });
+      }
       return;
     }
     // Enemy bases — larger diamond shape
