@@ -6,7 +6,7 @@
 
 ## Game Objective
 
-Claim as much territory as possible, build a thriving colony, and outlast rival players and CPU opponents. Earn XP by expanding your territory, level up, and unlock increasingly powerful building shapes.
+Claim as much territory as possible, build a thriving colony, and outlast rival players and CPU opponents. Earn XP by expanding your territory and level up to track your progress.
 
 ---
 
@@ -171,19 +171,19 @@ At night, your vision shrinks dramatically — perfect cover for lurking raptors
 
 ## Progression: XP & Levels
 
-Earn **1 XP** every time a builder claims a tile. As you level up, new building shapes unlock:
+Earn **1 XP** every time a builder claims a tile. Your level increases as you accumulate XP:
 
-| Level | XP Required | Unlocks |
-|-------|-------------|---------|
-| 1 | 0 | O-piece, I-piece |
-| 2 | 10 | T-piece |
-| 3 | 25 | L-piece |
-| 4 | 45 | J-piece |
-| 5 | 70 | S-piece, Z-piece |
-| 6 | 100 | Pets |
-| 7 | 140 | Pet breeding |
+| Level | XP Required |
+|-------|-------------|
+| 1 | 0 |
+| 2 | 10 |
+| 3 | 25 |
+| 4 | 45 |
+| 5 | 70 |
+| 6 | 100 |
+| 7 | 140 |
 
-Building shapes let you place multi-tile structures that claim territory more efficiently.
+Your level tracks your expansion progress — keep claiming tiles to climb the ranks!
 
 ---
 
@@ -208,7 +208,7 @@ CPU names: Atlas, Borealis, Cypher, Draco, Echo, Fenrir, Golem.
 4. **Scout before you strike.** Send an Explorer to locate enemy bases before committing your Raiders.
 5. **Fear the night.** Night cuts your vision in half. Either pull back to defend or fortify before dusk falls.
 6. **Eliminate enemy bases early.** The longer they sit, the more dangerous units they spawn. A neglected Raider Camp will slowly drain your defenses.
-7. **Chase XP for building shapes.** Larger building shapes claim more territory in fewer placements — it's worth grinding for the levels.
+7. **Keep expanding for XP.** Claiming tiles earns XP and levels — a handy way to track your colony's growth.
 8. **Factories beat Farms late game.** Factories cost more upfront but produce double the wood—when your economy is stable, the upgrade pays for itself.
 
 ---

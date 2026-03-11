@@ -22,7 +22,7 @@ const HOW_TO_PLAY: [string, string][] = [
   ['🛡 Defenders', 'Spawn (15W 10S) to patrol and guard your territory'],
   ['⚔ Attackers', 'Spawn (20W 15S) to raid enemy bases'],
   ['🔭 Explorers', 'Spawn (12W 8S) to scout with 6-tile vision'],
-  ['⭐ Level up', 'Earn XP by claiming tiles → unlock building shapes'],
+  ['⭐ Level up', 'Earn XP by claiming tiles → track your progress'],
   ['🌙 Day/night', 'Vision shrinks at night — stay alert for predators'],
 ];
 
