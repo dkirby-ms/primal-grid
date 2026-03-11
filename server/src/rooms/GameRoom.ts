@@ -408,9 +408,15 @@ export class GameRoom extends Room {
       return;
     }
 
-    // Validate no existing building (outpost/"" can be replaced; hq/farm/factory cannot)
-    if (tile.structureType !== "" && tile.structureType !== "outpost") {
+    // Validate no existing building (outpost/hq/"" can be replaced; farm/factory cannot)
+    if (tile.structureType !== "" && tile.structureType !== "outpost" && tile.structureType !== "hq") {
       client.send("game_log", { message: "Tile already has a structure.", type: "error" });
+      return;
+    }
+
+    // Protect the actual HQ building (the center tile of HQ territory)
+    if (tile.x === player.hqX && tile.y === player.hqY) {
+      client.send("game_log", { message: "Cannot build on your HQ.", type: "error" });
       return;
     }
 

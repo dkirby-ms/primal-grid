@@ -42,8 +42,7 @@ function joinPlayer(room: GameRoom, sessionId: string) {
 /**
  * Prepare a buildable tile: find a walkable, unowned tile and manually
  * assign it to the player with empty structureType.
- * (HQ territory tiles all have structureType="hq" so buildings can't
- * be placed there — players must expand territory first.)
+ * (HQ territory tiles have structureType="hq" which is also valid for building.)
  */
 function prepareBuildableTile(
   room: GameRoom,
@@ -261,7 +260,7 @@ describe("Building Placement System", () => {
 
       expect(client.send).toHaveBeenCalledWith(
         "game_log",
-        expect.objectContaining({ type: "error" }),
+        expect.objectContaining({ type: "error", message: "Cannot build on your HQ." }),
       );
       expect(hqTile.structureType).toBe("hq");
     });

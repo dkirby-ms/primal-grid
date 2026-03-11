@@ -1983,3 +1983,14 @@ Large-map rendering with PixiJS requires explicit culling—the scene graph does
 - **Building removal:** Contestation clears farm/factory structureType when ownership transfers, but HQ structureType is preserved.
 - **Key discovery:** `spawnHQ()` sets `structureType = "hq"` on ALL 25 tiles in the starting territory, not just the center tile. This means buildings can only be placed on territory tiles claimed AFTER initial spawn (where structureType is ""). Test helper `prepareBuildableTile()` manually assigns ownership to a walkable unowned tile with empty structureType to simulate expanded territory.
 - **Test patterns:** Same `Object.create(GameRoom.prototype)` + `vi.fn()` mocking pattern as existing tests. `prepareBuildableTile()` is the key helper for setting up buildable tiles in a controlled way.
+
+### E2E Building Placement Tests (2026-03-11)
+
+- **Created `e2e/tests/buildings.spec.ts`** — 10 E2E tests covering building placement for farm and factory.
+- **Key E2E finding:** All 25 starting territory tiles have `structureType = "hq"`, so `findPlaceableTile()` must filter for `structureType === ''`. In E2E, territory expands via income ticks — placeable tiles appear as the guard zone grows.
+- **Starting resources (25W/15S)** are enough for 1 farm (12W+6S) or 1 factory (20W+12S) immediately. For 2 farms (24W+12S), must wait for income.
+- **Resource deduction timing:** Between `getPlayerState` reads, income ticks may fire. Assert `woodBefore - woodAfter >= cost` (not exact equality) to avoid flakiness.
+- **Unowned tile testing:** Corner coordinates (0,0 etc.) work for rejection tests since HQ is procedurally placed away from edges. Fog of war means the tile may be null — assert rejection via error game_log rather than tile state.
+- **Income verification:** Use `takeSnapshot` + `waitTicksAndSnapshot(44+)` + `diffSnapshots` to verify resource increases. 44 ticks guarantees at least 1 income cycle (every 40 ticks).
+- **WebSocket recording:** `installMessageRecorder` must be called after `waitForPlayerCount` (room connected). Use `sendAndRecord` for outgoing, `waitForMessage` for incoming `game_log` responses.
+- **Existing test compilation:** Standalone `tsc` on e2e test files produces `never` type errors from `page.evaluate` return inference — same as existing tests. Not a real issue; project builds via its own pipeline.
