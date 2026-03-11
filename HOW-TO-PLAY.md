@@ -1,6 +1,6 @@
 # 🦖 How to Play Primal Grid
 
-**Primal Grid: Survival of the Frontier** is a real-time strategy colony builder set on a procedurally generated world full of dinosaurs. Build your base, gather resources, expand your territory, and survive.
+**Primal Grid** is a real-time strategy colony builder where you claim territory, build a thriving base, and compete against rival players and AI opponents—all while dinosaurs roam the world around you.
 
 ---
 
@@ -20,7 +20,7 @@ You start with **25 Wood** and **15 Stone**.
 
 ### 2. Your HQ Generates Income
 
-Your HQ automatically produces **+2 Wood** and **+2 Stone** every income tick (every 10 seconds). This is your baseline economy — build on it.
+Your HQ automatically produces **+2 Wood** and **+2 Stone** every 10 seconds. This steady income is your baseline economy — invest it wisely to grow faster than your opponents.
 
 ---
 
@@ -30,10 +30,10 @@ Everything in Primal Grid costs **Wood** 🪵 and **Stone** 🪨.
 
 | Source | Wood | Stone | Frequency |
 |--------|------|-------|-----------|
-| HQ (passive) | +2 | +2 | Every 10 sec |
-| Farm (passive) | +1 | +1 | Every 10 sec |
-| Factory (passive) | +2 | +1 | Every 10 sec |
-| Pawn harvesting | Varies | Varies | When pawns gather from tiles |
+| HQ | +2 | +2 | Every 10 seconds |
+| Farm | +1 | +1 | Every 10 seconds |
+| Factory | +2 | +1 | Every 10 seconds |
+| Pawns harvesting tiles | Varies | Varies | When gathering |
 
 Tiles regenerate resources over time (1 resource every 20 seconds, up to 10 per tile), so the map never runs dry.
 
@@ -48,7 +48,7 @@ Build structures on your territory to boost your economy. Click the **Build Farm
 | 🌾 **Farm** | 12 Wood, 6 Stone | +1 Wood, +1 Stone |
 | 🏭 **Factory** | 20 Wood, 12 Stone | +2 Wood, +1 Stone |
 
-Income is distributed every **10 seconds** from all your buildings combined.
+All your buildings combine their income and deposit it every **10 seconds**.
 
 ---
 
@@ -65,12 +65,7 @@ Pawns are your workers and warriors. Spawn them from the HUD panel on the right 
 | Health | 50 |
 | Vision | 4 tiles |
 
-Builders are the backbone of expansion. They automatically:
-1. Find an unowned tile adjacent to your territory
-2. Move to it
-3. Claim it (takes ~2 seconds)
-
-Builders prioritize filling interior gaps (tiles surrounded on 3+ sides by your territory) before expanding outward. Each tile claimed earns you **1 XP**.
+Builders are your expansion force. They automatically scout for unclaimed tiles next to your territory, move to them, and claim them in about 2 seconds. Smart builders prioritize filling gaps in your territory first, then push outward. Each successful claim earns you **1 XP** toward leveling up.
 
 ### 🛡 Defender
 
@@ -82,9 +77,9 @@ Builders prioritize filling interior gaps (tiles surrounded on 3+ sides by your 
 | Damage | 20 |
 | Detection | 5 tiles |
 
-Defenders patrol your territory and engage any hostiles — enemy raiders, carnivores — that wander in. They **never leave your territory**, making them reliable guards. If pushed outside, they return to the nearest owned tile.
+Defenders patrol your territory and will fight off any threat that enters — whether it's an enemy raider or a hungry carnivore. They **never leave your territory**, so they're your reliable last line of defense. If pushed outside by an attacker, they automatically return home.
 
-### ⚔ Attacker
+### ⚔ Raider
 
 | Stat | Value |
 |------|-------|
@@ -94,7 +89,7 @@ Defenders patrol your territory and engage any hostiles — enemy raiders, carni
 | Damage | 25 |
 | Detection | 6 tiles |
 
-Attackers seek out and destroy enemy bases and hostile units. They venture beyond your territory to raid. After ~50 seconds on sortie, they return home automatically. Best used once you have defenders covering your base.
+Raiders are your offensive strike force. They venture beyond your territory to destroy enemy bases and take out hostile units. They'll patrol for about 50 seconds before heading home. Deploy them strategically once you've got defenders protecting your own base.
 
 ### 🔭 Explorer
 
@@ -105,7 +100,7 @@ Attackers seek out and destroy enemy bases and hostile units. They venture beyon
 | Health | 35 |
 | Vision | 6 tiles |
 
-Explorers roam the map to reveal fog of war. They are drawn toward unclaimed and unexplored tiles. They don't fight — their value is **intelligence**. Use them to find resources, enemies, and creatures before you commit forces.
+Explorers roam the map to reveal the unknown. They're drawn to unexplored and unclaimed areas. They won't fight, but they'll show you what's out there — enemy bases, resources, creatures — before you commit your army.
 
 ---
 
@@ -113,12 +108,12 @@ Explorers roam the map to reveal fog of war. They are drawn toward unclaimed and
 
 Your territory starts as a 5×5 square around your HQ. To expand:
 
-1. **Spawn a Builder** pawn (10 Wood, 5 Stone)
-2. The builder autonomously finds and claims adjacent tiles
-3. Each claim takes **~2 seconds**
-4. You can only claim tiles **adjacent** to territory you already own — no jumping
+1. **Spawn a Builder** (10 Wood, 5 Stone)
+2. The builder automatically finds and claims nearby unclaimed tiles
+3. Each claim takes about 2 seconds
+4. You can only claim tiles **next to territory you already own** — no jumping across the map
 
-Expansion is contiguous. Think of your territory like a growing blob on the map.
+Your territory grows as a connected landmass. Think of it like a living blob expanding outward.
 
 ---
 
@@ -128,7 +123,7 @@ The world is alive with dinosaurs that follow their own AI.
 
 ### 🦕 Herbivores (Parasaurolophus)
 
-- Graze on tile resources (eat 1 resource per action)
+- Graze on tile resources, consuming 1 resource per meal
 - Wander peacefully across the map
 - Flee from carnivores
 - Population maintained at a minimum of 4
@@ -141,13 +136,13 @@ The world is alive with dinosaurs that follow their own AI.
 - Population maintained at a minimum of 2
 - Can be killed by your Defender and Attacker pawns
 
-**Tip:** Keep defenders spawned to protect builders from raptors, especially near forests.
+**💡 Pro tip:** Keep a Defender or two spawned whenever you're expanding near forests. Raptors hunt builders, so active defense saves your workforce.
 
 ---
 
 ## Enemy Bases
 
-Hostile bases spawn on the map over time (first one appears after ~60 seconds). They generate enemy mobiles that threaten your territory.
+Enemy bases appear on the map as the game progresses (the first one shows up after about a minute). They spawn hostile units that probe your defenses and threaten your territory.
 
 | Base Type | Health | Spawns | Reward |
 |-----------|--------|--------|--------|
@@ -155,7 +150,7 @@ Hostile bases spawn on the map over time (first one appears after ~60 seconds). 
 | 🪺 Hive | 150 | Swarms | 10W, 5S |
 | 🏰 Fortress | 400 | Raiders | 25W, 20S |
 
-Destroy them with **Attacker pawns** to earn resource rewards and remove the threat.
+Destroy them with **Raider pawns** to earn resource rewards and eliminate the threat.
 
 ---
 
@@ -170,7 +165,7 @@ The world cycles through four phases every **2 minutes**:
 | 🌆 Dusk | Orange-red | -1 tile vision |
 | 🌙 Night | Blue tint | -2 tile vision |
 
-At night your vision is significantly reduced. Carnivores are harder to spot, and enemies can approach unseen. Keep defenders on patrol.
+At night, your vision shrinks dramatically — perfect cover for lurking raptors and sneaky enemy units. Enemies become harder to spot, and dangers approach unseen. Keep defenders patrolling and stay vigilant.
 
 ---
 
@@ -194,7 +189,7 @@ Building shapes let you place multi-tile structures that claim territory more ef
 
 ## CPU Opponents
 
-You can play against **0–7 CPU opponents** (configurable in the lobby). CPU players:
+You can face **0 to 7 CPU opponents** (customize this in the lobby before starting). CPU players:
 
 - Place their own HQ and expand territory
 - Spawn builders, defenders, and attackers based on strategic priorities
@@ -207,14 +202,14 @@ CPU names: Atlas, Borealis, Cypher, Draco, Echo, Fenrir, Golem.
 
 ## Tips & Strategies
 
-1. **Economy first.** Build 1–2 Farms early for steady income before expanding aggressively.
-2. **Defend your builders.** Raptors target builders. Spawn at least one Defender before sending builders into forests.
-3. **Fill gaps.** Builders prioritize interior territory gaps — this is efficient. Let them work.
-4. **Scout before attacking.** Spawn an Explorer to find enemy bases before committing Attackers.
-5. **Watch the clock.** Night reduces vision by 2 tiles. Pull back or fortify before dusk.
-6. **Destroy enemy bases early.** They spawn increasingly dangerous mobiles. A Raider Camp left alone becomes a constant drain on your defenders.
-7. **Level up for shapes.** Larger building shapes claim more territory per placement — XP investment pays off.
-8. **Factory over Farm (late game).** Factories cost more but produce double wood (+2 vs +1). Worth it once your economy is rolling.
+1. **Build your economy first.** Place 1–2 Farms early and let them work before you expand too aggressively.
+2. **Protect your builders.** Raptors hunt builders, so always have at least one Defender running before expanding toward forests.
+3. **Let builders fill gaps.** Your territory will have interior gaps — builders prioritize filling them first, which is smart and efficient.
+4. **Scout before you strike.** Send an Explorer to locate enemy bases before committing your Raiders.
+5. **Fear the night.** Night cuts your vision in half. Either pull back to defend or fortify before dusk falls.
+6. **Eliminate enemy bases early.** The longer they sit, the more dangerous units they spawn. A neglected Raider Camp will slowly drain your defenses.
+7. **Chase XP for building shapes.** Larger building shapes claim more territory in fewer placements — it's worth grinding for the levels.
+8. **Factories beat Farms late game.** Factories cost more upfront but produce double the wood—when your economy is stable, the upgrade pays for itself.
 
 ---
 
