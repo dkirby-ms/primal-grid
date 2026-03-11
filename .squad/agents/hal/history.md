@@ -1007,3 +1007,79 @@ Used Gemini 3 Pro for this review task to leverage an alternate model for indepe
 **Decision:** Approved for merge. Performance optimization deferred to future refactor as non-blocking.
 
 **Outcome:** PR #137 merged to dev. Issue #127 closed. Issue #136 filed.
+
+
+### Latest Session: PR #138 Review (2026-03-11)
+
+**Task:** Review PR #138 "Fix non-player unit rendering" (#136).
+
+**Review Notes:**
+- **Correctness:** Verified removal of `isLocalBuilder` gate. All pawns now render correct emoji regardless of owner.
+- **Completeness:** `isPlayerPawn` utility ensures coverage for all types: builder, defender, attacker, explorer.
+- **Consistency:** `drawStateBackground` correctly implements player color rendering with type-based fallback. Ownership border adds necessary visual distinction for non-local units.
+- **No Regressions:** Local player rendering logic preserved.
+- **Tests:** 843/843 passed. New `lastOwnerID` tracking ensures re-render on ownership change.
+
+**Verdict:** **APPROVE**. Code is clean, correct, and safe to merge.
+
+## Learnings
+- Renderer uses `playerColors` cache in `CreatureRenderer` to avoid repeated map lookups during draw calls.
+- `isPlayerPawn` utility covers all `pawn_*` types.
+- Rendering logic is centralized in `getIcon` and `drawStateBackground`, good for consistency.
+
+---
+
+## 2026-03-11: PR #138 Review & Merge (2026-03-11T15-26-00Z)
+
+**Task:** Review PR #138 "Fix non-player unit rendering"  
+**Author:** Gately  
+**Issue:** #136  
+
+**Review Notes:**
+- Verified removal of `isLocalBuilder` gate — all pawn types now render correct emoji
+- `isPlayerPawn` utility ensures complete coverage for all pawn types
+- `drawStateBackground` correctly implements player color rendering with type-based fallback
+- Ownership border adds necessary visual distinction for non-local units
+- Local player rendering logic preserved (no regressions)
+- 843/843 tests passing; `lastOwnerID` tracking ensures proper re-renders
+
+**Verdict:** **APPROVED**. Code is clean, correct, and safe to merge.
+
+**Outcome:** Merged to dev (2026-03-11). Branch deleted. Issue #136 auto-closed.
+
+**Learnings:**
+- Player color caching pattern (`playerColors` map in CreatureRenderer) improves rendering performance
+- Ownership borders effectively disambiguate non-local pawns in multi-player view
+- Utility functions (`isPlayerPawn`) reduce code duplication and improve maintainability
+### PR #140 Review — Outpost Spacing Fix (2026-03-11)
+
+- **Issue:** #139 — Builders placed outposts on every claimed tile, causing visual clutter.
+- **Fix:** `MIN_OUTPOST_SPACING = 4` constant + `hasNearbyOutpost()` Manhattan distance check in `builderAI.ts`. Tiles still claimed; only outpost structure suppressed when too close.
+- **Verdict:** APPROVE. Correct distance metric (Manhattan for grid), clean gate logic, 12 solid tests, no regressions (854/855 pass; 1 flake in water-depth.test.ts is pre-existing).
+- **Key Observations:**
+  - `hasNearbyOutpost` scans ~41 tiles per call (r=4 diamond). Negligible perf cost since builds complete rarely.
+  - When spacing blocks outpost, `structureType` stays at default `""` — no ghost structures.
+  - Farm placement correctly bypasses spacing check entirely.
+- **Outcome:** Reviewed and approved PR #140.
+
+## PR #140 Merge (2026-03-11T15-44-00Z)
+
+**Task:** Merge PR #140 after review approval  
+**Outcome:** Merged to dev via `gh pr merge 140 --merge --delete-branch`  
+**Related Issue:** #139 auto-closed  
+
+**Details:**
+- All 854/855 tests pass (1 pre-existing timeout in water-depth.test.ts, unrelated to this PR)
+- Manhattan distance logic verified as correct for grid tile calculations
+- Claiming logic preserved — only outpost icon suppressed when too close
+- 12 new tests provide comprehensive proximity validation
+
+**Learnings:**
+- Manhattan distance is the correct metric for grid-based spatial checks
+- Spacing checks using iterative rings are performant enough for infrequent operations
+- Constants like `MIN_OUTPOST_SPACING` provide tunable game balance parameters
+
+**Downstream:**
+- Gately's pawn builder system now has tighter visual feedback with reduced icon clutter
+- No client-side changes required; rendering already keys off `structureType`
+

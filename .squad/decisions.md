@@ -1,3 +1,44 @@
+## 2026-03-12: Soft-Preference Anti-Clustering for All Pawn Types
+
+**Author:** Pemulis  
+**Date:** 2026-03-12  
+**Status:** Implemented  
+
+### Context
+
+PR #134 added `getReservedTiles()` to prevent builders from targeting the same tile. Clustering persisted because:
+1. Builders picked adjacent tiles (not just the same tile)
+2. `moveToward()` let pawns stack on the same tile
+3. Attackers all targeted the same enemy
+4. Explorers converged on the same frontier
+
+### Decision
+
+All pawn anti-clustering uses **soft preferences**, never hard blocks:
+- Target reservation: deprioritize (don't exclude) nearby targets when better options exist
+- Movement: prefer unoccupied tiles but always fall back to any valid tile
+- This prevents deadlocks in narrow corridors or small territories
+
+### Implications
+
+- Any new pawn type should follow this pattern: check `hasFriendlyPawnAt()` during movement, add target-spreading to selection logic
+- `moveToward()` now has different behavior for pawns vs wildlife — wildlife takes first valid move, pawns try unoccupied first
+- Performance: O(P) per pawn per movement candidate where P = same-owner pawns. Negligible for max ~13 pawns per player
+
+---
+
+## 2026-03-11T12:57:00Z: User Directive — No Autonomous Production Promotions
+
+**Author:** Copilot  
+**Date:** 2026-03-11  
+**Source:** User request  
+
+**Directive:** Never initiate PRs into uat or prod autonomously. Promotion PRs are human-initiated only.
+
+**Reason:** Ensures human oversight on deployment decisions. Captured for team memory.
+
+---
+
 ## 2026-03-10T18:23:36Z: Window Event Mocks Must Capture Callbacks
 
 **Author:** Steeply (Tester)  
@@ -2765,3 +2806,26 @@ Two PRs (#133, #134) implemented competing solutions for preventing multiple bui
 - PR #133 has been closed (superseded by #134)
 - Future pawn logic should follow this state-aware pattern when coordinating target selection
 - The pattern is safe for defenders and attackers if they ever independently select from a shared pool
+
+## 2026-03-11T15-44-00Z: Minimum Outpost Spacing
+
+**Author:** Gately (Game Dev)  
+**Date:** 2026-03-11  
+**PR:** #140  
+**Issue:** #139  
+
+### Context
+
+Builders placed outposts on every claimed tile, visually cluttering the map.
+
+### Decision
+
+Added `MIN_OUTPOST_SPACING = 4` (Manhattan distance) in `shared/src/constants.ts`. The `hasNearbyOutpost()` function in `builderAI.ts` checks proximity before placing an outpost structure. Tiles are still claimed — only the outpost icon is suppressed when too close.
+
+### Impact
+
+- **Rendering:** Fewer outpost markers on map — cleaner visuals
+- **Client:** No changes needed — already renders based on `structureType`
+- **Balance:** Spacing of 4 tiles means roughly 1 outpost per ~20 tiles of territory. Tunable via constant.
+
+---
