@@ -1,6 +1,6 @@
-import { GameState, PlayerState, CreatureState } from "./GameState.js";
+import { GameState, PlayerState } from "./GameState.js";
 import {
-  PAWN_TYPES, CPU_PLAYER, CREATURE_AI,
+  PAWN_TYPES, CPU_PLAYER,
   isEnemyMobile,
 } from "@primal-grid/shared";
 import type { Room } from "colyseus";
