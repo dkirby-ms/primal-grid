@@ -27,6 +27,7 @@ import {
   DayPhase,
   isEnemyBase,
   CPU_PLAYER,
+  STARVATION,
 } from "@primal-grid/shared";
 import type { SpawnPawnPayload, SetNamePayload, ChatPayload, PlaceBuildingPayload } from "@primal-grid/shared";
 import { spawnHQ } from "./territory.js";
@@ -200,6 +201,7 @@ export class GameRoom extends Room {
     if (restored && savedState) {
       player.wood = savedState.wood;
       player.stone = savedState.stone;
+      player.food = savedState.food;
       player.level = savedState.level;
       player.xp = savedState.xp;
     }
@@ -472,6 +474,9 @@ export class GameRoom extends Room {
     // Validate resources
     if (player.wood < pawnDef.cost.wood || player.stone < pawnDef.cost.stone) return null;
 
+    // Block spawning when food is depleted (starvation)
+    if (player.food <= 0) return null;
+
     // Validate pawn cap (per pawn type, boosted by buildings)
     let pawnCount = 0;
     this.state.creatures.forEach((c) => {
@@ -694,6 +699,7 @@ export class GameRoom extends Room {
       // HQ base income
       player.wood += STRUCTURE_INCOME.HQ_WOOD;
       player.stone += STRUCTURE_INCOME.HQ_STONE;
+      player.food += STRUCTURE_INCOME.HQ_FOOD;
 
       // Building income (farms, factories, etc.)
       const playerBuildings = buildingCounts.get(playerId);
@@ -703,8 +709,33 @@ export class GameRoom extends Room {
           if (income) {
             player.wood += count * income.wood;
             player.stone += count * income.stone;
+            player.food += count * income.food;
           }
         });
+      }
+
+      // Deduct food upkeep for all owned pawns
+      let totalUpkeep = 0;
+      this.state.creatures.forEach((c) => {
+        if (c.ownerID === playerId && c.pawnType !== "") {
+          const def = PAWN_TYPES[c.pawnType];
+          if (def) totalUpkeep += def.foodUpkeep;
+        }
+      });
+      player.food -= totalUpkeep;
+
+      // Starvation: deal damage to one random pawn when food <= 0
+      if (player.food <= 0) {
+        const ownedPawns: CreatureState[] = [];
+        this.state.creatures.forEach((c) => {
+          if (c.ownerID === playerId && c.pawnType !== "") {
+            ownedPawns.push(c);
+          }
+        });
+        if (ownedPawns.length > 0) {
+          const victim = ownedPawns[Math.floor(Math.random() * ownedPawns.length)];
+          victim.health -= STARVATION.DAMAGE_PER_TICK;
+        }
       }
     });
   }

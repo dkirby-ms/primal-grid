@@ -59,6 +59,9 @@ export class PlayerState extends Schema {
   stone: number = 0;
 
   @type("number")
+  food: number = 0;
+
+  @type("number")
   hqX: number = -1;
 
   @type("number")

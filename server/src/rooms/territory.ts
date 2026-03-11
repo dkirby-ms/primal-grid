@@ -69,6 +69,7 @@ export function spawnHQ(
   // Starting resources
   player.wood = TERRITORY.STARTING_WOOD;
   player.stone = TERRITORY.STARTING_STONE;
+  player.food = TERRITORY.STARTING_FOOD;
 }
 
 /** Get count of tiles owned by each player. */

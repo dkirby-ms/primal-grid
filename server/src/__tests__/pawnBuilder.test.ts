@@ -4,7 +4,7 @@ import { GameRoom } from "../rooms/GameRoom.js";
 import { isAdjacentToTerritory, getTerritoryCounts } from "../rooms/territory.js";
 import {
   TileType, isWaterTile, DEFAULT_MAP_SIZE,
-  CREATURE_AI, CREATURE_TYPES, TERRITORY, SHAPE, PAWN,
+  CREATURE_AI, CREATURE_TYPES, TERRITORY, SHAPE, PAWN, PAWN_TYPES,
   SPAWN_PAWN,
 } from "@primal-grid/shared";
 import type { SpawnPawnPayload } from "@primal-grid/shared";
@@ -188,17 +188,18 @@ describe("Builder spawning (cost, cap, validation)", () => {
     expect(payload.pawnType).toBe("builder");
   });
 
-  it("spawning deducts correct resources (10W / 5S)", () => {
+  it("spawning deducts correct resources (8W / 4S)", () => {
     const room = createRoomWithMap(42);
     const { client, player } = joinPlayer(room, "p1");
 
     player.wood = 50;
     player.stone = 30;
+    player.food = 50;
 
     room.handleSpawnPawn(client, { pawnType: "builder" });
 
-    expect(player.wood).toBe(50 - PAWN.BUILDER_COST_WOOD);
-    expect(player.stone).toBe(30 - PAWN.BUILDER_COST_STONE);
+    expect(player.wood).toBe(50 - PAWN_TYPES.builder.cost.wood);
+    expect(player.stone).toBe(30 - PAWN_TYPES.builder.cost.stone);
   });
 
   it("cannot spawn when insufficient resources", () => {
