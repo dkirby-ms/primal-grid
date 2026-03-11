@@ -39,6 +39,18 @@ All pawn anti-clustering uses **soft preferences**, never hard blocks:
 
 ---
 
+## 2026-03-10T12:14Z: Filter CI, Chore & Squad Commits from Changelogs
+
+**Author:** dkirby-ms (via Copilot)  
+**Date:** 2026-03-10  
+**Status:** Accepted
+
+**Directive Source:** User request  
+> Filter `ci:`, `chore:`, and `squad:` prefixed commits from player-facing Discord changelogs. Only feat/fix and other meaningful commits should appear.
+
+**Decision:**
+
+All `git log` commands in deployment/promotion workflows now exclude `ci:`, `chore:`, and `squad:` prefixed commits from Discord changelogs.
 ## 2026-03-10T18:23:36Z: Window Event Mocks Must Capture Callbacks
 
 **Author:** Steeply (Tester)  
@@ -297,6 +309,80 @@ Update all three workflows to use `"username": "Squad: Joelle"`. No other change
 ```bash
 RAW_LOG=$(git log --no-merges --pretty=format:'• %h %s (%an)' ... | head -N)
 FEATURES=$(echo "$RAW_LOG" | grep -iE '^• [a-f0-9]+ (feat|fix)' || true)
+OTHER=$(echo "$RAW_LOG" | grep -viE '^• [a-f0-9]+ (feat|fix|ci:|chore:|squad:)' || true)
+CHANGELOG=$(printf '%s\n%s' "$FEATURES" "$OTHER" | sed '/^$/d' | head -N)
+```
+
+**Rationale:** CI housekeeping and version bumps aren't player-relevant. Only feat/fix and other meaningful commits should appear in player-facing notifications.
+
+---
+
+## 2026-03-10T01:40:18Z: Issue Lifecycle & Promotion Pipeline Labels
+
+**Author:** dkirby-ms (via Copilot)  
+**Date:** 2026-03-10  
+**Status:** Accepted
+
+**Directive Source:** User request  
+> Issues should stay open until the fix reaches prod. When a fix merges to dev, label the issue to indicate it's ready for UAT testing. Remove stale workflow labels (e.g., `go:needs-research`) at that point.
+
+**Decision:**
+
+1. Issues remain open throughout the promotion pipeline (dev → UAT → prod).
+2. When a fix merges to dev, apply a label indicating readiness for UAT testing.
+3. Remove stale/intermediate workflow labels (`go:needs-research`, etc.) at promotion milestones.
+4. Close the issue only after the fix reaches prod.
+
+**Rationale:** Provides visibility into promotion pipeline status without prematurely closing issues. User request — captured for team memory.
+
+---
+
+## 2026-03-10: Discord Webhook Identity Handoff: Marathe → Joelle
+
+**Author:** Hal (Lead)  
+**Date:** 2026-03-10  
+**Status:** Recommendation
+
+### Context
+
+Joelle joined the team as Community/DevRel specialist (`.squad/agents/joelle/charter.md`) and owns Discord deployment notifications — tone, formatting, and community voice. However, three GitHub Actions workflows still hardcode `"username": "Squad: Marathe"` in Discord webhook payloads:
+
+1. `.github/workflows/deploy.yml` (line 169) — production deployments
+2. `.github/workflows/deploy-uat.yml` (line 169) — UAT deployments
+3. `.github/workflows/e2e.yml` (line 95) — E2E test results
+
+This means Joelle's first community announcement shipped as Marathe instead of her own identity — the onboarding issue dkirby-ms noted.
+
+### Decision
+
+**Change webhook username from "Squad: Marathe" to "Squad: Joelle"** in:
+- `deploy.yml` line 169
+- `deploy-uat.yml` line 169
+- `e2e.yml` line 95
+
+**Ownership split:**
+- **Joelle owns:** Discord identity, message tone, changelog formatting/curation, what goes in the message
+- **Marathe owns:** CI/CD mechanics (workflow structure, changelog generation scripts, build/deploy logic)
+
+**Rationale:**
+1. Charter alignment: Joelle's charter explicitly lists "Discord deployment notifications" as owned by her
+2. Community voice: Deployment announcements are player-facing communications — Joelle's domain
+3. Clear boundary: The infrastructure (workflow YAML, bash scripts) stays with Marathe; the community identity and voice belongs to Joelle
+4. Consistency: All deployment/test notifications should come from the same community voice
+
+### Future Pattern
+
+If new Discord notifications are added:
+- Workflow mechanics → Marathe (or relevant CI/CD owner)
+- Discord identity/message content → Joelle
+- Joelle may request changes to Marathe's changelog scripts if the format doesn't serve community needs
+
+### Related Files
+- `.squad/agents/joelle/charter.md` — Joelle's ownership of Discord notifications
+- `.squad/agents/marathe/charter.md` — Marathe's CI/CD infrastructure domain
+- `.github/workflows/deploy.yml`
+- `.github/workflows/deploy-uat.yml`
+- `.github/workflows/e2e.yml`
 OTHER=$(echo "$RAW_LOG" | grep -viE '^• [a-f0-9]+ (feat|fix)' || true)
 CHANGELOG=$(printf '%s\n%s' "$FEATURES" "$OTHER" | sed '/^$/d' | head -N)
 ```
