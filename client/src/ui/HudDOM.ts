@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { PAWN_TYPES, BUILDING_COSTS, PLACE_BUILDING, isEnemyBase } from '@primal-grid/shared';
+import { PAWN_TYPES, BUILDING_COSTS, BUILDING_CAP_BONUS, PLACE_BUILDING, isEnemyBase } from '@primal-grid/shared';
 import type { PlaceBuildingPayload } from '@primal-grid/shared';
 
 /**
@@ -35,6 +35,7 @@ export class HudDOM {
   private currentAttackerCount = 0;
   private currentExplorerCount = 0;
   private currentEnemyBaseCount = 0;
+  private currentCapBonus = 0;
 
   // Building placement
   private buildFarmBtn: HTMLButtonElement;
@@ -156,32 +157,34 @@ export class HudDOM {
 
   /** Update spawn button enabled/disabled state. */
   private updateSpawnButton(): void {
+    const cap = this.currentCapBonus;
+
     const builderDef = PAWN_TYPES['builder'];
     const canAfford = builderDef
       ? this.currentWood >= builderDef.cost.wood && this.currentStone >= builderDef.cost.stone
       : false;
-    const underCap = builderDef ? this.currentBuilderCount < builderDef.maxCount : false;
+    const underCap = builderDef ? this.currentBuilderCount < builderDef.maxCount + cap : false;
     this.spawnBuilderBtn.disabled = !canAfford || !underCap;
 
     // Defender button
     const defDef = PAWN_TYPES['defender'];
     if (defDef) {
       const canAffordDef = this.currentWood >= defDef.cost.wood && this.currentStone >= defDef.cost.stone;
-      this.spawnDefenderBtn.disabled = !canAffordDef || this.currentDefenderCount >= defDef.maxCount;
+      this.spawnDefenderBtn.disabled = !canAffordDef || this.currentDefenderCount >= defDef.maxCount + cap;
     }
 
     // Attacker button
     const atkDef = PAWN_TYPES['attacker'];
     if (atkDef) {
       const canAffordAtk = this.currentWood >= atkDef.cost.wood && this.currentStone >= atkDef.cost.stone;
-      this.spawnAttackerBtn.disabled = !canAffordAtk || this.currentAttackerCount >= atkDef.maxCount;
+      this.spawnAttackerBtn.disabled = !canAffordAtk || this.currentAttackerCount >= atkDef.maxCount + cap;
     }
 
     // Explorer button
     const expDef = PAWN_TYPES['explorer'];
     if (expDef) {
       const canAffordExp = this.currentWood >= expDef.cost.wood && this.currentStone >= expDef.cost.stone;
-      this.spawnExplorerBtn.disabled = !canAffordExp || this.currentExplorerCount >= expDef.maxCount;
+      this.spawnExplorerBtn.disabled = !canAffordExp || this.currentExplorerCount >= expDef.maxCount + cap;
     }
 
     // Building buttons
@@ -253,6 +256,22 @@ export class HudDOM {
         });
       }
 
+      // Count building cap bonus from tiles
+      const tiles = state['tiles'] as
+        | { forEach: (cb: (tile: Record<string, unknown>, key: string) => void) => void; length?: number }
+        | undefined;
+      if (tiles && typeof tiles.forEach === 'function') {
+        let capBonus = 0;
+        tiles.forEach((tile) => {
+          const ownerID = (tile['ownerID'] as string) ?? '';
+          if (ownerID !== this.localSessionId) return;
+          const st = (tile['structureType'] as string) ?? '';
+          const b = BUILDING_CAP_BONUS[st];
+          if (b) capBonus += b;
+        });
+        this.currentCapBonus = capBonus;
+      }
+
       // Creature counts (including builder pawns and combat entities)
       const creatures = state['creatures'] as
         | { forEach: (cb: (creature: Record<string, unknown>, key: string) => void) => void }
@@ -285,7 +304,10 @@ export class HudDOM {
         });
         this.creatureCounts.textContent = `🦕 ${herbs}  🦖 ${carns}`;
         this.currentBuilderCount = builders;
-        this.builderCountEl.textContent = `Builders: ${builders}/${PAWN_TYPES['builder']?.maxCount ?? 5}`;
+        const capBonus = this.currentCapBonus;
+        const bonusTag = capBonus > 0 ? ` (+${capBonus})` : '';
+        this.builderCountEl.textContent = `Builders: ${builders}/${(PAWN_TYPES['builder']?.maxCount ?? 5) + capBonus}`;
+        if (capBonus > 0) this.builderCountEl.innerHTML = `Builders: ${builders}/${(PAWN_TYPES['builder']?.maxCount ?? 5) + capBonus} <span style="color:#7ecfff">(+${capBonus})</span>`;
 
         // Combat counts
         const defDef = PAWN_TYPES['defender'];
@@ -295,9 +317,9 @@ export class HudDOM {
         this.currentAttackerCount = attackers;
         this.currentExplorerCount = explorers;
         this.currentEnemyBaseCount = enemyBases;
-        this.defenderCountEl.textContent = `🛡 ${defenders}/${defDef?.maxCount ?? 3}`;
-        this.attackerCountEl.textContent = `⚔ ${attackers}/${atkDef?.maxCount ?? 2}`;
-        this.explorerCountEl.textContent = `🔭 ${explorers}/${expDef?.maxCount ?? 3}`;
+        this.defenderCountEl.textContent = `🛡 ${defenders}/${(defDef?.maxCount ?? 3) + capBonus}${bonusTag}`;
+        this.attackerCountEl.textContent = `⚔ ${attackers}/${(atkDef?.maxCount ?? 2) + capBonus}${bonusTag}`;
+        this.explorerCountEl.textContent = `🔭 ${explorers}/${(expDef?.maxCount ?? 3) + capBonus}${bonusTag}`;
         this.enemyBaseCountEl.textContent = enemyBases > 0 ? `⛺ ${enemyBases} active` : 'No threats';
 
         this.updateSpawnButton();

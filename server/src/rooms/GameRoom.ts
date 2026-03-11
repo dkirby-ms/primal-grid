@@ -20,7 +20,7 @@ import {
   ResourceType, TileType, isWaterTile,
   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
   CREATURE_AI, CREATURE_RESPAWN, TERRITORY,
-  STRUCTURE_INCOME, SHAPE, BUILDING_COSTS, BUILDING_INCOME,
+  STRUCTURE_INCOME, SHAPE, BUILDING_COSTS, BUILDING_INCOME, BUILDING_CAP_BONUS,
   PROGRESSION, getLevelForXP,
   PAWN_TYPES, DAY_NIGHT, FOG_OF_WAR,
   ENEMY_SPAWNING, ENEMY_BASE_TYPES,
@@ -472,12 +472,13 @@ export class GameRoom extends Room {
     // Validate resources
     if (player.wood < pawnDef.cost.wood || player.stone < pawnDef.cost.stone) return null;
 
-    // Validate pawn cap (per pawn type)
+    // Validate pawn cap (per pawn type, boosted by buildings)
     let pawnCount = 0;
     this.state.creatures.forEach((c) => {
       if (c.ownerID === playerId && c.pawnType === pawnType) pawnCount++;
     });
-    if (pawnCount >= pawnDef.maxCount) return null;
+    const capBonus = this.getBuildingCapBonus(playerId);
+    if (pawnCount >= pawnDef.maxCount + capBonus) return null;
 
     // Find walkable tile within HQ zone
     const spawnPos = this.findHQWalkableTile(player);
@@ -532,6 +533,19 @@ export class GameRoom extends Room {
     }
     if (candidates.length === 0) return null;
     return candidates[Math.floor(Math.random() * candidates.length)];
+  }
+
+  /** Sum building cap bonuses for a player across all their buildings. */
+  getBuildingCapBonus(playerId: string): number {
+    let bonus = 0;
+    const len = this.state.tiles.length;
+    for (let i = 0; i < len; i++) {
+      const tile = this.state.tiles.at(i);
+      if (!tile || tile.ownerID !== playerId) continue;
+      const b = BUILDING_CAP_BONUS[tile.structureType];
+      if (b) bonus += b;
+    }
+    return bonus;
   }
 
   private countNonWalkableInZone(cx: number, cy: number): number {
