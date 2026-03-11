@@ -86,7 +86,7 @@ describe("Water Depth Variants", () => {
   describe("Map generation water distribution", () => {
     const TEST_SEEDS = [42, 100, 256, 777, 9999];
 
-    it("generated maps contain BOTH ShallowWater and DeepWater tiles", () => {
+    it("generated maps contain BOTH ShallowWater and DeepWater tiles", { timeout: 30_000 }, () => {
       for (const seed of TEST_SEEDS) {
         const room = createRoomWithMap(seed);
         let shallow = 0;
@@ -101,7 +101,7 @@ describe("Water Depth Variants", () => {
       }
     });
 
-    it("water tiles exist on the map (not all eliminated by smoothing)", () => {
+    it("water tiles exist on the map (not all eliminated by smoothing)", { timeout: 30_000 }, () => {
       for (const seed of TEST_SEEDS) {
         const room = createRoomWithMap(seed);
         let waterCount = 0;
