@@ -992,3 +992,18 @@ Used Gemini 3 Pro for this review task to leverage an alternate model for indepe
 
 - Encoder.BUFFER_SIZE now at 4 MB — ceiling for 256×256 maps. If larger maps are ever introduced, this needs revisiting.
 - Client-side game creation timeout is now 30s (was 15s). LobbyScreen.ts line 216.
+
+---
+
+### Latest Session: PR #137 Review & Approval (2026-03-11)
+
+**Task:** Review Pemulis's pawn clustering fix (PR #137).
+
+**Review Notes:**
+- Core logic fixes are sound across all 4 root causes
+- Test coverage adequate (790 tests passing)
+- **Performance Finding:** `hasFriendlyPawnAt` method is O(N²) in current implementation. For grid sizes ≤256×256, this is acceptable but should be monitored in production.
+
+**Decision:** Approved for merge. Performance optimization deferred to future refactor as non-blocking.
+
+**Outcome:** PR #137 merged to dev. Issue #127 closed. Issue #136 filed.
