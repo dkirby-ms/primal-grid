@@ -1,7 +1,7 @@
 import { GameState, CreatureState } from "./GameState.js";
 import { moveToward } from "./creatureAI.js";
 import { isAdjacentToTerritory } from "./territory.js";
-import { PAWN, SHAPE, TileType, PROGRESSION, isWaterTile } from "@primal-grid/shared";
+import { PAWN, SHAPE, TileType, PROGRESSION, MIN_OUTPOST_SPACING, isWaterTile } from "@primal-grid/shared";
 
 /**
  * Builder pawn FSM: idle → find_build_site → move_to_site → building → idle
@@ -87,7 +87,11 @@ export function stepBuilder(creature: CreatureState, state: GameState): void {
         // Build complete — claim the tile
         buildTile.ownerID = creature.ownerID;
         buildTile.shapeHP = SHAPE.BLOCK_HP;
-        buildTile.structureType = creature.buildMode === "farm" ? "farm" : "outpost";
+        if (creature.buildMode === "farm") {
+          buildTile.structureType = "farm";
+        } else if (!hasNearbyOutpost(state, creature.ownerID, creature.targetX, creature.targetY)) {
+          buildTile.structureType = "outpost";
+        }
 
         const player = state.players.get(creature.ownerID);
         if (player) {
@@ -115,6 +119,30 @@ function isValidBuildTile(tile: { type: number; shapeHP: number }): boolean {
   if (isWaterTile(tile.type) || tile.type === TileType.Rock) return false;
   if (tile.shapeHP > 0) return false;
   return true;
+}
+
+/**
+ * Check if any outpost owned by the same player is within
+ * MIN_OUTPOST_SPACING Manhattan distance of (x, y).
+ */
+export function hasNearbyOutpost(
+  state: GameState,
+  ownerID: string,
+  x: number,
+  y: number,
+): boolean {
+  const r = MIN_OUTPOST_SPACING;
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      if (Math.abs(dx) + Math.abs(dy) > r) continue;
+      const tile = state.getTile(x + dx, y + dy);
+      if (tile && tile.ownerID === ownerID && tile.structureType === "outpost") {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 /**
