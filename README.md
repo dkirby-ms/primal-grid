@@ -26,7 +26,7 @@ The game is fully server-authoritative with multiplayer powered by [Colyseus](ht
 - **Stamina & Exhaustion** — Creatures spend stamina to move and must rest to recover. Exhaustion triggers a hysteresis cooldown, preventing rapid state toggling.
 - **Territory Ownership & Building System** — Claim tiles adjacent to your territory using pawn builders. Build Farms (boost food income) and Factories (boost wood/stone income). Each building type increases your unit spawn caps: +1 per Farm, +2 per Factory, allowing you to field larger armies.
 - **Territory Ownership** — Claim tiles adjacent to your territory using pawn builders. Your 5×5 HQ zone is your foothold; expand outward.
-- **Pawn Builder System** — Spawn pawns (cost: Wood + Stone + Food) that autonomously find unclaimed land, move to it, and build structures. Each pawn type consumes food per income tick — manage your food supply carefully or face starvation.
+- **Pawn Builder System** — Spawn pawns (cost: Wood + Stone; upkeep: Food per income tick) that autonomously find unclaimed land, move to it, and build structures. Each pawn type consumes food per income tick — manage your food supply carefully or face starvation.
 - **Food Economy** — Three resources: **Wood**, **Stone**, and **Food**. Farms produce food; factories produce wood and stone. Your HQ generates all three. When food runs out, random pawns take damage each income tick until you recover.
 - **Progression System** — Earn XP, level up, and unlock new polyomino building shapes as you advance.
 - **Multiplayer** — Real-time multiplayer via Colyseus rooms with schema-based state synchronization.

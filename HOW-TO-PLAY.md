@@ -66,7 +66,7 @@ Pawns are your workers and warriors. Spawn them from the HUD panel on the right 
 
 | Stat | Value |
 |------|-------|
-| Cost | 8 Wood, 4 Stone + 1 Food/tick |
+| Cost | 8 Wood, 4 Stone (spawn); 1 Food/tick (upkeep) |
 | Max | 5 (base) |
 | Health | 50 |
 | Vision | 4 tiles |
@@ -85,7 +85,7 @@ Builders are your expansion force. They automatically scout for unclaimed tiles 
 
 Defenders patrol your territory and will fight off any threat that enters — whether it's an enemy raider or a hungry carnivore. They **never leave your territory**, so they're your reliable last line of defense. If pushed outside by an attacker, they automatically return home. Each defender costs 2 food per income tick.
 
-### ⚔ Raider
+### ⚔ Attacker
 
 | Stat | Value |
 |------|-------|
@@ -95,7 +95,7 @@ Defenders patrol your territory and will fight off any threat that enters — wh
 | Damage | 25 |
 | Detection | 6 tiles |
 
-Raiders are your offensive strike force. They venture beyond your territory to destroy enemy bases and take out hostile units. They'll patrol for about 50 seconds before heading home. Deploy them strategically once you've got defenders protecting your own base. Each raider is expensive and consumes 3 food per income tick.
+Attackers are your offensive strike force. They venture beyond your territory to destroy enemy bases and take out hostile units. They'll patrol for about 50 seconds before heading home. Deploy them strategically once you've got defenders protecting your own base. Each attacker is expensive and consumes 3 food per income tick.
 
 ### 🔭 Explorer
 
@@ -114,7 +114,7 @@ Explorers roam the map to reveal the unknown. They're drawn to unexplored and un
 
 Your territory starts as a 5×5 square around your HQ. To expand:
 
-1. **Spawn a Builder** (10 Wood, 5 Stone)
+1. **Spawn a Builder** (8 Wood, 4 Stone)
 2. The builder automatically finds and claims nearby unclaimed tiles
 3. Each claim takes about 2 seconds
 4. You can only claim tiles **next to territory you already own** — no jumping across the map
@@ -156,7 +156,7 @@ Enemy bases appear on the map as the game progresses (the first one shows up aft
 | 🪺 Hive | 150 | Swarms | 10W, 5S, 5 Food |
 | 🏰 Fortress | 400 | Raiders | 25W, 20S, 10 Food |
 
-Destroy them with **Raider pawns** to earn resource rewards and eliminate the threat.
+Destroy them with **Attacker pawns** to earn resource rewards and eliminate the threat.
 
 ---
 

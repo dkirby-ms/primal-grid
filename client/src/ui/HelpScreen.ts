@@ -20,7 +20,7 @@ const HOW_TO_PLAY: [string, string][] = [
   ['🔨 Builders', 'Spawn (8W 4S) to claim adjacent tiles & expand territory'],
   ['🏗 Buildings', 'Farm (12W 6S → +2 Food +1 Cap) · Factory (20W 12S → +2W +1S +2 Cap)'],
   ['🛡 Defenders', 'Spawn (12W 8S) to patrol and guard your territory'],
-  ['⚔ Raiders', 'Spawn (16W 12S) to raid enemy bases and destroy threats'],
+  ['⚔ Attackers', 'Spawn (16W 12S) to raid enemy bases and destroy threats'],
   ['🔭 Explorers', 'Spawn (10W 6S) to scout with 6-tile vision'],
   ['🍖 Starvation', 'Pawns eat food each tick — when food ≤ 0, random pawns take damage'],
   ['⭐ Level up', 'Earn XP by claiming tiles → track your progress'],
