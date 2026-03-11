@@ -239,6 +239,8 @@ describe("Bug #139 — Outpost Spacing", () => {
       const targetTile = room.state.getTile(targetX, startY);
       if (!targetTile) return;
       targetTile.ownerID = "";
+      targetTile.type = TileType.Grassland;
+      targetTile.shapeHP = 0;
 
       const builder = addBuilder(room, "b1", "p1", startX, startY, {
         currentState: "building",

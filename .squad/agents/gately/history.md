@@ -1473,6 +1473,8 @@ When adding new structure types: check ALL paths — visible tile icons, fog sil
 - Manhattan distance is the correct metric for grid-based spatial queries
 - Spacing rules can be efficiently checked by scanning bounded tile regions rather than iterating all tiles
 - Rendering behavior automatically correct when `structureType` field is properly managed server-side
+- Test flakiness from map generation: When testing game logic (not terrain), explicitly set tile properties to ensure consistent test conditions
+- Multi-map generation tests on slow CI need explicit 30s timeouts (default 5s insufficient for 5+ map generations)
 
 **Integration Points:**
 - Pawn builder system now provides better visual feedback with reduced icon density
