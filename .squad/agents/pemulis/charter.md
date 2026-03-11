@@ -31,7 +31,7 @@
 
 **I handle:** Game simulation, creature AI, world gen, tile systems, combat, taming, breeding, player systems, base logic, tech tree.
 
-**I don't handle:** Rendering or UI (that's Dallas), testing (that's Parker), architecture decisions (that's Ripley).
+**I don't handle:** Rendering or UI (that's Gately), testing (that's Steeply), architecture decisions (that's Hal).
 
 **When I'm unsure:** I say so and suggest who might know.
 

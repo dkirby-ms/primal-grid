@@ -1427,3 +1427,11 @@ When adding new structure types: check ALL paths — visible tile icons, fog sil
 - **Key pattern:** `CreatureRenderer` now self-caches player colors from `state['players']` in `onStateChange`, keeping it decoupled from `GridRenderer` which also tracks player colors.
 - **Files:** `client/src/renderer/CreatureRenderer.ts`
 - **PR:** #138
+
+### Outpost Spacing — Bug #139 (2026-03-11)
+
+- **Problem:** Builders placed an outpost structure on every claimed tile, causing visual clutter on the map.
+- **Fix:** Added `MIN_OUTPOST_SPACING = 4` constant (shared/constants.ts) and `hasNearbyOutpost()` helper (builderAI.ts). Before setting `structureType = "outpost"`, the builder checks if any existing outpost owned by the same player is within 4 Manhattan distance. If too close, the tile is still claimed (ownerID, shapeHP, score, XP all applied) but no outpost structure is placed. Farm placement is unaffected.
+- **Key pattern:** Spacing check scans a diamond-shaped area using Manhattan distance, only checking tiles with `structureType === "outpost"` and matching `ownerID`. Exported for testability.
+- **Files:** `shared/src/constants.ts`, `server/src/rooms/builderAI.ts`, `server/src/__tests__/outpost-spacing.test.ts`
+- **PR:** #140
