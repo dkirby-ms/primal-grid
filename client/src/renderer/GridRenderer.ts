@@ -385,6 +385,9 @@ export class GridRenderer {
         if (!currentVisible.has(prevIdx)) {
           const px = prevIdx % this.mapSize;
           const py = Math.floor(prevIdx / this.mapSize);
+          // Hide building icon so it doesn't bleed through the semi-transparent fog
+          const bldgIcon = this.buildingIcons.get(prevIdx);
+          if (bldgIcon) bldgIcon.visible = false;
           this.setFogState(px, py, 'explored');
         }
       }
@@ -439,6 +442,10 @@ export class GridRenderer {
           if (icon.text !== expected) icon.text = expected;
         }
         icon.visible = true;
+      } else {
+        // No structure in cache — hide any stale fog silhouette icon
+        const icon = this.fogStructureIcons.get(idx);
+        if (icon) icon.visible = false;
       }
     } else {
       // Unexplored — solid black
