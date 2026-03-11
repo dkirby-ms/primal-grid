@@ -1895,3 +1895,49 @@ See `.squad/decisions.md` for full triage document, dependency graph, risk mitig
 - **Fix Locations:** `GameRoom.ts` (buffer), `LobbyRoom.ts` (error handling), `GameClient.ts` (timeout)
 - **Test Coverage:** 43 anticipatory tests by Steeply; 7 integration tests added; all 794 tests pass
 - **Pattern Insight:** See Steeply's anticipatory test pattern — tests validate server state before client integration
+
+### Pawn Clustering Fix — Issue #127 (2026-03-12)
+
+- **PR:** #133 on `squad/127-fix-pawn-clustering` branch
+- **Bug:** Multiple builder pawns converged on the same target tile because `findBuildSite()` had no awareness of other pawns' targets. All builders independently selected the identical best tile using the same deterministic scoring, then moved toward it in lockstep — visible clustering.
+- **Root cause:** `findBuildSite()` evaluated tiles purely by gap priority → distance → HQ distance, with no check for whether another pawn was already heading there.
+- **Fix:** Added `getReservedTargets()` in `builderAI.ts` — collects tiles targeted by other same-owner builders into a `Set<string>`. `findBuildSite()` skips reserved tiles via `reserved.has()`. Each builder now picks a distinct destination.
+- **Complexity:** O(N) per builder where N = same-owner builders (max 5). Negligible cost.
+- **Key insight:** This is a classic "greedy allocation without coordination" bug. When multiple agents run identical scoring independently, they converge. The fix is target reservation — not collision avoidance or repulsion forces.
+- **Files changed:** `server/src/rooms/builderAI.ts` only. No schema changes, no new constants.
+- **Tests:** 738/738 passing, no regressions.
+
+---
+
+## 2026-03-11: Wave 2 Bug Fix — Pawn Clustering (#127)
+
+**PR:** #133  
+**Status:** COMPLETED, in review  
+**Orchestration:** [2026-03-11T12-10-00Z-pemulis.md](.squad/orchestration-log/2026-03-11T12-10-00Z-pemulis.md)
+
+### Work Summary
+
+Fixed greedy target selection in builder AI. Root cause: all builders evaluated identical game state with same scoring function, converging deterministically on the single best tile.
+
+### Solution Implemented
+
+Added `getReservedTargets()` function that collects tiles already targeted by same-owner builders. `findBuildSite()` now skips reserved tiles, forcing builders to select distinct destinations.
+
+### Details
+
+- **File:** `server/src/rooms/builderAI.ts` only
+- **Complexity:** O(N) where N = same-owner builders (max 5)
+- **Schema Impact:** None (reuses existing `targetX/targetY` fields)
+- **Network Impact:** None (no new messages)
+- **CPU Player Benefit:** Automatic (same code path)
+- **Test Coverage:** 19 anticipatory tests by Steeply (#836 total suite)
+
+### Key Insight
+
+Classic "greedy allocation without coordination" pattern. Multiple agents running identical scoring independently always converge. Solution is target reservation, not collision avoidance or repulsion forces.
+
+### Integrated With
+
+- Steeply's 19 anticipatory tests for pawn clustering validation
+- Gately's concurrent outpost fix (shares `getReservedTargets()` pattern)
+

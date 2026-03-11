@@ -928,3 +928,31 @@ Clean, well-tested implementation. Bootstrap reconnect-check handles all edge ca
 - **Critical Fix:** Increased Colyseus encoder buffer to 4MB (was 768KB) to support 256x256 map state sync.
 - **Robustness:** Added try/catch around room creation to prevent swallowed errors. Increased client timeout to 30s.
 - **Validation:** New tests verify 64x64 and 256x256 map generation and performance.
+
+---
+
+## 2026-03-11: Wave 1 PR Reviews (Wave 2 Session Context)
+
+**Status:** COMPLETED  
+**Model:** Gemini 3 Pro (preview)  
+**Orchestration:** [2026-03-11T12-10-00Z-hal.md](.squad/orchestration-log/2026-03-11T12-10-00Z-hal.md)
+
+### PRs Reviewed & Approved
+
+| PR | Author | Issue | Work | Status |
+|----|---------|----|---------|--------|
+| #129 | Marathe | #122 | Stage label lifecycle (dev→uat automation) | ✅ APPROVED |
+| #130 | Gately | #128 | Fog-of-war ghosting & icon clearing | ✅ APPROVED |
+| #131 | Pemulis | #126 | Map size timeout (Colyseus buffer, error handling, timeouts) | ✅ APPROVED |
+
+### Review Findings
+
+- All PRs meet squad standards
+- No blockers or required changes
+- Ready for merge to respective branches (dev/uat)
+- Each PR demonstrates solid pattern implementation (label automation, rendering cleanup, encoder buffer scaling)
+
+### Model Override Note
+
+Used Gemini 3 Pro for this review task to leverage an alternate model for independent validation perspective. Model performed well on procedural code review.
+

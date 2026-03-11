@@ -1364,3 +1364,58 @@ See `.squad/decisions.md` Initiative Triage & Execution Plan (2026-03-09) for fu
 - **Fix Location:** `client/src/ui/GridRenderer.ts` (7-line surgical fix)
 - **Test Coverage:** 20 anticipatory tests by Steeply; all 794 tests pass
 - **Related Work:** See Steeply's anticipatory test pattern decision — server state model tests validate rendering fixes
+
+## Learnings
+
+### Outpost Placement & Rendering Fix (Issue #125, PR #134)
+
+- **Status:** COMPLETED, PR #134 opened against dev
+- **Bug:** Outpost structures clustered together, disappeared after construction, and appeared to shift position.
+- **Root causes (3):**
+  1. **Clustering:** `findBuildSite()` in `builderAI.ts` didn't check if another builder was already targeting the same tile. Multiple builders converged on identical tiles.
+  2. **Disappearing:** `updateBuildingIcon()` in `GridRenderer.ts` only rendered `farm` and `factory` icons. Outpost was excluded with a comment claiming it had "its own renderer" — but no outpost renderer existed. Outposts were invisible after construction.
+  3. **Moving:** Without a persistent outpost icon, the builder creature was the only visual signal. When it finished and moved to its next target, the "outpost" appeared to shift.
+- **Fix:**
+  - Added `getReservedTiles()` to collect active builder targets and skip them during site selection (prevents clustering).
+  - Included `outpost` in `updateBuildingIcon()` building type check (renders 🗼 icon).
+  - Added building icon hiding during visible→explored fog transitions (same #128 pattern).
+- **Key insight:** Always verify "has its own renderer" comments — cross-reference with actual renderer files. The outpost renderer claim was stale/false.
+- **Pattern:** When adding new structure types to the renderer, check ALL rendering paths: visible tile icons, fog silhouettes, fog transition cleanup. Miss any one and you get phantom or invisible structures.
+
+---
+
+## 2026-03-11: Wave 2 Bug Fix — Outpost Structure Issues (#125)
+
+**PR:** #134  
+**Status:** COMPLETED, in review  
+**Orchestration:** [2026-03-11T12-10-00Z-gately.md](.squad/orchestration-log/2026-03-11T12-10-00Z-gately.md)
+
+### Work Summary
+
+Fixed triple-layer outpost structure issues: builder tile clustering, missing outpost icon rendering, and fog-of-war bleed-through.
+
+### Issues Fixed
+
+1. **Builder Tile Reservation** — Multiple builders now properly reserve tiles, preventing construction of multiple buildings on same location
+2. **Outpost Icon Rendering** — Added 🗼 emoji rendering in `GridRenderer.ts` (was missing from building type check)
+3. **Fog Bleed-Through** — Outpost visuals now properly hidden during visible→explored fog transitions
+
+### Details
+
+- **Primary File:** `client/src/ui/GridRenderer.ts` (building type inclusion + fog cleanup)
+- **Secondary:** `server/src/rooms/builderAI.ts` (tile reservation coordination with Pemulis)
+- **Test Coverage:** 23 anticipatory tests by Steeply (#836 total suite)
+
+### Key Learning
+
+Stale comments in code ("has its own renderer") can hide bugs. The outpost renderer claim was false — no separate renderer existed. Always verify such comments with reality checks (grep, renderer file inspection).
+
+### Rendering Pattern Established
+
+When adding new structure types: check ALL paths — visible tile icons, fog silhouettes, fog transition cleanup. Missing any one causes phantom/invisible structures.
+
+### Integrated With
+
+- Steeply's 23 anticipatory tests for outpost stability
+- Pemulis's concurrent pawn clustering fix (shares `getReservedTargets()` pattern)
+

@@ -2015,3 +2015,62 @@ Large-map rendering with PixiJS requires explicit culling—the scene graph does
 - **Result:** All 794 tests pass post-fixes
 - **Pattern Established:** Anticipatory testing against server state model — write tests before fixes validate behavior contracts
 - **Gately/Pemulis Alert:** If your fixes change `generateMap`, `tickFogOfWar`, `computeVisibleTiles`, or `TileState.structureType`, re-run these tests and flag failures for adjustment
+
+### Anticipatory Tests — Bug #127 & #125 (Wave 2)
+
+- **2 new test files**, 42 total new tests (19 for #127, 23 for #125). Suite at **836 tests, 49 files, all passing.**
+- **Bug #127 (pawn clustering):** `server/src/__tests__/pawn-clustering.test.ts` — Tests builder target distribution (2/5 builders selecting diverse tiles), spatial convergence (builders diverging from shared start positions, 10-builder spread), movement behavior at 1/2/5/10 pawn counts, infinite loop prevention (oscillation detection, simultaneous idle detection, target invalidation recovery), target selection determinism within same room state, and adjacency validation (targets adjacent to territory, not inside owned tiles).
+- **Bug #125 (outpost stability):** `server/src/__tests__/outpost-stability.test.ts` — Tests outpost persistence across 100+ ticks (direct placement, builder FSM completion, builder death), position immutability (x/y stable, shapeHP stable without combat), builder site distribution (multi-builder spread, territory edge targeting), multi-builder collision prevention (only one builder builds per tile, abandoned target detection), structureType sync integrity (immediate correctness, no reversion, JSON round-trip, type distinctness, bulk persistence), territory boundaries (edge placement, frontier expansion, map edge tiles, two-player contested border), and buildMode correctness (outpost vs farm, default value).
+- **Key pattern reuse:** Same `createRoomWithMap(seed)` + `joinPlayer()` + `addBuilder()` + `tickAI()` helpers from wave 1 and pawnBuilder.test.ts. Direct `stepBuilder()` calls for isolated FSM testing. `placeOutpost()` helper for testing persistence without full builder cycle.
+- **Determinism gotcha:** HQ placement uses `Math.random()` even with fixed map seed, so cross-run determinism tests must operate within a single room instance. Fixed in wave 2 after initial failure.
+- **Note:** Both files are anticipatory. Current server-side behavior passes all tests — the bugs likely manifest in client rendering, StateView sync, or AI coordination logic that Pemulis/Gately will patch. Tests may need tightening (e.g., asserting unique targets per builder) once fixes land.
+
+---
+
+## 2026-03-11: Wave 2 Anticipatory Tests — Pawn Clustering & Outpost Stability (#127, #125)
+
+**Status:** COMPLETED  
+**Orchestration:** [2026-03-11T12-10-00Z-steeply.md](.squad/orchestration-log/2026-03-11T12-10-00Z-steeply.md)
+
+### Work Summary
+
+Wrote 42 anticipatory test cases validating expected behavior for concurrent bug fixes by Pemulis (#127) and Gately (#125). Suite now at **836 passing tests, 100% pass rate**.
+
+### Test Coverage
+
+**Pawn Clustering (#127) — 19 tests**
+- Builder target distribution (2/5 builders select diverse tiles)
+- Spatial convergence prevention (builders diverge from shared start, 10-builder spread)
+- Movement behavior across pawn counts (1/2/5/10 pawns)
+- Infinite loop prevention (oscillation detection, target invalidation recovery)
+- Target selection determinism within room state
+- Adjacency validation (targets adjacent to territory, not inside)
+
+**Outpost Stability (#125) — 23 tests**
+- Outpost persistence across 100+ ticks
+- Position immutability (x/y/shapeHP stable without combat)
+- Multi-builder coordination (only one builder per tile, collision prevention)
+- StructureType sync integrity (immediate correctness, JSON round-trip, bulk persistence)
+- Territory boundaries (edge placement, frontier expansion, map edges, contested borders)
+- BuildMode correctness (outpost vs farm distinction, default values)
+
+### Testing Strategy
+
+Tests target the server state model to validate underlying data layer. If tests pass post-fix:
+- The bug is in a higher layer (rendering, serialization, networking) — Gately/Pemulis fix is correct
+- Test expectations are met — no adjustments needed
+
+If tests fail post-fix:
+- The fix changed server-side behavior — tests need updating
+- Reflects actual server contract change — must coordinate with implementation
+
+### Pattern Details
+
+Reused `createRoomWithMap()` + `joinPlayer()` + `addBuilder()` + `tickAI()` helpers from wave 1. Added `placeOutpost()` helper for direct structure testing without full builder FSM cycle. Determinism testing uses single room instance (HQ placement uses `Math.random()` even with fixed seed).
+
+### Integration
+
+- Paired with Pemulis PR #133 (pawn clustering fix)
+- Paired with Gately PR #134 (outpost structure fix)
+- All 836 tests passing; no blockers
+

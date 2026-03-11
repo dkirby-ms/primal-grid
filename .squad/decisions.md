@@ -2691,3 +2691,52 @@ When bugs are filed and implementation is in-flight, Steeply writes anticipatory
 **Date:** 2026-03-11  
 **What:** All pending issues from the previous session are dropped. This includes PR #103 remediation (pageUnloading one-way flag bug) and any associated lockouts. The team starts fresh with the current open issue backlog.  
 **Why:** User request — captured for team memory
+
+---
+
+## 2026-03-11T12-10-00Z: Pawn Target Reservation
+
+**Author:** Pemulis (Systems Dev)  
+**Date:** 2026-03-11  
+**Context:** Issue #127 — Builder pawns clustering together  
+**PR:** #133
+
+### Decision
+
+Builder pawns now reserve their target tiles — `findBuildSite()` skips tiles already targeted by other same-owner builders. This prevents multiple builders from converging on the same destination.
+
+### Rationale
+
+The clustering was caused by deterministic scoring without coordination. All builders evaluated the same game state with the same function and picked the same tile. Adding a reservation set is the minimal fix — no schema changes, no new network messages, no performance cost.
+
+### Impact
+
+- **Defenders and attackers** should use the same pattern if they ever independently select targets from a shared pool.
+- **CPU player AI** benefits automatically since CPU builders use the same `stepBuilder()` code path.
+- The reservation is soft (based on `targetX/targetY` fields already in CreatureState) — no new schema fields were needed.
+
+---
+
+## 2026-03-11T12-10-00Z: Centralized Changelog Generation Script
+
+**Author:** Marathe (DevOps / CI-CD)  
+**Date:** 2026-03-11  
+**PR:** #132  
+**Issue:** #120
+
+### Decision
+
+Changelog generation is now centralized in `.github/scripts/generate-changelog.sh` and shared across all deploy and promotion workflows. The inline grep-based changelog logic that was duplicated in `deploy-uat.yml`, `deploy.yml`, and `squad-promote.yml` has been replaced with calls to this shared script.
+
+### Rules
+
+1. **All changelog generation must use the shared script** — no inline commit-log parsing in workflows.
+2. **Discord changelogs** (`--format discord`) exclude maintenance/CI/chore/squad commits — only player-facing changes shown.
+3. **PR/markdown changelogs** (`--format markdown`) include all categories, ordered by priority.
+4. **Conventional commit prefixes are required** for proper classification. Commits without prefixes fall back to keyword matching, which is less reliable.
+5. **Squad-internal commits** (`squad:`, `squad(...):`) are always excluded from all changelog output.
+
+### Impact
+
+- Any new workflow that generates changelogs should call `.github/scripts/generate-changelog.sh` instead of writing inline logic.
+- Commit message conventions matter more now — `feat:`, `fix:`, `chore:` prefixes directly affect changelog quality.

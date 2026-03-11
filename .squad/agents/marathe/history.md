@@ -17,6 +17,10 @@
 - E2E tests use `workers: 1` (serial) with a single shared Colyseus server instance
 - Deploy changelogs filter out `squad:` and `squad(agent):` commits using `grep -v ' squad[:(]'` — keeps player-facing changelogs clean of internal bookkeeping noise
 - Expanded changelog filter pattern: use `grep -vE ' (squad|ci|chore)[:(]'` to exclude multiple internal commit prefixes from Discord changelogs in a single regex (squad, ci, chore)
+- Changelog generation centralized in `.github/scripts/generate-changelog.sh` — shared by deploy-uat.yml, deploy.yml, and squad-promote.yml (replaces duplicated inline grep logic)
+- Script classifies commits by conventional commit type, strips prefixes for human readability, and groups into prioritized categories (features → fixes → improvements → maintenance)
+- Discord format excludes maintenance/chore/CI commits entirely; markdown format (for PR bodies) includes all categories
+- Script supports `--format discord|markdown` and `--max-lines N` flags for output control
 
 ## CI/CD Audit Findings (2024-01-29)
 
@@ -671,3 +675,40 @@ Coordinator consolidated the triage system. The heartbeat-triggered triage steps
 - **Pattern:** Scans commit messages for issue refs (promotion PRs use commits, not PR body)
 - **Impact:** Automated label lifecycle for dev→uat→prod promotions; no manual label management needed
 - **Related:** Steeply/Hal no longer manually update issue stage labels after promotions
+
+---
+
+## 2026-03-11: Wave 2 Automation — Changelog Centralization (#120)
+
+**PR:** #132  
+**Status:** COMPLETED, in review  
+**Orchestration:** [2026-03-11T12-10-00Z-marathe.md](.squad/orchestration-log/2026-03-11T12-10-00Z-marathe.md)
+
+### Work Summary
+
+Centralized changelog generation into shared script. Eliminated inline grep-based changelog logic duplicated across `deploy-uat.yml`, `deploy.yml`, and `squad-promote.yml` workflows.
+
+### Changes Made
+
+- Created `.github/scripts/generate-changelog.sh` (canonical generator)
+- Updated 3 workflows to call shared script with format parameter
+- Implemented 2 formats: `discord` (player-facing), `markdown` (full history)
+
+### Changelog Rules Established
+
+1. All changelog generation must use `.github/scripts/generate-changelog.sh` (no inline logic)
+2. Discord changelogs exclude maintenance/CI/chore/squad commits — only player-facing changes
+3. Markdown changelogs include all categories, prioritized by impact
+4. Conventional commit prefixes (feat:, fix:, chore:) required for proper classification
+5. Squad-internal commits (`squad:`, `squad(...):`) always excluded from all output
+
+### Impact
+
+- Commit message conventions directly affect changelog quality
+- Future workflows should call shared script instead of writing inline parsing logic
+- Discord announcements now show only changes players care about (cleaner comms)
+
+### Routing Note
+
+Issue #120 re-labeled from `squad:pemulis` to `squad:marathe` (release automation scope, not simulation)
+
