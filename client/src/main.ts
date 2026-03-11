@@ -1,3 +1,6 @@
+declare const __APP_VERSION__: string;
+declare const __BUILD_DATE__: string;
+
 import { Application } from 'pixi.js';
 import { Room } from '@colyseus/sdk';
 import { GridRenderer } from './renderer/GridRenderer.js';
@@ -255,6 +258,21 @@ function setGameUIVisible(visible: boolean): void {
 }
 
 bootstrap().catch(console.error);
+
+// Populate app footer with version, build date, and issues link
+(function initFooter() {
+  const footer = document.getElementById('app-footer');
+  if (!footer) return;
+  const version =
+    typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev';
+  const buildDate =
+    typeof __BUILD_DATE__ !== 'undefined'
+      ? new Date(__BUILD_DATE__).toLocaleDateString()
+      : '';
+  const dateStr = buildDate ? ` · Built ${buildDate}` : '';
+  footer.innerHTML =
+    `v${version}${dateStr} · <a href="https://github.com/dkirby-ms/primal-grid/issues" target="_blank" rel="noopener">Report an Issue</a>`;
+})();
 
 if (import.meta.hot) {
   import.meta.hot.dispose(async () => {

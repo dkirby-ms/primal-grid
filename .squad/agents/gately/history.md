@@ -1510,3 +1510,11 @@ When adding new structure types: check ALL paths — visible tile icons, fog sil
 - **Edge case**: Building destruction immediately decreases cap; over-cap units survive but no new spawns allowed
 - **Shared package rebuild required**: Adding constants to `shared/src/constants.ts` requires `npm run build --workspace=shared` before tests can import them
 - **Tests**: 12 tests in `building-spawn-caps.test.ts` covering bonus calculation, spawn enforcement, destruction cap decrease, and over-cap survival
+
+### Footer with Version & Build Date (2026-03-13)
+
+Added `div#app-footer` fixed to bottom of viewport with version, build date, and issues link (PR #151, issue #150).
+
+- **Vite `define`:** Used `define` block in `client/vite.config.ts` to inject `__APP_VERSION__` (from root `package.json`) and `__BUILD_DATE__` (generated at build time) as compile-time string constants. This avoids runtime JSON imports and works cleanly with TypeScript (`declare const` in main.ts).
+- **Non-intrusive styling:** Footer uses `pointer-events: none` on the container so it never blocks game canvas clicks; only the issues link has `pointer-events: auto`. Fixed position at bottom, 10px monospace, muted #555 color.
+- **Footer populated in main.ts:** Runs after `bootstrap()` call, uses IIFE to keep scope clean. Gracefully falls back to "dev" if build constants aren't defined (e.g., in test environments).
