@@ -1481,3 +1481,12 @@ When adding new structure types: check ALL paths — visible tile icons, fog sil
 - No client-side changes required — rendering already keys off `structureType`
 - Pattern can be reused for other structure-to-structure spacing rules (defense structures, farms, etc.)
 
+
+### Building Spawn Caps — Issue #115 (PR #148)
+
+- **BUILDING_CAP_BONUS**: Farm +1, Factory +2 per building, applied globally to all pawn types
+- **Server**: `getBuildingCapBonus()` iterates player-owned tiles summing bonuses; `spawnPawnCore()` uses `pawnDef.maxCount + capBonus` as effective cap
+- **Client**: HUD shows effective cap with cyan `(+N)` indicator when bonus > 0; fixed `updateSpawnButton()` which wasn't accounting for cap bonus (buttons were wrongly disabled at base cap even with buildings)
+- **Edge case**: Building destruction immediately decreases cap; over-cap units survive but no new spawns allowed
+- **Shared package rebuild required**: Adding constants to `shared/src/constants.ts` requires `npm run build --workspace=shared` before tests can import them
+- **Tests**: 12 tests in `building-spawn-caps.test.ts` covering bonus calculation, spawn enforcement, destruction cap decrease, and over-cap survival
