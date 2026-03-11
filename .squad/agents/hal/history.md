@@ -1051,3 +1051,35 @@ Used Gemini 3 Pro for this review task to leverage an alternate model for indepe
 - Player color caching pattern (`playerColors` map in CreatureRenderer) improves rendering performance
 - Ownership borders effectively disambiguate non-local pawns in multi-player view
 - Utility functions (`isPlayerPawn`) reduce code duplication and improve maintainability
+### PR #140 Review — Outpost Spacing Fix (2026-03-11)
+
+- **Issue:** #139 — Builders placed outposts on every claimed tile, causing visual clutter.
+- **Fix:** `MIN_OUTPOST_SPACING = 4` constant + `hasNearbyOutpost()` Manhattan distance check in `builderAI.ts`. Tiles still claimed; only outpost structure suppressed when too close.
+- **Verdict:** APPROVE. Correct distance metric (Manhattan for grid), clean gate logic, 12 solid tests, no regressions (854/855 pass; 1 flake in water-depth.test.ts is pre-existing).
+- **Key Observations:**
+  - `hasNearbyOutpost` scans ~41 tiles per call (r=4 diamond). Negligible perf cost since builds complete rarely.
+  - When spacing blocks outpost, `structureType` stays at default `""` — no ghost structures.
+  - Farm placement correctly bypasses spacing check entirely.
+- **Outcome:** Reviewed and approved PR #140.
+
+## PR #140 Merge (2026-03-11T15-44-00Z)
+
+**Task:** Merge PR #140 after review approval  
+**Outcome:** Merged to dev via `gh pr merge 140 --merge --delete-branch`  
+**Related Issue:** #139 auto-closed  
+
+**Details:**
+- All 854/855 tests pass (1 pre-existing timeout in water-depth.test.ts, unrelated to this PR)
+- Manhattan distance logic verified as correct for grid tile calculations
+- Claiming logic preserved — only outpost icon suppressed when too close
+- 12 new tests provide comprehensive proximity validation
+
+**Learnings:**
+- Manhattan distance is the correct metric for grid-based spatial checks
+- Spacing checks using iterative rings are performant enough for infrequent operations
+- Constants like `MIN_OUTPOST_SPACING` provide tunable game balance parameters
+
+**Downstream:**
+- Gately's pawn builder system now has tighter visual feedback with reduced icon clutter
+- No client-side changes required; rendering already keys off `structureType`
+

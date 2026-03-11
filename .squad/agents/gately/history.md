@@ -1450,3 +1450,32 @@ When adding new structure types: check ALL paths — visible tile icons, fog sil
 - **Key pattern:** Spacing check scans a diamond-shaped area using Manhattan distance, only checking tiles with `structureType === "outpost"` and matching `ownerID`. Exported for testability.
 - **Files:** `shared/src/constants.ts`, `server/src/rooms/builderAI.ts`, `server/src/__tests__/outpost-spacing.test.ts`
 - **PR:** #140
+
+## PR #140 Merge & Issue #139 Closure (2026-03-11T15-44-00Z)
+
+**Status:** MERGED  
+**Issue Closed:** #139  
+**Reviewed by:** Hal (Lead)  
+
+**Summary:** PR #140 approved and merged to dev. Outpost spacing fix is complete — builders now skip placing outposts when another player-owned outpost exists within 4 Manhattan distance, eliminating visual clutter while preserving tile claiming.
+
+**Test Coverage:** 12 new tests in `server/src/__tests__/outpost-spacing.test.ts` validate proximity detection, edge cases, and farm interaction. All 854/855 tests passing (1 pre-existing flake in water-depth.test.ts unrelated to this PR).
+
+**Technical Details:**
+- `hasNearbyOutpost()` scans ~41 tiles per call (4-tile Manhattan diamond) — negligible perf cost since builds complete infrequently
+- When spacing blocks outpost placement, `structureType` remains `""` (default) — no ghost structures
+- Farm placement unaffected (bypasses spacing check entirely)
+- Tunable via `MIN_OUTPOST_SPACING` constant in shared config
+
+**Outcome:** Issue #139 auto-closed. Branch deleted. Ready for next phase work.
+
+**Learnings:**
+- Manhattan distance is the correct metric for grid-based spatial queries
+- Spacing rules can be efficiently checked by scanning bounded tile regions rather than iterating all tiles
+- Rendering behavior automatically correct when `structureType` field is properly managed server-side
+
+**Integration Points:**
+- Pawn builder system now provides better visual feedback with reduced icon density
+- No client-side changes required — rendering already keys off `structureType`
+- Pattern can be reused for other structure-to-structure spacing rules (defense structures, farms, etc.)
+
