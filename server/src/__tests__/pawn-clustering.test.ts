@@ -14,8 +14,7 @@ import { GameRoom } from "../rooms/GameRoom.js";
 import { stepBuilder } from "../rooms/builderAI.js";
 import { isAdjacentToTerritory } from "../rooms/territory.js";
 import {
-  TERRITORY, PAWN, CREATURE_AI, PAWN_TYPES,
-  TileType, isWaterTile,
+  TERRITORY, PAWN, CREATURE_AI,
 } from "@primal-grid/shared";
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -116,7 +115,7 @@ function tickAI(room: GameRoom, ticks: number): void {
 }
 
 /** Manhattan distance between two points. */
-function manhattan(x1: number, y1: number, x2: number, y2: number): number {
+function _manhattan(x1: number, y1: number, x2: number, y2: number): number {
   return Math.abs(x1 - x2) + Math.abs(y1 - y2);
 }
 
@@ -139,7 +138,7 @@ describe("Bug #127 — Pawn Clustering", () => {
                          (b2.targetX !== -1 || b2.currentState !== "idle");
       if (hasTargets && b1.targetX !== -1 && b2.targetX !== -1) {
         // If both have targets, they should ideally be different tiles
-        const sameTarget = b1.targetX === b2.targetX && b1.targetY === b2.targetY;
+        const _sameTarget = b1.targetX === b2.targetX && b1.targetY === b2.targetY;
         // This is the bug: currently they MAY pick the same target.
         // After fix, this should pass. For now, just verify they both found targets.
         expect(b1.targetX).not.toBe(-1);

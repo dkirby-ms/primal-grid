@@ -14,8 +14,8 @@ import { GameRoom } from "../rooms/GameRoom.js";
 import { stepBuilder } from "../rooms/builderAI.js";
 import { isAdjacentToTerritory } from "../rooms/territory.js";
 import {
-  TERRITORY, PAWN, SHAPE, CREATURE_AI, PAWN_TYPES,
-  TileType, isWaterTile, DEFAULT_MAP_SIZE,
+  TERRITORY, PAWN, SHAPE, CREATURE_AI,
+  TileType, isWaterTile,
 } from "@primal-grid/shared";
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -168,7 +168,7 @@ describe("Bug #125 — Outpost Stability", () => {
   describe("Outpost persistence across ticks", () => {
     it("outpost placed directly persists after 100 ticks with no builders", () => {
       const room = createRoomWithMap(42);
-      const { player } = joinPlayer(room, "p1");
+      const { player: _player } = joinPlayer(room, "p1");
 
       const adjTile = findClaimableAdjacentTile(room, "p1");
       expect(adjTile).toBeDefined();
@@ -189,13 +189,13 @@ describe("Bug #125 — Outpost Stability", () => {
 
     it("outpost built by builder FSM persists after builder goes idle", () => {
       const room = createRoomWithMap(42);
-      const { player } = joinPlayer(room, "p1");
+      const { player: _player } = joinPlayer(room, "p1");
 
       const adjTile = findClaimableAdjacentTile(room, "p1")!;
       expect(adjTile).toBeDefined();
 
       // Place builder adjacent to the target and set up near-complete build
-      const builder = addBuilder(room, "b1", "p1", adjTile.x, adjTile.y, {
+      const _builder = addBuilder(room, "b1", "p1", adjTile.x, adjTile.y, {
         currentState: "building",
         targetX: adjTile.x,
         targetY: adjTile.y,
@@ -218,13 +218,13 @@ describe("Bug #125 — Outpost Stability", () => {
 
     it("outpost survives when builder is removed from creatures map", () => {
       const room = createRoomWithMap(42);
-      const { player } = joinPlayer(room, "p1");
+      const { player: _player } = joinPlayer(room, "p1");
 
       const adjTile = findClaimableAdjacentTile(room, "p1")!;
       placeOutpost(room, "p1", adjTile.x, adjTile.y);
 
       // Add and remove a builder (simulating builder death)
-      const builder = addBuilder(room, "b1", "p1", adjTile.x + 1, adjTile.y);
+      const _builder = addBuilder(room, "b1", "p1", adjTile.x + 1, adjTile.y);
       room.state.creatures.delete("b1");
 
       tickAI(room, 20);
@@ -238,7 +238,7 @@ describe("Bug #125 — Outpost Stability", () => {
   describe("Outpost position immutability", () => {
     it("outpost x/y coordinates don't shift after placement", () => {
       const room = createRoomWithMap(42);
-      const { player } = joinPlayer(room, "p1");
+      const { player: _player } = joinPlayer(room, "p1");
 
       const adjTile = findClaimableAdjacentTile(room, "p1")!;
       const tile = placeOutpost(room, "p1", adjTile.x, adjTile.y)!;
@@ -301,7 +301,7 @@ describe("Bug #125 — Outpost Stability", () => {
       // Both should have found targets
       if (b1.targetX !== -1 && b2.targetX !== -1) {
         // Bug #125: builders shouldn't both target the exact same tile
-        const sameTarget = b1.targetX === b2.targetX && b1.targetY === b2.targetY;
+        const _sameTarget = b1.targetX === b2.targetX && b1.targetY === b2.targetY;
         // Record for the fix — currently this may fail
         expect(b1.targetX).not.toBe(-1);
         expect(b2.targetX).not.toBe(-1);
@@ -323,11 +323,11 @@ describe("Bug #125 — Outpost Stability", () => {
       const outposts = getOutposts(room, "p1");
       if (outposts.length >= 2) {
         // Check that outposts aren't ALL clumped together
-        let allAdjacent = true;
+        let _allAdjacent = true;
         for (let i = 1; i < outposts.length; i++) {
           const dist = Math.abs(outposts[i].x - outposts[0].x) +
                        Math.abs(outposts[i].y - outposts[0].y);
-          if (dist > 2) allAdjacent = false;
+          if (dist > 2) _allAdjacent = false;
         }
         // This tests distribution — after fix, outposts should spread out
         expect(outposts.length).toBeGreaterThanOrEqual(1);
@@ -355,17 +355,17 @@ describe("Bug #125 — Outpost Stability", () => {
   describe("Multiple builder collision prevention", () => {
     it("two builders targeting same tile: only one should build there", () => {
       const room = createRoomWithMap(42);
-      const { player } = joinPlayer(room, "p1");
+      const { player: _player } = joinPlayer(room, "p1");
 
       const adjTile = findClaimableAdjacentTile(room, "p1")!;
 
       // Both builders target the exact same tile
-      const b1 = addBuilder(room, "b1", "p1", adjTile.x - 1, adjTile.y, {
+      const _b1 = addBuilder(room, "b1", "p1", adjTile.x - 1, adjTile.y, {
         currentState: "move_to_site",
         targetX: adjTile.x,
         targetY: adjTile.y,
       });
-      const b2 = addBuilder(room, "b2", "p1", adjTile.x + 1, adjTile.y, {
+      const _b2 = addBuilder(room, "b2", "p1", adjTile.x + 1, adjTile.y, {
         currentState: "move_to_site",
         targetX: adjTile.x,
         targetY: adjTile.y,
@@ -391,7 +391,7 @@ describe("Bug #125 — Outpost Stability", () => {
 
     it("builder abandons target when another builder claims it first", () => {
       const room = createRoomWithMap(42);
-      const { player } = joinPlayer(room, "p1");
+      const { player: _player } = joinPlayer(room, "p1");
 
       const adjTile = findClaimableAdjacentTile(room, "p1")!;
 
@@ -433,10 +433,10 @@ describe("Bug #125 — Outpost Stability", () => {
   describe("structureType='outpost' state sync integrity", () => {
     it("structureType is 'outpost' immediately after build completion", () => {
       const room = createRoomWithMap(42);
-      const { player } = joinPlayer(room, "p1");
+      const { player: _player } = joinPlayer(room, "p1");
 
       const adjTile = findClaimableAdjacentTile(room, "p1")!;
-      const builder = addBuilder(room, "b1", "p1", adjTile.x, adjTile.y, {
+      const _builder = addBuilder(room, "b1", "p1", adjTile.x, adjTile.y, {
         currentState: "building",
         targetX: adjTile.x,
         targetY: adjTile.y,
@@ -539,7 +539,7 @@ describe("Bug #125 — Outpost Stability", () => {
   describe("Outpost on territory boundaries", () => {
     it("outpost can be placed on tile adjacent to territory edge", () => {
       const room = createRoomWithMap(42);
-      const { player } = joinPlayer(room, "p1");
+      const { player: _player } = joinPlayer(room, "p1");
 
       const adjTile = findClaimableAdjacentTile(room, "p1")!;
       expect(adjTile).toBeDefined();
@@ -568,7 +568,7 @@ describe("Bug #125 — Outpost Stability", () => {
 
     it("outpost on boundary expands buildable frontier for next builder", () => {
       const room = createRoomWithMap(42);
-      const { player } = joinPlayer(room, "p1");
+      const { player: _player } = joinPlayer(room, "p1");
 
       // Place an outpost to expand territory
       const adj1 = findClaimableAdjacentTile(room, "p1")!;
@@ -586,7 +586,7 @@ describe("Bug #125 — Outpost Stability", () => {
 
     it("outpost placed on map edge tile persists", () => {
       const room = createRoomWithMap(42);
-      const { player } = joinPlayer(room, "p1");
+      const { player: _player } = joinPlayer(room, "p1");
       const mapSize = room.state.mapWidth;
 
       // Find an edge tile we can use
@@ -613,8 +613,8 @@ describe("Bug #125 — Outpost Stability", () => {
 
     it("two-player scenario: outpost near contested border persists", () => {
       const room = createRoomWithMap(42);
-      const { player: p1 } = joinPlayer(room, "p1");
-      const { player: p2 } = joinPlayer(room, "p2");
+      const { player: _p1 } = joinPlayer(room, "p1");
+      const { player: _p2 } = joinPlayer(room, "p2");
 
       // Place outpost for p1
       const adj = findClaimableAdjacentTile(room, "p1");
@@ -634,7 +634,7 @@ describe("Bug #125 — Outpost Stability", () => {
   describe("Builder buildMode='outpost' correctness", () => {
     it("builder with buildMode='outpost' creates outpost, not farm", () => {
       const room = createRoomWithMap(42);
-      const { player } = joinPlayer(room, "p1");
+      const { player: _player } = joinPlayer(room, "p1");
 
       const adjTile = findClaimableAdjacentTile(room, "p1")!;
       addBuilder(room, "b1", "p1", adjTile.x, adjTile.y, {

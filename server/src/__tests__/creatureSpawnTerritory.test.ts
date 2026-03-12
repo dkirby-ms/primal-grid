@@ -153,7 +153,8 @@ describe("Territory Exclusion — Creature Spawning", () => {
     claimTiles(room, "player1", 0, 0, Math.floor(DEFAULT_MAP_SIZE / 2), Math.floor(DEFAULT_MAP_SIZE / 2));
     room.spawnCreatures();
 
-    const expectedTotal = CREATURE_SPAWN.HERBIVORE_COUNT + CREATURE_SPAWN.CARNIVORE_COUNT;
+    const expectedTotal = CREATURE_SPAWN.HERBIVORE_COUNT + CREATURE_SPAWN.CARNIVORE_COUNT + 
+                         CREATURE_SPAWN.BIRD_COUNT + CREATURE_SPAWN.MONKEY_COUNT + CREATURE_SPAWN.SPIDER_COUNT;
     // Even with territory, most creatures should still find valid tiles
     expect(room.state.creatures.size).toBeGreaterThanOrEqual(Math.floor(expectedTotal * 0.5));
   });

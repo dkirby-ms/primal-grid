@@ -40,6 +40,12 @@ export class TileState extends Schema {
 
   @type("string")
   structureType: string = "";
+
+  @type("boolean")
+  upgraded: boolean = false;
+
+  @type("number")
+  attackCooldown: number = 0;
 }
 
 export class PlayerState extends Schema {
@@ -59,6 +65,9 @@ export class PlayerState extends Schema {
   stone: number = 0;
 
   @type("number")
+  food: number = 0;
+
+  @type("number")
   hqX: number = -1;
 
   @type("number")
@@ -75,6 +84,9 @@ export class PlayerState extends Schema {
 
   @type("boolean")
   isCPU: boolean = false;
+
+  @type("boolean")
+  isEliminated: boolean = false;
 }
 
 export class CreatureState extends Schema {
@@ -136,6 +148,12 @@ export class GameState extends Schema {
 
   @type("string")
   roundPhase: string = "playing";
+
+  @type("string")
+  winnerId: string = "";
+
+  @type("string")
+  endReason: string = "";
 
   // @view() enables per-element StateView filtering so each client only
   // receives tiles within their fog-of-war visibility radius.

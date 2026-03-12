@@ -16,19 +16,23 @@ import type { SerializedPlayerState } from "../persistence/playerStateSerde.js";
 import { tickCpuPlayers } from "./cpuPlayerAI.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
-  SPAWN_PAWN, SET_NAME, CHAT, CHAT_MAX_LENGTH, PLACE_BUILDING,
+  SPAWN_PAWN, SET_NAME, CHAT, CHAT_MAX_LENGTH, PLACE_BUILDING, UPGRADE_OUTPOST,
+  GAME_ENDED, PLAYER_ELIMINATED,
+  GameEndReason,
   ResourceType, TileType, isWaterTile,
   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
   CREATURE_AI, CREATURE_RESPAWN, TERRITORY,
-  STRUCTURE_INCOME, SHAPE, BUILDING_COSTS, BUILDING_INCOME,
+  STRUCTURE_INCOME, SHAPE, BUILDING_COSTS, BUILDING_INCOME, BUILDING_CAP_BONUS,
   PROGRESSION, getLevelForXP,
   PAWN_TYPES, DAY_NIGHT, FOG_OF_WAR,
   ENEMY_SPAWNING, ENEMY_BASE_TYPES,
   DayPhase,
-  isEnemyBase,
+  isEnemyBase, isEnemyMobile,
   CPU_PLAYER,
+  STARVATION,
+  OUTPOST_UPGRADE,
 } from "@primal-grid/shared";
-import type { SpawnPawnPayload, SetNamePayload, ChatPayload, PlaceBuildingPayload } from "@primal-grid/shared";
+import type { SpawnPawnPayload, SetNamePayload, ChatPayload, PlaceBuildingPayload, UpgradeOutpostPayload, GameEndedPayload } from "@primal-grid/shared";
 import { spawnHQ } from "./territory.js";
 
 const PLAYER_COLORS = [
@@ -42,6 +46,15 @@ const AUTO_SAVE_INTERVAL_TICKS = 120;
 
 /** Grace period (seconds) for reconnection after non-consented disconnect. */
 const RECONNECT_GRACE_SECONDS = 60;
+
+/** How often (in ticks) to run elimination checks. */
+const ELIMINATION_CHECK_INTERVAL = 10;
+
+/** Grace period (in ticks) before elimination checks begin, giving players time to spawn pawns. */
+const ELIMINATION_GRACE_TICKS = 40;
+
+/** Seconds to keep room alive after game ends so clients can see results. */
+const AUTO_DISPOSE_SECONDS = 60;
 
 export class GameRoom extends Room {
   state = new GameState();
@@ -78,6 +91,14 @@ export class GameRoom extends Room {
     this.gameId = typeof options?.gameId === "string" ? options.gameId : "";
     this.maxClients = maxPlayers;
 
+    // Initialize round timer from lobby options
+    const gameDuration = typeof options?.gameDuration === "number" ? options.gameDuration : 10;
+    if (gameDuration === 0) {
+      this.state.roundTimer = -1;
+    } else {
+      this.state.roundTimer = gameDuration * 60 * TICK_RATE;
+    }
+
     this.generateMap(seed, mapSize);
     this.spawnCreatures();
 
@@ -95,6 +116,9 @@ export class GameRoom extends Room {
     }
 
     this.setSimulationInterval((_deltaTime) => {
+      // Stop ticking after game ends
+      if (this.state.roundPhase === "ended") return;
+
       this.state.tick += 1;
       this.tickDayNightCycle();
       this.tickClaiming();
@@ -104,6 +128,8 @@ export class GameRoom extends Room {
       this.tickStructureIncome();
       this.tickEnemyBaseSpawning();
       this.tickCombat();
+      this.tickOutpostAttacks();
+      this.tickGameEndConditions();
       this.tickGraveDecay();
       this.tickFogOfWar();
       this.tickAutoSave();
@@ -124,6 +150,10 @@ export class GameRoom extends Room {
 
     this.onMessage(PLACE_BUILDING, (client, message: PlaceBuildingPayload) => {
       this.handlePlaceBuilding(client, message);
+    });
+
+    this.onMessage(UPGRADE_OUTPOST, (client, message: UpgradeOutpostPayload) => {
+      this.handleUpgradeOutpost(client, message);
     });
 
     console.log("[GameRoom] Room created.");
@@ -194,12 +224,16 @@ export class GameRoom extends Room {
     const hqPos = this.findHQSpawnLocation();
     spawnHQ(this.state, player, hqPos.x, hqPos.y);
 
+    // Spawn a free starting pawn so the player isn't immediately eliminated
+    this.spawnPawnCore(client.sessionId, player, TERRITORY.STARTING_PAWN, undefined, true);
+
     // Restore earned progression and resources after HQ spawn.
     // Territory is spatial and can't transfer across map seeds, so score stays
     // at the actual tile count set by spawnHQ.
     if (restored && savedState) {
       player.wood = savedState.wood;
       player.stone = savedState.stone;
+      player.food = savedState.food;
       player.level = savedState.level;
       player.xp = savedState.xp;
     }
@@ -383,6 +417,15 @@ export class GameRoom extends Room {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
 
+    if (this.state.roundPhase !== "playing") {
+      client.send("game_log", { message: "Game has ended.", type: "error" });
+      return;
+    }
+    if (player.isEliminated) {
+      client.send("game_log", { message: "You have been eliminated.", type: "error" });
+      return;
+    }
+
     this.spawnPawnCore(client.sessionId, player, message.pawnType, message.buildMode);
   }
 
@@ -390,6 +433,15 @@ export class GameRoom extends Room {
     const player = this.state.players.get(client.sessionId);
     if (!player) {
       client.send("game_log", { message: "Player not found.", type: "error" });
+      return;
+    }
+
+    if (this.state.roundPhase !== "playing") {
+      client.send("game_log", { message: "Game has ended.", type: "error" });
+      return;
+    }
+    if (player.isEliminated) {
+      client.send("game_log", { message: "You have been eliminated.", type: "error" });
       return;
     }
 
@@ -456,6 +508,72 @@ export class GameRoom extends Room {
     });
   }
 
+  private handleUpgradeOutpost(client: Client, message: UpgradeOutpostPayload) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) {
+      client.send("game_log", { message: "Player not found.", type: "error" });
+      return;
+    }
+
+    if (this.state.roundPhase !== "playing") {
+      client.send("game_log", { message: "Game has ended.", type: "error" });
+      return;
+    }
+    if (player.isEliminated) {
+      client.send("game_log", { message: "You have been eliminated.", type: "error" });
+      return;
+    }
+
+    const { x, y } = message;
+
+    // Validate tile exists
+    const tile = this.state.getTile(x, y);
+    if (!tile) {
+      client.send("game_log", { message: "Invalid tile.", type: "error" });
+      return;
+    }
+
+    // Validate tile owned by player
+    if (tile.ownerID !== client.sessionId) {
+      client.send("game_log", { message: "You don't own this tile.", type: "error" });
+      return;
+    }
+
+    // Validate tile has outpost structure
+    if (tile.structureType !== "outpost") {
+      client.send("game_log", { message: "Tile does not have an outpost.", type: "error" });
+      return;
+    }
+
+    // Validate not already upgraded
+    if (tile.upgraded) {
+      client.send("game_log", { message: "Outpost is already upgraded.", type: "error" });
+      return;
+    }
+
+    // Validate player has resources
+    if (player.wood < OUTPOST_UPGRADE.COST_WOOD || player.stone < OUTPOST_UPGRADE.COST_STONE) {
+      client.send("game_log", {
+        message: `Not enough resources. Need ${OUTPOST_UPGRADE.COST_WOOD} wood + ${OUTPOST_UPGRADE.COST_STONE} stone.`,
+        type: "error",
+      });
+      return;
+    }
+
+    // Deduct resources
+    player.wood -= OUTPOST_UPGRADE.COST_WOOD;
+    player.stone -= OUTPOST_UPGRADE.COST_STONE;
+
+    // Upgrade outpost
+    tile.upgraded = true;
+
+    const displayName = player.displayName || client.sessionId;
+    this.broadcast("game_log", {
+      message: `${displayName} upgraded an outpost at (${x}, ${y}).`,
+      type: "building",
+    });
+  }
+
   /**
    * Core pawn spawning logic shared between human (handleSpawnPawn) and CPU players.
    * Validates resources, pawn cap, finds spawn location, deducts cost, and creates the creature.
@@ -465,27 +583,36 @@ export class GameRoom extends Room {
     player: PlayerState,
     pawnType: string,
     buildMode?: string,
+    free?: boolean,
   ): CreatureState | null {
     const pawnDef = PAWN_TYPES[pawnType];
     if (!pawnDef) return null;
 
-    // Validate resources
-    if (player.wood < pawnDef.cost.wood || player.stone < pawnDef.cost.stone) return null;
+    if (!free) {
+      // Validate resources
+      if (player.wood < pawnDef.cost.wood || player.stone < pawnDef.cost.stone) return null;
 
-    // Validate pawn cap (per pawn type)
-    let pawnCount = 0;
-    this.state.creatures.forEach((c) => {
-      if (c.ownerID === playerId && c.pawnType === pawnType) pawnCount++;
-    });
-    if (pawnCount >= pawnDef.maxCount) return null;
+      // Block spawning when food is depleted (starvation)
+      if (player.food <= 0) return null;
+
+      // Validate pawn cap (per pawn type, boosted by buildings)
+      let pawnCount = 0;
+      this.state.creatures.forEach((c) => {
+        if (c.ownerID === playerId && c.pawnType === pawnType) pawnCount++;
+      });
+      const capBonus = this.getBuildingCapBonus(playerId);
+      if (pawnCount >= pawnDef.maxCount + capBonus) return null;
+    }
 
     // Find walkable tile within HQ zone
     const spawnPos = this.findHQWalkableTile(player);
     if (!spawnPos) return null;
 
-    // Deduct cost
-    player.wood -= pawnDef.cost.wood;
-    player.stone -= pawnDef.cost.stone;
+    if (!free) {
+      // Deduct cost
+      player.wood -= pawnDef.cost.wood;
+      player.stone -= pawnDef.cost.stone;
+    }
 
     // Spawn pawn
     if (this.nextCreatureId == null) this.nextCreatureId = 0;
@@ -512,7 +639,9 @@ export class GameRoom extends Room {
     if (!this.creatureIdCounter) this.creatureIdCounter = { value: 0 };
     this.creatureIdCounter.value = this.nextCreatureId;
 
-    this.broadcast("game_log", { message: `${pawnDef.name} spawned`, type: "spawn" });
+    if (!free) {
+      this.broadcast("game_log", { message: `${pawnDef.name} spawned`, type: "spawn" });
+    }
 
     return creature;
   }
@@ -532,6 +661,19 @@ export class GameRoom extends Room {
     }
     if (candidates.length === 0) return null;
     return candidates[Math.floor(Math.random() * candidates.length)];
+  }
+
+  /** Sum building cap bonuses for a player across all their buildings. */
+  getBuildingCapBonus(playerId: string): number {
+    let bonus = 0;
+    const len = this.state.tiles.length;
+    for (let i = 0; i < len; i++) {
+      const tile = this.state.tiles.at(i);
+      if (!tile || tile.ownerID !== playerId) continue;
+      const b = BUILDING_CAP_BONUS[tile.structureType];
+      if (b) bonus += b;
+    }
+    return bonus;
   }
 
   private countNonWalkableInZone(cx: number, cy: number): number {
@@ -617,6 +759,9 @@ export class GameRoom extends Room {
     const hqPos = this.findHQSpawnLocation();
     spawnHQ(this.state, player, hqPos.x, hqPos.y);
 
+    // Spawn a free starting pawn so the CPU isn't immediately eliminated
+    this.spawnPawnCore(cpuId, player, TERRITORY.STARTING_PAWN, undefined, true);
+
     this.cpuPlayerIds.add(cpuId);
 
     console.log(`[GameRoom] CPU player "${player.displayName}" spawned at (${hqPos.x}, ${hqPos.y})`);
@@ -656,6 +801,144 @@ export class GameRoom extends Room {
     }
   }
 
+  // ── Game End Condition Engine ─────────────────────────────────────
+
+  /**
+   * Check for elimination, last-standing victory, and time-up conditions.
+   * Runs elimination checks every ELIMINATION_CHECK_INTERVAL ticks for performance.
+   */
+  private tickGameEndConditions(): void {
+    if (this.state.roundPhase !== "playing") return;
+
+    // --- Time limit ---
+    if (this.state.roundTimer > 0) {
+      this.state.roundTimer -= 1;
+      if (this.state.roundTimer <= 0) {
+        this.state.roundTimer = 0;
+        // Highest-score non-eliminated player wins
+        const winner = this.getHighestScorePlayer();
+        this.endGame(winner?.id ?? "", GameEndReason.TimeUp);
+        return;
+      }
+    }
+
+    // --- Elimination check (every N ticks, after grace period) ---
+    if (this.state.tick < ELIMINATION_GRACE_TICKS) return;
+    if (this.state.tick % ELIMINATION_CHECK_INTERVAL !== 0) return;
+
+    // Build per-player tile counts (outside HQ) and living pawn counts
+    const tilesOutsideHQ = new Map<string, number>();
+    const livingPawns = new Map<string, number>();
+
+    const tileLen = this.state.tiles.length;
+    for (let i = 0; i < tileLen; i++) {
+      const tile = this.state.tiles.at(i);
+      if (!tile || tile.ownerID === "" || tile.isHQTerritory) continue;
+      tilesOutsideHQ.set(tile.ownerID, (tilesOutsideHQ.get(tile.ownerID) ?? 0) + 1);
+    }
+
+    this.state.creatures.forEach((c) => {
+      if (c.ownerID === "" || c.pawnType === "" || c.health <= 0) return;
+      livingPawns.set(c.ownerID, (livingPawns.get(c.ownerID) ?? 0) + 1);
+    });
+
+    // Check each non-eliminated player (human and CPU)
+    let newEliminations = false;
+    this.state.players.forEach((player, playerId) => {
+      if (player.isEliminated) return;
+
+      const outsideTiles = tilesOutsideHQ.get(playerId) ?? 0;
+      const pawns = livingPawns.get(playerId) ?? 0;
+
+      if (outsideTiles === 0 && pawns === 0) {
+        player.isEliminated = true;
+        newEliminations = true;
+        this.broadcast(PLAYER_ELIMINATED, {
+          playerId,
+          playerName: player.displayName || playerId,
+        });
+        this.broadcast("game_log", {
+          message: `${player.displayName || "A player"} has been eliminated!`,
+          type: "death",
+        });
+        console.log(`[GameRoom] Player eliminated: ${player.displayName || playerId}`);
+      }
+    });
+
+    // --- Victory check (only if something changed) ---
+    if (!newEliminations) return;
+
+    const nonEliminated: PlayerState[] = [];
+    this.state.players.forEach((player) => {
+      if (!player.isEliminated) nonEliminated.push(player);
+    });
+
+    if (nonEliminated.length === 1) {
+      this.endGame(nonEliminated[0].id, GameEndReason.LastStanding);
+    } else if (nonEliminated.length === 0) {
+      // Simultaneous elimination — highest score wins
+      const winner = this.getHighestScorePlayer();
+      this.endGame(winner?.id ?? "", GameEndReason.LastStanding);
+    }
+  }
+
+  /** Find the player with the highest score (human or CPU). */
+  private getHighestScorePlayer(): PlayerState | null {
+    let best: PlayerState | null = null;
+    this.state.players.forEach((player) => {
+      if (!best || player.score > best.score) best = player;
+    });
+    return best;
+  }
+
+  /**
+   * End the game: set final state, broadcast results, notify lobby, schedule disposal.
+   */
+  endGame(winnerId: string, reason: GameEndReason): void {
+    if (this.state.roundPhase === "ended") return;
+
+    this.state.roundPhase = "ended";
+    this.state.winnerId = winnerId;
+    this.state.endReason = reason;
+
+    // Build sorted final scores
+    const scores: Array<{ playerId: string; name: string; score: number }> = [];
+    this.state.players.forEach((player, id) => {
+      scores.push({
+        playerId: id,
+        name: player.displayName || id,
+        score: player.score,
+      });
+    });
+    scores.sort((a, b) => b.score - a.score);
+
+    const winner = this.state.players.get(winnerId);
+    const payload: GameEndedPayload = {
+      winnerId,
+      winnerName: winner?.displayName || winnerId,
+      reason,
+      finalScores: scores,
+    };
+
+    this.broadcast(GAME_ENDED, payload);
+    this.broadcast("game_log", {
+      message: `Game over! ${payload.winnerName} wins (${reason}).`,
+      type: "system",
+    });
+
+    // Notify lobby
+    if (this.gameId) {
+      this.lobbyBridge?.notifyGameEnded(this.gameId);
+    }
+
+    // Auto-dispose after giving clients time to see results
+    this.clock.setTimeout(() => {
+      this.disconnect();
+    }, AUTO_DISPOSE_SECONDS * 1000);
+
+    console.log(`[GameRoom] Game ended: winner=${payload.winnerName}, reason=${reason}`);
+  }
+
   private tickStructureIncome() {
     if (this.state.tick % STRUCTURE_INCOME.INTERVAL_TICKS !== 0) return;
 
@@ -680,6 +963,7 @@ export class GameRoom extends Room {
       // HQ base income
       player.wood += STRUCTURE_INCOME.HQ_WOOD;
       player.stone += STRUCTURE_INCOME.HQ_STONE;
+      player.food += STRUCTURE_INCOME.HQ_FOOD;
 
       // Building income (farms, factories, etc.)
       const playerBuildings = buildingCounts.get(playerId);
@@ -689,8 +973,33 @@ export class GameRoom extends Room {
           if (income) {
             player.wood += count * income.wood;
             player.stone += count * income.stone;
+            player.food += count * income.food;
           }
         });
+      }
+
+      // Deduct food upkeep for all owned pawns
+      let totalUpkeep = 0;
+      this.state.creatures.forEach((c) => {
+        if (c.ownerID === playerId && c.pawnType !== "") {
+          const def = PAWN_TYPES[c.pawnType];
+          if (def) totalUpkeep += def.foodUpkeep;
+        }
+      });
+      player.food -= totalUpkeep;
+
+      // Starvation: deal damage to one random living pawn when food <= 0
+      if (player.food <= 0) {
+        const livingPawns: CreatureState[] = [];
+        this.state.creatures.forEach((c) => {
+          if (c.ownerID === playerId && c.pawnType !== "" && c.health > 0) {
+            livingPawns.push(c);
+          }
+        });
+        if (livingPawns.length > 0) {
+          const victim = livingPawns[Math.floor(Math.random() * livingPawns.length)];
+          victim.health -= STARVATION.DAMAGE_PER_TICK;
+        }
       }
     });
   }
@@ -830,6 +1139,62 @@ export class GameRoom extends Room {
     tickGraveDecay(this.state, this.state.tick);
   }
 
+  /** Handle upgraded outpost attacks. */
+  private tickOutpostAttacks() {
+    const len = this.state.tiles.length;
+    for (let i = 0; i < len; i++) {
+      const tile = this.state.tiles.at(i);
+      if (!tile || tile.structureType !== "outpost" || !tile.upgraded) continue;
+
+      // Decrement cooldown
+      if (tile.attackCooldown > 0) {
+        tile.attackCooldown--;
+        continue;
+      }
+
+      // Find closest enemy within range
+      let closestTarget: CreatureState | null = null;
+      let closestDist = Infinity;
+
+      this.state.creatures.forEach((creature) => {
+        // Only target enemy mobiles and enemy bases
+        if (!isEnemyMobile(creature.creatureType) && !isEnemyBase(creature.creatureType)) return;
+        if (creature.health <= 0) return;
+
+        const dist = Math.abs(creature.x - tile.x) + Math.abs(creature.y - tile.y);
+        if (dist <= OUTPOST_UPGRADE.ATTACK_RANGE && dist < closestDist) {
+          closestDist = dist;
+          closestTarget = creature;
+        }
+      });
+
+      // Attack target if found
+      if (closestTarget) {
+        const target: CreatureState = closestTarget; // Type assertion to fix TypeScript narrowing
+        target.health -= OUTPOST_UPGRADE.DAMAGE;
+        tile.attackCooldown = OUTPOST_UPGRADE.ATTACK_COOLDOWN_TICKS;
+
+        // Remove if dead
+        if (target.health <= 0) {
+          this.state.creatures.delete(target.id);
+          
+          // Handle base destruction
+          if (isEnemyBase(target.creatureType)) {
+            const baseType = ENEMY_BASE_TYPES[target.creatureType];
+            if (baseType && tile.ownerID) {
+              const player = this.state.players.get(tile.ownerID);
+              if (player) {
+                player.wood += baseType.reward.wood;
+                player.stone += baseType.reward.stone;
+                player.food += baseType.reward.food;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   private tickCreatureAI() {
     // Lazy-initialize server-side state for test compatibility
     if (!this.enemyBaseState) this.enemyBaseState = new Map();
@@ -910,6 +1275,9 @@ export class GameRoom extends Room {
     for (const [typeKey, count] of [
       ["herbivore", CREATURE_SPAWN.HERBIVORE_COUNT],
       ["carnivore", CREATURE_SPAWN.CARNIVORE_COUNT],
+      ["bird", CREATURE_SPAWN.BIRD_COUNT],
+      ["monkey", CREATURE_SPAWN.MONKEY_COUNT],
+      ["spider", CREATURE_SPAWN.SPIDER_COUNT],
     ] as const) {
       for (let i = 0; i < count; i++) {
         this.spawnOneCreature(typeKey);

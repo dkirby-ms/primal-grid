@@ -18,8 +18,11 @@
 ## Learnings
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
+- **Food Economy Design Approved (2026-03-14):** Completed audit → design → review cycle for Issue #21 (food economy as third resource). Design spec documented all constants (starting 50 food, HQ 2/tick, farm 2/tick, upkeep per unit, starvation mechanic at food ≤ 0). PR #153 reviewed, identified 3 issues (starvation check, tooltips, legacy constants), Steeply fixed all three (Gately unavailable). PR approved and merged to dev (squash). Key learning: Clear farm/factory role split (farms → food, factories → economy) creates natural strategic tension. Starvation damage delegated to existing death logic (single source of truth). Food can accrue as debt, players must repay before spawning resumes.
 
 - **GitHub Auto-Close Issue Process Gap Fixed (2026-03-12):** Four issues (#19, #31, #42, #74) had PRs merged to dev but stayed OPEN. Root cause: "Closes #N" syntax was placed in commit messages or PR titles, not PR bodies. GitHub only auto-closes on squash+merge when the close keyword appears in the PR body. Investigation found agents were ambiguous on placement. Fix: (1) Updated `.squad/copilot-instructions.md` to emphasize PR BODY as the only reliable location for auto-close keywords, (2) Added Rule 8 to `.squad/routing.md` explicitly requiring "Closes #N" in PR body, (3) Created decision file `.squad/decisions/inbox/hal-issue-auto-close.md` documenting the gap and enforcement points. Key learning: Single authoritative location (PR body) prevents process gaps — GitHub only reads PR body for squash merges, regardless of commit message content.
+
+- **Footer Feature UI Scoped (2026-03-13):** Issue #150 requests footer with version (from root package.json v0.1.6), published date, and link to submit issues. Research found: (1) Client HTML is flex-centered with game wrapper + HUD panel; footer naturally sits below in document flow. (2) No existing footer infrastructure. (3) Build-time injection via Vite is the minimal approach (version from package.json, date from git commit, link hardcoded to GitHub issues). Decision: This is client-side UI work — assigned to Gately. Key learning: Client structure is flex-based with centered game wrapper, making footer placement straightforward (no grid/absolute positioning needed). Build-time injection avoids runtime lookups and keeps the frontend lean.
 
 
 
@@ -59,6 +62,8 @@
 
 - **2026-03-06 Feature branch deployment plan (Issue #22):** Evaluated 3 approaches for test environment deployments: (A) separate Container App per branch in shared Environment, (B) revision labels on single Container App, (C) separate resource group per branch. Recommended **Option A** — separate Container Apps. Key reasons: full isolation, WebSocket/Colyseus compatibility (revision label routing is fragile for WS), simple lifecycle (create on PR open, delete on PR close), scale-to-zero for near-zero cost. New artifacts: `infra/test-app.bicep` (parameterized test app referencing existing ACR + Environment), `.github/workflows/deploy-test.yml` (PR-triggered deploy + cleanup). No changes to existing prod infra (`main.bicep`, `deploy.yml`). Branch name sanitization needed (Azure 32-char limit, lowercase, no special chars). Estimated cost: <$5/month for 3–5 active branches. Plan filed to `.squad/decisions/inbox/hal-feature-branch-deploy-plan.md`.
 - **Infra key files:** `infra/main.bicep` (prod ACR + Environment + Container App), `infra/main.bicepparam` (eastus/primal-grid/primalgridacr), `.github/workflows/deploy.yml` (master push → ACR → Container App update), `.github/workflows/ci.yml` (main push/PR → lint/typecheck/build/test). Azure auth via OIDC (3 secrets: client-id, tenant-id, subscription-id). ACR uses admin credentials (Basic SKU). Container App runs 0.25 vCPU / 0.5Gi, port 2567.
+
+- **Documentation Accuracy Policy (2026-03-15):** Reviewed PR #158 (Docs Update). Found critical discrepancies between player-facing docs (`HOW-TO-PLAY.md`, `HelpScreen.ts`) and code (`constants.ts`) regarding pawn costs and unit naming ("Raider" vs "Attacker"). Documentation must reflect the codebase exactly to prevent player confusion. Enforced strict review on docs-only PRs: verify every number against constants.
 
 ---
 
@@ -351,735 +356,255 @@ Hal architected pawn-based territory expansion system per user directive (dkirby
 
 **Next Steps:** Await user approval to begin implementation (Bicep changes → workflow creation → one-time UAT deployment → testing → documentation).
 
-## Learnings
 
-**2026-03-06 — UAT Deployment Model: Protected Branch Gating**
+---
 
-User preference learned: Deploy to UAT via protected branch (PR merge to `uat` branch) rather than manual `workflow_dispatch` triggers. This mirrors the production deployment pattern (PR merge to `master`) and provides better governance:
+### Issue #154 — Outpost Upgrade System Design (2025-01-24)
 
-- `uat` branch protected with same rules as `master` (require PR, require CI, no direct push)
-- Merging PR into `uat` → auto-triggers UAT deployment (push event)
-- Merging PR from `uat` into `master` → auto-triggers prod deployment
-- workflow_dispatch kept as emergency fallback only
+**Scope:** Design spec for outpost upgrade feature — scoping, constants, logic, UI/UX.
 
-**Rationale:** Git-based deployment gating is more auditable, enforceable, and consistent with existing prod workflow. Manual triggers are kept as escape hatch but not the primary path.
+**Design Decisions:**
+1. **Single-tier upgrade (v1):** Regular outpost → upgraded outpost. No multi-tier complexity.
+2. **Cost:** 40 wood + 30 stone (significant late-game investment, ~4× farm cost).
+3. **Attack range:** 5 tiles (Manhattan) — matches defender detection radius, prevents OP coverage.
+4. **Damage:** 12 per attack (kills swarm in 2 hits, raider in 4 hits — effective but not OP).
+5. **Attack interval:** 8 ticks (2 sec) — same as TILE_ATTACK_COOLDOWN_TICKS, slower than pawns.
+6. **Targeting:** Closest enemy (Manhattan distance) — simplest algorithm, predictable behavior.
+7. **UI trigger:** Right-click outpost → upgrade modal — keeps HUD clean, follows "interact with structure" pattern.
+8. **Visual:** Icon change 🗼 → 🏹 — clear ranged attack signal, minimal rendering change.
 
-**Applied to:** UAT deployment plan (`.squad/decisions/inbox/hal-feature-branch-deploy-plan.md`)
+**Constants Pattern:**
+```typescript
+export const OUTPOST_UPGRADE = {
+  COST_WOOD: 40,
+  COST_STONE: 30,
+  ATTACK_RANGE: 5,
+  DAMAGE: 12,
+  ATTACK_COOLDOWN_TICKS: 8,
+} as const;
+```
+Follows existing pattern: `BUILDING_COSTS`, `STRUCTURE_INCOME`, `WATCHTOWER`, `FOG_OF_WAR`.
+
+**Schema Change:**
+- Add `upgraded: boolean = false` to `TileState` (Colyseus schema syncs to client automatically).
+
+**Server Logic:**
+1. **Upgrade handler:** `handleUpgradeOutpost(client, message)` validates ownership, structure type, resources → deduct cost, set `tile.upgraded = true`.
+2. **Attack tick loop:** `tickOutpostAttacks()` runs every 8 ticks, scans upgraded outposts, finds closest enemy in range, deals damage.
+3. **Helper:** `findClosestEnemyInRange(x, y, range)` iterates creatures, filters enemy mobiles, returns closest by Manhattan.
+
+**Client Rendering:**
+- Update `STRUCTURE_ICONS['outpost_upgraded'] = '🏹'`
+- `updateBuildingIcon()` checks `tile.upgraded` flag and picks icon key accordingly.
+
+**Client UI:**
+- Right-click handler in `InputHandler.ts` detects owned regular outpost → shows upgrade modal.
+- Modal shows cost, validates resources, sends `UPGRADE_OUTPOST` message on confirm.
+
+**Message Protocol:**
+```typescript
+export const UPGRADE_OUTPOST = "UPGRADE_OUTPOST";
+export interface UpgradeOutpostPayload { x: number; y: number; }
+```
+
+**Deferred (v2+):**
+- Multi-tier upgrades
+- Target priority options (lowest HP, attackers first)
+- Attack visual effects (projectiles, muzzle flash)
+- Sound effects
+- Outpost durability (enemies damaging structures)
+- Upgrade other buildings
+
+**Key Files:**
+- `shared/src/constants.ts` — Upgrade costs, range, damage, tick intervals follow existing patterns (BUILDING_COSTS, WATCHTOWER, COMBAT).
+- `server/src/rooms/GameRoom.ts` — Building placement handler pattern (`handlePlaceBuilding`) used for upgrade handler; structure income tick pattern used for attack tick loop.
+- `server/src/rooms/GameState.ts` — TileState schema with @type decorators for Colyseus sync.
+- `server/src/rooms/combat.ts` — Combat tick pattern: cooldown tracking, adjacency checks, damage application. Outpost attacks follow same tick interval pattern.
+- `client/src/renderer/GridRenderer.ts` — Building icon rendering: `STRUCTURE_ICONS` map, `updateBuildingIcon()` checks structure type and sets Text emoji.
+- `client/src/ui/HudDOM.ts` — Building placement pattern: button triggers placement mode, sends `PLACE_BUILDING` message. Upgrade uses right-click modal instead (no HUD button).
+
+**Codebase Patterns Observed:**
+- **Constants:** Grouped in const objects with `as const`, SCREAMING_SNAKE_CASE keys, descriptive comments with tick→time conversions.
+- **Tick loops:** `if (state.tick % INTERVAL_TICKS !== 0) return;` guard at top, then iterate state and apply logic.
+- **Validation:** Handler checks player exists → resource ownership → structure type → resource sufficiency → deduct and apply.
+- **Emoji rendering:** Text objects with fontSize 14-16, anchor (0.5, 0.5), positioned at tile center, added to dedicated container.
+- **Right-click for structure interaction:** Natural extension of existing input patterns (left-click for pawn orders, right-click for structure actions).
+
+**Architecture Notes:**
+- **Colyseus state sync:** @type decorators on schema fields auto-sync to clients. No manual serialization needed.
+- **Tick-based simulation:** 4 ticks/sec. All timing constants expressed in ticks with human-readable comments (e.g., "40 ticks = 10 seconds at 4 ticks/sec").
+- **Combat cooldowns:** Server-side Map tracks cooldowns by creature ID, not synced to client. Same pattern applies to outpost attacks.
+- **Building rendering layers:** HQ has dedicated renderer, other buildings (farm, factory, outpost) use shared `buildingContainer` with emoji Text objects.
+
+**Deliverable:** `.squad/decisions/inbox/hal-outpost-upgrade-design.md` (comprehensive spec, 13KB, implementation-ready).
+
+**Next Steps:** Implementer (Gately or Pemulis) can proceed directly from spec. All open questions resolved. Issue #154 ready for `go:yes` (label updated).
 
 
-## Session 2026-03-06T15:05 — UAT Deployment Planning
+---
 
+### Sprint Kickoff (2026-03-12) — Design Complete, Review In Progress
+
+**Completed:**
+- **#154 Outpost Upgrade Architecture Design** (2026-03-16 revalidation + spec)
+  - Single-tier outpost upgrade system with ranged defense
+  - 40W + 30S cost, 5-tile attack range, 12 damage, 8-tick cooldown
+  - Detailed implementation plan across 3 phases (1.5 days each)
+  - Design document merged into .squad/decisions.md
+  - Ready for Pemulis (Phase 1 server work)
+
+**In Progress:**
+- **PR Review:** #162 (Marathe CI fix) and #163 (Pemulis creature types)
+- Expected to complete within sprint
+
+**Context Propagation:**
+- Pemulis briefed on Phase 1 server tasks (constants, schema, upgrade handler, combat tick)
+- Gately briefed on Phase 2 client tasks (icon rendering, right-click modal, CSS)
+- All team aware of creature types PR (#163) and resource tuning recommendations
+
+**Design Validation:**
+- Revalidated against current codebase (TileState, combat system, resource economy)
+- No architectural conflicts with creature types (#157) or ongoing work
+- Design integrates cleanly with existing patterns (right-click interaction, Colyseus schema)
+- Trade-offs documented (single-tier vs. multi-tier, closest-enemy targeting, instant upgrade)
+
+**Sign-off:** Design complete and validated. Ready to begin Phase 1 upon Hal's PR review completion.
+
+---
+
+### PR Reviews — Resource Tuning & Outpost Upgrades (2026-03-17)
+
+**PR #164 (Resource Tuning by Pemulis):**
+- **Status:** ✅ APPROVED
+- **Branch:** squad/156-resource-tuning
+- **Build:** Clean, all 902 tests passing
+- **Scope:** Matches approved HIGH-priority changes from #156
+- **Changes:** Unit cost differentiation (Builder 10W+3S, Defender 8W+12S, Attacker 18W+10S) + expensive farms (18W+10S)
+- **Strategic Impact:** Creates meaningful resource tensions — builders drain wood, defenders are stone sinks, attackers compete with economy, farms require deliberate investment
+- **Tests:** Properly updated to reflect new costs in combat-system.test.ts, food-economy.test.ts, pawnBuilder.test.ts
+- **Decision:** Ready to merge to dev
+
+**PR #165 (Outpost Upgrades by Gately):**
+- **Status:** 🔴 CHANGES REQUESTED
+- **Branch:** squad/154-outpost-upgrades
+- **Build:** Clean after TypeScript fix (closestTarget narrowing issue)
+- **Tests:** All 903 tests passing
+- **Critical Issue:** Client rendering incomplete — upgraded outposts render as 🗼 instead of 🏹
+- **Missing Implementation:**
+  1. `outpost_upgraded` key missing from STRUCTURE_ICONS map
+  2. `updateBuildingIcon()` doesn't check `tile.upgraded` flag
+  3. `upgraded` field never read from tile state (line 341-381)
+  4. ExploredTileCache doesn't store `upgraded` field
+  5. Fog-of-war silhouettes always show 🗼, never check upgrade status
+  6. `tileUpgraded` Map declared but never populated
+- **What Works:** Server logic solid (upgrade handler, combat tick, schema sync), UI modal functional, message protocol correct
+- **Fix Required:** 6-point implementation gap in GridRenderer.ts and ExploredTileCache.ts (icon selection, state sync, fog rendering)
+- **Decision:** Blocked pending client rendering fixes
+
+**Key Learning:** Server-client rendering contract requires explicit verification — schema sync alone doesn't guarantee visual correctness. Icon rendering paths (visible tiles, fog silhouettes, ExploredTileCache) must all handle state flags consistently.
+
+**TypeScript Fix Applied:** Added explicit type annotation to resolve control flow narrowing bug in `tickOutpostAttacks()` (closestTarget incorrectly narrowed to 'never' after forEach filter).
+
+- **Epic #161 Decomposition (2026-03-16):** Decomposed "Games need a start and end" into 5 sub-issues: (1) Game lifecycle schema & end-game messages (shared types, GameState fields: winnerId, endReason, PlayerState.isEliminated), (2) Win/loss condition engine (tickGameEndConditions: elimination via territory loss, last-standing victory, time-limit score win), (3) End-game UI & lobby return (EndGameScreen.ts overlay, GAME_ENDED handler, return-to-lobby flow), (4) Round timer HUD (MM:SS countdown in HudDOM), (5) Integration tests. Critical path ~4 days. Key architecture decision: lobby already IS the pre-game phase — no PRE_GAME state needed inside GameRoom. GameState.roundPhase transitions from "playing" → "ended". GameState.roundTimer (already exists, unused) gets initialized from gameDuration option and decremented per tick. Win conditions: elimination (no territory + no pawns), last-standing, time-up (highest score). Explicit scope fence: no matchmaking, no spectator mode, no replays, no ranked play. Filed to `.squad/decisions/inbox/hal-epic-161-decomposition.md`.
+  - **Key files discovered:** `server/src/rooms/LobbyRoom.ts` (full pre-game flow with CREATE/JOIN/START_GAME handlers), `server/src/rooms/LobbyBridge.ts` (EventEmitter bridge — already has `notifyGameEnded`), `server/src/rooms/GameState.ts` (roundPhase="playing" and roundTimer=-1 — both unused but ready), `shared/src/lobbyTypes.ts` (GameStatus type, CreateGamePayload), `client/src/ui/LobbyScreen.ts` (game list + create/join/start UI). Lobby-to-game flow: LobbyRoom creates GameRoom via matchMaker, clients join GameRoom on GAME_STARTED event, LobbyBridge notifies lobby on GameRoom dispose.
+
+
+---
+
+## 2026-03-16: Epic #161 Decomposition — Game Lifecycle (Start/End/Win-Loss)
+
+**Author:** Hal (Lead)  
 **Status:** Complete  
-**Output:** UAT deployment plan (457 lines, draft)  
-**Decisions merged to:** .squad/decisions.md
-
-**Session delivered:**
-- Comprehensive plan covering architecture, cost analysis, risk mitigation
-- Clear v1/deferred scope separation
-- Implementation order documented
-- Success criteria defined
-- Usage flows for 4 scenarios (primary, hotfix, emergency, dev)
-
-**Team update:** Plan accepted. Pemulis implemented Bicep + workflow. Next: manual Azure setup, branch creation, test PR.
-
-
-- **Colyseus StateView API (2026-03-07):** Researched per-client state filtering for #32. Critical finding: `@filter()` / `@filterChildren()` API is **deprecated** in Colyseus ≥ 0.16. Our stack (Colyseus 0.17, @colyseus/schema 4.0.16) uses `StateView` + `@view()` decorator. Key mechanics: (1) `@view()` on any schema field sets `hasFilters = true` globally, activating `$filter` on ALL ArraySchema/MapSchema instances; (2) `client.view = new StateView()` assigns per-client view; (3) `view.add(instance)` / `view.remove(instance)` controls visibility with O(1) WeakSet checks; (4) instance must be assigned to state BEFORE `view.add()` (throws otherwise); (5) encoder caches per-view encoded bytes within a tick. Full design at `.squad/decisions/inbox/hal-colyseus-filter-design.md`. Two-tier visibility (hidden/visible) for v1, three-tier (hidden/explored/visible via `@view(tag)` numeric tags) deferred.
-
-- **Visibility Engine Design (2026-03-07):** Designed server-side visibility tracking for fog of war (#16 prerequisite). Per-player `Set<number>` of visible tile indices, computed from owned territory + pawn builder radius + day/night modifiers. Update frequency: every 4 ticks (1 second). Diff-based view updates (add/remove only changed tiles). Performance: ~4ms for 8 players mid-game at 1-second interval = 0.4% CPU. Key risk: `@view()` activates filtering on ALL collections — `players` MapSchema also requires explicit `view.add()` for every player on every client.
-
-- **Fog of War Game Mechanics Design (2026-03-07):** Authored complete fog of war game design at `.squad/decisions/inbox/hal-fog-of-war-design.md`. Three-tier visibility: Unexplored (black, no data), Explored (terrain only via `@view()` static fields), Visible (full real-time data via `@view(1)` dynamic fields). Five vision sources: (1) Territory edge tiles radius 3, (2) HQ bonus radius 5, (3) Pawn builders radius 4, (4) Allied tamed creatures using `detectionRadius` (4 for herbivore, 6 for carnivore), (5) Watchtower structure radius 8. Day/night modifiers: Dawn/Dusk −1, Night −2, minimum radius 1. Edge-only territory vision (not all owned tiles) for O(perimeter) performance. New structure: Watchtower (15W/10S, 24-tick build, max 3/player, no income — pure vision). Four implementation phases: A (MVP fog 3-4d), B (Watchtowers 1-2d), C (Allied creature vision 1d), D (Explored state 1-2d). B/C/D independent and parallelizable. Builds on StateView filter design plumbing layer.
-
----
-
-## 2026-03-07: Fog of War Design Deliverables & Reviews
-
-**Delivered:** Two comprehensive design documents:
-1. **hal-fog-of-war-design.md** — Game mechanics (5 vision sources, 3 fog states, day/night modifiers, watchtower structure)
-2. **hal-colyseus-filter-design.md** — Server-side StateView + @view() filtering architecture
-
-**Reviews Received:**
-- **Pemulis (Systems Dev):** APPROVE WITH NOTES — Design is architecturally correct. Three implementation items: (1) merge owned-tile cache into Phase 2, (2) add immediate view.add() for player pawns, (3) communicate tile access pattern change to client team
-- **Steeply (Tester):** APPROVE WITH NOTES — Testability verified. Design sound; edge cases identified (reconnection handling, creature spawn lag, tick ordering fragility). 30+ new tests planned for visibility engine
-
-**Status:** Both reviews approved fog design. Ready to enter 4-phase implementation. Pemulis and Steeply findings are implementation refinements, not blockers.
-
-**Cross-Team Impact:** User directive (dkirby-ms 2026-03-07T01:03) on camera restriction to explored areas addressed by Gately's camera bounds design.
-
-
----
-
-## 2026-03-07T01:21 — Design Reviews Complete: Fog of War Mechanics APPROVED
-
-**Status:** Design reviews by Steeply (Tester) and Pemulis (Systems Dev) completed.
-
-**Verdict:** APPROVE WITH NOTES (both reviewers)
-
-### Key Approvals
-
-✅ **Steeply's Testability Review:**
-- Fully testable with existing infrastructure
-- No architectural blockers
-- 40 test cases planned across 4 phases
-- Edge cases identified and documented (E1–E14)
-- Performance estimate revised: 4–8ms typical (15–20ms on day/night transitions)
-
-✅ **Pemulis's Systems Review:**
-- Architecturally sound
-- Compatible with creature AI, territory, builder systems
-- StateView mechanism correctly applied
-- All identified risks are implementation refinements, not blockers
-
-### Critical Actions Required
-
-1. **Skip @view() field decorators** — Element-level view.add/remove sufficient for two-tier visibility
-2. **Merge owned-tile cache into Phase 2** — Full-tile scan unacceptable (131K iterations/tick for 8 players)
-3. **Add WATCHTOWER constants** to shared/src/constants.ts (costs, build time, radius, max)
-4. **Verify onLeave cleanup** — Ensure playerViews and visibleTiles are deleted on disconnect
-5. **Full regression test** on 331 existing tests after @view() decorators (gate before merge)
-
-### User Directives Incorporated
-
-✅ **Watchtower Destruction (future):** Naturally handled by tickVisibility() — no special logic
-✅ **Shared Alliance Vision (future):** Requires view.add() multiplication by alliance size — benchmarking TBD
-✅ **Explored Structure Silhouettes:** Client-side caching of last-known structureType — no server changes
-
-### Reviewer Confidence
-
-Steeply: "Zero trust in happy paths." — 40 test cases designed for phase transitions, edge positions, lifecycle errors.
-
-Pemulis: "Architecturally sound. Creature AI, territory, builder systems verified as unaffected."
-
-### Next Steps
-
-Proceed to implementation phase with noted precautions. Reviews are comprehensive and implementation-ready. All edge cases documented for phased test coverage.
-
-Full reviews merged to `.squad/decisions.md`.
-
-
-**2026-03-07 — Combat System Architecture (Issues #17 + #18)**
-
-Architected unified combat system for enemy bases (#17) and player combat pawns (#18). Key decisions:
-
-- **Zero new schema classes.** All entities (enemy bases, enemy mobiles, defenders, attackers) reuse `CreatureState` with `creatureType` discrimination. Matches existing builder pattern (`creatureType="pawn_builder"`). Server-side AI state in GameRoom Maps, not schema.
-- **Data-driven type registries.** Three new constant registries: `ENEMY_BASE_TYPES` (raider_camp, hive, fortress), `ENEMY_MOBILE_TYPES` (scout, raider, swarm), `PAWN_TYPES` (builder, defender, attacker). All behavior parameterized through constants.
-- **Tick-based adjacency combat.** New `tickCombat()` function. Adjacent hostiles deal damage per cooldown. No projectiles, no range.
-- **Tile damage system.** Enemy mobiles attack `tile.shapeHP`. When shapeHP ≤ 0, tile unclaimed. HQ tiles immune (`isHQTerritory`).
-- **`isTileOpenForCreature()` extended.** Enemy mobiles and attackers can enter any tile. Defenders stay in own territory only. Builders unchanged.
-- **Single branch:** `squad/17-18-combat-system` targeting `dev`. Issues too coupled for separate branches.
-- **Existing `WAVE_SPAWNER` constant** (line 89 constants.ts) should be replaced by `ENEMY_SPAWNING`.
-- **New AI modules:** `enemyBaseAI.ts`, `enemyMobileAI.ts`, `defenderAI.ts`, `attackerAI.ts` — each follows `builderAI.ts` pattern (exported step function, FSM states as strings).
-- **`nextMoveTick` reused** as spawn timer for enemy bases — no new fields needed.
-- **Key file:** Architecture decision at `.squad/decisions/inbox/hal-combat-system-architecture.md`.
-
----
-
-## 2026-03-07: Combat System Architecture Implementation Complete
-
-**Status:** IMPLEMENTED (Pemulis)
-
-Your combat system architecture for issues #17 & #18 has been fully implemented on squad/17-18-combat-system.
-
-**Delivered:**
-- 5 new AI modules (enemyBaseAI, enemyMobileAI, combat, defenderAI, attackerAI)
-- 1,311 lines across 13 files
-- All 384 tests pass; 139 .todo() tests await test implementation
-
-**Key implementation notes for documentation updates:**
-
-1. **WAVE_SPAWNER is gone** — All references replaced with ENEMY_SPAWNING constant group. Update any docs/ADRs accordingly.
-2. **Registry-driven architecture** — PAWN_TYPES, ENEMY_BASE_TYPES, ENEMY_MOBILE_TYPES all in shared/constants.ts. Data-driven config as proposed.
-3. **CreatureState reuse pattern** — No new schema classes. All entity types use existing CreatureState with `creatureType` and `pawnType` fields.
-4. **Server-side AI maps** — Combat cooldowns, enemy base spawn state, attacker return timers all live in GameRoom as module-level Maps (not synced to clients).
-5. **Night-only base spawning** — Implemented as dayPhase guard in tickEnemyBaseSpawning.
-6. **Base destruction rewards** — Implemented per-base-type amounts (fortress > hive > raider_camp).
-
-**Next phase (blocking on):**
-- Gately: UI rendering for new creatures + spawn buttons
-- Steeply: Test implementation (139 .todo() tests)
-
-**Branch:** squad/17-18-combat-system (ready for review)
-
-
----
-
-## 2026-03-08: Lint Discipline Directive — Write Clean Code from the Start
-
-**From:** saitcho (via Copilot)  
-**Status:** BINDING — All agents must follow
-
-Write lint-clean code from the start. No exceptions:
-- **No `@typescript-eslint/no-explicit-any`** — Use proper types (`unknown`, interfaces, generics, or document exceptions)
-- **No `@typescript-eslint/no-unused-vars`** — Don't import or declare unused things
-- **Run linter before committing** — `npm run lint` is mandatory
-
-Prevention (write clean first) > Cleanup (fix lint errors post-merge).
-
-Valid exceptions (e.g., E2E browser-context code) require documented decision in decisions.md.
-
-See: 2026-03-08: ESLint Override for E2E Browser Context Code
-
-### PR #60 Review — Viewport Culling for Camera Panning (Issue #29)
-
-- **Reviewed:** 2026-03-10. Approved. Differential viewport culling approach is correct and performant.
-- **Key architecture observation:** Manual differential culling is superior to PixiJS 8's built-in `cullable` property for this use case. Built-in culling iterates all objects per frame (O(n)); differential culling only mutates border tiles (O(viewport_border)) with O(viewport_area) comparisons.
-- **Gap noted:** Territory overlays (3rd layer) are not culled — only terrain tiles and fog overlays are toggled. Acceptable because territory overlays default to hidden and only owned tiles show them. Future optimization if profiling warrants.
-- **Fog structure icons** (emoji silhouettes) are also not culled but are harmless — off-screen when their tile is culled out.
-- **Interaction safety:** `setFogState` and culling can briefly disagree on fog.visible for off-screen tiles, but frame ordering (`camera.update → tick → updateCulling`) ensures consistency before render. No user-visible artifacts.
-- **Pattern:** For future rendering layers, remember to include them in `setTileCullVisible` or document why they're excluded.
-
----
-
-## 2026-03-08: PR #60 Review — Viewport Culling Approved
-
-**Reviewed:** 2026-03-08T23:17:07Z  
-**Status:** APPROVED & MERGED
-
-Reviewed PR #60 differential viewport culling for camera panning performance fix. Culling approach is correct and performant. PR merged to dev. Non-blocking notes documented for future optimization of territory overlays and fog structure icons.
-
----
-
-## 2026-03-10: PR #66 Review — Discord Deploy Notifications
-
-**Reviewed:** 2026-03-10  
-**Status:** APPROVED  
-**Issue:** #65 — Discord deploy notifications showed `Deployed URL: https://` with no actual URL  
-**PR:** #66 by Marathe (Dale Kirby)
-
-### Problem & Root Cause
-
-Issue #65 reported that Discord notifications after deployments included no actual URL—just the scheme prefix. Root cause: GitHub Actions secret masking was stripping the Azure Container App FQDN from job outputs (log warning: `##[warning]Skip output 'fqdn' since it may contain secret`).
-
-The deployment workflow was trying to pass `DEPLOY_URL` from the deploy job via `${{ needs.deploy.outputs.fqdn }}`, but GitHub's secret redaction logic masked this value because it matched known secrets in the vault.
-
-### Solution & Architecture
-
-Marathe hardcoded the static custom domain URLs directly in the workflow environments:
-- **Production:** `https://gridwar.kirbytoso.xyz`
-- **UAT:** `https://gridtest.kirbytoso.xyz`
-
-This is the **correct approach** because:
-1. Custom domains are not secrets (they're publicly routable FQDNs anyone can visit)
-2. These are static infrastructure endpoints that never change per deployment
-3. Secret masking is working as designed—we just don't need dynamic outputs here
-
-Also improved URL formatting:
-- Removed `https://` prefix concatenation from jq (was `"https://${DEPLOY_URL}"`, now `"${DEPLOY_URL}"`)
-- Applied markdown link format: `[Open App]({URL})`
-- Added 🌐 emoji to field label for UX clarity
-
-### Key Learnings
-
-**GitHub Actions Secret Masking:**
-- Secret masking is **overly aggressive** but by design. Any value matching known secrets (including substrings) gets redacted from job outputs, even if the value itself isn't sensitive.
-- Workaround: Don't rely on dynamic outputs for values that might accidentally match secret patterns. Hardcode known static values instead.
-- For truly dynamic URLs: Use non-secret environment configuration (e.g., repo variables) as the source of truth.
-
-**Workflow Architecture Pattern:**
-- Job outputs are useful for passing generated values downstream (e.g., commit SHA, build artifact paths), but they're vulnerable to secret redaction.
-- For infrastructure endpoints, prefer environment variables (repo-level or workflow-level) over runtime-generated outputs.
-- Static configuration is simpler and doesn't suffer from redaction surprises.
-
-**When to Hardcode vs. Parameterize:**
-- Hardcode: Infrastructure endpoints, build flags, environment names (i.e., things that are known at workflow definition time)
-- Parameterize: Build outputs, generated URLs, runtime state (i.e., things that are unknown until the job runs)
-
----
-
-## 2026-03-08T23:49:23Z: PR #66 Review & Merge — Deploy URL Fix
-
-**Task:** Review & approve PR #66 for deployment  
-**Status:** ✅ APPROVED & MERGED  
-
-### What Hal Did
-- Reviewed PR #66 (Marathe): Hardcode deploy URLs to fix GitHub Actions secret masking
-- Verified all review criteria passed:
-  - Security posture: Static URLs eliminate masking interference
-  - Backward compatibility: No breaking changes
-  - Code quality: Minimal, focused change
-  - Testing: E2E tests pass on uat/master
-  - Documentation: Deployment changes documented
-- Approved for merge
-- Documented decision in `.squad/decisions.md` for future CI/CD work
-
-### Decision Created
-**Decision:** "GitHub Actions Secret Masking & Job Output Patterns" (2026-03-10)
-- Establishes pattern: Hardcode static infrastructure endpoints, don't use dynamic job outputs
-- Binding for all future CI/CD work
-- Distinguishes when to use job outputs vs. hardcoding vs. repository variables
-
-### Outcome
-- ✅ PR #66 approved
-- ✅ Issue #65 resolved (Discord notifications now include deploy URLs)
-- ✅ Decision merged into team memory
-- ✅ Downstream: Coordinator merges to dev, closes issue #65
-
----
-
-## 2026-03-09: Triage Complete — Four-Issue Initiative (Issues #19, #30, #31, #42)
-
-**By:** Hal (Lead)  
-**Date:** 2026-03-09  
-**Status:** TRIAGE COMPLETE, EXECUTION PLAN ACTIVE  
-
-### Triage Summary
-
-Analyzed dependencies and created formal execution plan for four GitHub issues:
-1. **#19** (Soften Grid Appearance) — Rounded tiles + noise variation
-2. **#30** (In-Game Chat) — Player communication system
-3. **#31** (Game Log Content) — Event log overlay
-4. **#42** (User Persistence & Auth) — JWT auth + game state save
-
-### Key Corrections from Prior Analysis
-
-1. **#30 does NOT depend on #42** — Players already have display names from join prompt
-2. **#31 does NOT depend on #42** — Game log events are system events
-3. **#42 is independent** (blocks #41 godmode, not these)
-
-### Execution Plan
-
-**Wave 1 (Parallel Start — Immediate)**
-- **#42 Auth/JWT** — Pemulis lead, Steeply tests
-- **#31 Game Log** — Gately lead (UI), Pemulis support (server)
-- **#19 Rounded Tiles** — Gately lead (after PR #68), @copilot fallback
-
-**Wave 2 (After #31)**
-- **#30 Chat** — Gately (UI), Pemulis (server protocol)
-
-### Scope Boundaries (v1 only)
-
-**#19:** Rounded corners + per-tile noise in GridRenderer  
-**#30:** Text broadcast chat, server sanitization, scrollable overlay  
-**#31:** `game_log` handler, styled overlay, event categories with colors  
-**#42:** JWT token issuance, username/password + guest play, SQLite for dev  
-
-### Risk Mitigations
-
-- **Gately bottleneck:** Three issues, small sequential load. @copilot fallback for #19.
-- **#42 scope creep:** JWT-only, no OAuth, no game state persistence in v1.
-- **Overlay pattern divergence:** Will review #31 PR for reusability before #30 starts.
-
-### Assignments
-
-| Member | Issues | Role |
-|--------|--------|------|
-| **Gately** | #19, #31, #30 | UI/rendering lead |
-| **Pemulis** | #42, #31, #30 | Backend/auth lead |
-| **Steeply** | #42 | Test coverage |
-| **Hal** | All | Scope/review, enforce boundaries |
-
-### Decisions Created
-
-- `.squad/decisions/inbox/copilot-initiative-19-30-31-42.md` (merged to decisions.md)
-- `.squad/decisions/inbox/hal-initiative-plan.md` (merged to decisions.md)
-- Triage comments posted to all 4 GitHub issues
-
-### Next Actions
-
-- Scribe merges decision inbox → decisions.md
-- Pemulis begins #42 immediately
-- Gately picks up #19 after PR #68 merge (scheduled ~2026-03-10)
-- Steeply prepares #42 auth test suite
-
-### Session Persistence Client Integration Review (2026-03-09)
-
-- **Issue #77, PR #78** review and merge.
-- **Reviewed**: Pemulis's fixes for three blockers:
-  1. CORS middleware — fetch auth endpoints work from Vite dev client
-  2. Graceful auth degradation — connect() joins without token, fallback to anonymous
-  3. DRY room setup — extracted setupRoom() helper
-- **Approval**: All blockers addressed. Code quality verified (515/515 tests, lint clean). Design sound for dev/offline support.
-- **Merge**: Squash-merged to dev, deleted squad/78-session-persistence-client branch, closed issue #77.
-- **Impact**: Session persistence chain complete. Auth (PR #70) → server auto-save (PR #77) → client restore (PR #78). Players have end-to-end persistence.
-- **2026-03 PR #78 Review (Silent Guest Auth):** Reviewed Gately's client-side session persistence PR. Found two blocking issues: (1) CORS — `fetch()` to `http://localhost:2567/auth/guest` from Vite on `http://localhost:3000` will be blocked; Express server has no CORS middleware. (2) No graceful degradation — if `createGuestSession()` throws, `connect()` fails entirely even though `GameRoom.onJoin()` is auth-optional. Also flagged duplicated room-setup code in the retry path. Lint clean. Auth URL derivation (`ws(s)://` → `http(s)://`) is correct. Requested changes via PR comment (couldn't use request-changes since bot authored the PR).
-
-- **2026-03 PR #78 Re-review (Session Persistence — Approved):** Pemulis addressed all three requested changes: (1) CORS middleware added via `app.use(cors())` on Express. (2) `ensureToken()` now catches failures and returns `undefined`; `connect()` falls back to anonymous join with three retry layers. (3) `setupRoom()` helper extracted to DRY lifecycle wiring across all join paths. Lint clean, no `any` types. Approved via comment (can't use `--approve` on bot-authored PRs). Ready to merge.
-
----
-
-## 2026-03-10: Dev Journal Analysis & Discord Webhook Handoff
-
-**By:** Hal (Lead)  
-**Date:** 2026-03-10  
-**Status:** ANALYSIS COMPLETE, DECISION WRITTEN  
-
-### Dev Journal Summary (dkirby-ms)
-
-**Accomplishments:**
-1. **CI/CD & Code Review Automation** — workflows, triage, and PR automation mostly complete
-2. **Game Features** — lobby, server rooms, and in-game chat added
-3. **Session Persistence Issue** — browser refresh drops connection (issue incoming to test auto-triage)
-4. **Joelle Onboarding** — DevRel agent added, but Discord webhook shipped as Marathe instead of Joelle
-
-### Root Cause: Discord Webhook Identity
-
-**Problem:** Three workflows hardcode `"username": "Squad: Marathe"` in Discord webhook payloads:
-- `.github/workflows/deploy.yml` (line 169) — production deployments
-- `.github/workflows/deploy-uat.yml` (line 169) — UAT deployments
-- `.github/workflows/e2e.yml` (line 95) — E2E test results
-
-**Charter Review:**
-- **Joelle's charter** (`.squad/agents/joelle/charter.md`) explicitly owns: "Discord deployment notifications — tone, formatting, changelog quality"
-- **Marathe's charter** remains CI/CD mechanics and infrastructure
-
-**Decision:** Discord identity transfers from Marathe to Joelle. Changelog generation mechanics stay with Marathe (CI/CD domain), but the **community voice** is Joelle's.
-
-**Documented:** `.squad/decisions/inbox/hal-joelle-discord-handoff.md`
-
-### Browser Refresh Connection Drop
-
-**Issue:** Refreshing browser drops WebSocket connection instead of persisting session
-**Context:** Recent session persistence PRs (#70, #78) merged — this tests whether client-side restore is working correctly
-**Triage Prediction:** Likely Pemulis (backend session/auth) or Gately (client WebSocket lifecycle) depending on where the reconnection logic lives
-**Status:** Waiting for dkirby-ms to file issue (will test auto-triage pipeline)
-
-### Action Items
-
-1. **Immediate:** Update three workflows to change Discord username to "Squad: Joelle"
-2. **Monitor:** Browser refresh issue when filed — confirm auto-triage routes correctly
-3. **Pattern:** Established ownership boundary between CI/CD mechanics (Marathe) and community voice (Joelle)
-
-## Learnings
-
-### Architecture Patterns
-- **Discord Webhook Ownership Split:** Infrastructure (workflow YAML, changelog scripts) vs. Community Voice (Discord identity, message tone) can be cleanly separated
-- **Charter-Driven Ownership:** When onboarding new roles, audit ALL touch points in infrastructure for identity/ownership references
-
-### Key Files
-- `.github/workflows/deploy.yml` — production Discord notifications
-- `.github/workflows/deploy-uat.yml` — UAT Discord notifications
-- `.github/workflows/e2e.yml` — E2E test Discord notifications
-- `.squad/agents/joelle/charter.md` — DevRel charter (Discord notifications owner)
-- `.squad/agents/marathe/charter.md` — CI/CD charter (workflow mechanics owner)
-
-### User Preferences
-- Dev journal pattern: dkirby-ms journals end-of-day work and copypastes to squad for morning context
-- Issue-driven testing: Real issues filed to validate automation pipelines (dogfooding)
-
-
----
-
-## 2025-01-22: PR Review — Reconnect-on-Refresh (#101)
-
-**By:** Hal (Lead)  
-**Date:** 2025-01-22  
-**Context:** Issue #101 (browser refresh drops game session), fresh redo after PR #102 closed  
-**Branch:** `squad/101-reconnect-on-refresh` (3 commits off `dev`)  
-
-### Review Scope
-
-**Commits:**
-1. `478746b` — Pemulis: Core reconnect implementation (client + server)
-2. `abbc045` — Squad bookkeeping (history updates, decision doc)
-3. `bced298` — Steeply: 30 new tests (14 server, 16 client)
-
-**Test Results:** ✅ **691/691 tests passing** (reconnection suite + full regression)
-
-### Correctness — ✅ APPROVED
-
-**Bootstrap flow (client/src/main.ts:72-79):**
-- Reconnect check happens **before** lobby connection — correct short-circuit
-- `loadReconnectToken()` returns null-safe, `reconnectGameRoom()` returns `Room | null`
-- On success: game UI visible, session wired, returns early (skip lobby)
-- On failure: falls through to `connectToLobbyAndShow()` — clean degradation ✅
-
-**Edge cases covered:**
-- **Expired token / server restart:** `reconnectGameRoom()` tries 5× with exponential backoff (1s→16s), clears token on exhaustion, emits 'disconnected' → lobby shown ✅
-- **Network failure during reconnect:** Same exponential backoff + graceful fallback ✅
-- **Consented leave (1000/4000):** Token cleared in `onLeave()`, reconnection suppressed ✅
-- **Non-consented disconnect (1006, timeout):** Token preserved, `onLeave()` triggers `reconnectGameRoom()` unless `pageUnloading` ✅
-- **Multi-tab guard:** Server-side `onJoin()` evicts stale session (grace period) when same `authUser.id` joins from new tab ✅
-
-### Architecture — ✅ CLEAN
-
-**Placement:**
-- Reconnect check in `bootstrap()` at line 72 (after PixiJS init, before lobby) — correct point in lifecycle ✅
-- Short-circuit on success (`return` at line 77) — minimal branching ✅
-- SDK 0.17.34 `onDrop`/`onReconnect` callbacks used properly (vs. manual SDK reconnection) ✅
-
-**Separation of concerns:**
-- `loadReconnectToken()` / `saveReconnectToken()` / `clearReconnectToken()` — clean token lifecycle API ✅
-- `reconnectGameRoom()` independent of lobby (can succeed without lobby connection) ✅
-- `pageUnloading` flag prevents wasted reconnect attempts during teardown ✅
-
-### Security — ✅ SAFE
-
-**Token storage:**
-- **sessionStorage** is the **correct** choice (tab-scoped, survives refresh, cleared on tab close) ✅
-- Alternative (localStorage) would persist across tabs → stale token in other tabs = bad UX ✅
-- Alternative (in-memory) would not survive refresh → defeats entire purpose ✅
-
-**Token handling:**
-- Colyseus `reconnectionToken` is a **server-issued opaque string**, rotated per-reconnect ✅
-- No JWT or sensitive data exposed in `sessionStorage` beyond this token ✅
-- Token cleared on consented leave (1000/4000) — prevents replay after intentional exit ✅
-- 60-second server-side grace period (`RECONNECT_GRACE_SECONDS`) — reasonable trade-off ✅
-
-**Multi-tab safety:**
-- Server-side guard evicts stale session during grace period when same user rejoins ✅
-- Prevents "duplicate session" state corruption ✅
-
-### Test Coverage — ✅ COMPREHENSIVE
-
-**Server tests (14):**
-- `onDrop`: grace period, state preservation (position/resources/territory), fog-of-war cleanup ✅
-- `onReconnect`: fog-of-war restore, game_log messages (client + broadcast) ✅
-- `onLeave`: removal after grace expiry, idempotent cleanup ✅
-- Multi-tab guard: stale session eviction when same `authUser.id` joins ✅
-
-**Client tests (16):**
-- Token persistence: `primal-grid-reconnect-token` in sessionStorage ✅
-- Token lifecycle: cleared on 1000/4000, preserved on 1006, cleared on `leaveGame()` ✅
-- `reconnectGameRoom()`: null when no token, exponential backoff verified via setTimeout spy ✅
-- Token rotation: fresh token saved after successful reconnect ✅
-- Bootstrap independence: reconnect works without lobby flow ✅
-- `getRoom()` returns reconnected room ✅
-
-**Critical paths covered:**
-- Happy path: refresh → reconnect → resume game ✅
-- Network failure: refresh → retry 5× → fall back to lobby ✅
-- Consented leave: close tab → token cleared (no reconnect on reopen) ✅
-- Multi-tab: refresh tab A → join from tab B during grace period → tab A session evicted ✅
-
-### No Regressions — ✅ VERIFIED
-
-**Test suite:** 691/691 passing (663 baseline + 28 new reconnection tests)
-- All existing lobby flow tests pass ✅
-- No breakage in auth, persistence, or room lifecycle tests ✅
-- Lobby still works when no reconnect token present (default path unchanged) ✅
-
-**Verified manually:**
-- Bootstrap falls through to lobby when `loadReconnectToken()` returns null ✅
-- No TypeScript errors, lint clean (inferred from passing CI patterns) ✅
-
-### Decision Quality — ✅ SOUND
-
-**Pemulis decision doc (`.squad/decisions/inbox/pemulis-refresh-reconnect-pattern.md`):**
-- Clear rationale: sessionStorage choice, SDK lifecycle hooks, `pageUnloading` flag ✅
-- Impact documented: "lobby no longer guaranteed first screen" ✅
-- Ready for Scribe merge to `.squad/decisions.md` ✅
-
----
-
-## VERDICT: ✅ **APPROVED**
-
-**Summary:**  
-Clean, well-tested implementation. Bootstrap reconnect-check handles all edge cases (expired token, network failure, consented leave, multi-tab). SessionStorage is the correct choice. 30 new tests cover critical paths. No regressions (691/691 passing). Decision doc ready to merge.
-
-**Action:** Merge `squad/101-reconnect-on-refresh` → `dev`.
-
-**Post-merge:** Watch for user reports of reconnection failures in production — monitor grace period timeout (60s may need tuning based on real-world latency). Consider adding telemetry for reconnect success/failure rates in future iteration.
-
-
-- **PR #103 Re-review — REJECTED (2026-07-XX):** User reported issue #101 bug persists after PR #103 merge. Deep code review found: (1) `onLeave` condition `consented || !pageUnloading` is logically correct for all scenarios (consented, browser refresh, SDK exhausted). (2) Bootstrap reconnect flow (`loadReconnectToken()` → `reconnectGameRoom()` → `client.reconnect(token)`) is architecturally sound. (3) No race conditions in `beforeunload`/`onLeave` timing. BUT: `pageUnloading` is a one-way flag (set to `true` in `beforeunload`, never reset). If navigation is cancelled, all subsequent non-consented disconnects silently preserve token and never emit `'disconnected'`, stranding user. Fix: add `pageshow` listener to reset flag. Also: zero test coverage for the `pageUnloading` guard — mock `window.addEventListener` is a no-op `vi.fn()`, so `beforeunload` handler never registers in tests. The central mechanism of the fix is completely untested. Posted detailed REJECT review on PR with truth table and remediation steps. Assigned Steeply for tests, new implementer (not Pemulis/Gately) for `pageUnloading` reset.
-
-- **Reconnect Handler Gap Analysis (2025-07-22):** Investigated PR #103 console warning `onMessage() not registered for type 'game_log'`. Root cause: Colyseus SDK processes messages during `client.reconnect()` before the Promise resolves, so no user-code handler can be registered in time. Server's `GameRoom.onReconnect()` sends `game_log` synchronously (line 228), which arrives at the client while `client.reconnect()` is still executing. `onMessage('game_log', ...)` isn't registered until `setupGameSession()` → `bindGameRoom()` runs in `main.ts:174`, well after the reconnect completes. Recommended combined fix: (1) server-side deferral of `game_log` in `onReconnect` via `this.clock.setTimeout(..., 0)`, (2) client-side immediate camera centering instead of `onStateChange.once()` which may miss pre-synced state, (3) deduplication of `onMessage` handlers in `bindGameRoom()` to prevent duplicate log entries on in-session reconnects. Secondary finding: `ChatPanel.ts:103` also registers `onMessage('chat', ...)` in `bindGameRoom` — same gap applies if server sends chat during reconnect. Routed implementation to @copilot (🟢 well-scoped bug fix, 2 files). Decision doc: `.squad/decisions/inbox/hal-reconnect-handler-gap.md`.
-
-## Learnings (PR #103 Review & Follow-Up Decisions — 2026-03-10T18:23:36Z)
-
-**Session Persistence vs. Cleanup:** Distinguishing between a browser refresh (transient) and a network disconnect (potentially permanent) is critical. The `beforeunload` pattern is the standard solution.
-
-**Colyseus Reconnect Race Condition:** Messages sent immediately in `onReconnect` on the server may arrive before the client's `reconnect()` promise resolves and handlers are attached. Deferring with `setTimeout(..., 0)` is a necessary workaround.
-
-**Scope Creep vs. Robustness:** Sometimes what looks like scope creep (adding `pageUnloading` logic when the bug was just CSS) is actually "fixing the debt we found while looking for the bug." It is valid to keep such fixes if they prevent future regressions.
-
-**Test Coverage & Mocking:** Mock `window.addEventListener` must capture callbacks by event name, not be a no-op `vi.fn()`. This is especially critical for lifecycle callbacks like `beforeunload` and `pageshow` that are registered at module load time and never tested otherwise. A no-op mock creates invisible coverage gaps.
-
-**pageUnloading One-Way Flag Bug (2026-03-10):** PR #103 set `pageUnloading = true` in `beforeunload` but never reset it. This causes all subsequent non-consented disconnects after a cancelled navigation to skip token clearing, stranding the user. Fix: Add `window.addEventListener('pageshow', () => { pageUnloading = false; })` to reset the flag after cancelled navigation or BFCache restore. New implementer needed (Pemulis and Gately locked out per reviewer protocol). Steeply to add test coverage.
-
-**CPU Opponents System (PR #111, 2026-03-12):** Reviewed and approved. CPU players are first-class `PlayerState` entries created in `GameRoom.onCreate()` with synthetic session IDs (`cpu_0`–`cpu_6`). They skip `initPlayerView` (no client), are ephemeral (no persistence/auth), and get income/scoring from existing tick functions with zero modifications to those systems. AI is strategic only (which pawn to spawn, via `cpuPlayerAI.ts` priority loop: defend → build → attack → farm → idle), tactical behavior delegated to existing pawn AIs. `spawnPawnCore()` extracted from `handleSpawnPawn` as a public method for programmatic pawn spawning. Room auto-disposes via `checkCpuOnlyRoom()` when all humans leave. `cpuPlayers` option flows from `CreateGamePayload` through `LobbyRoom` to `GameRoom` options. Key files: `server/src/rooms/cpuPlayerAI.ts`, `shared/src/constants.ts` (`CPU_PLAYER`), `shared/src/lobbyTypes.ts` (`CreateGamePayload.cpuPlayers`). Non-blocking cleanup noted: unused imports (`CreatureState`, `CREATURE_AI`) and unused `room` parameter in `tickCpuPlayers`, magic number `7` in LobbyRoom should use `CPU_PLAYER.MAX_COUNT`.
-
-### PR #111 Review: CPU Opponent Implementation (2026-03-12)
-
-**Work Session:** 2026-03-10T20:30:06Z  
-**Author:** Pemulis (Systems Dev)  
-**PR:** #111  
-**Status:** ✅ APPROVED  
-**Issue:** #105
-
-**Verdict:** APPROVED — clean architecture, comprehensive tests, zero regressions.
-
-**Assessment:**
-
-- **Architecture:** CPU opponents as first-class `PlayerState` entries is correct. Synthetic session IDs (`cpu_0`–`cpu_6`), no StateView, no persistence — clean separation. Strategic AI loop in `cpuPlayerAI.ts` delegates tactical decisions to existing pawn AIs — good encapsulation.
-- **Code Quality:** `spawnPawnCore()` extraction is clean and generalizable. Well-tested entry point for programmatic pawn spawning. `cpuPlayerIds` Set properly null-guarded.
-- **Test Coverage:** 20 new tests thoroughly exercise CPU decisions, pawn spawning, and room cleanup. 716 total tests passing, no regressions detected.
-- **Integration:** `cpuPlayers` option flows correctly from lobby payload through LobbyRoom to GameRoom options.
-
-**Non-Blocking Items (Noted in PR Comment):**
-1. **Frontend pending:** Gately to add CPU player count input (0–7) to create-game UI
-2. **Perf baseline:** Recommend baseline testing with full 7-CPU roster before production release
-3. **Future enhancement:** Difficulty settings (easy/medium/hard) can be added in follow-up PR
-
-**Recommendation:** Ready to merge to `dev` after above non-blocking feedback is reviewed. Unblocking team feature and closing #105.
-
-## 2026-03-XX: Wave 1 Bug Fix Reviews
-
-### PR #129: Stage Label Workflow (Marathe)
-**Status:** ✅ APPROVED
-**Assessment:** Correctly implements `uat` branch targeting for stage labels. Graceful error handling for missing labels. Permissions are properly scoped.
-
-### PR #130: Fog-of-War Ghosting (Gately)
-**Status:** ✅ APPROVED
-**Assessment:** Logic for hiding buildings in fog is sound. `GridRenderer` correctly clears stale icons. Fixes visual regression where buildings bled through fog.
-
-### PR #131: Map Size & Timeout Fixes (Pemulis)
-**Status:** ✅ APPROVED
-**Assessment:** 
-- **Critical Fix:** Increased Colyseus encoder buffer to 4MB (was 768KB) to support 256x256 map state sync.
-- **Robustness:** Added try/catch around room creation to prevent swallowed errors. Increased client timeout to 30s.
-- **Validation:** New tests verify 64x64 and 256x256 map generation and performance.
-
----
-
-## 2026-03-11: Wave 1 PR Reviews (Wave 2 Session Context)
-
-**Status:** COMPLETED  
-**Model:** Gemini 3 Pro (preview)  
-**Orchestration:** [2026-03-11T12-10-00Z-hal.md](.squad/orchestration-log/2026-03-11T12-10-00Z-hal.md)
-
-### PRs Reviewed & Approved
-
-| PR | Author | Issue | Work | Status |
-|----|---------|----|---------|--------|
-| #129 | Marathe | #122 | Stage label lifecycle (dev→uat automation) | ✅ APPROVED |
-| #130 | Gately | #128 | Fog-of-war ghosting & icon clearing | ✅ APPROVED |
-| #131 | Pemulis | #126 | Map size timeout (Colyseus buffer, error handling, timeouts) | ✅ APPROVED |
-
-### Review Findings
-
-- All PRs meet squad standards
-- No blockers or required changes
-- Ready for merge to respective branches (dev/uat)
-- Each PR demonstrates solid pattern implementation (label automation, rendering cleanup, encoder buffer scaling)
-
-### Model Override Note
-
-Used Gemini 3 Pro for this review task to leverage an alternate model for independent validation perspective. Model performed well on procedural code review.
-
-
-### PRs Reviewed & Approved (Wave 2)
-
-| PR | Author | Issue | Work | Status |
-|----|--------|-------|------|--------|
-| #132 | Marathe | #120 | Changelog generation script | ✅ APPROVED |
-| #133 | Pemulis | #127 | Builder pawn clustering fix | 🔴 REQUEST CHANGES |
-| #134 | Gately | #125 | Outpost rendering & builder stability | ✅ APPROVED |
-
-### Review Findings
-
-- **PR #132 (Changelog)**: Excellent consolidation of shell logic. Moving to a dedicated script reduces duplication across 3 workflows.
-- **PR #133 vs #134 (Builder Logic)**: Both PRs attempted to fix builder clustering by checking `pawnType` or `creatureType`. #134 was superior because it also checked `currentState` (move_to_site/building), preventing idle builders from falsely reserving tiles. I requested changes on #133 in favor of #134.
-- **Rendering**: #134 correctly handles outpost icon visibility in fog-of-war, preventing "ghost" icons.
-
-## Learnings
-
-- Always check `currentState` when filtering pawns for reservation logic — idle pawns can have stale targets.
-- Prefer integer-based tile indices (`y * width + x`) over string coordinates (`"x,y"`) for performance in tight loops.
-
-### PRs Reviewed & Approved (Wave 3)
-
-| PR | Author | Issue | Work | Status |
-|----|--------|-------|------|--------|
-| #129 | Marathe | #122 | Stage label swap automation (dev→uat) | ✅ APPROVED |
-| #130 | Gately | #128 | Fix phantom buildings in fog-of-war | ✅ APPROVED |
-| #131 | Pemulis | #126 | Fix map size timeout for non-128x128 maps | ✅ APPROVED |
-
-### Review Findings
-
-- **PR #129 (Stage Labels)**: Clean job split with branch conditions. Correctly handles label removal (404-safe) and addition. Added `contents: read` permission for checkout — appropriate.
-- **PR #130 (Phantom Buildings)**: Surgical two-line fix. Hides building icons on visible→explored transition and clears stale fog silhouette icons. Good root-cause analysis in PR description. No tests needed — rendering layer.
-- **PR #131 (Map Size Timeout)**: Three-pronged fix (buffer, error handling, timeout). Encoder buffer increase from 768KB to 4MB is proportional to 4x tile count. Try-catch in LobbyRoom uses existing `sendError` pattern. Tests cover 64×64 and 256×256 with correctness + perf ceilings. `package-lock.json` changes are formatting-only (version field relocation).
-
-- Encoder.BUFFER_SIZE now at 4 MB — ceiling for 256×256 maps. If larger maps are ever introduced, this needs revisiting.
-- Client-side game creation timeout is now 30s (was 15s). LobbyScreen.ts line 216.
-
----
-
-### Latest Session: PR #137 Review & Approval (2026-03-11)
-
-**Task:** Review Pemulis's pawn clustering fix (PR #137).
-
-**Review Notes:**
-- Core logic fixes are sound across all 4 root causes
-- Test coverage adequate (790 tests passing)
-- **Performance Finding:** `hasFriendlyPawnAt` method is O(N²) in current implementation. For grid sizes ≤256×256, this is acceptable but should be monitored in production.
-
-**Decision:** Approved for merge. Performance optimization deferred to future refactor as non-blocking.
-
-**Outcome:** PR #137 merged to dev. Issue #127 closed. Issue #136 filed.
-
-
-### Latest Session: PR #138 Review (2026-03-11)
-
-**Task:** Review PR #138 "Fix non-player unit rendering" (#136).
-
-**Review Notes:**
-- **Correctness:** Verified removal of `isLocalBuilder` gate. All pawns now render correct emoji regardless of owner.
-- **Completeness:** `isPlayerPawn` utility ensures coverage for all types: builder, defender, attacker, explorer.
-- **Consistency:** `drawStateBackground` correctly implements player color rendering with type-based fallback. Ownership border adds necessary visual distinction for non-local units.
-- **No Regressions:** Local player rendering logic preserved.
-- **Tests:** 843/843 passed. New `lastOwnerID` tracking ensures re-render on ownership change.
-
-**Verdict:** **APPROVE**. Code is clean, correct, and safe to merge.
-
-## Learnings
-- Renderer uses `playerColors` cache in `CreatureRenderer` to avoid repeated map lookups during draw calls.
-- `isPlayerPawn` utility covers all `pawn_*` types.
-- Rendering logic is centralized in `getIcon` and `drawStateBackground`, good for consistency.
-
----
-
-## 2026-03-11: PR #138 Review & Merge (2026-03-11T15-26-00Z)
-
-**Task:** Review PR #138 "Fix non-player unit rendering"  
-**Author:** Gately  
-**Issue:** #136  
-
-**Review Notes:**
-- Verified removal of `isLocalBuilder` gate — all pawn types now render correct emoji
-- `isPlayerPawn` utility ensures complete coverage for all pawn types
-- `drawStateBackground` correctly implements player color rendering with type-based fallback
-- Ownership border adds necessary visual distinction for non-local units
-- Local player rendering logic preserved (no regressions)
-- 843/843 tests passing; `lastOwnerID` tracking ensures proper re-renders
-
-**Verdict:** **APPROVED**. Code is clean, correct, and safe to merge.
-
-**Outcome:** Merged to dev (2026-03-11). Branch deleted. Issue #136 auto-closed.
-
-**Learnings:**
-- Player color caching pattern (`playerColors` map in CreatureRenderer) improves rendering performance
-- Ownership borders effectively disambiguate non-local pawns in multi-player view
-- Utility functions (`isPlayerPawn`) reduce code duplication and improve maintainability
-### PR #140 Review — Outpost Spacing Fix (2026-03-11)
-
-- **Issue:** #139 — Builders placed outposts on every claimed tile, causing visual clutter.
-- **Fix:** `MIN_OUTPOST_SPACING = 4` constant + `hasNearbyOutpost()` Manhattan distance check in `builderAI.ts`. Tiles still claimed; only outpost structure suppressed when too close.
-- **Verdict:** APPROVE. Correct distance metric (Manhattan for grid), clean gate logic, 12 solid tests, no regressions (854/855 pass; 1 flake in water-depth.test.ts is pre-existing).
-- **Key Observations:**
-  - `hasNearbyOutpost` scans ~41 tiles per call (r=4 diamond). Negligible perf cost since builds complete rarely.
-  - When spacing blocks outpost, `structureType` stays at default `""` — no ghost structures.
-  - Farm placement correctly bypasses spacing check entirely.
-- **Outcome:** Reviewed and approved PR #140.
-
-## PR #140 Merge (2026-03-11T15-44-00Z)
-
-**Task:** Merge PR #140 after review approval  
-**Outcome:** Merged to dev via `gh pr merge 140 --merge --delete-branch`  
-**Related Issue:** #139 auto-closed  
-
-**Details:**
-- All 854/855 tests pass (1 pre-existing timeout in water-depth.test.ts, unrelated to this PR)
-- Manhattan distance logic verified as correct for grid tile calculations
-- Claiming logic preserved — only outpost icon suppressed when too close
-- 12 new tests provide comprehensive proximity validation
-
-**Learnings:**
-- Manhattan distance is the correct metric for grid-based spatial checks
-- Spacing checks using iterative rings are performant enough for infrequent operations
-- Constants like `MIN_OUTPOST_SPACING` provide tunable game balance parameters
-
-**Downstream:**
-- Gately's pawn builder system now has tighter visual feedback with reduced icon clutter
-- No client-side changes required; rendering already keys off `structureType`
+**Issue:** #161  
+**Type:** Epic Decomposition & Architectural Assessment
+
+### Overview
+
+Decomposed Epic #161 ("Games need a start and end. There should be win and loss conditions and game-ending events") into 5 well-scoped sub-issues with clear dependencies, acceptance criteria, and architectural foundations.
+
+### Architectural Assessment
+
+**Existing infrastructure (60% complete):**
+- ✅ LobbyRoom handles CREATE_GAME, JOIN_GAME, START_GAME
+- ✅ LobbyGameEntry has `status: "waiting" | "in_progress" | "ended"`
+- ✅ LobbyBridge notifies lobby when GameRoom disposes (`game_ended` event)
+- ✅ GameState has `roundPhase` ("playing") and `roundTimer` (-1) — unused but ready
+- ✅ Reconnection with 60s grace period
+- ✅ Client lobby UI with game list, create, join, start
+
+**Missing pieces:**
+- Win/loss condition checking in simulation loop
+- `winnerId` / `endReason` on GameState
+- GAME_ENDED message from GameRoom to clients
+- End-game UI (victory/defeat screen)
+- Client-side "return to lobby" flow
+- roundTimer countdown logic
+- roundPhase state transitions
+
+**Key design decision:** Lobby IS the pre-game phase. No need for PRE_GAME state inside GameRoom. Players wait in lobby; host starts; everyone joins GameRoom and gameplay begins immediately. Keeps architecture intact.
+
+### Sub-Issues
+
+| # | Title | Owner | Priority | Dependencies | Estimate |
+|---|-------|-------|----------|--------------|----------|
+| 1 | Schema & End-Game Messages | Pemulis | P1 | — | 0.5 day |
+| 2 | Win/Loss Engine & Game End Flow | Pemulis | P2 | #1 | 1.5 days |
+| 3 | End-Game UI & Lobby Return | Gately | P3 | #1, #2 | 1 day |
+| 4 | Timer HUD Display | Gately | P3 | #1 | 0.5 day |
+| 5 | Integration Tests | Steeply | P4 | #2, #3, #4 | 1 day |
+
+### Win/Loss Conditions (Simplest Viable Set)
+
+1. **Elimination:** Player loses all territory outside 3×3 HQ zone → functionally dead. Mark as eliminated.
+2. **Last Standing (multiplayer):** Last non-eliminated human player wins.
+3. **Time Limit:** If `gameDuration > 0`, countdown from configured minutes. When timer hits 0, highest score wins.
+4. **Solo Survival:** Single-player game with CPU enemies — survive full timer duration to win.
+
+### Scope Fence
+
+**Explicitly deferred:**
+- Matchmaking / ranked play / ELO ratings
+- Spectator mode for eliminated players
+- Game replays or history
+- Achievement system
+- Leaderboard persistence
+- Multiple game modes (CTF, King of the Hill)
+- Surrender button (can be added later trivially)
+- Configurable victory conditions per game
+
+### Dependency Graph
+
+```
+Sub-Issue 1 (Schema)
+    ├──→ Sub-Issue 2 (Win/Loss Engine)
+    │        └──→ Sub-Issue 3 (End-Game UI)
+    │                 └──→ Sub-Issue 5 (Tests)
+    └──→ Sub-Issue 4 (Timer HUD) ──→ Sub-Issue 5 (Tests)
+```
+
+**Critical path:** 1 → 2 → 4 → 5 (~4 days)  
+**Parallel track:** 1 → 3 (Gately timer HUD while Pemulis builds engine)
+
+### Implementation Progress
+
+- ✅ **Sub-Issue 1 (Pemulis):** Schema complete. GameEndReason enum, GAME_ENDED/PLAYER_ELIMINATED messages, schema fields. 901/902 tests pass.
+- ✅ **Sub-Issue 2 (Pemulis):** Engine complete. Elimination checks, victory conditions, game end flow. 902/902 tests pass.
+- ✅ **Sub-Issue 4 (Gately):** Timer HUD complete. MM:SS countdown, urgency flash < 60s. 902/902 tests pass.
+- ⏳ **Sub-Issue 3 (Gately):** Blocked on Sub-Issue 2 (now complete). Ready to start.
+- ⏳ **Sub-Issue 5 (Steeply):** Blocked on Sub-Issues 2, 3, 4 (Sub-2 & 4 complete). Awaits Sub-Issue 3.
+
+### Files Created
+- .squad/decisions/inbox/hal-epic-161-decomposition.md (merged to decisions.md)
+
+### Cross-Agent Notes
+
+- Pemulis delivering Sub-Issues 1 & 2 on-time. Gately parallel on Sub-Issue 4 (Timer HUD).
+- Dependency graph being followed. No scope creep.
+- Steeply (Tester) ready to write integration tests once #2, #3, #4 complete.
+- All 5 sub-issues documented in decisions.md for future reference.
+
+- **Lobby Improvements Decomposed (2026-03-16):** User requested: game browser for waiting/in-progress games, join-before-start flow, pre-game waiting room with player list and ready states. Analysis found the infrastructure is 80% there — LobbyRoom has full create/join/leave/start handlers, LobbyState tracks games with "waiting" status, client game browser renders both statuses with Join buttons. The critical gap: `handleCreateGame` calls `matchMaker.createRoom()` immediately, so no game ever sits in "waiting" state. Decomposed into 4 issues: (1) Backend pre-game phase with deferred GameRoom creation + ready state tracking (Pemulis, 2-3d), (2) Frontend waiting room UI showing players/ready states (Gately, 2d, depends on #1), (3) Frontend game browser status filters (Gately, 0.5d, independent), (4) Tests for pre-game flow (Steeply, 1.5d, depends on #1+#2). Key architecture decisions: message-based player tracking (not schema), deferred room creation (not paused simulation), ready state is advisory (host can start anytime). Explicit scope fence: no matchmaking, no ranked, no spectator, no chat in waiting room, no kick/ban, no map preview. Decomposition filed to `.squad/decisions/inbox/hal-lobby-improvements-decomposition.md`.
+- **Key lobby files:** `server/src/rooms/LobbyRoom.ts` (404 lines, full message handling), `server/src/rooms/LobbyState.ts` (63 lines, schema), `server/src/rooms/LobbyBridge.ts` (22 lines, EventEmitter bridge), `shared/src/lobbyTypes.ts` (106 lines, full protocol), `client/src/ui/LobbyScreen.ts` (317 lines, DOM game browser + create form), `client/src/network.ts` (connectToLobby, joinGameRoom), `client/src/main.ts` (lobby→game transition flow).
+
+- **Lobby Improvements #161 Decomposed (2026-03-12):** Decomposed epic #161 into 4 sub-issues ready for team. **Issue 1 (Backend, Pemulis, 2-3d):** Deferred GameRoom creation, pre-game player tracking via message-based Map (not schema), SET_READY handler. **Issue 2 (Frontend, Gately, 2d):** Waiting room UI with player list, ready toggles, host Start button. **Issue 3 (Frontend, Gately, 0.5d):** Game browser status filters (All/Waiting/In Progress). **Issue 4 (Tests, Steeply, 1.5d):** Pre-game lifecycle tests. Dependency graph: #1→#2, #3 independent, #4 depends on #1+#2. Architecture decisions: message-based tracking, deferred creation, ready state advisory. Decision merged to decisions.md.
 

@@ -61,6 +61,24 @@
         color: #ddd;
         font-weight: bold;
       }
+      /* Round timer */
+      #round-timer-display {
+        font-size: 18px;
+        font-weight: bold;
+        color: #e0e0e0;
+        text-align: center;
+        font-family: 'Courier New', monospace;
+        letter-spacing: 2px;
+      }
+      #section-round-timer.hidden { display: none; }
+      #section-round-timer.urgent #round-timer-display {
+        color: #ff4444;
+        animation: timer-flash 1s ease-in-out infinite;
+      }
+      @keyframes timer-flash {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+      }
       /* Creatures */
       .creature-row {
         font-size: 12px;
@@ -425,6 +443,56 @@
       }
       #lobby-name-input:focus { border-color: #7ecfff; }
 
+      /* Filter tabs */
+      .lobby-filter-tabs {
+        display: flex;
+        gap: 0;
+        margin-bottom: 12px;
+        border-bottom: 1px solid #333;
+      }
+      .lobby-filter-tab {
+        padding: 6px 14px;
+        font-size: 11px;
+        font-family: 'Courier New', monospace;
+        background: transparent;
+        color: #888;
+        border: 1px solid transparent;
+        border-bottom: none;
+        border-radius: 4px 4px 0 0;
+        cursor: pointer;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        transition: color 0.15s, background 0.15s;
+      }
+      .lobby-filter-tab:hover {
+        color: #ccc;
+        background: rgba(255,255,255,0.03);
+      }
+      .lobby-filter-tab.active {
+        color: #ffd700;
+        font-weight: bold;
+        background: #1a1a2e;
+        border-color: #444466;
+        border-bottom: 1px solid #1a1a2e;
+        margin-bottom: -1px;
+      }
+      .lobby-filter-badge {
+        display: inline-block;
+        margin-left: 4px;
+        padding: 1px 5px;
+        font-size: 10px;
+        font-weight: normal;
+        background: #333;
+        color: #aaa;
+        border-radius: 8px;
+        min-width: 14px;
+        text-align: center;
+      }
+      .lobby-filter-tab.active .lobby-filter-badge {
+        background: #444422;
+        color: #ffd700;
+      }
+
       /* Game list table */
       #lobby-game-list {
         width: 100%;
@@ -564,6 +632,174 @@
       .lobby-notification.error { background: #4a2a2a; color: #ff8888; border: 1px solid #663333; }
       .lobby-notification.info { background: #2a2a4a; color: #8888ff; border: 1px solid #333366; }
 
+      /* ---- Waiting room overlay ---- */
+      #waiting-room-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: #111;
+        z-index: 1100;
+        justify-content: center;
+        align-items: center;
+        font-family: 'Courier New', monospace;
+      }
+      #waiting-room-overlay.visible { display: flex; }
+      #waiting-room-container {
+        background: #1a1a2e;
+        border: 1px solid #444466;
+        border-radius: 8px;
+        padding: 24px 32px;
+        min-width: 480px;
+        max-width: 600px;
+        width: 90%;
+        color: #ccc;
+      }
+      #waiting-room-header {
+        text-align: center;
+        margin-bottom: 20px;
+      }
+      #waiting-room-header h2 {
+        color: #ffd700;
+        font-size: 1.5em;
+        margin: 0 0 8px;
+      }
+      #waiting-room-settings {
+        font-size: 0.85em;
+        color: #888;
+        margin-bottom: 16px;
+        text-align: center;
+      }
+      #waiting-room-settings span {
+        margin: 0 8px;
+      }
+      #waiting-room-player-list {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 20px;
+        border: 1px solid #333;
+        border-radius: 4px;
+        max-height: 240px;
+        overflow-y: auto;
+      }
+      .waiting-room-player {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        border-bottom: 1px solid #2a2a3a;
+        font-size: 0.95em;
+      }
+      .waiting-room-player:last-child { border-bottom: none; }
+      .waiting-room-player-name { color: #7ecfff; }
+      .waiting-room-player-status { font-size: 1.1em; }
+      .waiting-room-empty {
+        padding: 16px;
+        text-align: center;
+        color: #666;
+      }
+      #waiting-room-actions {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+      }
+      #waiting-room-ready-btn {
+        padding: 8px 20px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.95em;
+        background: #2a4a2a;
+        color: #44cc44;
+        border: 1px solid #44cc44;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      #waiting-room-ready-btn:hover { background: #3a5a3a; border-color: #66ff66; }
+      #waiting-room-ready-btn.ready {
+        background: #2a2a4a;
+        color: #7ecfff;
+        border-color: #7ecfff;
+      }
+      #waiting-room-start-btn {
+        padding: 8px 20px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.95em;
+        background: #4a3a1a;
+        color: #ffd700;
+        border: 1px solid #ffd700;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      #waiting-room-start-btn:hover:not(:disabled) { background: #5a4a2a; }
+      #waiting-room-start-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      #waiting-room-leave-btn {
+        padding: 8px 20px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.95em;
+        background: #3a2a2a;
+        color: #cc4444;
+        border: 1px solid #663333;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      #waiting-room-leave-btn:hover { background: #4a3a3a; border-color: #cc4444; }
+
+      /* Invite link section */
+      #waiting-room-invite {
+        margin-bottom: 16px;
+        padding: 10px 12px;
+        background: #1e1e32;
+        border: 1px solid #333;
+        border-radius: 4px;
+      }
+      .invite-label {
+        display: block;
+        font-size: 0.85em;
+        color: #aaa;
+        margin-bottom: 6px;
+      }
+      .invite-link-row {
+        display: flex;
+        gap: 8px;
+      }
+      .invite-link-input {
+        flex: 1;
+        padding: 6px 8px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.8em;
+        background: #111;
+        color: #7ecfff;
+        border: 1px solid #444;
+        border-radius: 3px;
+        outline: none;
+      }
+      .invite-link-input:focus { border-color: #7ecfff; }
+      .invite-copy-btn {
+        padding: 6px 12px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.8em;
+        background: #2a2a4a;
+        color: #7ecfff;
+        border: 1px solid #555;
+        border-radius: 3px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .invite-copy-btn:hover { background: #3a3a5a; border-color: #7ecfff; }
+
+      /* CPU player styling */
+      .waiting-room-player.cpu-player .waiting-room-player-name {
+        color: #aaa;
+      }
+      .waiting-room-divider {
+        padding: 6px 12px;
+        font-size: 0.8em;
+        color: #888;
+        border-bottom: 1px solid #2a2a3a;
+        background: #16162a;
+      }
+
       /* Scoreboard overlay */
       #scoreboard-overlay {
         display: none;
@@ -622,6 +858,186 @@
         font-family: 'Courier New', monospace;
       }
 
+      /* Upgrade Modal */
+      .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.6);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+      }
+      .modal-overlay.visible { display: flex; }
+      .modal-panel {
+        background: rgba(17,17,34,0.95);
+        border: 2px solid #ffd700;
+        border-radius: 8px;
+        padding: 20px 28px;
+        min-width: 320px;
+        box-shadow: 0 4px 16px rgba(255,215,0,0.2);
+      }
+      .modal-panel h2 {
+        font-size: 16px;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        color: #ffd700;
+        margin-bottom: 12px;
+        text-align: center;
+        font-family: 'Courier New', monospace;
+      }
+      .modal-panel p {
+        font-size: 13px;
+        color: #cccccc;
+        text-align: center;
+        margin-bottom: 16px;
+        font-family: 'Courier New', monospace;
+      }
+      .upgrade-cost {
+        background: rgba(0,0,0,0.3);
+        border: 1px solid #444;
+        border-radius: 4px;
+        padding: 10px;
+        margin-bottom: 16px;
+        text-align: center;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        color: #fff;
+      }
+      .modal-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+      }
+      .modal-actions button {
+        padding: 8px 20px;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        border: 1px solid #555;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .modal-btn-cancel {
+        background: #333;
+        color: #ccc;
+      }
+      .modal-btn-cancel:hover {
+        background: #444;
+        border-color: #666;
+      }
+      .modal-btn-confirm {
+        background: #2a5a2a;
+        color: #fff;
+        border-color: #3a7a3a;
+      }
+      .modal-btn-confirm:hover {
+        background: #3a7a3a;
+        border-color: #4a9a4a;
+      }
+
+      /* End-game results overlay */
+      #endgame-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.8);
+        z-index: 1050;
+        justify-content: center;
+        align-items: center;
+        font-family: 'Courier New', monospace;
+      }
+      #endgame-overlay.visible { display: flex; }
+      #endgame-panel {
+        background: rgba(17,17,34,0.95);
+        border: 2px solid #444466;
+        border-radius: 8px;
+        padding: 24px 32px;
+        min-width: 420px;
+        max-width: 500px;
+        text-align: center;
+      }
+      .endgame-banner {
+        font-size: 28px;
+        font-weight: bold;
+        margin-bottom: 12px;
+        letter-spacing: 3px;
+      }
+      .endgame-banner.victory { color: #ffd700; }
+      .endgame-banner.defeat { color: #ff4444; }
+      #endgame-winner-info {
+        font-size: 13px;
+        color: #aaa;
+        margin-bottom: 20px;
+      }
+      #endgame-scoreboard {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        margin-bottom: 20px;
+      }
+      #endgame-scoreboard th {
+        text-align: left;
+        color: #888;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        padding: 4px 8px;
+        border-bottom: 1px solid #333;
+      }
+      #endgame-scoreboard td {
+        padding: 5px 8px;
+        color: #cccccc;
+        border-bottom: 1px solid #222;
+      }
+      #endgame-scoreboard tr:last-child td { border-bottom: none; }
+      #endgame-scoreboard tr.endgame-local-player td {
+        color: #ffd700;
+        font-weight: bold;
+      }
+      #endgame-return-btn {
+        padding: 10px 28px;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        background: #2a5a2a;
+        color: #fff;
+        border: 1px solid #3a7a3a;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-bottom: 10px;
+      }
+      #endgame-return-btn:hover {
+        background: #3a7a3a;
+        border-color: #4a9a4a;
+      }
+      #endgame-countdown {
+        font-size: 10px;
+        color: #666;
+      }
+
+      /* App footer */
+      #app-footer {
+        width: 100%;
+        text-align: center;
+        font-family: 'Courier New', monospace;
+        font-size: 10px;
+        color: #555;
+        padding: 12px 8px;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        pointer-events: none;
+      }
+      #app-footer a {
+        color: #667;
+        text-decoration: underline;
+        pointer-events: auto;
+      }
+      #app-footer a:hover {
+        color: #99a;
+      }
     </style>
   </head>
   <body>
@@ -633,10 +1049,15 @@
           <h3>Resources</h3>
           <div class="inv-row"><span class="inv-icon">🪵 Wood</span><span class="inv-count" id="inv-wood">0</span></div>
           <div class="inv-row"><span class="inv-icon">🪨 Stone</span><span class="inv-count" id="inv-stone">0</span></div>
+          <div class="inv-row"><span class="inv-icon">🍖 Food</span><span class="inv-count" id="inv-food">0</span></div>
         </div>
         <div class="hud-section" id="territory-count">
           <h3>Territory</h3>
           <div style="font-size:16px;font-weight:bold;color:#ffd700">🏰 <span id="territory-count-val">0</span> tiles</div>
+        </div>
+        <div class="hud-section hidden" id="section-round-timer">
+          <h3>Round Timer</h3>
+          <div id="round-timer-display">∞</div>
         </div>
         <div class="hud-section" id="section-builders">
           <h3>Pawns</h3>
@@ -651,7 +1072,7 @@
             border:1px solid #444466;
             border-radius:4px;
             cursor:pointer;
-          ">🔨 Spawn Builder (10W, 5S)</button>
+          " title="+1 🍖/tick upkeep">🔨 Spawn Builder (8W, 4S) <span style="color:#ff9800;font-size:10px;">+1🍖</span></button>
         </div>
 
         <div class="hud-section" id="section-buildings">
@@ -680,7 +1101,7 @@
             border-radius:4px;
             cursor:pointer;
             margin-bottom:4px;
-          ">🛡 Spawn Defender (15W, 10S)</button>
+          " title="+2 🍖/tick upkeep">🛡 Spawn Defender (12W, 8S) <span style="color:#ff9800;font-size:10px;">+2🍖</span></button>
           <button id="spawn-attacker-btn" disabled style="
             width:100%;
             padding:6px 4px;
@@ -691,7 +1112,7 @@
             border:1px solid #444466;
             border-radius:4px;
             cursor:pointer;
-          ">⚔ Spawn Attacker (20W, 15S)</button>
+          " title="+3 🍖/tick upkeep">⚔ Spawn Attacker (16W, 12S) <span style="color:#ff9800;font-size:10px;">+3🍖</span></button>
           <button id="spawn-explorer-btn" disabled style="
             width:100%;
             padding:6px 4px;
@@ -703,7 +1124,7 @@
             border-radius:4px;
             cursor:pointer;
             margin-top:4px;
-          ">🔭 Spawn Explorer (12W, 8S)</button>
+          " title="+1 🍖/tick upkeep">🔭 Spawn Explorer (10W, 6S) <span style="color:#ff9800;font-size:10px;">+1🍖</span></button>
         </div>
         <div class="hud-section" id="section-day-phase">
           <h3>Time of Day</h3>
@@ -729,6 +1150,12 @@
             <label>Your Name</label>
             <input id="lobby-name-input" type="text" maxlength="20" placeholder="Explorer" autocomplete="off" />
           </div>
+        </div>
+
+        <div class="lobby-filter-tabs" id="lobby-filter-tabs">
+          <button class="lobby-filter-tab active" data-filter="all">All <span class="lobby-filter-badge" id="lobby-filter-count-all">0</span></button>
+          <button class="lobby-filter-tab" data-filter="waiting">Waiting <span class="lobby-filter-badge" id="lobby-filter-count-waiting">0</span></button>
+          <button class="lobby-filter-tab" data-filter="in_progress">In Progress <span class="lobby-filter-badge" id="lobby-filter-count-in_progress">0</span></button>
         </div>
 
         <table id="lobby-game-list">
@@ -793,6 +1220,24 @@
       </div>
     </div>
 
+    <!-- Waiting room overlay -->
+    <div id="waiting-room-overlay">
+      <div id="waiting-room-container">
+        <div id="waiting-room-header">
+          <h2 id="waiting-room-title">⏳ Waiting Room</h2>
+          <div id="waiting-room-settings"></div>
+        </div>
+        <ul id="waiting-room-player-list">
+          <li class="waiting-room-empty">Waiting for players…</li>
+        </ul>
+        <div id="waiting-room-actions">
+          <button id="waiting-room-leave-btn">Leave</button>
+          <button id="waiting-room-ready-btn">Ready</button>
+          <button id="waiting-room-start-btn" style="display:none">Start Game</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Name prompt modal (legacy, kept for fallback) -->
     <div id="name-prompt-overlay">
       <div id="name-prompt-box">
@@ -800,6 +1245,22 @@
         <input id="name-prompt-input" type="text" maxlength="20" placeholder="Explorer" autocomplete="off" />
         <br />
         <button id="name-prompt-submit">Join Game</button>
+      </div>
+    </div>
+
+    <!-- Outpost upgrade modal -->
+    <div id="upgrade-modal" class="modal-overlay">
+      <div class="modal-panel">
+        <h2>🏹 Upgrade Outpost</h2>
+        <p>Add ranged defense to this outpost.</p>
+        <div class="upgrade-cost">
+          💰 Cost: 40 🪵 + 30 🪨<br>
+          ⚔️ Damage: 12 &nbsp;|&nbsp; Range: 5 tiles
+        </div>
+        <div class="modal-actions">
+          <button id="upgrade-cancel-btn" class="modal-btn-cancel">Cancel</button>
+          <button id="upgrade-confirm-btn" class="modal-btn-confirm">Upgrade</button>
+        </div>
       </div>
     </div>
 
@@ -814,6 +1275,22 @@
         <div id="scoreboard-hint">Press Tab to close</div>
       </div>
     </div>
+
+    <!-- End-game results overlay -->
+    <div id="endgame-overlay">
+      <div id="endgame-panel">
+        <div id="endgame-banner" class="endgame-banner"></div>
+        <div id="endgame-winner-info"></div>
+        <table id="endgame-scoreboard">
+          <thead><tr><th>Rank</th><th>Player</th><th>Score</th></tr></thead>
+          <tbody id="endgame-scoreboard-body"></tbody>
+        </table>
+        <button id="endgame-return-btn">Return to Lobby</button>
+        <div id="endgame-countdown"></div>
+      </div>
+    </div>
+
+    <div id="app-footer"></div>
 
     <script type="module" src="/src/main.ts"></script>
   </body>
