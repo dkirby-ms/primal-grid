@@ -632,6 +632,119 @@
       .lobby-notification.error { background: #4a2a2a; color: #ff8888; border: 1px solid #663333; }
       .lobby-notification.info { background: #2a2a4a; color: #8888ff; border: 1px solid #333366; }
 
+      /* ---- Waiting room overlay ---- */
+      #waiting-room-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: #111;
+        z-index: 1100;
+        justify-content: center;
+        align-items: center;
+        font-family: 'Courier New', monospace;
+      }
+      #waiting-room-overlay.visible { display: flex; }
+      #waiting-room-container {
+        background: #1a1a2e;
+        border: 1px solid #444466;
+        border-radius: 8px;
+        padding: 24px 32px;
+        min-width: 480px;
+        max-width: 600px;
+        width: 90%;
+        color: #ccc;
+      }
+      #waiting-room-header {
+        text-align: center;
+        margin-bottom: 20px;
+      }
+      #waiting-room-header h2 {
+        color: #ffd700;
+        font-size: 1.5em;
+        margin: 0 0 8px;
+      }
+      #waiting-room-settings {
+        font-size: 0.85em;
+        color: #888;
+        margin-bottom: 16px;
+        text-align: center;
+      }
+      #waiting-room-settings span {
+        margin: 0 8px;
+      }
+      #waiting-room-player-list {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 20px;
+        border: 1px solid #333;
+        border-radius: 4px;
+        max-height: 240px;
+        overflow-y: auto;
+      }
+      .waiting-room-player {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        border-bottom: 1px solid #2a2a3a;
+        font-size: 0.95em;
+      }
+      .waiting-room-player:last-child { border-bottom: none; }
+      .waiting-room-player-name { color: #7ecfff; }
+      .waiting-room-player-status { font-size: 1.1em; }
+      .waiting-room-empty {
+        padding: 16px;
+        text-align: center;
+        color: #666;
+      }
+      #waiting-room-actions {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+      }
+      #waiting-room-ready-btn {
+        padding: 8px 20px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.95em;
+        background: #2a4a2a;
+        color: #44cc44;
+        border: 1px solid #44cc44;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      #waiting-room-ready-btn:hover { background: #3a5a3a; border-color: #66ff66; }
+      #waiting-room-ready-btn.ready {
+        background: #2a2a4a;
+        color: #7ecfff;
+        border-color: #7ecfff;
+      }
+      #waiting-room-start-btn {
+        padding: 8px 20px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.95em;
+        background: #4a3a1a;
+        color: #ffd700;
+        border: 1px solid #ffd700;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      #waiting-room-start-btn:hover:not(:disabled) { background: #5a4a2a; }
+      #waiting-room-start-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      #waiting-room-leave-btn {
+        padding: 8px 20px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.95em;
+        background: #3a2a2a;
+        color: #cc4444;
+        border: 1px solid #663333;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      #waiting-room-leave-btn:hover { background: #4a3a3a; border-color: #cc4444; }
+
       /* Scoreboard overlay */
       #scoreboard-overlay {
         display: none;
@@ -1049,6 +1162,24 @@
         </div>
 
         <div id="lobby-notification" class="lobby-notification"></div>
+      </div>
+    </div>
+
+    <!-- Waiting room overlay -->
+    <div id="waiting-room-overlay">
+      <div id="waiting-room-container">
+        <div id="waiting-room-header">
+          <h2 id="waiting-room-title">⏳ Waiting Room</h2>
+          <div id="waiting-room-settings"></div>
+        </div>
+        <ul id="waiting-room-player-list">
+          <li class="waiting-room-empty">Waiting for players…</li>
+        </ul>
+        <div id="waiting-room-actions">
+          <button id="waiting-room-leave-btn">Leave</button>
+          <button id="waiting-room-ready-btn">Ready</button>
+          <button id="waiting-room-start-btn" style="display:none">Start Game</button>
+        </div>
       </div>
     </div>
 

@@ -6,19 +6,18 @@ import type {
   GameUpdatedPayload,
   GameRemovedPayload,
   GameJoinedPayload,
-  GameStartedPayload,
   LobbyErrorPayload,
   CreateGamePayload,
 } from "@primal-grid/shared";
 import {
   CREATE_GAME, JOIN_GAME, LEAVE_GAME,
   GAME_LIST, GAME_UPDATED, GAME_REMOVED, GAME_JOINED,
-  GAME_STARTED, LOBBY_ERROR,
+  LOBBY_ERROR,
 } from "@primal-grid/shared";
 
 export type LobbyEvent =
   | { type: "join_game"; gameId: string; roomId: string }
-  | { type: "game_started"; gameId: string; roomId: string }
+  | { type: "waiting"; gameId: string; gameInfo: GameSessionInfo | null; isHost: boolean }
   | { type: "error"; message: string };
 
 type LobbyEventCallback = (event: LobbyEvent) => void;
@@ -144,13 +143,23 @@ export class LobbyScreen {
     });
 
     room.onMessage(GAME_JOINED, (data: GameJoinedPayload) => {
+      const wasCreating = this.isCreatingGame;
       this.clearCreateGameState();
       this.currentGameId = data.gameId;
-      this.eventCallback?.({ type: "join_game", gameId: data.gameId, roomId: data.roomId });
-    });
 
-    room.onMessage(GAME_STARTED, (data: GameStartedPayload) => {
-      this.eventCallback?.({ type: "game_started", gameId: data.gameId, roomId: data.roomId });
+      if (data.roomId) {
+        // Room already exists — join immediately (legacy / in-progress rejoin)
+        this.eventCallback?.({ type: "join_game", gameId: data.gameId, roomId: data.roomId });
+      } else {
+        // No roomId — game is in waiting phase
+        const gameInfo = this.games.get(data.gameId) ?? null;
+        this.eventCallback?.({
+          type: "waiting",
+          gameId: data.gameId,
+          gameInfo,
+          isHost: wasCreating,
+        });
+      }
     });
 
     room.onMessage(LOBBY_ERROR, (data: LobbyErrorPayload) => {
