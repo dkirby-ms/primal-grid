@@ -213,7 +213,7 @@ CPU names: Atlas, Borealis, Cypher, Draco, Echo, Fenrir, Golem.
 3. **Use building caps.** Factories boost your spawn caps by 2 each; use them to field more units once your wood/stone economy is stable.
 4. **Protect your builders.** Raptors hunt builders, so always have at least one Defender running before expanding toward forests.
 5. **Let builders fill gaps.** Your territory will have interior gaps — builders prioritize filling them first, which is smart and efficient.
-6. **Scout before you strike.** Send an Explorer to locate enemy bases before committing your Raiders.
+6. **Scout before you strike.** Send an Explorer to locate enemy bases before committing your Attackers.
 7. **Fear the night.** Night cuts your vision in half. Either pull back to defend or fortify before dusk falls.
 8. **Eliminate enemy bases early.** The longer they sit, the more dangerous units they spawn. A neglected Raider Camp will slowly drain your defenses.
 9. **Keep expanding for XP.** Claiming tiles earns XP and levels — a handy way to track your colony's growth.
