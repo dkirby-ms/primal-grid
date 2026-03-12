@@ -219,7 +219,7 @@ export const PAWN_TYPES: Record<string, PawnTypeDef> = {
     maxCount: 5,
     damage: 0,
     detectionRadius: 0,
-    maxStamina: 20,
+    maxStamina: 40,
     staminaCostPerMove: 1,
     staminaRegenPerTick: 2,
     exhaustedThreshold: 5,
@@ -235,7 +235,7 @@ export const PAWN_TYPES: Record<string, PawnTypeDef> = {
     maxCount: 3,
     damage: 20,
     detectionRadius: 5,
-    maxStamina: 25,
+    maxStamina: 50,
     staminaCostPerMove: 1,
     staminaRegenPerTick: 2,
     exhaustedThreshold: 5,
@@ -251,7 +251,7 @@ export const PAWN_TYPES: Record<string, PawnTypeDef> = {
     maxCount: 2,
     damage: 25,
     detectionRadius: 6,
-    maxStamina: 30,
+    maxStamina: 60,
     staminaCostPerMove: 1,
     staminaRegenPerTick: 2,
     exhaustedThreshold: 5,
@@ -267,7 +267,7 @@ export const PAWN_TYPES: Record<string, PawnTypeDef> = {
     maxCount: 3,
     damage: 0,
     detectionRadius: 0,
-    maxStamina: 30,
+    maxStamina: 60,
     staminaCostPerMove: 1,
     staminaRegenPerTick: 2,
     exhaustedThreshold: 5,
@@ -371,7 +371,7 @@ export const PAWN = {
   /** Radius to scan for build sites. */
   BUILD_SITE_SCAN_RADIUS: 8,
   /** Builder maximum stamina pool. */
-  BUILDER_MAX_STAMINA: 20,
+  BUILDER_MAX_STAMINA: 40,
   /** Builder stamina cost per tile moved. */
   BUILDER_STAMINA_COST_PER_MOVE: 1,
   /** Builder stamina recovered per AI tick when not moving. */
