@@ -50,6 +50,9 @@ const RECONNECT_GRACE_SECONDS = 60;
 /** How often (in ticks) to run elimination checks. */
 const ELIMINATION_CHECK_INTERVAL = 10;
 
+/** Grace period (in ticks) before elimination checks begin, giving players time to spawn pawns. */
+const ELIMINATION_GRACE_TICKS = 40;
+
 /** Seconds to keep room alive after game ends so clients can see results. */
 const AUTO_DISPOSE_SECONDS = 60;
 
@@ -806,7 +809,8 @@ export class GameRoom extends Room {
       }
     }
 
-    // --- Elimination check (every N ticks) ---
+    // --- Elimination check (every N ticks, after grace period) ---
+    if (this.state.tick < ELIMINATION_GRACE_TICKS) return;
     if (this.state.tick % ELIMINATION_CHECK_INTERVAL !== 0) return;
 
     // Build per-player tile counts (outside HQ) and living pawn counts
@@ -825,10 +829,10 @@ export class GameRoom extends Room {
       livingPawns.set(c.ownerID, (livingPawns.get(c.ownerID) ?? 0) + 1);
     });
 
-    // Check each non-eliminated human player
+    // Check each non-eliminated player (human and CPU)
     let newEliminations = false;
     this.state.players.forEach((player, playerId) => {
-      if (player.isEliminated || player.isCPU) return;
+      if (player.isEliminated) return;
 
       const outsideTiles = tilesOutsideHQ.get(playerId) ?? 0;
       const pawns = livingPawns.get(playerId) ?? 0;
@@ -853,7 +857,7 @@ export class GameRoom extends Room {
 
     const nonEliminated: PlayerState[] = [];
     this.state.players.forEach((player) => {
-      if (!player.isEliminated && !player.isCPU) nonEliminated.push(player);
+      if (!player.isEliminated) nonEliminated.push(player);
     });
 
     if (nonEliminated.length === 1) {
@@ -865,11 +869,10 @@ export class GameRoom extends Room {
     }
   }
 
-  /** Find the non-CPU player with the highest score. */
+  /** Find the player with the highest score (human or CPU). */
   private getHighestScorePlayer(): PlayerState | null {
     let best: PlayerState | null = null;
     this.state.players.forEach((player) => {
-      if (player.isCPU) return;
       if (!best || player.score > best.score) best = player;
     });
     return best;

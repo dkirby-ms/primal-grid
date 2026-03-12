@@ -32,6 +32,9 @@ import {
 /** Must match ELIMINATION_CHECK_INTERVAL in GameRoom.ts (10). */
 const ELIMINATION_CHECK_INTERVAL = 10;
 
+/** Must match ELIMINATION_GRACE_TICKS in GameRoom.ts (40). */
+const ELIMINATION_GRACE_TICKS = 40;
+
 // ── Private-method access via type assertion ───────────────────────
 
 type TestableGameRoom = GameRoom & {
@@ -142,9 +145,9 @@ function addPawn(
   return creature;
 }
 
-/** Set tick to the next elimination-check boundary. */
+/** Set tick to a value past the grace period that aligns to an elimination-check boundary. */
 function setTickToEliminationCheck(room: TestableGameRoom): void {
-  room.state.tick = ELIMINATION_CHECK_INTERVAL;
+  room.state.tick = ELIMINATION_GRACE_TICKS;
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -205,13 +208,15 @@ describe("Game Lifecycle — Elimination Detection", () => {
     expect(eliminationBroadcasts.length).toBe(0);
   });
 
-  it("does NOT eliminate CPU players", () => {
+  it("eliminates CPU players with no territory or pawns", () => {
+    addPlayer(room, "human", { hqX: 25, hqY: 25 });
+    claimNonHQTile(room, 30, 30, "human");
     const cpu = addPlayer(room, "cpu1", { isCPU: true });
-    // CPU has only HQ territory — should not be flagged
+    // CPU has only HQ territory — should be eliminated
     setTickToEliminationCheck(room);
     room.tickGameEndConditions();
 
-    expect(cpu.isEliminated).toBe(false);
+    expect(cpu.isEliminated).toBe(true);
   });
 
   it("broadcasts PLAYER_ELIMINATED on elimination", () => {
@@ -247,10 +252,20 @@ describe("Game Lifecycle — Elimination Detection", () => {
   it("only checks on ELIMINATION_CHECK_INTERVAL ticks", () => {
     addPlayer(room, "p1");
     // Tick not aligned to interval — elimination check should be skipped
-    room.state.tick = ELIMINATION_CHECK_INTERVAL + 1;
+    room.state.tick = ELIMINATION_GRACE_TICKS + 1;
     room.tickGameEndConditions();
 
     // Player was not eliminated because the interval check was skipped
+    const player = room.state.players.get("p1")!;
+    expect(player.isEliminated).toBe(false);
+  });
+
+  it("does not eliminate during grace period", () => {
+    addPlayer(room, "p1");
+    // Tick aligned to interval but within grace period
+    room.state.tick = ELIMINATION_CHECK_INTERVAL;
+    room.tickGameEndConditions();
+
     const player = room.state.players.get("p1")!;
     expect(player.isEliminated).toBe(false);
   });
@@ -620,7 +635,7 @@ describe("Game Lifecycle — Edge Cases", () => {
     expect(room.state.winnerId).toBe("solo");
   });
 
-  it("solo player with CPU enemies: CPU ignored for elimination", () => {
+  it("solo player with CPU enemies: CPU can be eliminated", () => {
     addPlayer(room, "human", { score: 50 });
     claimNonHQTile(room, 20, 20, "human");
     addPlayer(room, "cpu1", { isCPU: true, hqX: 25, hqY: 25 });
@@ -628,10 +643,13 @@ describe("Game Lifecycle — Edge Cases", () => {
     setTickToEliminationCheck(room);
     room.tickGameEndConditions();
 
-    // Human has territory, so not eliminated
-    expect(room.state.roundPhase).toBe("playing");
+    // CPU has no territory outside HQ → eliminated, human wins
+    const cpu = room.state.players.get("cpu1")!;
+    expect(cpu.isEliminated).toBe(true);
     const human = room.state.players.get("human")!;
     expect(human.isEliminated).toBe(false);
+    expect(room.state.roundPhase).toBe("ended");
+    expect(room.state.winnerId).toBe("human");
   });
 
   it("CPU-only room: checkCpuOnlyRoom disposes when no humans remain", () => {
@@ -739,5 +757,128 @@ describe("Game Lifecycle — Edge Cases", () => {
     expect(room.state.roundPhase).toBe("ended");
     expect(room.state.winnerId).toBe("");
     expect(room.state.endReason).toBe(GameEndReason.TimeUp);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// CPU Inclusion & Grace Period — Game-End Condition Fixes
+// ══════════════════════════════════════════════════════════════════════
+
+describe("Game Lifecycle — CPU Inclusion & Grace Period", () => {
+  let room: TestableGameRoom;
+
+  beforeEach(() => {
+    room = createRoom();
+  });
+
+  it("single human + CPU players should NOT end game immediately", () => {
+    // 1 human + 2 CPUs, all with non-HQ territory → nobody eliminated
+    addPlayer(room, "human1", { hqX: 10, hqY: 10 });
+    claimNonHQTile(room, 5, 5, "human1");
+
+    addPlayer(room, "cpu1", { isCPU: true, hqX: 20, hqY: 20 });
+    claimNonHQTile(room, 25, 25, "cpu1");
+
+    addPlayer(room, "cpu2", { isCPU: true, hqX: 15, hqY: 25 });
+    claimNonHQTile(room, 18, 28, "cpu2");
+
+    // Past grace period, on elimination check interval
+    room.state.tick = ELIMINATION_GRACE_TICKS;
+    room.tickGameEndConditions();
+
+    // All three alive → game continues
+    expect(room.state.roundPhase).toBe("playing");
+    expect(room.state.winnerId).toBe("");
+  });
+
+  it("game should not end while non-eliminated CPU players remain", () => {
+    // Human has no non-HQ tiles/pawns → will be eliminated
+    // Two CPUs alive with territory → game continues after human is eliminated
+    addPlayer(room, "human1", { hqX: 10, hqY: 10 });
+
+    addPlayer(room, "cpu1", { isCPU: true, hqX: 20, hqY: 20 });
+    claimNonHQTile(room, 25, 25, "cpu1");
+
+    addPlayer(room, "cpu2", { isCPU: true, hqX: 15, hqY: 25 });
+    claimNonHQTile(room, 18, 28, "cpu2");
+
+    room.state.tick = ELIMINATION_GRACE_TICKS;
+    room.tickGameEndConditions();
+
+    // Human eliminated, but 2 CPUs remain → game does NOT end
+    expect(room.state.players.get("human1")!.isEliminated).toBe(true);
+    expect(room.state.roundPhase).toBe("playing");
+  });
+
+  it("CPU players can be eliminated", () => {
+    // Human has territory → survives
+    addPlayer(room, "human1", { hqX: 10, hqY: 10 });
+    claimNonHQTile(room, 5, 5, "human1");
+
+    // CPU has 0 non-HQ tiles, 0 pawns → should be eliminated
+    const cpu = addPlayer(room, "cpu1", { isCPU: true, hqX: 20, hqY: 20 });
+
+    room.state.tick = ELIMINATION_GRACE_TICKS;
+    room.tickGameEndConditions();
+
+    expect(cpu.isEliminated).toBe(true);
+  });
+
+  it("elimination grace period protects new players", () => {
+    // Player with 0 non-HQ tiles, 0 pawns — would normally be eliminated
+    const player = addPlayer(room, "p1", { hqX: 10, hqY: 10 });
+
+    // Tick 10: within grace period (< 40), elimination should NOT fire
+    room.state.tick = ELIMINATION_CHECK_INTERVAL;
+    room.tickGameEndConditions();
+
+    expect(player.isEliminated).toBe(false);
+
+    // Tick 40: grace period expired (40 >= 40 && 40 % 10 === 0)
+    room.state.tick = ELIMINATION_GRACE_TICKS;
+    room.tickGameEndConditions();
+
+    expect(player.isEliminated).toBe(true);
+  });
+
+  it("game ends when only one player remains (human or CPU)", () => {
+    // Human already eliminated
+    addPlayer(room, "human1", { hqX: 10, hqY: 10, isEliminated: true });
+
+    // CPU1 alive with territory + pawn
+    addPlayer(room, "cpu1", { isCPU: true, hqX: 20, hqY: 20, score: 100 });
+    claimNonHQTile(room, 25, 25, "cpu1");
+    addPawn(room, "cpu-pawn1", "cpu1", 22, 22);
+
+    // CPU2 has 0 non-HQ tiles, 0 pawns → will be eliminated
+    addPlayer(room, "cpu2", { isCPU: true, hqX: 15, hqY: 25 });
+
+    room.state.tick = ELIMINATION_GRACE_TICKS;
+    room.tickGameEndConditions();
+
+    // cpu2 eliminated → only cpu1 remains → game ends with cpu1 as winner
+    expect(room.state.roundPhase).toBe("ended");
+    expect(room.state.winnerId).toBe("cpu1");
+    expect(room.state.endReason).toBe(GameEndReason.LastStanding);
+  });
+
+  it("single human with CPU opponents continues until actual victory", () => {
+    // Human has territory → survives
+    addPlayer(room, "human1", { hqX: 10, hqY: 10, score: 50 });
+    claimNonHQTile(room, 5, 5, "human1");
+
+    // Both CPUs have 0 non-HQ tiles, 0 pawns → will be eliminated
+    addPlayer(room, "cpu1", { isCPU: true, hqX: 20, hqY: 20 });
+    addPlayer(room, "cpu2", { isCPU: true, hqX: 15, hqY: 25 });
+
+    room.state.tick = ELIMINATION_GRACE_TICKS;
+    room.tickGameEndConditions();
+
+    // Both CPUs eliminated → human is last standing
+    expect(room.state.players.get("cpu1")!.isEliminated).toBe(true);
+    expect(room.state.players.get("cpu2")!.isEliminated).toBe(true);
+    expect(room.state.roundPhase).toBe("ended");
+    expect(room.state.winnerId).toBe("human1");
+    expect(room.state.endReason).toBe(GameEndReason.LastStanding);
   });
 });
