@@ -444,3 +444,17 @@ export const STARVATION = {
   /** HP damage dealt to one random pawn per income tick when food <= 0. */
   DAMAGE_PER_TICK: 5,
 } as const;
+
+/** Outpost upgrade constants. */
+export const OUTPOST_UPGRADE = {
+  /** Wood cost to upgrade an outpost. */
+  COST_WOOD: 40,
+  /** Stone cost to upgrade an outpost. */
+  COST_STONE: 30,
+  /** Attack range from upgraded outpost (Manhattan distance). */
+  ATTACK_RANGE: 5,
+  /** Damage dealt per attack. */
+  DAMAGE: 12,
+  /** Ticks between attacks. */
+  ATTACK_COOLDOWN_TICKS: 8,
+} as const;

@@ -5,6 +5,7 @@ export const SET_NAME = "set_name" as const;
 export const GAME_LOG = "game_log" as const;
 export const CHAT = "chat" as const;
 export const PLACE_BUILDING = "place_building" as const;
+export const UPGRADE_OUTPOST = "upgrade_outpost" as const;
 
 // --- Message payload interfaces ---
 
@@ -72,4 +73,10 @@ export interface PlaceBuildingPayload {
   x: number;
   y: number;
   buildingType: "farm" | "factory";
+}
+
+/** Payload for the UPGRADE_OUTPOST message. */
+export interface UpgradeOutpostPayload {
+  x: number;
+  y: number;
 }
