@@ -107,6 +107,12 @@ export function tickCreatureAI(
       moved = stepHerbivore(creature, state);
     } else if (creature.creatureType === "carnivore") {
       moved = stepCarnivore(creature, state, room);
+    } else if (creature.creatureType === "bird") {
+      moved = stepBird(creature, state);
+    } else if (creature.creatureType === "monkey") {
+      moved = stepMonkey(creature, state);
+    } else if (creature.creatureType === "spider") {
+      moved = stepSpider(creature, state, room);
     }
 
     // Stamina bookkeeping
@@ -233,6 +239,102 @@ function stepCarnivore(creature: CreatureState, state: GameState, room: Room): b
   }
 
   // Default: Idle briefly, then wander
+  return idleOrWander(creature, state);
+}
+
+function stepBird(creature: CreatureState, state: GameState): boolean {
+  const typeDef = CREATURE_TYPES["bird"];
+  
+  // Birds flee from carnivores and spiders
+  const nearestPredator = findNearestOfTypes(creature, state, ["carnivore", "spider"], typeDef.detectionRadius);
+  if (nearestPredator) {
+    creature.currentState = "flee";
+    return moveAwayFrom(creature, nearestPredator.x, nearestPredator.y, state);
+  }
+
+  // Eat when hungry (same as herbivore)
+  if (creature.hunger < CREATURE_AI.HUNGRY_THRESHOLD) {
+    const currentTile = state.getTile(creature.x, creature.y);
+    if (currentTile && currentTile.resourceType >= 0 && currentTile.resourceAmount > 0) {
+      creature.currentState = "eat";
+      currentTile.resourceAmount -= CREATURE_AI.GRAZE_AMOUNT;
+      creature.hunger = Math.min(creature.hunger + CREATURE_AI.EAT_RESTORE, typeDef.hunger);
+      if (currentTile.resourceAmount <= 0) {
+        currentTile.resourceAmount = 0;
+        currentTile.resourceType = -1;
+      }
+      return false;
+    }
+
+    const resourceTile = findNearestResource(creature, state, typeDef.detectionRadius);
+    if (resourceTile) {
+      creature.currentState = "wander";
+      return moveToward(creature, resourceTile.x, resourceTile.y, state);
+    }
+  }
+
+  return idleOrWander(creature, state);
+}
+
+function stepMonkey(creature: CreatureState, state: GameState): boolean {
+  const typeDef = CREATURE_TYPES["monkey"];
+  
+  // Monkeys flee from carnivores and spiders
+  const nearestPredator = findNearestOfTypes(creature, state, ["carnivore", "spider"], typeDef.detectionRadius);
+  if (nearestPredator) {
+    creature.currentState = "flee";
+    return moveAwayFrom(creature, nearestPredator.x, nearestPredator.y, state);
+  }
+
+  // Eat when hungry (same as herbivore)
+  if (creature.hunger < CREATURE_AI.HUNGRY_THRESHOLD) {
+    const currentTile = state.getTile(creature.x, creature.y);
+    if (currentTile && currentTile.resourceType >= 0 && currentTile.resourceAmount > 0) {
+      creature.currentState = "eat";
+      currentTile.resourceAmount -= CREATURE_AI.GRAZE_AMOUNT;
+      creature.hunger = Math.min(creature.hunger + CREATURE_AI.EAT_RESTORE, typeDef.hunger);
+      if (currentTile.resourceAmount <= 0) {
+        currentTile.resourceAmount = 0;
+        currentTile.resourceType = -1;
+      }
+      return false;
+    }
+
+    const resourceTile = findNearestResource(creature, state, typeDef.detectionRadius);
+    if (resourceTile) {
+      creature.currentState = "wander";
+      return moveToward(creature, resourceTile.x, resourceTile.y, state);
+    }
+  }
+
+  return idleOrWander(creature, state);
+}
+
+function stepSpider(creature: CreatureState, state: GameState, room: Room): boolean {
+  const typeDef = CREATURE_TYPES["spider"];
+
+  // Hunt herbivores, birds, monkeys, or builders when hungry
+  if (creature.hunger < CREATURE_AI.HUNGRY_THRESHOLD) {
+    const prey = findNearestPreyForSpider(creature, state, typeDef.detectionRadius);
+    if (prey) {
+      const dist = manhattan(creature.x, creature.y, prey.x, prey.y);
+      if (dist <= 1) {
+        creature.currentState = "eat";
+        prey.health -= CREATURE_AI.HUNT_DAMAGE;
+        creature.hunger = Math.min(creature.hunger + CREATURE_AI.EAT_RESTORE, typeDef.hunger);
+        if (prey.health <= 0) {
+          if (prey.creatureType === "pawn_builder" && prey.ownerID) {
+            room.broadcast?.("game_log", { message: "Builder killed by spider", type: "death" });
+          }
+          state.creatures.delete(prey.id);
+        }
+        return false;
+      }
+      creature.currentState = "hunt";
+      return moveToward(creature, prey.x, prey.y, state);
+    }
+  }
+
   return idleOrWander(creature, state);
 }
 
@@ -476,6 +578,53 @@ export function isTileOpenForCreature(state: GameState, creature: CreatureState,
 
 function manhattan(x1: number, y1: number, x2: number, y2: number): number {
   return Math.abs(x1 - x2) + Math.abs(y1 - y2);
+}
+
+/** Find nearest creature of any of the specified types within radius. */
+function findNearestOfTypes(
+  creature: CreatureState, state: GameState, targetTypes: string[], radius: number,
+): CreatureState | null {
+  let nearest: CreatureState | null = null;
+  let bestDist = Infinity;
+
+  state.creatures.forEach((other) => {
+    if (other.id === creature.id) return;
+    if (!targetTypes.includes(other.creatureType)) return;
+    const dist = manhattan(creature.x, creature.y, other.x, other.y);
+    if (dist <= radius && dist < bestDist) {
+      bestDist = dist;
+      nearest = other;
+    }
+  });
+
+  return nearest;
+}
+
+/** Find nearest valid prey for spiders: herbivores, birds, monkeys, and pawn_builders. */
+function findNearestPreyForSpider(
+  creature: CreatureState, state: GameState, radius: number,
+): CreatureState | null {
+  let nearest: CreatureState | null = null;
+  let bestDist = Infinity;
+
+  state.creatures.forEach((other) => {
+    if (other.id === creature.id) return;
+    const validPrey = other.creatureType === "herbivore" 
+      || other.creatureType === "bird" 
+      || other.creatureType === "monkey"
+      || other.creatureType === "pawn_builder";
+    if (!validPrey) return;
+    // Skip prey standing inside player territory (spider can't reach them)
+    const preyTile = state.getTile(other.x, other.y);
+    if (preyTile && preyTile.ownerID !== "") return;
+    const dist = manhattan(creature.x, creature.y, other.x, other.y);
+    if (dist <= radius && dist < bestDist) {
+      bestDist = dist;
+      nearest = other;
+    }
+  });
+
+  return nearest;
 }
 
 // Phase 5: A* pathfinding integration point

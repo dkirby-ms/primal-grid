@@ -39,9 +39,15 @@ export const RESOURCE_REGEN = {
 /** Creature spawning constants. */
 export const CREATURE_SPAWN = {
   /** Number of herbivores to spawn on 128×128 map. */
-  HERBIVORE_COUNT: 64,
+  HERBIVORE_COUNT: 40,
   /** Number of carnivores to spawn on 128×128 map. */
-  CARNIVORE_COUNT: 32,
+  CARNIVORE_COUNT: 20,
+  /** Number of birds to spawn on 128×128 map. */
+  BIRD_COUNT: 16,
+  /** Number of monkeys to spawn on 128×128 map. */
+  MONKEY_COUNT: 12,
+  /** Number of spiders to spawn on 128×128 map. */
+  SPIDER_COUNT: 8,
 } as const;
 
 /** Creature respawning constants. */
