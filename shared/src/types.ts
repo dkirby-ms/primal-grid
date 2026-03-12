@@ -42,6 +42,10 @@ export interface ITileState {
   isHQTerritory: boolean;
   /** Structure type on this tile ("" = none, "hq", "outpost", "farm"). */
   structureType: string;
+  /** Whether this outpost has been upgraded to ranged defense. */
+  upgraded: boolean;
+  /** Ticks remaining until upgraded outpost can attack again. */
+  attackCooldown: number;
 }
 
 /** Creature type identifiers. */

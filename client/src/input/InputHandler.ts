@@ -6,7 +6,9 @@ import type { Scoreboard } from '../ui/Scoreboard.js';
 import type { Camera } from '../renderer/Camera.js';
 import type { ChatPanel } from '../ui/ChatPanel.js';
 import type { GridRenderer } from '../renderer/GridRenderer.js';
+import type { UpgradeModal } from '../ui/UpgradeModal.js';
 import { TILE_SIZE } from '../renderer/GridRenderer.js';
+import { OUTPOST_UPGRADE } from '@primal-grid/shared';
 
 export class InputHandler {
   private room: Room;
@@ -19,8 +21,14 @@ export class InputHandler {
   private camera: Camera | null = null;
   private chatPanel: ChatPanel | null = null;
   private gridRenderer: GridRenderer | null = null;
+  private upgradeModal: UpgradeModal | null = null;
   private _keyHandler: ((e: KeyboardEvent) => void) | null = null;
   private _clickHandler: ((e: MouseEvent) => void) | null = null;
+  private _contextMenuHandler: ((e: MouseEvent) => void) | null = null;
+
+  // Track current player's resources for validation
+  private currentWood = 0;
+  private currentStone = 0;
 
   constructor(room: Room, worldContainer: Container, canvas: HTMLCanvasElement) {
     this.room = room;
@@ -28,6 +36,7 @@ export class InputHandler {
     this.canvas = canvas;
     this.bindKeys();
     this.bindClicks();
+    this.bindContextMenu();
     this.canvas.style.cursor = 'crosshair';
   }
 
@@ -69,6 +78,17 @@ export class InputHandler {
     this.gridRenderer = gridRenderer;
   }
 
+  /** Wire up the upgrade modal. */
+  public setUpgradeModal(upgradeModal: UpgradeModal): void {
+    this.upgradeModal = upgradeModal;
+  }
+
+  /** Update current resources (called by HUD when resources change). */
+  public updateResources(wood: number, stone: number): void {
+    this.currentWood = wood;
+    this.currentStone = stone;
+  }
+
   /** Convert screen coordinates to world tile coordinates. */
   private screenToTile(screenX: number, screenY: number): { x: number; y: number } | null {
     // Get the world container's global transform to account for camera pan/zoom
@@ -104,6 +124,37 @@ export class InputHandler {
     };
 
     this.canvas.addEventListener('click', this._clickHandler);
+  }
+
+  private bindContextMenu(): void {
+    this._contextMenuHandler = (e: MouseEvent) => {
+      e.preventDefault(); // Prevent default context menu
+
+      const rect = this.canvas.getBoundingClientRect();
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
+
+      const tile = this.screenToTile(screenX, screenY);
+      if (!tile) return;
+
+      // Get tile data
+      const tileData = this.gridRenderer?.getTileData(tile.x, tile.y);
+      if (!tileData) return;
+
+      // Check if this is an owned, non-upgraded outpost
+      const localPlayerId = this.hud?.localSessionId ?? '';
+      const isOwnedOutpost = tileData.owner === localPlayerId && tileData.structure === 'outpost';
+      const isNotUpgraded = !tileData.upgraded;
+      const hasEnoughResources = this.currentWood >= OUTPOST_UPGRADE.COST_WOOD && 
+                                  this.currentStone >= OUTPOST_UPGRADE.COST_STONE;
+
+      // Show upgrade modal if all conditions met
+      if (isOwnedOutpost && isNotUpgraded && hasEnoughResources) {
+        this.upgradeModal?.show(tile.x, tile.y);
+      }
+    };
+
+    this.canvas.addEventListener('contextmenu', this._contextMenuHandler);
   }
 
   private bindKeys(): void {
@@ -165,6 +216,10 @@ export class InputHandler {
     if (this._clickHandler) {
       this.canvas.removeEventListener('click', this._clickHandler);
       this._clickHandler = null;
+    }
+    if (this._contextMenuHandler) {
+      this.canvas.removeEventListener('contextmenu', this._contextMenuHandler);
+      this._contextMenuHandler = null;
     }
     if (this.hud) {
       this.hud.onPlacementModeChange = null;

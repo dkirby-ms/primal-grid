@@ -3465,3 +3465,40 @@ The pawnBuilder test referenced legacy `PAWN.BUILDER_COST_WOOD` (10) which diver
 - Spawn buttons should disable when `player.food <= 0` (server blocks it anyway)
 - BUILDING_INCOME type now includes `food: number` — update any client references
 - Spawn costs changed: builder 8W/4S, defender 12W/8S, attacker 16W/12S, explorer 10W/6S
+
+---
+
+## 2026-03-12: Sprint Round 2 — Triage & Implementation
+
+**Author:** Hal  
+**Status:** Approved  
+**Issues:** #161, #156, #154
+
+### Decision: #161 Deferred
+
+**Issue:** #161 (Outpost UI Expansion)  
+**Label Applied:** `squad:hal`, `epic`, `p2`, `backlog`  
+**Rationale:** Scope exceeds current sprint capacity. Deferred to backlog for future consideration after P1 core features stabilize.
+
+### Decision: #156 Approved (Partial)
+
+**Issue:** #156 (Resource Tuning & Balanced Costs)  
+**Label Applied:** `go:yes`, `p1`  
+**Scope:** Unit cost differentiation + expensive farms system  
+**Owner:** Pemulis (Systems Dev) & Gately (Game Dev)  
+**Status:** Implementation complete. PR #164 (Pemulis server-side) and PR #165 (Gately client-side) in review queue.  
+**Rationale:** Core to P1 progression. Resource economy stability unblocks other features.
+
+### Decision: #154 Outpost Upgrade Implementation
+
+**Issue:** #154 (Outpost Upgrade System)  
+**Status:** Parallel implementation in progress  
+**Server-side (Pemulis):** Foundation complete. Branch `squad/154-outpost-upgrades`, PR #164 ready.  
+**Client-side (Gately):** Rendering, modal UI, fog-of-war integration. PR #165 ready.  
+**Next:** Await Hal's review on both PRs. Merge to dev upon approval.
+
+### Cross-Agent Notes
+
+- Pemulis (Systems) and Gately (Game Dev) coordinating on shared outpost schema
+- Hal (Lead) reviewing both PRs in parallel; blockers to be noted in PR comments
+- No decision conflicts detected; implementation proceeding autonomously per charter

@@ -554,3 +554,37 @@ Hal completed comprehensive architecture design for single-tier outpost upgrade 
 **Note:** Resource tuning recommendation #4 suggests stone-heavy outpost upgrade (30W/50S instead of 40W/30S) as a late-game stone sink. This can be implemented post-Phase 1 if consensus reached.
 
 **Design Document:** .squad/decisions.md (merged from inbox)
+
+### Resource Tuning Implementation (2026-03-12, Issue #156, PR #164)
+
+**Implementation:** Implemented HIGH-priority resource tuning changes from approved analysis — unit cost differentiation and expensive farms.
+
+**Unit Cost Changes (Strategic Differentiation):**
+- **Builder:** 8W/4S → 10W/3S (wood-focused economy unit, cheap stone)
+- **Defender:** 12W/8S → 8W/12S (stone-heavy defensive unit, cheap wood)
+- **Attacker:** 16W/12S → 18W/10S (expensive wood, moderate stone)
+- **Farm:** 12W/6S → 18W/10S (50% cost increase)
+
+**Design Shift:** Broke the old linear cost progression model (builder < defender < attacker) in favor of differentiated resource profiles. Each unit now has a unique resource identity:
+- Defender-heavy strategies are stone-starved
+- Attacker-heavy strategies are wood-starved
+- Builders are balanced but not trivial
+- Farms are now a real strategic investment (delays food abundance, forces "farm vs defender" tradeoffs)
+
+**Test Updates:**
+- Updated food-economy.test.ts, pawnBuilder.test.ts to assert new cost values
+- Rewrote combat-system.test.ts to validate strategic differentiation rather than linear ordering (removed "defender > builder" and "attacker > defender" tests, replaced with explicit cost validation that documents the strategic identity of each unit type)
+- All resource-related tests pass (903 tests total, 2 pre-existing timeout failures unrelated)
+
+**Deferred Items:** Factory income buff, outpost upgrade cost adjustment, starting resource variance all deferred pending playtesting as approved by Hal.
+
+**Branch:** squad/156-resource-tuning → dev
+**Status:** PR #164 open, awaiting review
+
+### Cross-Agent Sync: Round 2 (2026-03-12)
+
+**Gately's Client Integration:** Gately completed client-side implementation for #154 (PR #165). Tested with `tile.upgraded` flag and ExploredTileCache integration. Waiting on server merge to dev before client testing. No blockers identified.
+
+**Hal's Review:** Both PR #164 (this work) and PR #165 (Gately) submitted to Hal for review. Will proceed to dev upon approval.
+
+**Decision Impact:** #156 approved (resource tuning unit costs + farms) — your implementation is locked in and documented in decisions.md. #161 deferred to backlog.

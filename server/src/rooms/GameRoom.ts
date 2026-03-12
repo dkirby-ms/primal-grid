@@ -16,7 +16,7 @@ import type { SerializedPlayerState } from "../persistence/playerStateSerde.js";
 import { tickCpuPlayers } from "./cpuPlayerAI.js";
 import {
   TICK_RATE, DEFAULT_MAP_SIZE, DEFAULT_MAP_SEED,
-  SPAWN_PAWN, SET_NAME, CHAT, CHAT_MAX_LENGTH, PLACE_BUILDING,
+  SPAWN_PAWN, SET_NAME, CHAT, CHAT_MAX_LENGTH, PLACE_BUILDING, UPGRADE_OUTPOST,
   ResourceType, TileType, isWaterTile,
   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
   CREATURE_AI, CREATURE_RESPAWN, TERRITORY,
@@ -25,11 +25,12 @@ import {
   PAWN_TYPES, DAY_NIGHT, FOG_OF_WAR,
   ENEMY_SPAWNING, ENEMY_BASE_TYPES,
   DayPhase,
-  isEnemyBase,
+  isEnemyBase, isEnemyMobile,
   CPU_PLAYER,
   STARVATION,
+  OUTPOST_UPGRADE,
 } from "@primal-grid/shared";
-import type { SpawnPawnPayload, SetNamePayload, ChatPayload, PlaceBuildingPayload } from "@primal-grid/shared";
+import type { SpawnPawnPayload, SetNamePayload, ChatPayload, PlaceBuildingPayload, UpgradeOutpostPayload } from "@primal-grid/shared";
 import { spawnHQ } from "./territory.js";
 
 const PLAYER_COLORS = [
@@ -105,6 +106,7 @@ export class GameRoom extends Room {
       this.tickStructureIncome();
       this.tickEnemyBaseSpawning();
       this.tickCombat();
+      this.tickOutpostAttacks();
       this.tickGraveDecay();
       this.tickFogOfWar();
       this.tickAutoSave();
@@ -125,6 +127,10 @@ export class GameRoom extends Room {
 
     this.onMessage(PLACE_BUILDING, (client, message: PlaceBuildingPayload) => {
       this.handlePlaceBuilding(client, message);
+    });
+
+    this.onMessage(UPGRADE_OUTPOST, (client, message: UpgradeOutpostPayload) => {
+      this.handleUpgradeOutpost(client, message);
     });
 
     console.log("[GameRoom] Room created.");
@@ -454,6 +460,63 @@ export class GameRoom extends Room {
     const displayName = player.displayName || client.sessionId;
     this.broadcast("game_log", {
       message: `${displayName} built a ${buildingType} at (${x}, ${y}).`,
+      type: "building",
+    });
+  }
+
+  private handleUpgradeOutpost(client: Client, message: UpgradeOutpostPayload) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) {
+      client.send("game_log", { message: "Player not found.", type: "error" });
+      return;
+    }
+
+    const { x, y } = message;
+
+    // Validate tile exists
+    const tile = this.state.getTile(x, y);
+    if (!tile) {
+      client.send("game_log", { message: "Invalid tile.", type: "error" });
+      return;
+    }
+
+    // Validate tile owned by player
+    if (tile.ownerID !== client.sessionId) {
+      client.send("game_log", { message: "You don't own this tile.", type: "error" });
+      return;
+    }
+
+    // Validate tile has outpost structure
+    if (tile.structureType !== "outpost") {
+      client.send("game_log", { message: "Tile does not have an outpost.", type: "error" });
+      return;
+    }
+
+    // Validate not already upgraded
+    if (tile.upgraded) {
+      client.send("game_log", { message: "Outpost is already upgraded.", type: "error" });
+      return;
+    }
+
+    // Validate player has resources
+    if (player.wood < OUTPOST_UPGRADE.COST_WOOD || player.stone < OUTPOST_UPGRADE.COST_STONE) {
+      client.send("game_log", {
+        message: `Not enough resources. Need ${OUTPOST_UPGRADE.COST_WOOD} wood + ${OUTPOST_UPGRADE.COST_STONE} stone.`,
+        type: "error",
+      });
+      return;
+    }
+
+    // Deduct resources
+    player.wood -= OUTPOST_UPGRADE.COST_WOOD;
+    player.stone -= OUTPOST_UPGRADE.COST_STONE;
+
+    // Upgrade outpost
+    tile.upgraded = true;
+
+    const displayName = player.displayName || client.sessionId;
+    this.broadcast("game_log", {
+      message: `${displayName} upgraded an outpost at (${x}, ${y}).`,
       type: "building",
     });
   }
@@ -873,6 +936,62 @@ export class GameRoom extends Room {
   /** Remove expired grave markers. */
   private tickGraveDecay() {
     tickGraveDecay(this.state, this.state.tick);
+  }
+
+  /** Handle upgraded outpost attacks. */
+  private tickOutpostAttacks() {
+    const len = this.state.tiles.length;
+    for (let i = 0; i < len; i++) {
+      const tile = this.state.tiles.at(i);
+      if (!tile || tile.structureType !== "outpost" || !tile.upgraded) continue;
+
+      // Decrement cooldown
+      if (tile.attackCooldown > 0) {
+        tile.attackCooldown--;
+        continue;
+      }
+
+      // Find closest enemy within range
+      let closestTarget: CreatureState | null = null;
+      let closestDist = Infinity;
+
+      this.state.creatures.forEach((creature) => {
+        // Only target enemy mobiles and enemy bases
+        if (!isEnemyMobile(creature.creatureType) && !isEnemyBase(creature.creatureType)) return;
+        if (creature.health <= 0) return;
+
+        const dist = Math.abs(creature.x - tile.x) + Math.abs(creature.y - tile.y);
+        if (dist <= OUTPOST_UPGRADE.ATTACK_RANGE && dist < closestDist) {
+          closestDist = dist;
+          closestTarget = creature;
+        }
+      });
+
+      // Attack target if found
+      if (closestTarget) {
+        const target: CreatureState = closestTarget; // Type assertion to fix TypeScript narrowing
+        target.health -= OUTPOST_UPGRADE.DAMAGE;
+        tile.attackCooldown = OUTPOST_UPGRADE.ATTACK_COOLDOWN_TICKS;
+
+        // Remove if dead
+        if (target.health <= 0) {
+          this.state.creatures.delete(target.id);
+          
+          // Handle base destruction
+          if (isEnemyBase(target.creatureType)) {
+            const baseType = ENEMY_BASE_TYPES[target.creatureType];
+            if (baseType && tile.ownerID) {
+              const player = this.state.players.get(tile.ownerID);
+              if (player) {
+                player.wood += baseType.reward.wood;
+                player.stone += baseType.reward.stone;
+                player.food += baseType.reward.food;
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   private tickCreatureAI() {

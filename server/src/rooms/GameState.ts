@@ -40,6 +40,12 @@ export class TileState extends Schema {
 
   @type("string")
   structureType: string = "";
+
+  @type("boolean")
+  upgraded: boolean = false;
+
+  @type("number")
+  attackCooldown: number = 0;
 }
 
 export class PlayerState extends Schema {

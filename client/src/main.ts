@@ -15,6 +15,7 @@ import { ChatPanel } from './ui/ChatPanel.js';
 import { HelpScreen } from './ui/HelpScreen.js';
 import { Scoreboard } from './ui/Scoreboard.js';
 import { LobbyScreen } from './ui/LobbyScreen.js';
+import { UpgradeModal } from './ui/UpgradeModal.js';
 import { connectToLobby, joinGameRoom, disconnect, onConnectionStatus, isDevMode, getRoom, loadReconnectToken, reconnectGameRoom, resetClient } from './network.js';
 import type { GameLogPayload } from '@primal-grid/shared';
 
@@ -154,6 +155,7 @@ function setupGameSession(
   const logEl = document.getElementById('game-log');
   if (logEl) gameLog.init(logEl);
   const chatPanel = new ChatPanel();
+  const upgradeModal = new UpgradeModal();
 
   const helpScreen = new HelpScreen(WIDTH, HEIGHT);
   app.stage.addChild(helpScreen.container);
@@ -206,6 +208,13 @@ function setupGameSession(
     input.setCamera(camera);
     input.setChatPanel(chatPanel);
     input.setGridRenderer(grid);
+    input.setUpgradeModal(upgradeModal);
+    
+    // Wire up HUD to notify InputHandler of resource changes
+    hud.onResourcesChange = (wood, stone) => input?.updateResources(wood, stone);
+    
+    // Wire up upgrade modal with room
+    upgradeModal.setRoom(r);
   }
 
   // Initial bind

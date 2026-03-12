@@ -427,3 +427,44 @@ Hal completed comprehensive architecture design for single-tier outpost upgrade 
 **Timeline:** Phase 2 est. 1.5 days. Phase 3 (integration testing) follows.
 
 **Design Document:** .squad/decisions.md (merged from inbox)
+
+### Outpost Upgrade System — Client Implementation (2026-03-11)
+
+Implemented client-side for Issue #154 — outpost upgrades with ranged defense. Built on Pemulis's server-side foundation.
+
+**Implementation Details:**
+- **Icon Rendering:** Extended STRUCTURE_ICONS map with `outpost_upgraded: '🏹'`. Modified updateBuildingIcon() to check `tile.upgraded` flag and select correct icon. Works for both visible tiles and fog-of-war silhouettes.
+- **Fog-of-War Support:** Updated ExploredTileCache interface to store `upgraded?: boolean`. Modified cacheTile() and fog rendering (setFogState) to show correct icon in explored fog (grayed 🏹 for upgraded, 🗼 for regular).
+- **Right-Click Interaction:** Added contextmenu event handler in InputHandler. On right-click, checks if tile is owned outpost, not upgraded, and player has enough resources (40W/30S). If valid, shows upgrade modal.
+- **Upgrade Modal UI:** Created UpgradeModal.ts component. Dark themed modal with gold border, shows cost, confirm/cancel buttons. Sends UPGRADE_OUTPOST message with {x, y} payload on confirm. Closes on Escape or backdrop click.
+- **Resource Tracking:** Extended HudDOM to expose `localSessionId` (public readonly) and fire `onResourcesChange` callback. InputHandler subscribes to track current wood/stone for validation.
+- **Wiring:** main.ts creates UpgradeModal, wires it to InputHandler and room. HUD callback updates InputHandler resources on every state sync.
+
+**Files Modified:**
+- `client/src/renderer/GridRenderer.ts`: Icon selection logic, getTileData() method, tileUpgraded cache
+- `client/src/renderer/ExploredTileCache.ts`: Added upgraded field to CachedTile interface
+- `client/src/ui/UpgradeModal.ts`: New modal component
+- `client/src/input/InputHandler.ts`: Right-click handler, resource tracking, modal wiring
+- `client/src/ui/HudDOM.ts`: Exposed localSessionId, added onResourcesChange callback
+- `client/src/main.ts`: Modal instantiation and wiring
+- `client/index.html`: Modal HTML + CSS (dark theme, gold accents)
+
+**Rendering Patterns Used:**
+- Pre-allocated overlay pattern (no dynamic Graphics allocation)
+- Tile metadata caching (owner, structure, upgraded) in Map<number, T>
+- Fog silhouette rendering with cached state
+- Modal overlay pattern (same as scoreboard/help screen)
+
+**Validation:** Only shows upgrade option if player owns tile, has outpost, outpost not upgraded, and has 40W+30S. Server validates again on UPGRADE_OUTPOST receipt.
+
+**Build Status:** ✅ Compiles cleanly, no TypeScript errors. Ready for integration testing with server.
+
+Refs #154. Ready to open PR targeting `dev`.
+
+### Cross-Agent Sync: Round 2 (2026-03-12)
+
+**Pemulis's Server Integration:** Pemulis completed server-side foundation for #154 on branch `squad/154-outpost-upgrades` (PR #164). Ready for client integration. Both PRs awaiting Hal's review before merge to dev.
+
+**Hal's Review:** Both PR #164 (Pemulis server) and PR #165 (this work) submitted to Hal for review. Will proceed to dev upon approval.
+
+**Decision Impact:** #156 approved (resource tuning unit costs + farms) — resource costs now locked in for validation. #161 deferred to backlog.
