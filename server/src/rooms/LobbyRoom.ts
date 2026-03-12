@@ -192,6 +192,9 @@ export class LobbyRoom extends Room {
       Math.max(typeof payload.cpuPlayers === "number" ? Math.floor(payload.cpuPlayers) : 0, 0),
       7
     );
+    const gameDuration = typeof payload.gameDuration === "number"
+      ? Math.max(Math.floor(payload.gameDuration), 0)
+      : 10;
 
     // Persist game session
     let gameInfo: GameSessionInfo;
@@ -226,6 +229,7 @@ export class LobbyRoom extends Room {
         maxPlayers,
         hostId: session.userId,
         cpuPlayers,
+        gameDuration,
       });
     } catch (err) {
       console.error(`[LobbyRoom] Failed to create GameRoom:`, err);
@@ -236,6 +240,9 @@ export class LobbyRoom extends Room {
 
     // Add to lobby state for all clients to see
     this.addGameToState(gameInfo);
+    // Set gameDuration on the lobby entry (not part of GameSessionInfo)
+    const lobbyEntry = this.state.games.get(gameInfo.id);
+    if (lobbyEntry) lobbyEntry.gameDuration = gameDuration;
 
     // Tell the creator they can now join
     client.send(GAME_JOINED, { gameId: gameInfo.id, roomId: gameRoom.roomId });
