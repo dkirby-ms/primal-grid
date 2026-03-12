@@ -1,3 +1,5 @@
+import type { GameEndReason } from "./types.js";
+
 // --- Message type constants ---
 
 export const SPAWN_PAWN = "spawn_pawn" as const;
@@ -6,6 +8,8 @@ export const GAME_LOG = "game_log" as const;
 export const CHAT = "chat" as const;
 export const PLACE_BUILDING = "place_building" as const;
 export const UPGRADE_OUTPOST = "upgrade_outpost" as const;
+export const GAME_ENDED = "game_ended" as const;
+export const PLAYER_ELIMINATED = "player_eliminated" as const;
 
 // --- Message payload interfaces ---
 
@@ -79,4 +83,18 @@ export interface PlaceBuildingPayload {
 export interface UpgradeOutpostPayload {
   x: number;
   y: number;
+}
+
+/** Payload broadcast when the game ends. */
+export interface GameEndedPayload {
+  winnerId: string;
+  winnerName: string;
+  reason: GameEndReason;
+  finalScores: Array<{ playerId: string; name: string; score: number }>;
+}
+
+/** Payload broadcast when a player is eliminated. */
+export interface PlayerEliminatedPayload {
+  playerId: string;
+  playerName: string;
 }

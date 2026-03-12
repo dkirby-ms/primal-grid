@@ -112,6 +112,13 @@ export enum FogState {
   Visible = 2,
 }
 
+/** Reasons a game can end. */
+export enum GameEndReason {
+  LastStanding = "last_standing",
+  TimeUp = "time_up",
+  Surrender = "surrender",
+}
+
 /** Day/night cycle phase identifiers. */
 export enum DayPhase {
   Dawn = "dawn",
@@ -144,4 +151,6 @@ export interface IPlayerState {
   level: number;
   /** Experience points earned this round. */
   xp: number;
+  /** Whether this player has been eliminated from the current game. */
+  isEliminated: boolean;
 }
