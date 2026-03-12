@@ -865,3 +865,11 @@ Created `.github/workflows/ci-failure-issue.yml` to automatically create GitHub 
 - Use temp files for complex markdown content to avoid shell expansion issues
 - Fetch only failed jobs from API to keep issue content focused
 - Limit output with `head -20` to prevent excessive issue length
+
+## 2026-03-12: Board Clearing Session — CI Failure Automation
+
+Implemented CI failure auto-issue workflow (#174, PR #175): GitHub Actions workflow monitors CI pipeline completions and automatically creates issues for failures with full context (workflow name, run ID, branch, commit SHA, failed job names). Includes duplicate detection to search for existing open issues and append comments instead of creating duplicates.
+
+Strategic decision: cherry-picked workflow directly to prod instead of dev→uat→prod pipeline. Justification: CI-only infrastructure changes are safe and benefit from immediate deployment for faster team feedback.
+
+Result: CI failures now tracked systematically in GitHub Issues. Team can triage via existing workflows instead of manual Actions tab monitoring.
