@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { PAWN_TYPES, BUILDING_COSTS, BUILDING_CAP_BONUS, PLACE_BUILDING, isEnemyBase } from '@primal-grid/shared';
+import { PAWN_TYPES, BUILDING_COSTS, BUILDING_CAP_BONUS, PLACE_BUILDING, TICK_RATE, isEnemyBase } from '@primal-grid/shared';
 import type { PlaceBuildingPayload } from '@primal-grid/shared';
 
 /**
@@ -16,6 +16,11 @@ export class HudDOM {
   private invFood: HTMLElement;
   private creatureCounts: HTMLElement;
   private dayPhaseDisplay: HTMLElement;
+
+  // Round timer
+  private roundTimerSection: HTMLElement;
+  private roundTimerDisplay: HTMLElement;
+  private lastTimerSecond = -1;
 
   // Builder panel
   private spawnBuilderBtn: HTMLButtonElement;
@@ -64,6 +69,10 @@ export class HudDOM {
     this.invFood = document.getElementById('inv-food')!;
     this.creatureCounts = document.getElementById('creature-counts')!;
     this.dayPhaseDisplay = document.getElementById('day-phase-display')!;
+
+    // Round timer elements
+    this.roundTimerSection = document.getElementById('section-round-timer')!;
+    this.roundTimerDisplay = document.getElementById('round-timer-display')!;
 
     // Builder panel elements
     this.builderCountEl = document.getElementById('builder-count')!;
@@ -228,6 +237,31 @@ export class HudDOM {
     this.dayPhaseDisplay.style.color = color;
   }
 
+  /** Update the round timer display. Throttled to 1 update/sec. */
+  public updateRoundTimer(roundTimer: number): void {
+    if (roundTimer === -1) {
+      this.roundTimerSection.classList.add('hidden');
+      this.lastTimerSecond = -1;
+      return;
+    }
+
+    const totalSeconds = Math.max(0, Math.ceil(roundTimer / TICK_RATE));
+
+    // Throttle: only update DOM when the displayed second changes
+    if (totalSeconds === this.lastTimerSecond) return;
+    this.lastTimerSecond = totalSeconds;
+
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    const display = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+    this.roundTimerSection.classList.remove('hidden');
+    this.roundTimerDisplay.textContent = `⏱ ${display}`;
+
+    // Flash when under 60 seconds
+    this.roundTimerSection.classList.toggle('urgent', totalSeconds < 60 && totalSeconds > 0);
+  }
+
   /** Listen to Colyseus state and update DOM elements for the local player. */
   public bindToRoom(room: Room): void {
     this.room = room;
@@ -237,6 +271,12 @@ export class HudDOM {
       const dayPhase = state['dayPhase'] as string | undefined;
       if (dayPhase) {
         this.updateDayPhase(dayPhase);
+      }
+
+      // Round timer
+      const roundTimer = state['roundTimer'] as number | undefined;
+      if (roundTimer !== undefined) {
+        this.updateRoundTimer(roundTimer);
       }
 
       const players = state['players'] as

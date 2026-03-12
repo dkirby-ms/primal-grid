@@ -61,6 +61,24 @@
         color: #ddd;
         font-weight: bold;
       }
+      /* Round timer */
+      #round-timer-display {
+        font-size: 18px;
+        font-weight: bold;
+        color: #e0e0e0;
+        text-align: center;
+        font-family: 'Courier New', monospace;
+        letter-spacing: 2px;
+      }
+      #section-round-timer.hidden { display: none; }
+      #section-round-timer.urgent #round-timer-display {
+        color: #ff4444;
+        animation: timer-flash 1s ease-in-out infinite;
+      }
+      @keyframes timer-flash {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+      }
       /* Creatures */
       .creature-row {
         font-size: 12px;
@@ -737,6 +755,10 @@
         <div class="hud-section" id="territory-count">
           <h3>Territory</h3>
           <div style="font-size:16px;font-weight:bold;color:#ffd700">🏰 <span id="territory-count-val">0</span> tiles</div>
+        </div>
+        <div class="hud-section hidden" id="section-round-timer">
+          <h3>Round Timer</h3>
+          <div id="round-timer-display">∞</div>
         </div>
         <div class="hud-section" id="section-builders">
           <h3>Pawns</h3>
