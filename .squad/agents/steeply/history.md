@@ -498,3 +498,15 @@ Hal completed comprehensive architecture design for single-tier outpost upgrade 
 - Resource tuning analysis available for future reference
 
 **Timeline:** Steeply begins Phase 3 after both Phase 1 and Phase 2 land (~3 days from sprint start).
+
+### Game Lifecycle — Sub-Issue 5 (#161) (2026-03-17)
+
+- **42 new tests** in `server/src/__tests__/game-lifecycle.test.ts`. Total suite: **944 tests, all passing.**
+- **Elimination detection:** Player marked eliminated only when 0 non-HQ tiles AND 0 living pawns. CPU players excluded from checks. Dead pawns (health ≤ 0) don't count. Already-eliminated players skip re-check.
+- **Victory conditions:** LastStanding (last non-eliminated human wins), TimeUp (highest score on timer expiry), simultaneous elimination (all eliminated → highest score wins).
+- **endGame() behavior:** Sets roundPhase="ended", winnerId, endReason. Builds finalScores sorted descending. Broadcasts GAME_ENDED + game_log. Notifies lobby. Schedules auto-dispose (60s). Idempotent — second call is no-op.
+- **Action gating:** handleSpawnPawn, handlePlaceBuilding, handleUpgradeOutpost all reject with appropriate error messages when roundPhase !== "playing" or player.isEliminated === true.
+- **Round timer:** Decrements each tick when > 0, stays at -1 for unlimited, triggers TimeUp at 0. Timer initialization converts gameDuration minutes → ticks via `minutes * 60 * TICK_RATE`.
+- **Edge cases tested:** Solo game elimination/timer, CPU-only room disposal, multi-player simultaneous elimination, early exit when game already ended.
+- **Test pattern:** `Object.create(GameRoom.prototype)` + `room.state = new GameState()` + `room.generateMap(seed)`. Mock `broadcast = vi.fn()` and `clock.setTimeout = vi.fn()`. Inline helpers (addPlayer, claimNonHQTile, addPawn, fakeClient). `ELIMINATION_CHECK_INTERVAL = 10` constant matches GameRoom internal.
+- **Key gotcha:** Tick 0 is a valid elimination-check boundary (0 % 10 === 0), so tests for non-elimination scenarios must ensure players have territory or pawns.
