@@ -1,3 +1,11 @@
+# Hal Outpost Design (already merged)
+
+---
+
+# Pemulis Resource Tuning (already merged)
+
+---
+
 ## 2026-01-24: Outpost Upgrade System — Design Spec
 
 **Author:** Hal  

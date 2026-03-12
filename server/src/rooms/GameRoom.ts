@@ -955,6 +955,9 @@ export class GameRoom extends Room {
     for (const [typeKey, count] of [
       ["herbivore", CREATURE_SPAWN.HERBIVORE_COUNT],
       ["carnivore", CREATURE_SPAWN.CARNIVORE_COUNT],
+      ["bird", CREATURE_SPAWN.BIRD_COUNT],
+      ["monkey", CREATURE_SPAWN.MONKEY_COUNT],
+      ["spider", CREATURE_SPAWN.SPIDER_COUNT],
     ] as const) {
       for (let i = 0; i < count; i++) {
         this.spawnOneCreature(typeKey);

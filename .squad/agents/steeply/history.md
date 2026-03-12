@@ -465,3 +465,36 @@ File: `server/src/__tests__/pawnCommands.test.ts`
 - 244 total tests, 0 failures
 - Baseline flaky test (`herbivore idle→wander transition`) pre-existing, not caused by this work
 
+
+---
+
+### Sprint Kickoff (2026-03-12) — Context Propagation
+
+**Upcoming Work — Outpost Upgrades Integration Testing (#154):**
+
+Hal completed comprehensive architecture design for single-tier outpost upgrade feature. **Phase 3 (Integration Testing)** will be assigned to Steeply after Phase 1 (server) and Phase 2 (client) land.
+
+**Phase 3 Tasks (Steeply, ~1 day):**
+1. End-to-end test: upgrade outpost → verify icon change (🗼 → 🏹) → verify ranged attack
+2. Balance validation: verify damage kills targets in expected hits
+   - Scouts: 2 hits (40 HP, 12 damage/hit)
+   - Raiders: 4 hits (40 HP)
+   - Swarms: 2 hits (15 HP)
+3. Edge cases:
+   - Insufficient resources (can't upgrade)
+   - Already upgraded outpost (can't re-upgrade)
+   - Non-owned outpost (can't upgrade others)
+   - Non-outpost structures (can't upgrade)
+4. Cooldown enforcement (8 ticks between attacks)
+5. Performance check: 10+ upgraded outposts + 50+ enemies (no lag)
+6. UI flow validation: right-click → modal → confirm/cancel
+
+**Current PRs Ready for Testing:**
+- **#163:** Creature types system (Pemulis)
+- **#162:** CI Discord notification fix (Marathe)
+
+**Decisions & Design:**
+- Outpost upgrade design merged into .squad/decisions.md
+- Resource tuning analysis available for future reference
+
+**Timeline:** Steeply begins Phase 3 after both Phase 1 and Phase 2 land (~3 days from sprint start).

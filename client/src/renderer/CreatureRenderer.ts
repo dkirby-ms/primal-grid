@@ -29,6 +29,9 @@ const STACK_OFFSETS: ReadonlyArray<Readonly<{ x: number; y: number }>> = [
 // Base colors per creature type
 const HERBIVORE_COLOR = 0x4caf50;
 const CARNIVORE_COLOR = 0xf44336;
+const BIRD_COLOR = 0x795548;
+const MONKEY_COLOR = 0x8d6e63;
+const SPIDER_COLOR = 0x424242;
 const BUILDER_COLOR = 0x42a5f5;
 const DEFENDER_COLOR = 0x2196f3;
 const ATTACKER_COLOR = 0xff9800;
@@ -37,9 +40,13 @@ const EXPLORER_COLOR = 0x66bb6a;
 // Brighter variants for Eat state
 const HERBIVORE_EAT_COLOR = 0x81c784;
 const CARNIVORE_EAT_COLOR = 0xef9a9a;
+const BIRD_EAT_COLOR = 0xa1887f;
+const MONKEY_EAT_COLOR = 0xa1887f;
+const SPIDER_EAT_COLOR = 0x616161;
 
 // Darker variants for Hunt state
 const CARNIVORE_HUNT_COLOR = 0xc62828;
+const SPIDER_HUNT_COLOR = 0x212121;
 
 // Exhausted state color (gray/muted)
 const EXHAUSTED_COLOR = 0x9e9e9e;
@@ -434,6 +441,19 @@ export class CreatureRenderer {
       if (currentState === 'eat') return CARNIVORE_EAT_COLOR;
       if (currentState === 'hunt') return CARNIVORE_HUNT_COLOR;
       return CARNIVORE_COLOR;
+    }
+    if (creatureType === 'bird') {
+      if (currentState === 'eat') return BIRD_EAT_COLOR;
+      return BIRD_COLOR;
+    }
+    if (creatureType === 'monkey') {
+      if (currentState === 'eat') return MONKEY_EAT_COLOR;
+      return MONKEY_COLOR;
+    }
+    if (creatureType === 'spider') {
+      if (currentState === 'eat') return SPIDER_EAT_COLOR;
+      if (currentState === 'hunt') return SPIDER_HUNT_COLOR;
+      return SPIDER_COLOR;
     }
     if (currentState === 'eat') return HERBIVORE_EAT_COLOR;
     return HERBIVORE_COLOR;

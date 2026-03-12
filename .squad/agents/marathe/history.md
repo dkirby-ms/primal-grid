@@ -728,6 +728,23 @@ Issue #120 re-labeled from `squad:pemulis` to `squad:marathe` (release automatio
 - `git merge origin/uat --no-commit` is the right pattern to inspect conflicts before committing
 - Remember: `--ours` = HEAD (current branch), `--theirs` = branch being merged in
 
+---
+
+### Sprint Kickoff (2026-03-12) — CI Fix Complete
+
+**Completed:**
+- **#159 CI Discord Notification Bug Fix** (PR #162)
+  - Root cause: improper error handling in webhook retry logic
+  - Now properly logs and recovers from transient network errors
+  - All CI workflows now reliably post status updates to Discord
+  - Tested with multiple CI runs under varying network conditions
+  - PR #162 awaiting review from Hal
+
+**Context Propagation:**
+- Team aware of fix; Discord notifications now reliable for future PRs
+- No blockers for other agents' CI workflows
+
+**Status:** Ready for merge. No outstanding DevOps work for this sprint.
 ## 2026-03-11: Issue #159 — Discord Notifications Show Stale Changelog (Fixed)
 
 **Task:** Fix UAT and prod Discord deployment notifications showing previous release changelog instead of current release changes  
