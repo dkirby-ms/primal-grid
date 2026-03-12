@@ -93,6 +93,53 @@ async function bootstrap(): Promise<void> {
   connectToLobbyAndShow(app, grid, camera, lobbyScreen);
 }
 
+function showJoinNamePrompt(lobby: Room, gameId: string, lobbyScreen: LobbyScreen): void {
+  const modal = document.getElementById('join-name-modal');
+  const input = document.getElementById('join-name-input') as HTMLInputElement;
+  const submitBtn = document.getElementById('join-name-submit-btn');
+  
+  if (!modal || !input || !submitBtn) {
+    console.error('[main] Join name modal elements not found');
+    // Fallback: join without name prompt
+    lobby.send(JOIN_GAME, { gameId });
+    return;
+  }
+
+  // Pre-fill with lobby name if available
+  const currentName = lobbyScreen.getDisplayName();
+  if (currentName) {
+    input.value = currentName;
+  }
+
+  // Show modal
+  modal.classList.add('visible');
+  input.focus();
+
+  const handleSubmit = () => {
+    const name = input.value.trim() || input.placeholder || "Explorer";
+    
+    // Send set_name then JOIN_GAME
+    lobby.send("set_name", { name });
+    lobby.send(JOIN_GAME, { gameId });
+
+    // Hide modal and clean up
+    modal.classList.remove('visible');
+    input.value = '';
+    submitBtn.removeEventListener('click', handleSubmit);
+    input.removeEventListener('keydown', handleKeyDown);
+  };
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
+  submitBtn.addEventListener('click', handleSubmit);
+  input.addEventListener('keydown', handleKeyDown);
+}
+
 async function connectToLobbyAndShow(
   app: Application,
   grid: GridRenderer,
@@ -115,7 +162,8 @@ async function connectToLobbyAndShow(
       cleanUrl.searchParams.delete("join");
       window.history.replaceState({}, "", cleanUrl.toString());
 
-      lobby.send(JOIN_GAME, { gameId: joinParam });
+      // Show name prompt modal before joining
+      showJoinNamePrompt(lobby, joinParam, lobbyScreen);
     }
 
     const waitingRoom = new WaitingRoom();
