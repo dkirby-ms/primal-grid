@@ -14,6 +14,7 @@ How to decide who handles what.
 | Testing | Steeply | Write tests, find edge cases, verify fixes, performance checks |
 | Scope & priorities | Hal | What to build next, trade-offs, decisions |
 | Community & Discord | Joelle | Discord notifications, release notes, README updates, player-facing comms |
+| Cross-project orchestration | Avril | Studio coordination, cross-project status, scaffolding |
 | Session logging | Scribe | Automatic — never needs routing |
 
 ## PR Review Gates
