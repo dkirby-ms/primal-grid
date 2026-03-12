@@ -8,11 +8,11 @@
  * 4. Fall back to random movement when fully surrounded by owned tiles
  */
 import { describe, it, expect, vi } from "vitest";
-import { GameState, CreatureState, TileState } from "../rooms/GameState.js";
+import { GameState, CreatureState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import { stepExplorer, countFrontierInDirection } from "../rooms/explorerAI.js";
 import {
-  TileType, PAWN_TYPES,
+  PAWN_TYPES,
 } from "@primal-grid/shared";
 
 // ── Helpers ─────────────────────────────────────────────────────────

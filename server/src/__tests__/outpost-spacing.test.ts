@@ -298,7 +298,7 @@ describe("Bug #139 — Outpost Spacing", () => {
       player.wood = 500;
       player.stone = 500;
 
-      const half = Math.floor(TERRITORY.STARTING_SIZE / 2);
+      const _half = Math.floor(TERRITORY.STARTING_SIZE / 2);
       const hqTile = { x: player.hqX, y: player.hqY };
 
       // Spawn 3 builders inside the HQ zone
@@ -334,7 +334,7 @@ describe("Bug #139 — Outpost Spacing", () => {
       const player = joinPlayer(room, "p1");
       const initialScore = player.score;
 
-      const half = Math.floor(TERRITORY.STARTING_SIZE / 2);
+      const _half = Math.floor(TERRITORY.STARTING_SIZE / 2);
       addBuilder(room, "b1", "p1", player.hqX, player.hqY);
 
       tickAI(room, 200);
