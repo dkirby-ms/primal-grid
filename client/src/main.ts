@@ -16,8 +16,10 @@ import { HelpScreen } from './ui/HelpScreen.js';
 import { Scoreboard } from './ui/Scoreboard.js';
 import { LobbyScreen } from './ui/LobbyScreen.js';
 import { UpgradeModal } from './ui/UpgradeModal.js';
-import { connectToLobby, joinGameRoom, disconnect, onConnectionStatus, isDevMode, getRoom, loadReconnectToken, reconnectGameRoom, resetClient } from './network.js';
-import type { GameLogPayload } from '@primal-grid/shared';
+import { EndGameScreen } from './ui/EndGameScreen.js';
+import { connectToLobby, joinGameRoom, leaveGame, disconnect, onConnectionStatus, isDevMode, getRoom, loadReconnectToken, reconnectGameRoom, resetClient } from './network.js';
+import type { GameLogPayload, GameEndedPayload, PlayerEliminatedPayload } from '@primal-grid/shared';
+import { GAME_ENDED, PLAYER_ELIMINATED } from '@primal-grid/shared';
 
 const WIDTH = 600;
 const HEIGHT = 600;
@@ -156,6 +158,14 @@ function setupGameSession(
   if (logEl) gameLog.init(logEl);
   const chatPanel = new ChatPanel();
   const upgradeModal = new UpgradeModal();
+  const endGameScreen = new EndGameScreen();
+
+  // Wire return-to-lobby flow
+  endGameScreen.onReturnToLobby(async () => {
+    await leaveGame();
+    setGameUIVisible(false);
+    connectToLobbyAndShow(app, grid, camera, lobbyScreen);
+  });
 
   const helpScreen = new HelpScreen(WIDTH, HEIGHT);
   app.stage.addChild(helpScreen.container);
@@ -195,6 +205,17 @@ function setupGameSession(
         });
       }
 
+      r.onMessage(GAME_ENDED, (data: GameEndedPayload) => {
+        const isWinner = data.winnerId === r.sessionId;
+        endGameScreen.show(isWinner, data, r.sessionId);
+      });
+
+      r.onMessage(PLAYER_ELIMINATED, (data: PlayerEliminatedPayload) => {
+        if (data.playerId === r.sessionId && logEl) {
+          gameLog.addEntry(`💀 You have been eliminated!`, 'death');
+        }
+      });
+
       const chatEl = document.getElementById('chat-panel');
       if (chatEl) chatPanel.init(chatEl, r);
     }
@@ -224,6 +245,7 @@ function setupGameSession(
   const unsubscribe = onConnectionStatus((status) => {
     if (status === 'disconnected') {
       // Final disconnect — tear down game session and return to lobby
+      endGameScreen.hide();
       if (input) input.dispose();
       input = null;
       app.ticker.remove(creatureTicker);
