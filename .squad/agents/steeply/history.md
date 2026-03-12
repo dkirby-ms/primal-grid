@@ -531,3 +531,18 @@ Hal completed comprehensive architecture design for single-tier outpost upgrade 
 - **Test file path:** `server/src/__tests__/game-lifecycle.test.ts` (now ~850 lines).
 
 - **Game-End Condition Test Coverage (2026-03-16):** Wrote 6 new test cases validating Pemulis's game-end bug fixes in `server/src/__tests__/game-lifecycle.test.ts`. Tests cover grace period behavior (ELIMINATION_GRACE_TICKS=40 blocks elimination at tick 10, allows at tick 40), CPU elimination (0 non-HQ tiles + 0 pawns), CPU victory (CPU can win LastStanding), and human victory after CPU elimination. Key pattern: set `room.state.tick = ELIMINATION_GRACE_TICKS` to bypass grace period and hit elimination check intervals. Noted behavioral gap: when host leaves waiting game, remaining players are stranded (no host transfer implemented). All 982/984 tests pass; 2 pre-existing 256×256 map timeouts unrelated to this work.
+
+### Test Fixture Pattern: GameRoom Auto-Spawn (2026-03-12)
+
+**Insight from Pemulis's starvation damage test fix:**
+GameRoom.onJoin() auto-spawns a starting explorer pawn. This affects all tests that create fixtures involving pawn targeting, damage distribution, or random selection. 
+
+**Key gotcha:** If a test creates additional pawns and assumes they are the only targets for effects (starvation damage, healing, etc.), the auto-spawned pawn will also be eligible for selection, making the outcome non-deterministic.
+
+**Pattern for deterministic tests:**
+- Remove or account for the auto-spawned starting pawn before assertions that depend on pawn count or single-target behavior
+- Reference: `.squad/skills/deterministic-random-tests/SKILL.md` (reusable pattern for future test design)
+- Example: food-economy.test.ts starvation damage test now removes the starting pawn before asserting target-specific health changes
+
+**Apply this insight to:** Any tests involving GameRoom fixture setup that interact with pawn spawning, targeting, or randomized effects.
+
