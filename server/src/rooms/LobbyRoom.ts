@@ -4,14 +4,14 @@ import type { GameSessionRepository } from "../persistence/GameSessionRepository
 import type { LobbyBridge } from "./LobbyBridge.js";
 import { LobbyState, LobbyGameEntry, LobbyPlayer } from "./LobbyState.js";
 import {
-  CREATE_GAME, JOIN_GAME, LEAVE_GAME, START_GAME,
-  GAME_LIST, GAME_JOINED, GAME_STARTED,
+  CREATE_GAME, JOIN_GAME, LEAVE_GAME, START_GAME, SET_READY,
+  GAME_LIST, GAME_JOINED, GAME_STARTED, GAME_PLAYERS,
   GAME_UPDATED, GAME_REMOVED, LOBBY_ERROR,
-  LOBBY_DEFAULTS, DEFAULT_MAP_SIZE,
+  LOBBY_DEFAULTS, DEFAULT_MAP_SIZE, CPU_PLAYER,
 } from "@primal-grid/shared";
 import type {
   CreateGamePayload, JoinGamePayload,
-  GameSessionInfo,
+  GameSessionInfo, PreGamePlayerInfo, GamePlayersPayload,
 } from "@primal-grid/shared";
 
 /** Maps Colyseus sessionId → authenticated user info. */
@@ -41,6 +41,10 @@ export class LobbyRoom extends Room {
   private sessions = new Map<string, LobbySession>();
   /** Maps gameId → Colyseus roomId for active GameRoom instances. */
   private gameRoomIds = new Map<string, string>();
+  /** Maps gameId → (sessionId → player info) for players in waiting games. */
+  private waitingPlayers = new Map<string, Map<string, PreGamePlayerInfo>>();
+  /** Maps gameId → creation options, stored until room is actually created on start. */
+  private pendingGameOptions = new Map<string, Record<string, unknown>>();
 
   override async onCreate(_options: Record<string, unknown>) {
     // Load persisted active games on startup
@@ -140,6 +144,10 @@ export class LobbyRoom extends Room {
       void this.handleStartGame(client);
     });
 
+    this.onMessage(SET_READY, (client, payload: { ready: boolean }) => {
+      this.handleSetReady(client, payload);
+    });
+
     this.onMessage("set_name", (client, payload: { name: string }) => {
       this.handleSetName(client, payload);
     });
@@ -192,6 +200,9 @@ export class LobbyRoom extends Room {
       Math.max(typeof payload.cpuPlayers === "number" ? Math.floor(payload.cpuPlayers) : 0, 0),
       7
     );
+    const gameDuration = typeof payload.gameDuration === "number"
+      ? Math.max(Math.floor(payload.gameDuration), 0)
+      : 10;
 
     // Persist game session
     let gameInfo: GameSessionInfo;
@@ -199,6 +210,7 @@ export class LobbyRoom extends Room {
       gameInfo = await this.gameSessionRepo.create(
         name, session.userId, session.displayName, maxPlayers, mapSize, mapSeed,
       );
+      gameInfo.cpuPlayers = cpuPlayers;
     } else {
       // In-memory fallback (testing)
       gameInfo = {
@@ -212,36 +224,50 @@ export class LobbyRoom extends Room {
         mapSize,
         mapSeed,
         createdAt: Date.now(),
+        cpuPlayers,
       };
     }
 
-    // Create the Colyseus GameRoom
-    let gameRoom;
-    try {
-      gameRoom = await matchMaker.createRoom("game", {
-        gameId: gameInfo.id,
-        gameName: name,
-        mapSize,
-        seed: mapSeed,
-        maxPlayers,
-        hostId: session.userId,
-        cpuPlayers,
-      });
-    } catch (err) {
-      console.error(`[LobbyRoom] Failed to create GameRoom:`, err);
-      return this.sendError(client, "Failed to create game room. Please try again.");
-    }
+    // Store creation options for deferred room creation on start
+    this.pendingGameOptions.set(gameInfo.id, {
+      gameId: gameInfo.id,
+      gameName: name,
+      mapSize,
+      seed: mapSeed,
+      maxPlayers,
+      hostId: session.userId,
+      cpuPlayers,
+      gameDuration,
+    });
 
-    this.gameRoomIds.set(gameInfo.id, gameRoom.roomId);
+    // Track the creator in the waiting players map
+    const playerMap = new Map<string, PreGamePlayerInfo>();
+    playerMap.set(client.sessionId, {
+      userId: session.userId,
+      displayName: session.displayName,
+      isReady: false,
+    });
+    this.waitingPlayers.set(gameInfo.id, playerMap);
 
     // Add to lobby state for all clients to see
     this.addGameToState(gameInfo);
+    // Set gameDuration on the lobby entry (not part of GameSessionInfo)
+    const lobbyEntry = this.state.games.get(gameInfo.id);
+    if (lobbyEntry) lobbyEntry.gameDuration = gameDuration;
 
-    // Tell the creator they can now join
-    client.send(GAME_JOINED, { gameId: gameInfo.id, roomId: gameRoom.roomId });
+    // Tell the creator they've joined the waiting game (no roomId yet)
+    client.send(GAME_JOINED, { gameId: gameInfo.id });
 
     // Update lobby player's active game
     if (lobbyPlayer) lobbyPlayer.activeGameId = gameInfo.id;
+
+    // Broadcast updated game list entry to all lobby clients
+    if (lobbyEntry) {
+      this.broadcast(GAME_UPDATED, { game: this.entryToInfo(lobbyEntry) });
+    }
+
+    // Send initial player list to the creator
+    this.broadcastGamePlayers(gameInfo.id);
 
     console.log(`[LobbyRoom] Game created: "${name}" (${gameInfo.id}) by ${session.displayName}`);
   }
@@ -260,14 +286,33 @@ export class LobbyRoom extends Room {
     if (entry.status !== "waiting") return this.sendError(client, "Game already started");
     if (entry.playerCount >= entry.maxPlayers) return this.sendError(client, "Game is full");
 
-    const roomId = this.gameRoomIds.get(gameId);
-    if (!roomId) return this.sendError(client, "Game room not available");
+    // Add joiner to the waiting players map
+    const playerMap = this.waitingPlayers.get(gameId);
+    if (!playerMap) return this.sendError(client, "Game not available");
 
-    // Tell the joiner the roomId (count will be updated by bridge event)
-    client.send(GAME_JOINED, { gameId, roomId });
+    playerMap.set(client.sessionId, {
+      userId: session.userId,
+      displayName: session.displayName,
+      isReady: false,
+    });
+
+    // Update player count in lobby state
+    entry.playerCount = playerMap.size;
+    if (this.gameSessionRepo) {
+      void this.gameSessionRepo.updatePlayerCount(gameId, entry.playerCount);
+    }
+
+    // Tell the joiner they've joined (no roomId during waiting phase)
+    client.send(GAME_JOINED, { gameId });
 
     // Update lobby player's active game
     if (lobbyPlayer) lobbyPlayer.activeGameId = gameId;
+
+    // Broadcast player list to all participants in this game
+    this.broadcastGamePlayers(gameId);
+
+    // Broadcast updated game entry to all lobby clients
+    this.broadcast(GAME_UPDATED, { game: this.entryToInfo(entry) });
 
     console.log(`[LobbyRoom] ${session.displayName} joined game "${entry.name}"`);
   }
@@ -278,19 +323,40 @@ export class LobbyRoom extends Room {
 
     const gameId = lobbyPlayer.activeGameId;
     const entry = this.state.games.get(gameId);
-    if (entry && entry.playerCount > 0) {
-      entry.playerCount -= 1;
 
-      // If host left and game hasn't started, remove it
+    // Remove from waiting players map if game is still in waiting phase
+    const playerMap = this.waitingPlayers.get(gameId);
+    if (playerMap) {
+      playerMap.delete(client.sessionId);
+
+      // If host left and no players remain, remove the game entirely
       const session = this.sessions.get(client.sessionId);
-      if (entry.status === "waiting" && session?.userId === entry.hostId && entry.playerCount === 0) {
+      if (entry && entry.status === "waiting" && session?.userId === entry.hostId && playerMap.size === 0) {
+        this.waitingPlayers.delete(gameId);
+        this.pendingGameOptions.delete(gameId);
         this.removeGame(gameId);
-      } else {
+        lobbyPlayer.activeGameId = "";
+        return;
+      }
+
+      // Update player count and broadcast
+      if (entry) {
+        entry.playerCount = playerMap.size;
         if (this.gameSessionRepo) {
           void this.gameSessionRepo.updatePlayerCount(gameId, entry.playerCount);
         }
         this.broadcast(GAME_UPDATED, { game: this.entryToInfo(entry) });
       }
+
+      // Broadcast updated player list to remaining participants
+      this.broadcastGamePlayers(gameId);
+    } else if (entry && entry.playerCount > 0) {
+      // Game is in_progress — decrement count via existing logic
+      entry.playerCount -= 1;
+      if (this.gameSessionRepo) {
+        void this.gameSessionRepo.updatePlayerCount(gameId, entry.playerCount);
+      }
+      this.broadcast(GAME_UPDATED, { game: this.entryToInfo(entry) });
     }
 
     lobbyPlayer.activeGameId = "";
@@ -309,21 +375,67 @@ export class LobbyRoom extends Room {
     if (entry.hostId !== session.userId) return this.sendError(client, "Only the host can start");
     if (entry.status !== "waiting") return this.sendError(client, "Game already started");
 
+    // NOW create the Colyseus GameRoom
+    const roomOptions = this.pendingGameOptions.get(gameId);
+    if (!roomOptions) return this.sendError(client, "Game configuration not found");
+
+    let gameRoom;
+    try {
+      gameRoom = await matchMaker.createRoom("game", roomOptions);
+    } catch (err) {
+      console.error(`[LobbyRoom] Failed to create GameRoom:`, err);
+      return this.sendError(client, "Failed to create game room. Please try again.");
+    }
+
+    this.gameRoomIds.set(gameId, gameRoom.roomId);
+
     // Transition to in_progress
     entry.status = "in_progress";
     if (this.gameSessionRepo) {
       await this.gameSessionRepo.updateStatus(gameId, "in_progress");
     }
 
-    const roomId = this.gameRoomIds.get(gameId);
     this.broadcast(GAME_UPDATED, { game: this.entryToInfo(entry) });
 
-    // Notify all players in this game
-    if (roomId) {
-      this.broadcast(GAME_STARTED, { gameId, roomId });
+    // Notify all players in this game with the roomId so they can join the GameRoom
+    const playerMap = this.waitingPlayers.get(gameId);
+    if (playerMap) {
+      for (const [sessionId] of playerMap) {
+        const playerClient = this.clients.find((c) => c.sessionId === sessionId);
+        if (playerClient) {
+          playerClient.send(GAME_STARTED, { gameId, roomId: gameRoom.roomId });
+        }
+      }
     }
 
+    // Clean up waiting state
+    this.waitingPlayers.delete(gameId);
+    this.pendingGameOptions.delete(gameId);
+
     console.log(`[LobbyRoom] Game "${entry.name}" started by ${session.displayName}`);
+  }
+
+  private handleSetReady(client: Client, payload: { ready: boolean }) {
+    const session = this.sessions.get(client.sessionId);
+    if (!session) return this.sendError(client, "Not authenticated");
+
+    const lobbyPlayer = this.state.players.get(client.sessionId);
+    if (!lobbyPlayer?.activeGameId) return this.sendError(client, "Not in a game");
+
+    const gameId = lobbyPlayer.activeGameId;
+    const entry = this.state.games.get(gameId);
+    if (!entry || entry.status !== "waiting") return;
+
+    const playerMap = this.waitingPlayers.get(gameId);
+    if (!playerMap) return;
+
+    const playerInfo = playerMap.get(client.sessionId);
+    if (!playerInfo) return;
+
+    playerInfo.isReady = !!payload.ready;
+
+    // Broadcast updated player list to all participants
+    this.broadcastGamePlayers(gameId);
   }
 
   private handleSetName(client: Client, payload: { name: string }) {
@@ -352,9 +464,40 @@ export class LobbyRoom extends Room {
     this.removeGame(gameId);
   }
 
+  /** Send GAME_PLAYERS to all participants currently in a waiting game. */
+  private broadcastGamePlayers(gameId: string) {
+    const playerMap = this.waitingPlayers.get(gameId);
+    if (!playerMap) return;
+
+    const players: PreGamePlayerInfo[] = Array.from(playerMap.values());
+
+    // Append synthetic CPU player entries so they appear in the waiting room
+    const options = this.pendingGameOptions.get(gameId);
+    const cpuCount = typeof options?.cpuPlayers === "number" ? options.cpuPlayers : 0;
+    for (let i = 0; i < cpuCount; i++) {
+      players.push({
+        userId: `${CPU_PLAYER.SESSION_PREFIX}${i}`,
+        displayName: CPU_PLAYER.NAMES[i] ?? `CPU ${i + 1}`,
+        isReady: true,
+        isCPU: true,
+      });
+    }
+
+    const payload: GamePlayersPayload = { gameId, players };
+
+    for (const [sessionId] of playerMap) {
+      const playerClient = this.clients.find((c) => c.sessionId === sessionId);
+      if (playerClient) {
+        playerClient.send(GAME_PLAYERS, payload);
+      }
+    }
+  }
+
   private removeGame(gameId: string) {
     this.state.games.delete(gameId);
     this.gameRoomIds.delete(gameId);
+    this.waitingPlayers.delete(gameId);
+    this.pendingGameOptions.delete(gameId);
     this.broadcast(GAME_REMOVED, { gameId });
     if (this.gameSessionRepo) {
       void this.gameSessionRepo.delete(gameId);
@@ -373,6 +516,7 @@ export class LobbyRoom extends Room {
     entry.mapSize = info.mapSize;
     entry.mapSeed = info.mapSeed;
     entry.createdAt = info.createdAt;
+    entry.cpuPlayers = info.cpuPlayers ?? 0;
     this.state.games.set(info.id, entry);
   }
 
@@ -388,6 +532,7 @@ export class LobbyRoom extends Room {
       mapSize: entry.mapSize,
       mapSeed: entry.mapSeed,
       createdAt: entry.createdAt,
+      cpuPlayers: entry.cpuPlayers,
     };
   }
 

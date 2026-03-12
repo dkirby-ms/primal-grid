@@ -20,6 +20,7 @@ export function isWaterTile(tileType: TileType): boolean {
 export enum ResourceType {
   Wood = 0,
   Stone = 1,
+  Food = 2,
 }
 
 /** State of a single tile on the grid. */
@@ -41,6 +42,10 @@ export interface ITileState {
   isHQTerritory: boolean;
   /** Structure type on this tile ("" = none, "hq", "outpost", "farm"). */
   structureType: string;
+  /** Whether this outpost has been upgraded to ranged defense. */
+  upgraded: boolean;
+  /** Ticks remaining until upgraded outpost can attack again. */
+  attackCooldown: number;
 }
 
 /** Creature type identifiers. */
@@ -107,6 +112,13 @@ export enum FogState {
   Visible = 2,
 }
 
+/** Reasons a game can end. */
+export enum GameEndReason {
+  LastStanding = "last_standing",
+  TimeUp = "time_up",
+  Surrender = "surrender",
+}
+
 /** Day/night cycle phase identifiers. */
 export enum DayPhase {
   Dawn = "dawn",
@@ -128,6 +140,7 @@ export interface IPlayerState {
   color: string;
   wood: number;
   stone: number;
+  food: number;
   /** X coordinate of player's HQ tile. */
   hqX: number;
   /** Y coordinate of player's HQ tile. */
@@ -138,4 +151,6 @@ export interface IPlayerState {
   level: number;
   /** Experience points earned this round. */
   xp: number;
+  /** Whether this player has been eliminated from the current game. */
+  isEliminated: boolean;
 }

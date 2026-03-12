@@ -1,4 +1,98 @@
-<<<<<<< uat
+# Hal Outpost Design (already merged)
+
+---
+
+# Pemulis Resource Tuning (already merged)
+
+---
+
+## 2026-01-24: Outpost Upgrade System — Design Spec
+
+**Author:** Hal  
+**Issue:** #154  
+**Date:** 2026-01-24  
+**Status:** Design Complete, Ready for Implementation  
+
+### Overview
+
+Players can upgrade outposts by spending wood and stone. Upgraded outposts gain ranged attack capability that automatically targets and damages nearby enemies. This is a late-game defensive investment — expensive but powerful.
+
+### Design Decisions
+
+**1. Single-Tier Upgrade (v1)**
+- Outposts have one upgrade level only — regular → upgraded
+- Simplest implementation that delivers core value
+- Can add tiers later if demand exists
+
+**2. Upgrade Cost: 40W + 30S**
+- Significant late-game investment (~4x farm cost)
+- Strategic decision point, not spam-able
+
+**3. Attack Range: 5 tiles (Manhattan distance)**
+- Matches defender pawn detection radius
+- Positions upgraded outposts as "automated defender"
+- Enemies can still approach from blind spots
+
+**4. Damage: 12 per attack**
+- Lower than pawns (20–25 damage) — outposts are stationary
+- Kills swarm in 2 hits, scouts in 2 hits, raiders in 4 hits
+- Effective for defense without replacing mobile units
+
+**5. Attack Interval: 8 ticks (2 seconds at 4 ticks/sec)**
+- Consistent with TILE_ATTACK_COOLDOWN_TICKS
+- Responsive but not machine-gun rate
+
+**6. Target Priority: Closest enemy**
+- Simplest algorithm — no state inspection
+- Works well for area denial
+- Predictable behavior for players
+
+**7. Upgrade Trigger: Right-click owned outpost**
+- Two-step flow: right-click → confirm modal
+- Fits "interact with structure" pattern
+- Keeps HUD clean
+
+**8. Visual Distinction: 🗼 → 🏹**
+- Clear signal that upgraded outpost has ranged attack
+- Minimal rendering change: check `tile.upgraded` flag
+
+### Constants
+
+Add to `shared/src/constants.ts`:
+
+```typescript
+export const OUTPOST_UPGRADE = {
+  COST_WOOD: 40,
+  COST_STONE: 30,
+  ATTACK_RANGE: 5,
+  DAMAGE: 12,
+  ATTACK_COOLDOWN_TICKS: 8,
+} as const;
+```
+
+### Schema & Implementation
+
+- **TileState:** Add `upgraded: boolean = false` field
+- **Server Handler:** Validate ownership, upgrade status, resources; deduct cost; set flag
+- **Combat Loop:** New `tickOutpostAttacks()` function that targets closest enemy within range
+- **Client Rendering:** Update STRUCTURE_ICONS mapping; check `tile.upgraded` for icon selection
+- **Client UI:** Right-click handler opens upgrade modal; confirm sends UPGRADE_OUTPOST message
+- **Message Protocol:** Define UPGRADE_OUTPOST and UpgradeOutpostPayload
+
+### Scope
+
+**In Scope (v1):** Single-tier, fixed cost, ranged attack (5 tiles, 12 damage, 8 tick interval), closest-enemy targeting, icon change, right-click UI.
+
+**Deferred (v2+):** Multi-tier upgrades, target priority options, attack visual effects, upgrade progress, sound, structure damage, upgrade other buildings, downgrade mechanics.
+
+### Sign-off
+
+This design delivers a simple, effective outpost upgrade system that adds strategic depth without feature creep. All implementation questions answered. Ready to ship.
+
+— Hal
+
+---
+
 ## 2026-03-12: Soft-Preference Anti-Clustering for All Pawn Types
 
 **Author:** Pemulis  
@@ -40,9 +134,10 @@ All pawn anti-clustering uses **soft preferences**, never hard blocks:
 
 ---
 
-=======
 ## 2026-03-09T23:43:26Z: Prod Default Branch & Squad File Policy
->>>>>>> prod
+
+---
+
 ## 2026-03-10T12:14Z: Filter CI, Chore & Squad Commits from Changelogs
 
 **Author:** dkirby-ms (via Copilot)  
@@ -2919,3 +3014,1144 @@ Added `MIN_OUTPOST_SPACING = 4` (Manhattan distance) in `shared/src/constants.ts
 - **Balance:** Spacing of 4 tiles means roughly 1 outpost per ~20 tiles of territory. Tunable via constant.
 
 ---
+
+---
+
+## Territory Color Rendering: Local Gold + Dynamic Player Colors
+
+**Author:** Gately (Game Dev)  
+**Date:** 2026-03-12  
+**PR:** #142  
+
+### Decision
+
+Territory borders and HQ fills use a two-tier color scheme:
+- **Local player:** Always gold (`0xffd700`) — special "your territory" highlight
+- **Other players:** Their actual assigned color from `playerColors` map (populated from server state sync)
+- **Fallback:** Red (`#e6194b`) if a player's color is missing (defensive)
+
+### Rationale
+
+Previously, all non-local territory was hard-coded red. This made multiplayer unreadable — you couldn't tell which opponent owned which territory. The `playerColors` map was already populated and used correctly for claiming animations, just not for owned territory rendering.
+
+### Implications
+
+- Any new territory visual (influence zones, contested tiles, etc.) should use `playerColors.get(ownerID)` for non-local players, not a hard-coded color.
+- Gold is reserved for local player territory rendering. Don't assign gold as a player color on the server side.
+
+---
+
+## Decision: Explicit Map Setup in Tests
+
+**Date:** 2024-10-24
+**Status:** Proposed
+**Author:** Hal (Lead)
+
+## Context
+Tests relying on `generateMap(seed)` were flaky because specific tile properties (like `shapeHP` or `TileType`) at specific coordinates depended on random generation logic, which changes with algorithm tweaks.
+
+## Decision
+When testing game logic (like building placement or pathfinding) that depends on specific tile states, tests MUST explicitly set the tile properties rather than hoping a seeded map provides them.
+
+## Consequences
+- Tests become deterministic and resilient to map generation changes.
+- Reduces "flaky" failures in CI.
+
+---
+
+## HUD Performance: Full Tile Scan for Cap Bonus
+
+**Author:** Hal  
+**Date:** 2026-03-12  
+**Status:** Accepted (with risk)  
+**PR:** #148  
+
+### Context
+PR #148 implements building spawn cap bonuses. To display the bonus in the HUD (`HudDOM.ts`), the client iterates over all map tiles (`128x128 = 16,384`) on every Colyseus state change to count the player's buildings.
+
+### Decision
+Accepted this O(N) approach for now to keep implementation simple and stateless.
+
+### Risks
+- **Performance:** Iterating 16k schema objects on the main thread every state patch could cause frame drops on lower-end devices or if the update rate is high.
+- **Mitigation:** If performance becomes an issue, we will refactor to:
+  1. Maintain a `buildingCount` in the `Player` schema (server-side tracking).
+  2. Or cache the value in `HudDOM` and only update when `tiles` change specifically (using `tiles.onAdd`/`onRemove`).
+
+---
+
+## Building Cap Bonus — Global Per-Type Pattern
+
+**Author:** Gately  
+**Date:** 2026-03-14  
+**Status:** Implemented (PR #148)
+
+### Decision
+
+Building cap bonuses apply **globally to all pawn types equally** (not per-type). The effective cap is `baseCap + totalBuildingBonus` where bonus sums across all buildings regardless of type.
+
+### Implications
+
+- Any new building type that grants cap bonus should add an entry to `BUILDING_CAP_BONUS` in `shared/src/constants.ts`
+- `getBuildingCapBonus()` in GameRoom.ts handles the server-side sum; client mirrors it by iterating tiles
+- Both server (`spawnPawnCore`) and client (`updateSpawnButton` + HUD display) must use the same formula
+- Starting cap (13 total across types) is unchanged — progression through buildings is optional
+
+---
+
+## Explorer AI: Frontier Ray Scanning
+
+**Author:** Pemulis  
+**Date:** 2026-03-12  
+**Status:** Implemented  
+**PR:** #149  
+**Issue:** #147
+
+### Context
+
+Explorers scored only the 4 adjacent tiles. Deep inside owned territory, all neighbors are owned and score equally — resulting in random wandering that doesn't explore.
+
+### Decision
+
+Added a **frontier ray scan** to explorer scoring: for each candidate direction, cast a ray of up to `PAWN_TYPES.explorer.visionRadius` (6) tiles and count unclaimed tiles. This bonus steers explorers through owned territory toward the frontier.
+
+Scoring weights:
+- Unclaimed adjacent tile: +3 (was +2)
+- Owned adjacent tile: +1
+- Unclaimed tiles along ray: +1 each (0-6 range)
+- Away from same-owner explorers: +2 (was +1)
+
+### Implications
+
+- `countFrontierInDirection()` is exported from `explorerAI.ts` for direct testing
+- Performance: O(4 × scan_radius) per explorer per tick — negligible for max 3 explorers per player
+- If future pawn types need frontier awareness, reuse `countFrontierInDirection`
+
+---
+
+## Footer: Build-Time Injection via Vite
+
+**Author:** Hal (Lead)  
+**Date:** 2026-03-14  
+**Status:** Implemented (PR #151, merged to dev)  
+**Issue:** #150
+
+### Decision
+
+Footer UI is populated at build time via Vite `define` plugin:
+- **Version:** Injected from root `package.json` version field
+- **Date:** Injected from build timestamp (ISO 8601)
+- **Issues link:** Hardcoded to GitHub issues page
+
+### Implementation
+
+- Footer `<div id="footer">` in `client/index.html` (no additional markup)
+- Vite `define` config in `vite.config.ts` exposes `__VERSION__` and `__BUILD_DATE__`
+- Footer populated in `client/src/main.ts` on app startup
+- CSS styling: flex, bottom-aligned, minimal footprint
+
+### Rationale
+
+- **Build-time injection:** Avoids runtime lookups; version/date are immutable per build
+- **Vite integration:** Standard approach for frontend metadata; no extra API/config needed
+- **Non-intrusive:** Footer uses document flow; no changes to game canvas or HUD layout
+
+### Implications
+
+- Deployments include updated footer automatically
+- Version in footer always matches package.json of that build
+- Future additions (commit hash, branch name) reuse same pattern
+
+---
+
+## 2026-03-14: Food HUD Display — Client Decision
+
+**Author:** Gately (Game Dev)  
+**Context:** Issue #21 — Food resource client-side implementation
+
+
+Food is displayed as a simple count in the inventory section using the 🍖 emoji, following the exact same pattern as wood (🪵) and stone (🪨). No food upkeep rate display in HUD for now — just the raw count. The starvation state is communicated purely through spawn button disabling (all buttons disabled when food ≤ 0).
+
+
+- Keeping the food display consistent with wood/stone avoids visual clutter and complexity
+- Players learn food's role through gameplay (watching it decrease as they spawn units)
+- Spawn button disabling is the clearest feedback for "you can't do this"
+- A food upkeep rate indicator or starvation warning overlay could be added later if playtesting shows players don't understand the mechanic
+
+
+- If we add a "food upkeep rate" indicator later, it should go below the food count in the inventory section or as a tooltip
+- Any future resource types should follow this same pattern: emoji + name + count span with `id="inv-{resource}"`
+
+---
+
+## 2026-03-14: Food Economy Design
+
+**Author:** Hal (Lead)  
+**Status:** Proposed  
+**Issue:** #21 — New resource type: food  
+
+---
+
+
+Food is the third resource. It acts as a **unit allowance**: every pawn consumes food each income tick. Farms switch from producing wood/stone to producing food. This creates a clear build decision: farms feed your army, factories fund your economy.
+
+---
+
+
+| Constant | Value |
+|---|---|
+| Starting wood | 25 |
+| Starting stone | 15 |
+| HQ income (per 10s tick) | 2W, 2S |
+| Farm cost | 12W, 6S |
+| Farm income | 1W, 1S |
+| Factory cost | 20W, 12S |
+| Factory income | 2W, 1S |
+| Builder spawn | 10W, 5S |
+| Defender spawn | 15W, 10S |
+| Attacker spawn | 20W, 15S |
+| Explorer spawn | 12W, 8S |
+
+Income tick interval: 40 ticks (10 seconds at 4 ticks/sec).
+
+---
+
+
+
+| Resource | Old | New |
+|---|---|---|
+| Wood | 25 | 25 (unchanged) |
+| Stone | 15 | 15 (unchanged) |
+| Food | — | **50** |
+
+Rationale: 50 food gives ~4 income ticks of runway with 2 builders before needing farms.
+
+
+| Pawn Type | Food/tick | Rationale |
+|---|---|---|
+| Builder | 1 | Cheap utility unit |
+| Explorer | 1 | Cheap scout |
+| Defender | 2 | Combat unit, moderate upkeep |
+| Attacker | 3 | Strongest unit, highest upkeep |
+
+
+One-time wood/stone costs reduced slightly since food adds ongoing cost:
+
+| Pawn Type | Old Cost | New Cost |
+|---|---|---|
+| Builder | 10W, 5S | **8W, 4S** |
+| Defender | 15W, 10S | **12W, 8S** |
+| Attacker | 20W, 15S | **16W, 12S** |
+| Explorer | 12W, 8S | **10W, 6S** |
+
+
+| Source | Wood | Stone | Food |
+|---|---|---|---|
+| HQ (per income tick) | 2 | 2 | **2** |
+
+
+| Building | Cost | Income (OLD) | Income (NEW) |
+|---|---|---|---|
+| Farm | 12W, 6S | 1W, 1S | **0W, 0S, 2 food** |
+| Factory | 20W, 12S | 2W, 1S | **2W, 1S, 0 food** |
+
+Farms now **exclusively produce food**. Factories remain the resource engine. Clear role split.
+
+
+| Base Type | Old Reward | New Reward |
+|---|---|---|
+| Raider Camp | 15W, 10S | 15W, 10S, **5 food** |
+| Hive | 10W, 5S | 10W, 5S, **5 food** |
+| Fortress | 25W, 20S | 25W, 20S, **10 food** |
+
+
+When `player.food <= 0`:
+1. **Cannot spawn new units** (spawn blocked)
+2. **One random pawn takes 5 HP damage per income tick** (starvation damage)
+3. Food can go negative (debt accrues from upkeep)
+
+Constant: `STARVATION_DAMAGE_PER_TICK = 5`
+
+---
+
+
+**Early game (0 farms, 2 builders):**  
+HQ income: 2 food/tick. Upkeep: 2 food/tick. Break-even. Starting 50 food provides buffer.
+
+**Mid game (3 farms, 2 builders + 1 defender + 1 attacker + 1 explorer):**  
+Income: 2 + 6 = 8 food/tick. Upkeep: 2 + 2 + 3 + 1 = 8 food/tick. Balanced.
+
+**Late game (max army: 5B + 3D + 2A + 3E = 20 food/tick):**  
+Needs: (20 − 2) / 2 = 9 farms. Significant investment — correct tension.
+
+---
+
+
+
+```typescript
+// Add Food to ResourceType enum
+export enum ResourceType {
+  Wood = 0,
+  Stone = 1,
+  Food = 2,
+}
+
+// Add food to IPlayerState
+export interface IPlayerState {
+  // ... existing fields ...
+  food: number;
+}
+```
+
+
+```typescript
+// Add to TERRITORY
+STARTING_FOOD: 50,
+
+// Add foodUpkeep to PawnTypeDef interface
+export interface PawnTypeDef {
+  // ... existing fields ...
+  readonly foodUpkeep: number;
+}
+
+// Update PAWN_TYPES entries with new costs + foodUpkeep
+builder:  { cost: { wood: 8, stone: 4 },  foodUpkeep: 1, ... },
+defender: { cost: { wood: 12, stone: 8 }, foodUpkeep: 2, ... },
+attacker: { cost: { wood: 16, stone: 12 }, foodUpkeep: 3, ... },
+explorer: { cost: { wood: 10, stone: 6 }, foodUpkeep: 1, ... },
+
+// Add HQ_FOOD to STRUCTURE_INCOME
+HQ_FOOD: 2,
+
+// Update BUILDING_INCOME types to include food
+export const BUILDING_INCOME: Record<string, { wood: number; stone: number; food: number }> = {
+  farm:    { wood: 0, stone: 0, food: 2 },
+  factory: { wood: 2, stone: 1, food: 0 },
+};
+
+// Update EnemyBaseTypeDef.reward to include food
+reward: { wood: number; stone: number; food: number };
+
+// Update ENEMY_BASE_TYPES rewards
+enemy_base_raider:   { ..., reward: { wood: 15, stone: 10, food: 5 } },
+enemy_base_hive:     { ..., reward: { wood: 10, stone: 5,  food: 5 } },
+enemy_base_fortress: { ..., reward: { wood: 25, stone: 20, food: 10 } },
+
+// New constant
+export const STARVATION = {
+  DAMAGE_PER_TICK: 5,
+} as const;
+```
+
+
+```typescript
+// Add to PlayerState class
+@type("number")
+food: number = 0;
+```
+
+---
+
+
+
+```typescript
+player.food = TERRITORY.STARTING_FOOD;
+```
+
+
+1. After granting HQ wood/stone, also grant HQ food:
+   ```typescript
+   player.food += STRUCTURE_INCOME.HQ_FOOD;
+   ```
+
+2. Building income loop — farm now gives food, not wood/stone:
+   ```typescript
+   player.food += count * income.food;
+   ```
+
+3. **NEW: Deduct food upkeep** — after income, iterate all pawns and deduct:
+   ```typescript
+   let totalUpkeep = 0;
+   this.state.creatures.forEach((c) => {
+     if (c.ownerID === playerId && c.pawnType !== "") {
+       const def = PAWN_TYPES[c.pawnType];
+       if (def) totalUpkeep += def.foodUpkeep;
+     }
+   });
+   player.food -= totalUpkeep;
+   ```
+
+4. **NEW: Starvation check** — if `player.food <= 0`, deal 5 HP to one random pawn:
+   ```typescript
+   if (player.food <= 0) {
+     // Find random pawn owned by player, deal STARVATION.DAMAGE_PER_TICK
+   }
+   ```
+
+
+Add food check — block spawning if `player.food <= 0`:
+```typescript
+if (player.food <= 0) return null;
+```
+
+
+Where enemy base rewards are granted, also add:
+```typescript
+player.food += reward.food;
+```
+
+---
+
+
+
+Add food display next to wood/stone in inventory section:
+```html
+<span class="inv-count" id="inv-food">0</span>
+```
+Use 🍖 or 🌾 emoji as icon.
+
+
+1. Add `invFood` DOM element reference and `currentFood` field
+2. In `bindToRoom()`, listen for `player.food` changes and update display
+3. In spawn button validation (`updateSpawnButton()`), also check `currentFood > 0`
+4. Show food cost breakdown on spawn buttons is NOT needed (food is upkeep, not spawn cost) — but show current food upkeep rate somewhere in HUD
+
+
+Update button labels to still show wood/stone cost (unchanged UX — food is ongoing, not per-spawn):
+```
+🔨 Spawn Builder (8W, 4S)
+🛡 Spawn Defender (12W, 8S)
+⚔ Spawn Attacker (16W, 12S)
+🔭 Spawn Explorer (10W, 6S)
+```
+
+Add a tooltip or subtitle showing food upkeep: `+1 🍖/tick`
+
+---
+
+
+- `Food` resource type in enum, schema, constants
+- `food` field on PlayerState (server + client sync)
+- Starting food amount (50)
+- HQ passive food income (2/tick)
+- Farm produces food (2/tick), no longer wood/stone
+- Food upkeep per unit per income tick
+- Starvation mechanic (block spawn + pawn damage at food ≤ 0)
+- Rebalanced pawn spawn costs (wood/stone)
+- Food in enemy base rewards
+- HUD display of food count
+- Spawn button disable when food ≤ 0
+
+- Food as tile resource (harvestable from map) — not needed, farms are enough
+- Granary building (food storage bonus) — future feature
+- Food trading between players — future multiplayer feature
+- Food-specific research/upgrades — future progression feature
+- CPU player food AI — CPU already uses `spawnPawnCore`, food check is automatic
+
+---
+
+## 2026-03-14: Food Economy Implementation Notes
+
+**Author:** Pemulis  
+**Status:** Implemented  
+**Issue:** #21
+
+
+The starvation check subtracts HP but does not handle death inline — existing creature death logic in the tick loop handles removal when health <= 0. This keeps death handling in one place.
+
+Per the design spec, food debt accrues from upkeep. The starvation check fires when `player.food <= 0`, not just `== 0`. This means large armies can rack up food debt that must be repaid before spawning resumes.
+
+Added `food` to `SerializedPlayerState` and the serde functions. Reconnecting players restore their food balance. Legacy saves without food deserialize with `food: 0` (safe — triggers starvation on next tick, which is correct behavior for a returning player who had no food field).
+
+The pawnBuilder test referenced legacy `PAWN.BUILDER_COST_WOOD` (10) which diverged from actual `PAWN_TYPES.builder.cost.wood` (now 8). Updated test to use `PAWN_TYPES` directly.
+
+- `player.food` is now synced via Colyseus schema — listen for changes like wood/stone
+- Spawn buttons should disable when `player.food <= 0` (server blocks it anyway)
+- BUILDING_INCOME type now includes `food: number` — update any client references
+- Spawn costs changed: builder 8W/4S, defender 12W/8S, attacker 16W/12S, explorer 10W/6S
+
+---
+
+## 2026-03-12: Sprint Round 2 — Triage & Implementation
+
+**Author:** Hal  
+**Status:** Approved  
+**Issues:** #161, #156, #154
+
+### Decision: #161 Deferred
+
+**Issue:** #161 (Outpost UI Expansion)  
+**Label Applied:** `squad:hal`, `epic`, `p2`, `backlog`  
+**Rationale:** Scope exceeds current sprint capacity. Deferred to backlog for future consideration after P1 core features stabilize.
+
+### Decision: #156 Approved (Partial)
+
+**Issue:** #156 (Resource Tuning & Balanced Costs)  
+**Label Applied:** `go:yes`, `p1`  
+**Scope:** Unit cost differentiation + expensive farms system  
+**Owner:** Pemulis (Systems Dev) & Gately (Game Dev)  
+**Status:** Implementation complete. PR #164 (Pemulis server-side) and PR #165 (Gately client-side) in review queue.  
+**Rationale:** Core to P1 progression. Resource economy stability unblocks other features.
+
+### Decision: #154 Outpost Upgrade Implementation
+
+**Issue:** #154 (Outpost Upgrade System)  
+**Status:** Parallel implementation in progress  
+**Server-side (Pemulis):** Foundation complete. Branch `squad/154-outpost-upgrades`, PR #164 ready.  
+**Client-side (Gately):** Rendering, modal UI, fog-of-war integration. PR #165 ready.  
+**Next:** Await Hal's review on both PRs. Merge to dev upon approval.
+
+### Cross-Agent Notes
+
+- Pemulis (Systems) and Gately (Game Dev) coordinating on shared outpost schema
+- Hal (Lead) reviewing both PRs in parallel; blockers to be noted in PR comments
+- No decision conflicts detected; implementation proceeding autonomously per charter
+# Epic #161 Decomposition: Game Start, End, Win/Loss Conditions
+
+**Author:** Hal (Lead)
+**Date:** 2026-03-16
+**Epic:** [Feature] Games need a start and end. There should be win and loss conditions and game-ending events.
+**Status:** Decomposition Complete — Ready for Implementation
+
+---
+
+## Architecture Assessment
+
+The lobby/game lifecycle is already 60% built. Key infrastructure that exists:
+
+- **LobbyRoom** handles CREATE_GAME, JOIN_GAME, START_GAME — full pre-game flow ✅
+- **LobbyGameEntry** has `status: "waiting" | "in_progress" | "ended"` ✅
+- **LobbyBridge** already notifies lobby when GameRoom disposes (`game_ended` event) ✅
+- **GameState** has `roundPhase` ("playing") and `roundTimer` (-1) — **unused but ready** ✅
+- **Reconnection** with 60s grace period ✅
+- **Client** has lobby UI with game list, create, join, start ✅
+
+**What's missing:**
+- No win/loss condition checking in simulation loop
+- No `winnerId` or `endReason` on GameState
+- No GAME_ENDED message from GameRoom to clients
+- No end-game UI (victory/defeat screen)
+- No client-side "return to lobby" flow after game ends
+- `roundTimer` never decremented
+- `roundPhase` hardcoded to "playing", never transitions
+
+**Design decision:** The lobby already IS the pre-game phase. No need for a PRE_GAME state inside GameRoom. Players wait in the lobby, host starts, everyone joins GameRoom and gameplay begins immediately. This keeps the existing architecture intact.
+
+---
+
+## Win/Loss Conditions (Simplest Viable Set)
+
+1. **Elimination:** A player loses all territory outside their 3×3 HQ zone → functionally dead (can't spawn pawns, no income, no expansion). Mark as eliminated.
+2. **Last Standing (multiplayer):** Last non-eliminated human player wins.
+3. **Time Limit:** If `gameDuration > 0`, countdown from configured minutes. When timer hits 0, highest score wins.
+4. **Solo Survival:** Single-player game with CPU enemies — survive the full timer duration to win.
+
+**What we're NOT building:** Matchmaking, ranked play, ELO, spectator mode, replays, achievements, leaderboards. All deferred.
+
+---
+
+## Sub-Issues
+
+### Sub-Issue 1: Game Lifecycle Schema & End-Game Messages
+
+**Title:** `[#161] Add game lifecycle schema fields and end-game message protocol`
+**Owner:** Pemulis (Systems/Backend)
+**Priority:** P1 — Foundation, must be first
+**Dependencies:** None
+**Estimate:** ~0.5 day
+
+**What to build:**
+
+1. **shared/src/types.ts** — Add:
+   ```typescript
+   enum GameEndReason {
+     LastStanding = "last_standing",
+     TimeUp = "time_up",
+     Surrender = "surrender",
+   }
+   ```
+
+2. **shared/src/messages.ts** — Add message constants and payload:
+   ```typescript
+   const GAME_ENDED = "game_ended"
+   const PLAYER_ELIMINATED = "player_eliminated"
+
+   interface GameEndedPayload {
+     winnerId: string
+     winnerName: string
+     reason: GameEndReason
+     finalScores: Array<{ playerId: string; name: string; score: number }>
+   }
+
+   interface PlayerEliminatedPayload {
+     playerId: string
+     playerName: string
+   }
+   ```
+
+3. **shared/src/lobbyTypes.ts** — Add to `CreateGamePayload`:
+   ```typescript
+   gameDuration?: number  // minutes, 0 = no limit, default 10
+   ```
+
+4. **server/src/rooms/GameState.ts** — Add schema fields:
+   ```typescript
+   @type("string") winnerId: string = ""
+   @type("string") endReason: string = ""
+   // roundPhase already exists — will use "playing" | "ended"
+   // roundTimer already exists — will decrement from gameDuration
+   ```
+
+5. **server/src/rooms/LobbyState.ts** — Add to `LobbyGameEntry`:
+   ```typescript
+   @type("number") gameDuration: number = 10
+   ```
+
+6. **server/src/rooms/GameState.ts** — Add to `PlayerState`:
+   ```typescript
+   @type("boolean") isEliminated: boolean = false
+   ```
+
+**Definition of done:** Schema compiles, shared types exported, no runtime changes yet. All existing tests pass.
+
+---
+
+### Sub-Issue 2: Win/Loss Condition Engine & Game End Flow
+
+**Title:** `[#161] Implement win/loss detection and game end flow on server`
+**Owner:** Pemulis (Systems/Backend)
+**Priority:** P2
+**Dependencies:** Sub-Issue 1
+**Estimate:** ~1.5 days
+
+**What to build:**
+
+1. **GameRoom.ts** — New `tickGameEndConditions()` added to simulation loop (after combat, before fog-of-war):
+
+   ```
+   Elimination check (every 10 ticks, not every tick):
+   - For each non-eliminated human player:
+     - Count tiles where ownerID === player.id AND !isHQTerritory
+     - If count === 0 AND player has no living pawns → mark eliminated
+     - Broadcast PLAYER_ELIMINATED to all clients
+     - Log to game_log
+
+   Victory check (after elimination):
+   - Count non-eliminated human players
+   - If exactly 1 remains → that player wins (LastStanding)
+   - If 0 remain (simultaneous elimination) → highest score wins
+
+   Time limit check:
+   - If roundTimer > 0: decrement each tick
+   - If roundTimer hits 0: highest-score non-eliminated player wins (TimeUp)
+   ```
+
+2. **GameRoom.ts** — New `endGame(winnerId, reason)` method:
+   ```
+   - Set state.roundPhase = "ended"
+   - Set state.winnerId = winnerId
+   - Set state.endReason = reason
+   - Build finalScores array from all players
+   - Broadcast GAME_ENDED to all clients
+   - Notify lobby via LobbyBridge.notifyGameEnded()
+   - Stop simulation interval (clearInterval or skip ticks)
+   - Set auto-dispose timer (60 seconds — give clients time to see results)
+   ```
+
+3. **GameRoom.ts** — Gate actions behind game phase:
+   ```
+   In handleSpawnPawn, handlePlaceBuilding, handleUpgradeOutpost:
+   - If state.roundPhase !== "playing" → reject with error message
+   - If player.isEliminated → reject with error message
+   ```
+
+4. **GameRoom.ts** — Initialize round timer from options:
+   ```
+   In onCreate(options):
+   - state.roundTimer = (options.gameDuration || 10) * 60 * TICK_RATE
+   - If gameDuration === 0: state.roundTimer = -1 (no limit)
+   ```
+
+5. **LobbyRoom.ts** — Pass `gameDuration` through to GameRoom options in `handleCreateGame`.
+
+**Key files to modify:** `server/src/rooms/GameRoom.ts`, `server/src/rooms/LobbyRoom.ts`
+**Key files to read:** `server/src/rooms/combat.ts` (elimination check pattern), `shared/src/constants.ts` (tick rates)
+
+**Definition of done:**
+- Solo game with timer: game ends at 0, player wins if alive
+- 2-player game: eliminate opponent → victory
+- 2-player game with timer: timer expires → highest score wins
+- Actions rejected after game ends
+- Eliminated players can't act
+- Lobby shows game as ended
+- All existing tests pass + new unit tests for endGame logic
+
+---
+
+### Sub-Issue 3: End-Game UI & Return to Lobby
+
+**Title:** `[#161] Build end-game results screen and lobby return flow`
+**Owner:** Gately (Game Dev/UI)
+**Priority:** P3
+**Dependencies:** Sub-Issues 1, 2
+**Estimate:** ~1 day
+
+**What to build:**
+
+1. **client/src/ui/EndGameScreen.ts** — New DOM overlay (follows HudDOM pattern):
+   ```
+   - Full-screen semi-transparent overlay (z-index above game)
+   - Victory banner ("VICTORY!") or defeat banner ("DEFEATED")
+   - Winner name and reason (e.g., "Last player standing" / "Highest score — time expired")
+   - Final scoreboard table: rank, name, score, territory count
+   - Highlight current player's row
+   - "Return to Lobby" button
+   - Auto-dismiss timer (60s countdown matching server dispose)
+   ```
+
+2. **client/src/main.ts** — Handle GAME_ENDED message:
+   ```
+   room.onMessage(GAME_ENDED, (payload: GameEndedPayload) => {
+     const isWinner = payload.winnerId === currentPlayerId
+     endGameScreen.show(isWinner, payload)
+   })
+   ```
+
+3. **client/src/main.ts** — Handle PLAYER_ELIMINATED message:
+   ```
+   room.onMessage(PLAYER_ELIMINATED, (payload) => {
+     if (payload.playerId === currentPlayerId) {
+       // Show "You have been eliminated" notification in game log
+       // Optionally dim/grey the game view
+     }
+   })
+   ```
+
+4. **client/src/main.ts** — "Return to Lobby" flow:
+   ```
+   endGameScreen.onReturnToLobby(() => {
+     leaveGame()                    // Disconnect from GameRoom
+     endGameScreen.hide()
+     setGameUIVisible(false)
+     connectToLobbyAndShow()        // Reconnect to lobby
+   })
+   ```
+
+5. **client/src/main.ts** — Handle server-side disposal:
+   ```
+   If GameRoom disconnects (onLeave with non-consent code) while game ended:
+   - Auto-return to lobby (same flow as above)
+   ```
+
+**Styling:** Match existing HUD DOM panel style (dark background, light text, consistent with side panel). Minimal CSS — functional, not fancy.
+
+**Definition of done:**
+- Victory screen shows on win with correct stats
+- Defeat screen shows on loss
+- Return to Lobby button works (disconnects, reconnects to lobby)
+- Eliminated player sees notification
+- Auto-return to lobby when server disposes room
+
+---
+
+### Sub-Issue 4: Round Timer HUD Display
+
+**Title:** `[#161] Display round timer countdown in game HUD`
+**Owner:** Gately (Game Dev/UI)
+**Priority:** P3 (can be done in parallel with Sub-Issue 2)
+**Dependencies:** Sub-Issue 1 (schema fields only)
+**Estimate:** ~0.5 day
+
+**What to build:**
+
+1. **client/src/ui/HudDOM.ts** — Add timer display:
+   ```
+   - New element in HUD panel showing remaining time (MM:SS format)
+   - Reads from state.roundTimer (convert ticks to seconds: roundTimer / TICK_RATE)
+   - Hidden when roundTimer === -1 (no limit)
+   - Flash/highlight when < 60 seconds remaining
+   - Show "∞" or hide entirely for unlimited games
+   ```
+
+2. **client/src/ui/HudDOM.ts** — Update on state change:
+   ```
+   - Listen to state.roundTimer changes
+   - Update display each tick (or throttle to 1/sec for performance)
+   ```
+
+**Definition of done:**
+- Timer visible during timed games
+- Timer hidden during unlimited games
+- Timer counts down correctly
+- Visual urgency indicator under 60 seconds
+
+---
+
+### Sub-Issue 5: Game Lifecycle Integration Tests
+
+**Title:** `[#161] Integration tests for game lifecycle: start → play → win/loss → end → lobby`
+**Owner:** Steeply (Tester)
+**Priority:** P4
+**Dependencies:** Sub-Issues 2, 3
+**Estimate:** ~1 day
+
+**What to build:**
+
+1. **Unit tests** (server-side, Vitest):
+   - `tickGameEndConditions()` correctly detects elimination
+   - `tickGameEndConditions()` correctly detects last-standing victory
+   - `tickGameEndConditions()` correctly handles time-up with score comparison
+   - `endGame()` sets correct state fields
+   - `endGame()` broadcasts GAME_ENDED message
+   - Actions rejected when `roundPhase === "ended"`
+   - Actions rejected for eliminated players
+   - Round timer decrements correctly
+   - Edge case: simultaneous elimination → highest score wins
+   - Edge case: all players leave → game disposes cleanly
+
+2. **Integration tests** (E2E or server-integration):
+   - Full lifecycle: create game → start → eliminate opponent → victory screen
+   - Timer game: create timed game → timer expires → highest score wins
+   - Lobby return: after game ends → player returns to lobby → can create new game
+   - Lobby state: ended game no longer appears in lobby game list (or appears as "ended")
+
+**Test file locations:** Follow existing patterns in `server/src/rooms/__tests__/` and `e2e/`
+
+**Definition of done:**
+- All new tests pass
+- All existing tests still pass
+- Coverage for happy paths and edge cases listed above
+
+---
+
+## Dependency Graph
+
+```
+Sub-Issue 1 (Schema)
+    ├──→ Sub-Issue 2 (Win/Loss Engine)
+    │        └──→ Sub-Issue 3 (End-Game UI)
+    │                 └──→ Sub-Issue 5 (Tests)
+    └──→ Sub-Issue 4 (Timer HUD) ──→ Sub-Issue 5 (Tests)
+```
+
+## Priority Order
+
+| Order | Sub-Issue | Owner | Blocked By |
+|-------|-----------|-------|------------|
+| 1 | Schema & Messages | Pemulis | — |
+| 2 | Win/Loss Engine | Pemulis | #1 |
+| 3 | Timer HUD | Gately | #1 (can parallel with #2) |
+| 4 | End-Game UI | Gately | #1, #2 |
+| 5 | Integration Tests | Steeply | #2, #3, #4 |
+
+**Critical path:** 1 → 2 → 4 → 5 (~4 days)
+**Parallel track:** 1 → 3 (Gately starts timer HUD while Pemulis builds engine)
+
+## Scope Fence
+
+**Explicitly deferred (do NOT build):**
+- Matchmaking / ranked play / ELO ratings
+- Spectator mode for eliminated players
+- Game replays or history
+- Achievement system
+- Leaderboard persistence across games
+- Multiple game modes (capture the flag, king of the hill, etc.)
+- Pre-game phase inside GameRoom (lobby handles this)
+- Surrender button (can be added later trivially)
+- Configurable victory conditions per game (v1 = score + elimination, always)
+
+**Future considerations (noted, not planned):**
+- Surrender button (trivial: send message → mark eliminated → check victory)
+- Post-game stats persistence (needs DB schema, separate issue)
+- Game mode selection in lobby (needs UI + server routing, separate epic)
+# Lobby Improvements — Decomposition
+
+**Author:** Hal  
+**Date:** 2026-03-16  
+**Requested by:** dkirby-ms  
+**Status:** Scoped, ready for implementation
+
+---
+
+## Problem Statement
+
+The lobby flow skips the "waiting" phase entirely. When a player creates a game, the GameRoom is spawned immediately and simulation starts ticking — there is never a window for other players to discover, browse, or join a game before it begins. The game browser table exists and renders both "waiting" and "in_progress" statuses, but no game ever sits in "waiting" because room creation is instant.
+
+The user wants:
+1. A game browser where players can see waiting and in-progress games
+2. The ability to join a game **before** it starts
+3. A pre-game lobby showing players in the room and their ready state
+4. A richer game creation experience
+
+## What Already Exists
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| `shared/src/lobbyTypes.ts` | ✅ Complete | Full message protocol (CREATE_GAME, JOIN_GAME, LEAVE_GAME, START_GAME, GAME_LIST, etc.), GameStatus type ("waiting" / "in_progress" / "ended"), GameSessionInfo, LobbyPlayerInfo |
+| `server/src/rooms/LobbyRoom.ts` | ✅ Solid | Handles create/join/leave/start. Tracks games (MapSchema), players (MapSchema). Bridge for GameRoom lifecycle events. START_GAME handler exists but game is already running by the time it's called. |
+| `server/src/rooms/LobbyState.ts` | ✅ Complete | LobbyGameEntry (id, name, host, status, playerCount, maxPlayers, mapSize, gameDuration), LobbyPlayer (displayName, userId, isGuest, activeGameId) |
+| `server/src/rooms/LobbyBridge.ts` | ✅ Complete | EventEmitter for GameRoom → LobbyRoom (player_count_changed, game_ended) |
+| `client/src/ui/LobbyScreen.ts` | ✅ Functional | DOM-based game list table with Join buttons for waiting games, Create Game form (name, max players, map size, CPU count), status icons (🟢 waiting, 🔵 in-progress), sorted waiting-first |
+| `client/src/network.ts` | ✅ Complete | connectToLobby(), joinGameRoom(), reconnection logic |
+| `client/src/main.ts` | ✅ Functional | Lobby → game transition. Both join_game and game_started events immediately call joinGameRoom() |
+
+## What's Missing
+
+1. **Deferred GameRoom creation** — `handleCreateGame` calls `matchMaker.createRoom()` immediately. Must defer until START_GAME.
+2. **Pre-game player tracking** — No server-side list of which players are in a waiting game (only playerCount, no identity).
+3. **Ready state** — No concept of player readiness. No SET_READY message, no ready tracking.
+4. **Pre-game player list broadcast** — No message type to push player list updates to waiting room participants.
+5. **Waiting room UI** — Client has no screen between "join" and "play". The join_game event immediately transitions to game.
+6. **Game browser filtering** — No filter/tabs for "Waiting" vs "In Progress" games (both render, but no way to filter).
+
+## Decomposition
+
+### Issue 1: Backend — Pre-game waiting phase with deferred room creation
+**Owner:** Pemulis  
+**Estimated effort:** 2–3 days  
+**Dependencies:** None (foundation issue)
+
+**Scope:**
+- **Shared types** (`shared/src/lobbyTypes.ts`):
+  - Add `SET_READY` message constant
+  - Add `GAME_PLAYERS` message constant (server → client: player list updates for a waiting game)
+  - Add `PreGamePlayerInfo` interface: `{ userId, displayName, isReady }`
+  - Add `GamePlayersPayload` interface: `{ gameId, players: PreGamePlayerInfo[] }`
+  - Add `SetReadyPayload` interface: `{ ready: boolean }`
+
+- **LobbyState** (`server/src/rooms/LobbyState.ts`):
+  - Add `LobbyWaitingPlayer` schema class: `{ userId, displayName, isReady }` — nested in a per-game collection
+  - Or: track waiting players server-side only (not in Colyseus schema) and broadcast via messages. **Recommended: message-based** — avoids schema bloat, keeps LobbyState lean.
+
+- **LobbyRoom** (`server/src/rooms/LobbyRoom.ts`):
+  - `handleCreateGame`: Do NOT call `matchMaker.createRoom()`. Create LobbyGameEntry in "waiting" status only. Track creator in a per-game player map. Send `GAME_JOINED` with `gameId` (no `roomId` yet — client uses this to show waiting room). Broadcast `GAME_UPDATED` to all lobby clients.
+  - `handleJoinGame`: Add joiner to per-game player map. Broadcast `GAME_PLAYERS` to all players in that game. Broadcast `GAME_UPDATED` (playerCount change) to all lobby clients.
+  - `handleLeaveGame`: Remove player from per-game player map. If host leaves and no players remain, remove the game. Broadcast `GAME_PLAYERS` and `GAME_UPDATED`.
+  - New `handleSetReady`: Toggle isReady for a player in a waiting game. Broadcast `GAME_PLAYERS`.
+  - `handleStartGame`: NOW call `matchMaker.createRoom()`. On success, send `GAME_STARTED` with `{ gameId, roomId }` to all players in the game. Transition status to "in_progress". Clean up per-game player map.
+  - Add `SET_READY` message handler registration.
+  - Private `waitingPlayers` map: `Map<gameId, Map<sessionId, PreGamePlayerInfo>>`.
+
+- **GameJoinedPayload** update: `roomId` becomes optional (undefined during waiting phase, present only when game actually starts).
+
+**Out of scope:** Any GameRoom.ts changes. The GameRoom keeps its current behavior — it starts simulation on create. The change is that create is deferred.
+
+**Risks:** Race condition if host disconnects between START_GAME and room creation. Mitigation: wrap in try/catch, clean up on failure.
+
+---
+
+### Issue 2: Frontend — Pre-game waiting room UI
+**Owner:** Gately  
+**Estimated effort:** 2 days  
+**Dependencies:** Issue 1 (needs GAME_PLAYERS message and deferred creation flow)
+
+**Scope:**
+- **New waiting room panel** (could be a new section in `LobbyScreen.ts` or a separate `WaitingRoom.ts`):
+  - Shown when player receives `GAME_JOINED` (with no roomId) after creating or joining a waiting game
+  - Displays: game name, game settings summary (map size, max players, CPU count, duration)
+  - Player list: names + ready indicator (✅ / ⬜)
+  - Host controls: "Start Game" button (enabled when at least 1 player, or optionally when all non-host players are ready)
+  - Non-host controls: "Ready" / "Not Ready" toggle button
+  - "Leave" button → sends LEAVE_GAME, returns to game browser
+  - Listens for `GAME_PLAYERS` to update player list in real time
+  - Listens for `GAME_STARTED` to transition: call `joinGameRoom(roomId)`, hide waiting room, show game
+
+- **LobbyScreen updates:**
+  - `onEvent` callback: distinguish between `GAME_JOINED` (waiting phase → show waiting room) vs `GAME_STARTED` (game phase → join GameRoom)
+  - The `join_game` LobbyEvent should carry enough info to render the waiting room (game name, settings)
+
+- **HTML/CSS additions** (`client/index.html`):
+  - Waiting room container (hidden by default)
+  - Player list element
+  - Ready toggle button
+  - Start Game button (host only)
+  - Leave button
+
+**Out of scope:** Chat in waiting room. Animated transitions. Settings editing after creation.
+
+---
+
+### Issue 3: Frontend — Game browser status filters
+**Owner:** Gately  
+**Estimated effort:** 0.5 day  
+**Dependencies:** None (independent enhancement, but more useful after Issue 1 lands)
+
+**Scope:**
+- Add filter tabs or toggle buttons above the game list: **All** | **Waiting** | **In Progress**
+- Default to "All" (current behavior)
+- Filter `renderGameList()` output based on selected tab
+- Persist filter selection in component state (not localStorage)
+- Show count badges on tabs: e.g., "Waiting (3)" "In Progress (2)"
+- Minor: Improve empty state text per filter ("No waiting games — create one!" vs "No games in progress")
+
+**Out of scope:** Search by name. Sorting controls. Pagination.
+
+---
+
+### Issue 4: Tests — Pre-game lobby flow
+**Owner:** Steeply  
+**Estimated effort:** 1.5 days  
+**Dependencies:** Issues 1 + 2 (needs both backend and frontend)
+
+**Scope:**
+- **Server unit tests** (extend `server/src/__tests__/game-lifecycle.test.ts` or new file):
+  - Create game → verify LobbyGameEntry in "waiting", no GameRoom created
+  - Join waiting game → verify player added, GAME_PLAYERS broadcast
+  - Set ready → verify ready state updated, GAME_PLAYERS broadcast
+  - Start game → verify GameRoom created, GAME_STARTED sent, status transitions to "in_progress"
+  - Leave waiting game → verify player removed, game removed if host + empty
+  - Reject: join full game, join started game, non-host start, start without game
+  - Edge case: host disconnects from waiting game
+
+- **Client integration tests** (if existing test infrastructure supports):
+  - Waiting room renders on GAME_JOINED (no roomId)
+  - Player list updates on GAME_PLAYERS
+  - Ready toggle sends SET_READY
+  - Start button visible only to host
+  - Transition to game on GAME_STARTED
+
+**Out of scope:** E2E multi-browser tests. Performance/load testing.
+
+---
+
+## Dependency Graph
+
+```
+Issue 1 (Backend: pre-game phase)
+  │
+  ├──► Issue 2 (Frontend: waiting room)  ──┐
+  │                                         ├──► Issue 4 (Tests)
+  └──► Issue 3 (Frontend: browser filters) ─┘
+                                           (independent, parallelizable)
+```
+
+Issue 3 is fully independent — can ship before, during, or after the others.
+Issues 1 and 2 are sequential (2 depends on 1).
+Issue 4 depends on both 1 and 2.
+
+## Explicit Scope Fence
+
+**In scope:**
+- Game browser showing waiting + in-progress games with filtering
+- Join flow for games that haven't started
+- Pre-game waiting room with player list and ready states
+- Host-controlled game start
+
+**Out of scope (do NOT implement):**
+- Matchmaking or auto-join
+- Ranked play or ELO
+- Spectator mode
+- Chat in waiting room (use existing in-game chat)
+- Game settings editing after creation
+- Password-protected games
+- Kick/ban in waiting room
+- Map preview in waiting room
+- Team assignment / color selection pre-game
+
+## Architecture Decisions
+
+**L1: Message-based player tracking (not schema)**  
+Track waiting room players via server-side Map + GAME_PLAYERS broadcasts, not Colyseus schema fields. Keeps LobbyState lean. Schema changes are expensive to migrate.
+
+**L2: Deferred room creation (not paused simulation)**  
+Don't create the GameRoom until START_GAME. Simpler than adding a pause/resume phase to GameRoom. GameRoom remains unchanged.
+
+**L3: Ready state is advisory**  
+The host can start regardless of ready states. Ready indicators help coordination but don't gate the start button. Keeps UX simple — no griefing via "never ready" players.
+
+**L4: GAME_JOINED payload change**  
+`roomId` becomes optional in GameJoinedPayload. Presence of `roomId` distinguishes "you're in the waiting room" (no roomId) from legacy/future direct-join flows.
+
+---
+
+
+---
+
+## Deferred Room Creation for Lobby Waiting Phase
+
+**Author:** Pemulis
+**Date:** 2026-03-15
+**Status:** Implemented
+
+### Decision
+
+`matchMaker.createRoom()` is no longer called in `handleCreateGame`. Game creation stores configuration in a `pendingGameOptions` map and tracks players in a `waitingPlayers` map. The Colyseus GameRoom is only instantiated when the host sends `START_GAME`.
+
+### Rationale
+
+Previously, creating a game immediately spawned a GameRoom, meaning games could never sit in "waiting" status for other players to discover and join. Deferring room creation allows a true pre-game lobby phase where players gather, see each other's names, and toggle ready status before the simulation starts.
+
+### Impact
+
+- **Shared types:** `GameJoinedPayload.roomId` is now optional (`string | undefined`). Client code must handle the undefined case — Gately's client PR will address this.
+- **New messages:** `SET_READY` (client→server), `GAME_PLAYERS` (server→client). Both use message-based communication, not Colyseus schema, keeping `LobbyState` lean.
+- **Player tracking:** `waitingPlayers` is a `Map<gameId, Map<sessionId, PreGamePlayerInfo>>`. Cleaned up on game start or removal.
+- **GameRoom unchanged:** No modifications to GameRoom.ts. It still receives the same options on creation.
+- **Ready state is advisory:** Host can start the game regardless of player ready states.
+
+---
+
+## CPU Players Participate in Elimination & Victory
+
+**Author:** Pemulis  
+**Date:** 2026-03-16  
+**Status:** Implemented  
+
+### Context
+In 1-human + N-CPU games, four interrelated bugs caused immediate game-over:
+1. Victory condition only counted human players → 1 human always = "last standing"
+2. No grace period → players eliminated before spawning pawns (~2.5s after start)
+3. CPU players were immune to elimination (immortal)
+4. `getHighestScorePlayer` excluded CPUs from tiebreaker
+
+### Decision
+- **CPU players are full participants** in elimination and victory checks — same rules as humans.
+- **Elimination grace period of 40 ticks (~10 seconds)** added via `ELIMINATION_GRACE_TICKS` constant. No elimination checks run before this threshold.
+- **`getHighestScorePlayer` is player-type-agnostic** — a CPU can win if it has the highest score.
+
+### Impact
+- **Gately:** End-game UI should handle CPU winners (display name will be the CPU's `displayName`).
+- **Steeply:** Game lifecycle tests updated. Grace period constant must be mirrored in tests as `ELIMINATION_GRACE_TICKS = 40`.
+- **Hal:** If CPU AI complexity changes, the grace period may need tuning.
+
+---
+
+## Game-End Condition Test Coverage
+
+**Author:** Steeply  
+**Date:** 2026-03-15  
+**Status:** Tests landed
+
+### Decision
+
+Added 6 tests for the CPU-inclusion and grace period game-end fixes. All tests use `room.state.tick = ELIMINATION_GRACE_TICKS` (40) to bypass grace period and hit elimination check interval. Tests are forward-compatible — they document the NEW behavior where CPU players participate in elimination/victory logic.
+
+### Note for team
+
+The existing test "does NOT eliminate CPU players" (line ~208) still passes because it sets tick=10 (within grace period), so elimination never fires. This test now documents **grace period behavior** rather than CPU-skip behavior. If the team wants to explicitly remove or rename that test to avoid confusion, that's a cleanup task.
+
+### Coverage added
+
+1. Single human + CPUs with territory → game continues
+2. Human eliminated, CPUs alive → game continues
+3. CPU with 0 tiles/pawns → eliminated
+4. Grace period blocks elimination at tick 10, allows at tick 40
+5. CPU can be the winner (LastStanding)
+6. Human wins after all CPUs eliminated
+
+---
+
+## Lobby Host-Leave Gap (Observed in Testing)
+
+**Author:** Steeply
+**Date:** 2026-03-15
+**Status:** Observation — No Code Change
+
+When the host leaves a waiting game that still has other players, the game persists in "waiting" status but nobody can start it (only the original host can call START_GAME). The remaining players are stranded — they can leave, but cannot start.
+
+Options for Pemulis/Hal to consider:
+1. Transfer host role to next player
+2. Cancel the game and notify remaining players
+3. Leave as-is (players can leave and re-create)
+
+No tests were blocked by this — just flagging the behavioral gap.

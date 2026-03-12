@@ -1,23 +1,23 @@
 import { Room } from "@colyseus/sdk";
 import type {
   GameSessionInfo,
+  GameStatus,
   GameListPayload,
   GameUpdatedPayload,
   GameRemovedPayload,
   GameJoinedPayload,
-  GameStartedPayload,
   LobbyErrorPayload,
   CreateGamePayload,
 } from "@primal-grid/shared";
 import {
   CREATE_GAME, JOIN_GAME, LEAVE_GAME,
   GAME_LIST, GAME_UPDATED, GAME_REMOVED, GAME_JOINED,
-  GAME_STARTED, LOBBY_ERROR,
+  LOBBY_ERROR,
 } from "@primal-grid/shared";
 
 export type LobbyEvent =
   | { type: "join_game"; gameId: string; roomId: string }
-  | { type: "game_started"; gameId: string; roomId: string }
+  | { type: "waiting"; gameId: string; gameInfo: GameSessionInfo | null; isHost: boolean }
   | { type: "error"; message: string };
 
 type LobbyEventCallback = (event: LobbyEvent) => void;
@@ -37,6 +37,7 @@ export class LobbyScreen {
   private playerDisplayName = "";
   private isCreatingGame = false;
   private createGameTimeout: ReturnType<typeof setTimeout> | null = null;
+  private activeFilter: "all" | GameStatus = "all";
 
   /** Returns the current display name entered by the player. */
   getDisplayName(): string {
@@ -50,6 +51,28 @@ export class LobbyScreen {
 
     this.setupCreateForm();
     this.setupNameInput();
+    this.setupFilterTabs();
+  }
+
+  /** Bind click handlers to the filter tab buttons. */
+  private setupFilterTabs(): void {
+    const tabContainer = document.getElementById("lobby-filter-tabs");
+    if (!tabContainer) return;
+
+    tabContainer.addEventListener("click", (e) => {
+      const btn = (e.target as HTMLElement).closest(".lobby-filter-tab") as HTMLElement | null;
+      if (!btn) return;
+      const filter = btn.dataset.filter as "all" | GameStatus;
+      if (filter === this.activeFilter) return;
+
+      this.activeFilter = filter;
+
+      for (const tab of tabContainer.querySelectorAll(".lobby-filter-tab")) {
+        tab.classList.toggle("active", (tab as HTMLElement).dataset.filter === filter);
+      }
+
+      this.renderGameList();
+    });
   }
 
   /** Register callback for lobby events (join, start, error). */
@@ -120,13 +143,23 @@ export class LobbyScreen {
     });
 
     room.onMessage(GAME_JOINED, (data: GameJoinedPayload) => {
+      const wasCreating = this.isCreatingGame;
       this.clearCreateGameState();
       this.currentGameId = data.gameId;
-      this.eventCallback?.({ type: "join_game", gameId: data.gameId, roomId: data.roomId });
-    });
 
-    room.onMessage(GAME_STARTED, (data: GameStartedPayload) => {
-      this.eventCallback?.({ type: "game_started", gameId: data.gameId, roomId: data.roomId });
+      if (data.roomId) {
+        // Room already exists — join immediately (legacy / in-progress rejoin)
+        this.eventCallback?.({ type: "join_game", gameId: data.gameId, roomId: data.roomId });
+      } else {
+        // No roomId — game is in waiting phase
+        const gameInfo = this.games.get(data.gameId) ?? null;
+        this.eventCallback?.({
+          type: "waiting",
+          gameId: data.gameId,
+          gameInfo,
+          isHost: wasCreating,
+        });
+      }
     });
 
     room.onMessage(LOBBY_ERROR, (data: LobbyErrorPayload) => {
@@ -242,16 +275,30 @@ export class LobbyScreen {
 
   private renderGameList(): void {
     this.gameListBody.innerHTML = "";
+    this.updateFilterCounts();
 
-    if (this.games.size === 0) {
+    const allGames = [...this.games.values()];
+    const filtered = this.activeFilter === "all"
+      ? allGames
+      : allGames.filter((g) => g.status === this.activeFilter);
+
+    if (filtered.length === 0) {
       const emptyRow = document.createElement("tr");
-      emptyRow.innerHTML = `<td colspan="5" class="lobby-empty">No games available — create one!</td>`;
+      let emptyText: string;
+      if (this.activeFilter === "waiting") {
+        emptyText = "No waiting games — create one!";
+      } else if (this.activeFilter === "in_progress") {
+        emptyText = "No games in progress";
+      } else {
+        emptyText = "No games available — create one!";
+      }
+      emptyRow.innerHTML = `<td colspan="5" class="lobby-empty">${emptyText}</td>`;
       this.gameListBody.appendChild(emptyRow);
       return;
     }
 
     // Sort: waiting first, then by creation time (newest first)
-    const sorted = [...this.games.values()].sort((a, b) => {
+    const sorted = filtered.sort((a, b) => {
       if (a.status === "waiting" && b.status !== "waiting") return -1;
       if (a.status !== "waiting" && b.status === "waiting") return 1;
       return b.createdAt - a.createdAt;
@@ -291,6 +338,22 @@ export class LobbyScreen {
 
       this.gameListBody.appendChild(row);
     }
+  }
+
+  /** Update the count badges on each filter tab. */
+  private updateFilterCounts(): void {
+    const allGames = [...this.games.values()];
+    const waitingCount = allGames.filter((g) => g.status === "waiting").length;
+    const inProgressCount = allGames.filter((g) => g.status === "in_progress").length;
+
+    const setCount = (id: string, count: number) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = String(count);
+    };
+
+    setCount("lobby-filter-count-all", allGames.length);
+    setCount("lobby-filter-count-waiting", waitingCount);
+    setCount("lobby-filter-count-in_progress", inProgressCount);
   }
 
   /** Leave the current game and return to lobby view. */

@@ -1,0 +1,547 @@
+diff --git a/.squad/agents/gately/history.md b/.squad/agents/gately/history.md
+index 714d70e..425f682 100644
+--- a/.squad/agents/gately/history.md
++++ b/.squad/agents/gately/history.md
+@@ -1481,3 +1481,12 @@ When adding new structure types: check ALL paths — visible tile icons, fog sil
+ - No client-side changes required — rendering already keys off `structureType`
+ - Pattern can be reused for other structure-to-structure spacing rules (defense structures, farms, etc.)
+ 
++
++### Building Spawn Caps — Issue #115 (PR #148)
++
++- **BUILDING_CAP_BONUS**: Farm +1, Factory +2 per building, applied globally to all pawn types
++- **Server**: `getBuildingCapBonus()` iterates player-owned tiles summing bonuses; `spawnPawnCore()` uses `pawnDef.maxCount + capBonus` as effective cap
++- **Client**: HUD shows effective cap with cyan `(+N)` indicator when bonus > 0; fixed `updateSpawnButton()` which wasn't accounting for cap bonus (buttons were wrongly disabled at base cap even with buildings)
++- **Edge case**: Building destruction immediately decreases cap; over-cap units survive but no new spawns allowed
++- **Shared package rebuild required**: Adding constants to `shared/src/constants.ts` requires `npm run build --workspace=shared` before tests can import them
++- **Tests**: 12 tests in `building-spawn-caps.test.ts` covering bonus calculation, spawn enforcement, destruction cap decrease, and over-cap survival
+diff --git a/.squad/decisions/inbox/gately-building-cap-bonus.md b/.squad/decisions/inbox/gately-building-cap-bonus.md
+new file mode 100644
+index 0000000..5b216b1
+--- /dev/null
++++ b/.squad/decisions/inbox/gately-building-cap-bonus.md
+@@ -0,0 +1,16 @@
++## Building Cap Bonus — Global Per-Type Pattern
++
++**Author:** Gately  
++**Date:** 2026-03-14  
++**Status:** Implemented (PR #148)
++
++### Decision
++
++Building cap bonuses apply **globally to all pawn types equally** (not per-type). The effective cap is `baseCap + totalBuildingBonus` where bonus sums across all buildings regardless of type.
++
++### Implications
++
++- Any new building type that grants cap bonus should add an entry to `BUILDING_CAP_BONUS` in `shared/src/constants.ts`
++- `getBuildingCapBonus()` in GameRoom.ts handles the server-side sum; client mirrors it by iterating tiles
++- Both server (`spawnPawnCore`) and client (`updateSpawnButton` + HUD display) must use the same formula
++- Starting cap (13 total across types) is unchanged — progression through buildings is optional
+diff --git a/client/src/ui/HudDOM.ts b/client/src/ui/HudDOM.ts
+index 292b7a1..ffa4f01 100644
+--- a/client/src/ui/HudDOM.ts
++++ b/client/src/ui/HudDOM.ts
+@@ -1,5 +1,5 @@
+ import type { Room } from '@colyseus/sdk';
+-import { PAWN_TYPES, BUILDING_COSTS, PLACE_BUILDING, isEnemyBase } from '@primal-grid/shared';
++import { PAWN_TYPES, BUILDING_COSTS, BUILDING_CAP_BONUS, PLACE_BUILDING, isEnemyBase } from '@primal-grid/shared';
+ import type { PlaceBuildingPayload } from '@primal-grid/shared';
+ 
+ /**
+@@ -35,6 +35,7 @@ export class HudDOM {
+   private currentAttackerCount = 0;
+   private currentExplorerCount = 0;
+   private currentEnemyBaseCount = 0;
++  private currentCapBonus = 0;
+ 
+   // Building placement
+   private buildFarmBtn: HTMLButtonElement;
+@@ -156,32 +157,34 @@ export class HudDOM {
+ 
+   /** Update spawn button enabled/disabled state. */
+   private updateSpawnButton(): void {
++    const cap = this.currentCapBonus;
++
+     const builderDef = PAWN_TYPES['builder'];
+     const canAfford = builderDef
+       ? this.currentWood >= builderDef.cost.wood && this.currentStone >= builderDef.cost.stone
+       : false;
+-    const underCap = builderDef ? this.currentBuilderCount < builderDef.maxCount : false;
++    const underCap = builderDef ? this.currentBuilderCount < builderDef.maxCount + cap : false;
+     this.spawnBuilderBtn.disabled = !canAfford || !underCap;
+ 
+     // Defender button
+     const defDef = PAWN_TYPES['defender'];
+     if (defDef) {
+       const canAffordDef = this.currentWood >= defDef.cost.wood && this.currentStone >= defDef.cost.stone;
+-      this.spawnDefenderBtn.disabled = !canAffordDef || this.currentDefenderCount >= defDef.maxCount;
++      this.spawnDefenderBtn.disabled = !canAffordDef || this.currentDefenderCount >= defDef.maxCount + cap;
+     }
+ 
+     // Attacker button
+     const atkDef = PAWN_TYPES['attacker'];
+     if (atkDef) {
+       const canAffordAtk = this.currentWood >= atkDef.cost.wood && this.currentStone >= atkDef.cost.stone;
+-      this.spawnAttackerBtn.disabled = !canAffordAtk || this.currentAttackerCount >= atkDef.maxCount;
++      this.spawnAttackerBtn.disabled = !canAffordAtk || this.currentAttackerCount >= atkDef.maxCount + cap;
+     }
+ 
+     // Explorer button
+     const expDef = PAWN_TYPES['explorer'];
+     if (expDef) {
+       const canAffordExp = this.currentWood >= expDef.cost.wood && this.currentStone >= expDef.cost.stone;
+-      this.spawnExplorerBtn.disabled = !canAffordExp || this.currentExplorerCount >= expDef.maxCount;
++      this.spawnExplorerBtn.disabled = !canAffordExp || this.currentExplorerCount >= expDef.maxCount + cap;
+     }
+ 
+     // Building buttons
+@@ -253,6 +256,22 @@ export class HudDOM {
+         });
+       }
+ 
++      // Count building cap bonus from tiles
++      const tiles = state['tiles'] as
++        | { forEach: (cb: (tile: Record<string, unknown>, key: string) => void) => void; length?: number }
++        | undefined;
++      if (tiles && typeof tiles.forEach === 'function') {
++        let capBonus = 0;
++        tiles.forEach((tile) => {
++          const ownerID = (tile['ownerID'] as string) ?? '';
++          if (ownerID !== this.localSessionId) return;
++          const st = (tile['structureType'] as string) ?? '';
++          const b = BUILDING_CAP_BONUS[st];
++          if (b) capBonus += b;
++        });
++        this.currentCapBonus = capBonus;
++      }
++
+       // Creature counts (including builder pawns and combat entities)
+       const creatures = state['creatures'] as
+         | { forEach: (cb: (creature: Record<string, unknown>, key: string) => void) => void }
+@@ -285,7 +304,10 @@ export class HudDOM {
+         });
+         this.creatureCounts.textContent = `🦕 ${herbs}  🦖 ${carns}`;
+         this.currentBuilderCount = builders;
+-        this.builderCountEl.textContent = `Builders: ${builders}/${PAWN_TYPES['builder']?.maxCount ?? 5}`;
++        const capBonus = this.currentCapBonus;
++        const bonusTag = capBonus > 0 ? ` (+${capBonus})` : '';
++        this.builderCountEl.textContent = `Builders: ${builders}/${(PAWN_TYPES['builder']?.maxCount ?? 5) + capBonus}`;
++        if (capBonus > 0) this.builderCountEl.innerHTML = `Builders: ${builders}/${(PAWN_TYPES['builder']?.maxCount ?? 5) + capBonus} <span style="color:#7ecfff">(+${capBonus})</span>`;
+ 
+         // Combat counts
+         const defDef = PAWN_TYPES['defender'];
+@@ -295,9 +317,9 @@ export class HudDOM {
+         this.currentAttackerCount = attackers;
+         this.currentExplorerCount = explorers;
+         this.currentEnemyBaseCount = enemyBases;
+-        this.defenderCountEl.textContent = `🛡 ${defenders}/${defDef?.maxCount ?? 3}`;
+-        this.attackerCountEl.textContent = `⚔ ${attackers}/${atkDef?.maxCount ?? 2}`;
+-        this.explorerCountEl.textContent = `🔭 ${explorers}/${expDef?.maxCount ?? 3}`;
++        this.defenderCountEl.textContent = `🛡 ${defenders}/${(defDef?.maxCount ?? 3) + capBonus}${bonusTag}`;
++        this.attackerCountEl.textContent = `⚔ ${attackers}/${(atkDef?.maxCount ?? 2) + capBonus}${bonusTag}`;
++        this.explorerCountEl.textContent = `🔭 ${explorers}/${(expDef?.maxCount ?? 3) + capBonus}${bonusTag}`;
+         this.enemyBaseCountEl.textContent = enemyBases > 0 ? `⛺ ${enemyBases} active` : 'No threats';
+ 
+         this.updateSpawnButton();
+diff --git a/server/src/__tests__/building-spawn-caps.test.ts b/server/src/__tests__/building-spawn-caps.test.ts
+new file mode 100644
+index 0000000..4d01524
+--- /dev/null
++++ b/server/src/__tests__/building-spawn-caps.test.ts
+@@ -0,0 +1,330 @@
++import { describe, it, expect, vi, beforeEach } from "vitest";
++import { GameState, PlayerState } from "../rooms/GameState.js";
++import { GameRoom } from "../rooms/GameRoom.js";
++import {
++  BUILDING_COSTS,
++  BUILDING_CAP_BONUS,
++  PAWN_TYPES,
++  TileType,
++  isWaterTile,
++} from "@primal-grid/shared";
++
++// ── Helpers ─────────────────────────────────────────────────────────
++
++interface MockClient {
++  sessionId: string;
++  send: ReturnType<typeof vi.fn>;
++}
++
++function createRoomWithMap(seed?: number): GameRoom {
++  const room = Object.create(GameRoom.prototype) as GameRoom;
++  room.state = new GameState();
++  room.generateMap(seed);
++  room.broadcast = vi.fn();
++  return room;
++}
++
++function fakeClient(sessionId: string): MockClient {
++  return { sessionId, send: vi.fn() };
++}
++
++function joinPlayer(room: GameRoom, sessionId: string) {
++  const client = fakeClient(sessionId);
++  room.onJoin(client);
++  const player = room.state.players.get(sessionId)!;
++  return { client, player };
++}
++
++function prepareBuildableTile(
++  room: GameRoom,
++  playerId: string,
++): { x: number; y: number } {
++  for (let i = 0; i < room.state.tiles.length; i++) {
++    const tile = room.state.tiles.at(i)!;
++    if (
++      tile.ownerID === "" &&
++      !isWaterTile(tile.type) &&
++      tile.type !== TileType.Rock
++    ) {
++      tile.ownerID = playerId;
++      tile.structureType = "";
++      return { x: tile.x, y: tile.y };
++    }
++  }
++  throw new Error("No buildable tile found on map");
++}
++
++function prepareBuildableTiles(
++  room: GameRoom,
++  playerId: string,
++  count: number,
++): { x: number; y: number }[] {
++  const results: { x: number; y: number }[] = [];
++  for (let i = 0; i < room.state.tiles.length; i++) {
++    const tile = room.state.tiles.at(i)!;
++    if (
++      tile.ownerID === "" &&
++      !isWaterTile(tile.type) &&
++      tile.type !== TileType.Rock
++    ) {
++      tile.ownerID = playerId;
++      tile.structureType = "";
++      results.push({ x: tile.x, y: tile.y });
++      if (results.length >= count) break;
++    }
++  }
++  return results;
++}
++
++function giveResources(player: PlayerState, wood: number, stone: number) {
++  player.wood = wood;
++  player.stone = stone;
++}
++
++/** Place a building on a pre-prepared tile. */
++function placeBuilding(
++  room: GameRoom,
++  client: MockClient,
++  spot: { x: number; y: number },
++  buildingType: string,
++) {
++  room.handlePlaceBuilding(client, { x: spot.x, y: spot.y, buildingType });
++}
++
++/** Spawn pawns until the cap is hit, return the count spawned. */
++function fillPawnCap(
++  room: GameRoom,
++  playerId: string,
++  player: PlayerState,
++  pawnType: string,
++): number {
++  let spawned = 0;
++  // Give unlimited resources
++  giveResources(player, 99999, 99999);
++  for (let i = 0; i < 100; i++) {
++    const result = room.spawnPawnCore(playerId, player, pawnType);
++    if (!result) break;
++    spawned++;
++    giveResources(player, 99999, 99999);
++  }
++  return spawned;
++}
++
++// ── Tests ───────────────────────────────────────────────────────────
++
++describe("Building Spawn Caps", () => {
++  let room: GameRoom;
++
++  beforeEach(() => {
++    room = createRoomWithMap(42);
++  });
++
++  // ── getBuildingCapBonus ──────────────────────────────────────────
++
++  describe("getBuildingCapBonus", () => {
++    it("returns 0 when player has no buildings", () => {
++      const { player } = joinPlayer(room, "p1");
++      expect(room.getBuildingCapBonus("p1")).toBe(0);
++    });
++
++    it("returns 1 per farm", () => {
++      const { client, player } = joinPlayer(room, "p1");
++      const spots = prepareBuildableTiles(room, "p1", 2);
++      giveResources(player, 99999, 99999);
++
++      placeBuilding(room, client, spots[0], "farm");
++      expect(room.getBuildingCapBonus("p1")).toBe(BUILDING_CAP_BONUS["farm"]);
++
++      placeBuilding(room, client, spots[1], "farm");
++      expect(room.getBuildingCapBonus("p1")).toBe(BUILDING_CAP_BONUS["farm"] * 2);
++    });
++
++    it("returns 2 per factory", () => {
++      const { client, player } = joinPlayer(room, "p1");
++      const spot = prepareBuildableTile(room, "p1");
++      giveResources(player, 99999, 99999);
++
++      placeBuilding(room, client, spot, "factory");
++      expect(room.getBuildingCapBonus("p1")).toBe(BUILDING_CAP_BONUS["factory"]);
++    });
++
++    it("sums farm and factory bonuses", () => {
++      const { client, player } = joinPlayer(room, "p1");
++      const spots = prepareBuildableTiles(room, "p1", 2);
++      giveResources(player, 99999, 99999);
++
++      placeBuilding(room, client, spots[0], "farm");
++      placeBuilding(room, client, spots[1], "factory");
++      expect(room.getBuildingCapBonus("p1")).toBe(
++        BUILDING_CAP_BONUS["farm"] + BUILDING_CAP_BONUS["factory"],
++      );
++    });
++
++    it("only counts buildings owned by the requesting player", () => {
++      const { client: c1, player: p1 } = joinPlayer(room, "p1");
++      const { client: c2, player: p2 } = joinPlayer(room, "p2");
++      const spot1 = prepareBuildableTile(room, "p1");
++      const spot2 = prepareBuildableTile(room, "p2");
++      giveResources(p1, 99999, 99999);
++      giveResources(p2, 99999, 99999);
++
++      placeBuilding(room, c1, spot1, "farm");
++      placeBuilding(room, c2, spot2, "factory");
++
++      expect(room.getBuildingCapBonus("p1")).toBe(BUILDING_CAP_BONUS["farm"]);
++      expect(room.getBuildingCapBonus("p2")).toBe(BUILDING_CAP_BONUS["factory"]);
++    });
++  });
++
++  // ── Spawn cap enforcement ───────────────────────────────────────
++
++  describe("spawn cap enforcement", () => {
++    it("rejects spawn when at base cap (no buildings)", () => {
++      const { player } = joinPlayer(room, "p1");
++      const baseCap = PAWN_TYPES["builder"]!.maxCount;
++
++      const spawned = fillPawnCap(room, "p1", player, "builder");
++      expect(spawned).toBe(baseCap);
++
++      // One more should fail
++      giveResources(player, 99999, 99999);
++      const extra = room.spawnPawnCore("p1", player, "builder");
++      expect(extra).toBeNull();
++    });
++
++    it("building a farm increases cap, allowing one more spawn", () => {
++      const { client, player } = joinPlayer(room, "p1");
++      const baseCap = PAWN_TYPES["builder"]!.maxCount;
++
++      // Fill to base cap
++      const spawned = fillPawnCap(room, "p1", player, "builder");
++      expect(spawned).toBe(baseCap);
++
++      // At cap — can't spawn
++      giveResources(player, 99999, 99999);
++      expect(room.spawnPawnCore("p1", player, "builder")).toBeNull();
++
++      // Build a farm → +1 cap
++      const spot = prepareBuildableTile(room, "p1");
++      giveResources(player, 99999, 99999);
++      placeBuilding(room, client, spot, "farm");
++
++      // Now can spawn 1 more
++      giveResources(player, 99999, 99999);
++      const extra = room.spawnPawnCore("p1", player, "builder");
++      expect(extra).not.toBeNull();
++
++      // But not 2 more
++      giveResources(player, 99999, 99999);
++      expect(room.spawnPawnCore("p1", player, "builder")).toBeNull();
++    });
++
++    it("building a factory increases cap by 2", () => {
++      const { client, player } = joinPlayer(room, "p1");
++      const baseCap = PAWN_TYPES["defender"]!.maxCount;
++
++      const spawned = fillPawnCap(room, "p1", player, "defender");
++      expect(spawned).toBe(baseCap);
++
++      // Build a factory → +2 cap
++      const spot = prepareBuildableTile(room, "p1");
++      giveResources(player, 99999, 99999);
++      placeBuilding(room, client, spot, "factory");
++
++      // Can now spawn 2 more defenders
++      giveResources(player, 99999, 99999);
++      expect(room.spawnPawnCore("p1", player, "defender")).not.toBeNull();
++      giveResources(player, 99999, 99999);
++      expect(room.spawnPawnCore("p1", player, "defender")).not.toBeNull();
++
++      // But not a 3rd
++      giveResources(player, 99999, 99999);
++      expect(room.spawnPawnCore("p1", player, "defender")).toBeNull();
++    });
++
++    it("cap bonus applies globally to all pawn types", () => {
++      const { client, player } = joinPlayer(room, "p1");
++      const spot = prepareBuildableTile(room, "p1");
++      giveResources(player, 99999, 99999);
++      placeBuilding(room, client, spot, "farm");
++
++      // Each pawn type should get +1
++      for (const pawnType of ["builder", "defender", "attacker", "explorer"]) {
++        const baseCap = PAWN_TYPES[pawnType]!.maxCount;
++        const spawned = fillPawnCap(room, "p1", player, pawnType);
++        expect(spawned).toBe(baseCap + BUILDING_CAP_BONUS["farm"]);
++      }
++    });
++  });
++
++  // ── Building destruction → cap decrease ─────────────────────────
++
++  describe("building destruction reduces cap", () => {
++    it("destroying a farm decreases cap; over-cap units survive but no new spawns", () => {
++      const { client, player } = joinPlayer(room, "p1");
++
++      // Build a farm
++      const farmSpot = prepareBuildableTile(room, "p1");
++      giveResources(player, 99999, 99999);
++      placeBuilding(room, client, farmSpot, "farm");
++
++      // Fill to boosted cap
++      const boostedCap = PAWN_TYPES["builder"]!.maxCount + BUILDING_CAP_BONUS["farm"];
++      const spawned = fillPawnCap(room, "p1", player, "builder");
++      expect(spawned).toBe(boostedCap);
++
++      // Destroy the farm by clearing structureType
++      const farmTile = room.state.getTile(farmSpot.x, farmSpot.y)!;
++      farmTile.structureType = "";
++
++      // Cap is now back to base — can't spawn more
++      giveResources(player, 99999, 99999);
++      expect(room.spawnPawnCore("p1", player, "builder")).toBeNull();
++
++      // But existing pawns still alive (count > base cap)
++      let pawnCount = 0;
++      room.state.creatures.forEach((c) => {
++        if (c.ownerID === "p1" && c.pawnType === "builder") pawnCount++;
++      });
++      expect(pawnCount).toBe(boostedCap); // over-cap units survive
++    });
++
++    it("destroying a factory decreases cap by 2", () => {
++      const { client, player } = joinPlayer(room, "p1");
++
++      // Build a factory
++      const factorySpot = prepareBuildableTile(room, "p1");
++      giveResources(player, 99999, 99999);
++      placeBuilding(room, client, factorySpot, "factory");
++
++      // Spawn to boosted cap for attackers
++      const baseCap = PAWN_TYPES["attacker"]!.maxCount;
++      const spawned = fillPawnCap(room, "p1", player, "attacker");
++      expect(spawned).toBe(baseCap + BUILDING_CAP_BONUS["factory"]);
++
++      // Destroy the factory
++      const factoryTile = room.state.getTile(factorySpot.x, factorySpot.y)!;
++      factoryTile.structureType = "";
++
++      // Back to base cap — no new spawns
++      giveResources(player, 99999, 99999);
++      expect(room.spawnPawnCore("p1", player, "attacker")).toBeNull();
++
++      // Over-cap units survive
++      let pawnCount = 0;
++      room.state.creatures.forEach((c) => {
++        if (c.ownerID === "p1" && c.pawnType === "attacker") pawnCount++;
++      });
++      expect(pawnCount).toBe(baseCap + BUILDING_CAP_BONUS["factory"]);
++    });
++  });
++
++  // ── Constants validation ────────────────────────────────────────
++
++  describe("constants", () => {
++    it("BUILDING_CAP_BONUS has expected values", () => {
++      expect(BUILDING_CAP_BONUS["farm"]).toBe(1);
++      expect(BUILDING_CAP_BONUS["factory"]).toBe(2);
++    });
++  });
++});
+diff --git a/server/src/rooms/GameRoom.ts b/server/src/rooms/GameRoom.ts
+index 9e24e39..f10da1d 100644
+--- a/server/src/rooms/GameRoom.ts
++++ b/server/src/rooms/GameRoom.ts
+@@ -20,7 +20,7 @@ import {
+   ResourceType, TileType, isWaterTile,
+   RESOURCE_REGEN, CREATURE_SPAWN, CREATURE_TYPES,
+   CREATURE_AI, CREATURE_RESPAWN, TERRITORY,
+-  STRUCTURE_INCOME, SHAPE, BUILDING_COSTS, BUILDING_INCOME,
++  STRUCTURE_INCOME, SHAPE, BUILDING_COSTS, BUILDING_INCOME, BUILDING_CAP_BONUS,
+   PROGRESSION, getLevelForXP,
+   PAWN_TYPES, DAY_NIGHT, FOG_OF_WAR,
+   ENEMY_SPAWNING, ENEMY_BASE_TYPES,
+@@ -472,12 +472,13 @@ export class GameRoom extends Room {
+     // Validate resources
+     if (player.wood < pawnDef.cost.wood || player.stone < pawnDef.cost.stone) return null;
+ 
+-    // Validate pawn cap (per pawn type)
++    // Validate pawn cap (per pawn type, boosted by buildings)
+     let pawnCount = 0;
+     this.state.creatures.forEach((c) => {
+       if (c.ownerID === playerId && c.pawnType === pawnType) pawnCount++;
+     });
+-    if (pawnCount >= pawnDef.maxCount) return null;
++    const capBonus = this.getBuildingCapBonus(playerId);
++    if (pawnCount >= pawnDef.maxCount + capBonus) return null;
+ 
+     // Find walkable tile within HQ zone
+     const spawnPos = this.findHQWalkableTile(player);
+@@ -534,6 +535,19 @@ export class GameRoom extends Room {
+     return candidates[Math.floor(Math.random() * candidates.length)];
+   }
+ 
++  /** Sum building cap bonuses for a player across all their buildings. */
++  getBuildingCapBonus(playerId: string): number {
++    let bonus = 0;
++    const len = this.state.tiles.length;
++    for (let i = 0; i < len; i++) {
++      const tile = this.state.tiles.at(i);
++      if (!tile || tile.ownerID !== playerId) continue;
++      const b = BUILDING_CAP_BONUS[tile.structureType];
++      if (b) bonus += b;
++    }
++    return bonus;
++  }
++
+   private countNonWalkableInZone(cx: number, cy: number): number {
+     const half = Math.floor(TERRITORY.STARTING_SIZE / 2);
+     let count = 0;
+diff --git a/shared/src/constants.ts b/shared/src/constants.ts
+index 0af745e..60670ac 100644
+--- a/shared/src/constants.ts
++++ b/shared/src/constants.ts
+@@ -320,6 +320,12 @@ export const BUILDING_INCOME: Record<string, { wood: number; stone: number }> =
+   factory: { wood: 2, stone: 1 },
+ } as const;
+ 
++/** Per-building bonus to each pawn type's spawn cap (applied globally). */
++export const BUILDING_CAP_BONUS: Record<string, number> = {
++  farm: 1,
++  factory: 2,
++} as const;
++
+ /** Progression level definitions. */
+ export const PROGRESSION = {
+   MAX_LEVEL: 7,

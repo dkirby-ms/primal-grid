@@ -56,3 +56,6 @@ Scribe processed single-agent fix by Pemulis (Systems Dev) on enemy base spawn i
 **Cross-agent impact:** None — constant change is purely systems-level and doesn't break other agents' contracts.
 
 **Git status:** `.squad/` staged and committed (new logs only, no substantial changes)
+
+- **Session: Lobby Improvements + ESLint Cleanup (2026-03-12):** Logged work by Hal and Pemulis. Hal decomposed #161 (lobby improvements) into 4 sub-issues with architecture decisions. Pemulis fixed 47 ESLint no-unused-vars errors (0 lint, 944 tests). Merged decisions to decisions.md, deleted inbox files, updated team histories. Committed .squad/ changes.
+

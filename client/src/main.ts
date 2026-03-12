@@ -1,3 +1,6 @@
+declare const __APP_VERSION__: string;
+declare const __BUILD_DATE__: string;
+
 import { Application } from 'pixi.js';
 import { Room } from '@colyseus/sdk';
 import { GridRenderer } from './renderer/GridRenderer.js';
@@ -12,8 +15,12 @@ import { ChatPanel } from './ui/ChatPanel.js';
 import { HelpScreen } from './ui/HelpScreen.js';
 import { Scoreboard } from './ui/Scoreboard.js';
 import { LobbyScreen } from './ui/LobbyScreen.js';
-import { connectToLobby, joinGameRoom, disconnect, onConnectionStatus, isDevMode, getRoom, loadReconnectToken, reconnectGameRoom, resetClient } from './network.js';
-import type { GameLogPayload } from '@primal-grid/shared';
+import { WaitingRoom } from './ui/WaitingRoom.js';
+import { UpgradeModal } from './ui/UpgradeModal.js';
+import { EndGameScreen } from './ui/EndGameScreen.js';
+import { connectToLobby, joinGameRoom, leaveGame, disconnect, onConnectionStatus, isDevMode, getRoom, loadReconnectToken, reconnectGameRoom, resetClient } from './network.js';
+import type { GameLogPayload, GameEndedPayload, PlayerEliminatedPayload } from '@primal-grid/shared';
+import { GAME_ENDED, PLAYER_ELIMINATED, JOIN_GAME } from '@primal-grid/shared';
 
 const WIDTH = 600;
 const HEIGHT = 600;
@@ -86,6 +93,53 @@ async function bootstrap(): Promise<void> {
   connectToLobbyAndShow(app, grid, camera, lobbyScreen);
 }
 
+function showJoinNamePrompt(lobby: Room, gameId: string, lobbyScreen: LobbyScreen): void {
+  const modal = document.getElementById('join-name-modal');
+  const input = document.getElementById('join-name-input') as HTMLInputElement;
+  const submitBtn = document.getElementById('join-name-submit-btn');
+  
+  if (!modal || !input || !submitBtn) {
+    console.error('[main] Join name modal elements not found');
+    // Fallback: join without name prompt
+    lobby.send(JOIN_GAME, { gameId });
+    return;
+  }
+
+  // Pre-fill with lobby name if available
+  const currentName = lobbyScreen.getDisplayName();
+  if (currentName) {
+    input.value = currentName;
+  }
+
+  // Show modal
+  modal.classList.add('visible');
+  input.focus();
+
+  const handleSubmit = () => {
+    const name = input.value.trim() || input.placeholder || "Explorer";
+    
+    // Send set_name then JOIN_GAME
+    lobby.send("set_name", { name });
+    lobby.send(JOIN_GAME, { gameId });
+
+    // Hide modal and clean up
+    modal.classList.remove('visible');
+    input.value = '';
+    submitBtn.removeEventListener('click', handleSubmit);
+    input.removeEventListener('keydown', handleKeyDown);
+  };
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
+  submitBtn.addEventListener('click', handleSubmit);
+  input.addEventListener('keydown', handleKeyDown);
+}
+
 async function connectToLobbyAndShow(
   app: Application,
   grid: GridRenderer,
@@ -100,8 +154,40 @@ async function connectToLobbyAndShow(
     lobbyScreen.bindToRoom(lobby);
     lobbyScreen.show();
 
+    // Auto-join if ?join=<gameId> is present in the URL
+    const joinParam = new URLSearchParams(window.location.search).get("join");
+    if (joinParam) {
+      // Clean the URL so reloads don't re-trigger auto-join
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("join");
+      window.history.replaceState({}, "", cleanUrl.toString());
+
+      // Show name prompt modal before joining
+      showJoinNamePrompt(lobby, joinParam, lobbyScreen);
+    }
+
+    const waitingRoom = new WaitingRoom();
+
+    waitingRoom.onEvent(async (wrEvent) => {
+      if (wrEvent.type === "leave") {
+        // Player left waiting room — return to lobby
+        lobbyScreen.show();
+      } else if (wrEvent.type === "game_started") {
+        // Game started — join the game room
+        try {
+          const gameRoom = await joinGameRoom(wrEvent.roomId, lobbyScreen.getDisplayName());
+          setGameUIVisible(true);
+          setupGameSession(app, grid, camera, gameRoom, lobbyScreen);
+        } catch (err) {
+          console.error('[main] Failed to join game room from waiting room:', err);
+          lobbyScreen.show();
+        }
+      }
+    });
+
     lobbyScreen.onEvent(async (event) => {
-      if (event.type === "join_game" || event.type === "game_started") {
+      if (event.type === "join_game") {
+        // Has roomId — join game immediately (existing flow)
         try {
           const gameRoom = await joinGameRoom(event.roomId, lobbyScreen.getDisplayName());
           lobbyScreen.hide();
@@ -110,6 +196,10 @@ async function connectToLobbyAndShow(
         } catch (err) {
           console.error('[main] Failed to join game room:', err);
         }
+      } else if (event.type === "waiting") {
+        // No roomId — show waiting room
+        lobbyScreen.hide();
+        waitingRoom.show(lobby, event.gameId, event.gameInfo, event.isHost);
       } else if (event.type === "error") {
         console.warn('[main] Lobby error:', event.message);
       }
@@ -151,6 +241,15 @@ function setupGameSession(
   const logEl = document.getElementById('game-log');
   if (logEl) gameLog.init(logEl);
   const chatPanel = new ChatPanel();
+  const upgradeModal = new UpgradeModal();
+  const endGameScreen = new EndGameScreen();
+
+  // Wire return-to-lobby flow
+  endGameScreen.onReturnToLobby(async () => {
+    await leaveGame();
+    setGameUIVisible(false);
+    connectToLobbyAndShow(app, grid, camera, lobbyScreen);
+  });
 
   const helpScreen = new HelpScreen(WIDTH, HEIGHT);
   app.stage.addChild(helpScreen.container);
@@ -190,6 +289,17 @@ function setupGameSession(
         });
       }
 
+      r.onMessage(GAME_ENDED, (data: GameEndedPayload) => {
+        const isWinner = data.winnerId === r.sessionId;
+        endGameScreen.show(isWinner, data, r.sessionId);
+      });
+
+      r.onMessage(PLAYER_ELIMINATED, (data: PlayerEliminatedPayload) => {
+        if (data.playerId === r.sessionId && logEl) {
+          gameLog.addEntry(`💀 You have been eliminated!`, 'death');
+        }
+      });
+
       const chatEl = document.getElementById('chat-panel');
       if (chatEl) chatPanel.init(chatEl, r);
     }
@@ -203,6 +313,13 @@ function setupGameSession(
     input.setCamera(camera);
     input.setChatPanel(chatPanel);
     input.setGridRenderer(grid);
+    input.setUpgradeModal(upgradeModal);
+    
+    // Wire up HUD to notify InputHandler of resource changes
+    hud.onResourcesChange = (wood, stone) => input?.updateResources(wood, stone);
+    
+    // Wire up upgrade modal with room
+    upgradeModal.setRoom(r);
   }
 
   // Initial bind
@@ -212,6 +329,7 @@ function setupGameSession(
   const unsubscribe = onConnectionStatus((status) => {
     if (status === 'disconnected') {
       // Final disconnect — tear down game session and return to lobby
+      endGameScreen.hide();
       if (input) input.dispose();
       input = null;
       app.ticker.remove(creatureTicker);
@@ -255,6 +373,21 @@ function setGameUIVisible(visible: boolean): void {
 }
 
 bootstrap().catch(console.error);
+
+// Populate app footer with version, build date, and issues link
+(function initFooter() {
+  const footer = document.getElementById('app-footer');
+  if (!footer) return;
+  const version =
+    typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev';
+  const buildDate =
+    typeof __BUILD_DATE__ !== 'undefined'
+      ? new Date(__BUILD_DATE__).toLocaleDateString()
+      : '';
+  const dateStr = buildDate ? ` · Built ${buildDate}` : '';
+  footer.innerHTML =
+    `v${version}${dateStr} · <a href="https://github.com/dkirby-ms/primal-grid/issues" target="_blank" rel="noopener">Report an Issue</a>`;
+})();
 
 if (import.meta.hot) {
   import.meta.hot.dispose(async () => {

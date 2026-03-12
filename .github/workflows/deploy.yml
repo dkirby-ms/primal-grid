@@ -103,9 +103,19 @@ jobs:
           git clone --depth 50 https://github.com/${REPOSITORY}.git repo
           cd repo
           git fetch --depth 50 origin prod
+          git fetch --tags
 
-          # Generate categorized changelog (features/fixes first, chores excluded)
-          CHANGELOG=$(bash .github/scripts/generate-changelog.sh "HEAD~10..HEAD" --format discord --max-lines 10)
+          # Generate changelog from last production tag to current HEAD
+          # Find the most recent tag on prod branch
+          LAST_TAG=$(git describe --tags --abbrev=0 origin/prod 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            RANGE="${LAST_TAG}..origin/prod"
+          else
+            # Fallback: compare against prod~10 if no tags exist
+            RANGE="origin/prod~10..origin/prod"
+          fi
+          
+          CHANGELOG=$(bash .github/scripts/generate-changelog.sh "$RANGE" --format discord --max-lines 10)
           if [ -z "$CHANGELOG" ]; then
             CHANGELOG="• No recent changes"
           fi

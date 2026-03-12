@@ -482,13 +482,15 @@ describe("Fog of War — Phase A", () => {
       setDayPhase(room, "day");
 
       // Add builder that overlaps with HQ vision
-      addBuilder(room, "builder-overlap", "p1", player.hqX + 3, player.hqY);
+      // Pick direction that keeps builder in bounds (HQ spawn is non-deterministic)
+      const dx = player.hqX + 3 < room.state.mapWidth ? 3 : -3;
+      addBuilder(room, "builder-overlap", "p1", player.hqX + dx, player.hqY);
 
       const visible = computeVisibleTiles(room.state, "p1");
 
       // HQ center and builder position both visible
       expect(visible.has(player.hqY * room.state.mapWidth + player.hqX)).toBe(true);
-      expect(visible.has(player.hqY * room.state.mapWidth + (player.hqX + 3))).toBe(true);
+      expect(visible.has(player.hqY * room.state.mapWidth + (player.hqX + dx))).toBe(true);
 
       // Set semantics — array length matches size (no dupes)
       expect(Array.from(visible).length).toBe(visible.size);

@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { PAWN_TYPES, BUILDING_COSTS, PLACE_BUILDING, isEnemyBase } from '@primal-grid/shared';
+import { PAWN_TYPES, BUILDING_COSTS, BUILDING_CAP_BONUS, PLACE_BUILDING, TICK_RATE, isEnemyBase } from '@primal-grid/shared';
 import type { PlaceBuildingPayload } from '@primal-grid/shared';
 
 /**
@@ -7,20 +7,27 @@ import type { PlaceBuildingPayload } from '@primal-grid/shared';
  * Same duck-typed bindToRoom() pattern.
  */
 export class HudDOM {
-  private localSessionId: string;
+  public readonly localSessionId: string;
 
   // DOM element references (cached for perf)
   private territoryCount: HTMLElement;
   private invWood: HTMLElement;
   private invStone: HTMLElement;
+  private invFood: HTMLElement;
   private creatureCounts: HTMLElement;
   private dayPhaseDisplay: HTMLElement;
+
+  // Round timer
+  private roundTimerSection: HTMLElement;
+  private roundTimerDisplay: HTMLElement;
+  private lastTimerSecond = -1;
 
   // Builder panel
   private spawnBuilderBtn: HTMLButtonElement;
   private builderCountEl: HTMLElement;
   private currentWood = 0;
   private currentStone = 0;
+  private currentFood = 0;
   private currentBuilderCount = 0;
 
   // Combat panel
@@ -35,6 +42,7 @@ export class HudDOM {
   private currentAttackerCount = 0;
   private currentExplorerCount = 0;
   private currentEnemyBaseCount = 0;
+  private currentCapBonus = 0;
 
   // Building placement
   private buildFarmBtn: HTMLButtonElement;
@@ -43,6 +51,8 @@ export class HudDOM {
   private _placementMode: 'farm' | 'factory' | null = null;
   /** Callback fired when placement mode changes; InputHandler subscribes. */
   public onPlacementModeChange: ((mode: 'farm' | 'factory' | null) => void) | null = null;
+  /** Callback fired when resources change; InputHandler subscribes. */
+  public onResourcesChange: ((wood: number, stone: number) => void) | null = null;
 
   /** HQ position for colony interactions. */
   public localHqX = 0;
@@ -56,8 +66,13 @@ export class HudDOM {
     this.territoryCount = document.getElementById('territory-count-val')!;
     this.invWood = document.getElementById('inv-wood')!;
     this.invStone = document.getElementById('inv-stone')!;
+    this.invFood = document.getElementById('inv-food')!;
     this.creatureCounts = document.getElementById('creature-counts')!;
     this.dayPhaseDisplay = document.getElementById('day-phase-display')!;
+
+    // Round timer elements
+    this.roundTimerSection = document.getElementById('section-round-timer')!;
+    this.roundTimerDisplay = document.getElementById('round-timer-display')!;
 
     // Builder panel elements
     this.builderCountEl = document.getElementById('builder-count')!;
@@ -90,6 +105,7 @@ export class HudDOM {
     const builderDef = PAWN_TYPES['builder'];
     if (!builderDef) return;
     if (this.currentWood < builderDef.cost.wood || this.currentStone < builderDef.cost.stone) return;
+    if (this.currentFood <= 0) return;
     if (this.currentBuilderCount >= builderDef.maxCount) return;
     this.room.send('spawn_pawn', { pawnType: 'builder' });
   }
@@ -100,6 +116,7 @@ export class HudDOM {
     const def = PAWN_TYPES[pawnType];
     if (!def) return;
     if (this.currentWood < def.cost.wood || this.currentStone < def.cost.stone) return;
+    if (this.currentFood <= 0) return;
     let count: number;
     switch (pawnType) {
       case 'defender': count = this.currentDefenderCount; break;
@@ -156,32 +173,35 @@ export class HudDOM {
 
   /** Update spawn button enabled/disabled state. */
   private updateSpawnButton(): void {
+    const cap = this.currentCapBonus;
+    const starving = this.currentFood <= 0;
+
     const builderDef = PAWN_TYPES['builder'];
     const canAfford = builderDef
       ? this.currentWood >= builderDef.cost.wood && this.currentStone >= builderDef.cost.stone
       : false;
-    const underCap = builderDef ? this.currentBuilderCount < builderDef.maxCount : false;
-    this.spawnBuilderBtn.disabled = !canAfford || !underCap;
+    const underCap = builderDef ? this.currentBuilderCount < builderDef.maxCount + cap : false;
+    this.spawnBuilderBtn.disabled = !canAfford || !underCap || starving;
 
     // Defender button
     const defDef = PAWN_TYPES['defender'];
     if (defDef) {
       const canAffordDef = this.currentWood >= defDef.cost.wood && this.currentStone >= defDef.cost.stone;
-      this.spawnDefenderBtn.disabled = !canAffordDef || this.currentDefenderCount >= defDef.maxCount;
+      this.spawnDefenderBtn.disabled = !canAffordDef || this.currentDefenderCount >= defDef.maxCount + cap || starving;
     }
 
     // Attacker button
     const atkDef = PAWN_TYPES['attacker'];
     if (atkDef) {
       const canAffordAtk = this.currentWood >= atkDef.cost.wood && this.currentStone >= atkDef.cost.stone;
-      this.spawnAttackerBtn.disabled = !canAffordAtk || this.currentAttackerCount >= atkDef.maxCount;
+      this.spawnAttackerBtn.disabled = !canAffordAtk || this.currentAttackerCount >= atkDef.maxCount + cap || starving;
     }
 
     // Explorer button
     const expDef = PAWN_TYPES['explorer'];
     if (expDef) {
       const canAffordExp = this.currentWood >= expDef.cost.wood && this.currentStone >= expDef.cost.stone;
-      this.spawnExplorerBtn.disabled = !canAffordExp || this.currentExplorerCount >= expDef.maxCount;
+      this.spawnExplorerBtn.disabled = !canAffordExp || this.currentExplorerCount >= expDef.maxCount + cap || starving;
     }
 
     // Building buttons
@@ -217,6 +237,31 @@ export class HudDOM {
     this.dayPhaseDisplay.style.color = color;
   }
 
+  /** Update the round timer display. Throttled to 1 update/sec. */
+  public updateRoundTimer(roundTimer: number): void {
+    if (roundTimer === -1) {
+      this.roundTimerSection.classList.add('hidden');
+      this.lastTimerSecond = -1;
+      return;
+    }
+
+    const totalSeconds = Math.max(0, Math.ceil(roundTimer / TICK_RATE));
+
+    // Throttle: only update DOM when the displayed second changes
+    if (totalSeconds === this.lastTimerSecond) return;
+    this.lastTimerSecond = totalSeconds;
+
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    const display = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+    this.roundTimerSection.classList.remove('hidden');
+    this.roundTimerDisplay.textContent = `⏱ ${display}`;
+
+    // Flash when under 60 seconds
+    this.roundTimerSection.classList.toggle('urgent', totalSeconds < 60 && totalSeconds > 0);
+  }
+
   /** Listen to Colyseus state and update DOM elements for the local player. */
   public bindToRoom(room: Room): void {
     this.room = room;
@@ -226,6 +271,12 @@ export class HudDOM {
       const dayPhase = state['dayPhase'] as string | undefined;
       if (dayPhase) {
         this.updateDayPhase(dayPhase);
+      }
+
+      // Round timer
+      const roundTimer = state['roundTimer'] as number | undefined;
+      if (roundTimer !== undefined) {
+        this.updateRoundTimer(roundTimer);
       }
 
       const players = state['players'] as
@@ -244,13 +295,34 @@ export class HudDOM {
           const score = (player['score'] as number) ?? 0;
           this.territoryCount.textContent = String(score);
 
-          // Inventory (wood & stone only)
+          // Inventory (wood, stone & food)
           this.currentWood = (player['wood'] as number) ?? 0;
           this.currentStone = (player['stone'] as number) ?? 0;
+          this.currentFood = (player['food'] as number) ?? 0;
           this.invWood.textContent = String(this.currentWood);
           this.invStone.textContent = String(this.currentStone);
+          this.invFood.textContent = String(this.currentFood);
           this.updateSpawnButton();
+          
+          // Notify InputHandler of resource changes for upgrade validation
+          this.onResourcesChange?.(this.currentWood, this.currentStone);
         });
+      }
+
+      // Count building cap bonus from tiles
+      const tiles = state['tiles'] as
+        | { forEach: (cb: (tile: Record<string, unknown>, key: string) => void) => void; length?: number }
+        | undefined;
+      if (tiles && typeof tiles.forEach === 'function') {
+        let capBonus = 0;
+        tiles.forEach((tile) => {
+          const ownerID = (tile['ownerID'] as string) ?? '';
+          if (ownerID !== this.localSessionId) return;
+          const st = (tile['structureType'] as string) ?? '';
+          const b = BUILDING_CAP_BONUS[st];
+          if (b) capBonus += b;
+        });
+        this.currentCapBonus = capBonus;
       }
 
       // Creature counts (including builder pawns and combat entities)
@@ -285,7 +357,10 @@ export class HudDOM {
         });
         this.creatureCounts.textContent = `🦕 ${herbs}  🦖 ${carns}`;
         this.currentBuilderCount = builders;
-        this.builderCountEl.textContent = `Builders: ${builders}/${PAWN_TYPES['builder']?.maxCount ?? 5}`;
+        const capBonus = this.currentCapBonus;
+        const bonusTag = capBonus > 0 ? ` (+${capBonus})` : '';
+        this.builderCountEl.textContent = `Builders: ${builders}/${(PAWN_TYPES['builder']?.maxCount ?? 5) + capBonus}`;
+        if (capBonus > 0) this.builderCountEl.innerHTML = `Builders: ${builders}/${(PAWN_TYPES['builder']?.maxCount ?? 5) + capBonus} <span style="color:#7ecfff">(+${capBonus})</span>`;
 
         // Combat counts
         const defDef = PAWN_TYPES['defender'];
@@ -295,9 +370,9 @@ export class HudDOM {
         this.currentAttackerCount = attackers;
         this.currentExplorerCount = explorers;
         this.currentEnemyBaseCount = enemyBases;
-        this.defenderCountEl.textContent = `🛡 ${defenders}/${defDef?.maxCount ?? 3}`;
-        this.attackerCountEl.textContent = `⚔ ${attackers}/${atkDef?.maxCount ?? 2}`;
-        this.explorerCountEl.textContent = `🔭 ${explorers}/${expDef?.maxCount ?? 3}`;
+        this.defenderCountEl.textContent = `🛡 ${defenders}/${(defDef?.maxCount ?? 3) + capBonus}${bonusTag}`;
+        this.attackerCountEl.textContent = `⚔ ${attackers}/${(atkDef?.maxCount ?? 2) + capBonus}${bonusTag}`;
+        this.explorerCountEl.textContent = `🔭 ${explorers}/${(expDef?.maxCount ?? 3) + capBonus}${bonusTag}`;
         this.enemyBaseCountEl.textContent = enemyBases > 0 ? `⛺ ${enemyBases} active` : 'No threats';
 
         this.updateSpawnButton();
