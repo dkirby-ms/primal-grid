@@ -6,6 +6,12 @@ import { isTileOpenForCreature } from "./creatureAI.js";
 const FRONTIER_SCAN_RADIUS = PAWN_TYPES.explorer.visionRadius;
 
 /**
+ * Extended radius for forward scans — lets explorers detect frontier even
+ * when deep inside owned territory (e.g. a 9×9 HQ zone).
+ */
+const EXTENDED_SCAN_RADIUS = FRONTIER_SCAN_RADIUS * 2;
+
+/**
  * Explorer pawn FSM: idle → wander
  * Explorers roam the map autonomously, biased toward unclaimed/unowned tiles.
  * Their large vision radius reveals fog of war for the owning player.
@@ -50,15 +56,18 @@ export function countFrontierInDirection(
 }
 
 /**
- * Wander with bias toward unclaimed tiles (tiles not owned by any player).
- * Shuffles cardinal directions, then scores candidates:
- *  - Immediate tile: unclaimed = +3, owned = +1
- *  - Frontier scan: +1 per unclaimed tile in that direction (up to SCAN_RADIUS)
- *  - Explorer repulsion: +2 if no same-owner explorer within Manhattan distance 2
+ * Wander with strong bias toward unclaimed tiles (fog-of-war frontier).
+ * Shuffles cardinal directions for tie-breaking, then scores candidates:
  *
- * The frontier scan is the key improvement: when an explorer is deep inside
- * owned territory and all adjacent tiles score equally, the scan detects which
- * direction leads toward unexplored territory and biases movement that way.
+ *  - Immediate tile: unclaimed = +5, owned = +1 (base)
+ *  - Forward frontier scan: scans from the *candidate* position with extended
+ *    radius (2× vision) to detect frontier even from deep inside territory.
+ *    Each unclaimed tile ahead scores +3 (heavy directional pull).
+ *  - Perpendicular scans: counts unclaimed tiles to the left/right of the
+ *    movement direction at normal radius (+1 each). Detects frontier "off
+ *    to the side" so the explorer curves toward it.
+ *  - Explorer repulsion: +3 if no same-owner explorer within Manhattan
+ *    distance 3 (wider spread than before).
  */
 function wanderExplore(creature: CreatureState, state: GameState): boolean {
   const dirs: [number, number][] = [[0, -1], [0, 1], [-1, 0], [1, 0]];
@@ -90,19 +99,34 @@ function wanderExplore(creature: CreatureState, state: GameState): boolean {
     const tile = state.getTile(nx, ny);
     if (!tile) continue;
 
-    // Immediate tile: unclaimed tiles get a strong base score
-    let score = tile.ownerID === "" ? 3 : 1;
+    // Immediate tile: unclaimed tiles get a strong bonus
+    let score = tile.ownerID === "" ? 5 : 1;
 
-    // Frontier scan: count unclaimed tiles ahead in this direction
-    score += countFrontierInDirection(
-      state, creature.x, creature.y, dx, dy, FRONTIER_SCAN_RADIUS,
+    // Forward frontier scan from CANDIDATE position with extended radius.
+    // Scanning from (nx, ny) instead of (creature.x, creature.y) gives the
+    // explorer one tile of look-ahead, and the extended radius (2× vision)
+    // lets it detect frontier even from deep inside a large owned territory.
+    const frontierAhead = countFrontierInDirection(
+      state, nx, ny, dx, dy, EXTENDED_SCAN_RADIUS,
     );
+    score += frontierAhead * 3;
+
+    // Perpendicular scans: detect frontier to the left/right of movement.
+    // This lets the explorer curve toward frontier that isn't directly ahead.
+    const perpDirs: [number, number][] = dx !== 0
+      ? [[0, 1], [0, -1]]
+      : [[1, 0], [-1, 0]];
+    for (const [pdx, pdy] of perpDirs) {
+      score += countFrontierInDirection(
+        state, nx, ny, pdx, pdy, FRONTIER_SCAN_RADIUS,
+      );
+    }
 
     // Explorer repulsion: prefer tiles away from other same-owner explorers
     const nearExplorer = otherExplorers.some(
-      (e) => Math.abs(nx - e.x) + Math.abs(ny - e.y) <= 2,
+      (e) => Math.abs(nx - e.x) + Math.abs(ny - e.y) <= 3,
     );
-    if (!nearExplorer) score += 2;
+    if (!nearExplorer) score += 3;
 
     if (score > bestScore) {
       bestScore = score;
