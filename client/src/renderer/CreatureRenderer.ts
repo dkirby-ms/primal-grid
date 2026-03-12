@@ -42,6 +42,7 @@ const HERBIVORE_EAT_COLOR = 0x81c784;
 const CARNIVORE_EAT_COLOR = 0xef9a9a;
 const BIRD_EAT_COLOR = 0xa1887f;
 const MONKEY_EAT_COLOR = 0xa1887f;
+const SPIDER_EAT_COLOR = 0x616161;
 
 // Darker variants for Hunt state
 const CARNIVORE_HUNT_COLOR = 0xc62828;
@@ -450,6 +451,7 @@ export class CreatureRenderer {
       return MONKEY_COLOR;
     }
     if (creatureType === 'spider') {
+      if (currentState === 'eat') return SPIDER_EAT_COLOR;
       if (currentState === 'hunt') return SPIDER_HUNT_COLOR;
       return SPIDER_COLOR;
     }

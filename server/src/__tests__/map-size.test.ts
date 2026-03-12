@@ -102,7 +102,8 @@ describe("Map Size (#11)", () => {
 
     it("total creature count matches sum of spawn constants", () => {
       const room = createRoomWithCreatures(42);
-      const expectedTotal = CREATURE_SPAWN.HERBIVORE_COUNT + CREATURE_SPAWN.CARNIVORE_COUNT;
+      const expectedTotal = CREATURE_SPAWN.HERBIVORE_COUNT + CREATURE_SPAWN.CARNIVORE_COUNT + 
+                           CREATURE_SPAWN.BIRD_COUNT + CREATURE_SPAWN.MONKEY_COUNT + CREATURE_SPAWN.SPIDER_COUNT;
       expect(room.state.creatures.size).toBe(expectedTotal);
     });
 
@@ -157,7 +158,8 @@ describe("Map Size (#11)", () => {
 
     it("spawns creatures on a 64×64 map", () => {
       const room = createRoomWithCreatures(42, 64);
-      const expectedTotal = CREATURE_SPAWN.HERBIVORE_COUNT + CREATURE_SPAWN.CARNIVORE_COUNT;
+      const expectedTotal = CREATURE_SPAWN.HERBIVORE_COUNT + CREATURE_SPAWN.CARNIVORE_COUNT + 
+                           CREATURE_SPAWN.BIRD_COUNT + CREATURE_SPAWN.MONKEY_COUNT + CREATURE_SPAWN.SPIDER_COUNT;
       expect(room.state.creatures.size).toBe(expectedTotal);
       room.state.creatures.forEach((c: CreatureState) => {
         expect(c.x).toBeGreaterThanOrEqual(0);
@@ -169,7 +171,8 @@ describe("Map Size (#11)", () => {
 
     it("spawns creatures on a 256×256 map", () => {
       const room = createRoomWithCreatures(42, 256);
-      const expectedTotal = CREATURE_SPAWN.HERBIVORE_COUNT + CREATURE_SPAWN.CARNIVORE_COUNT;
+      const expectedTotal = CREATURE_SPAWN.HERBIVORE_COUNT + CREATURE_SPAWN.CARNIVORE_COUNT + 
+                           CREATURE_SPAWN.BIRD_COUNT + CREATURE_SPAWN.MONKEY_COUNT + CREATURE_SPAWN.SPIDER_COUNT;
       expect(room.state.creatures.size).toBe(expectedTotal);
       room.state.creatures.forEach((c: CreatureState) => {
         expect(c.x).toBeGreaterThanOrEqual(0);

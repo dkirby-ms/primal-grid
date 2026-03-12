@@ -99,13 +99,22 @@ describe("Phase A — HUD State Contract", () => {
       room.spawnCreatures();
       let herbCount = 0;
       let carnCount = 0;
+      let birdCount = 0;
+      let monkeyCount = 0;
+      let spiderCount = 0;
       room.state.creatures.forEach((c: CreatureState) => {
-        expect(["herbivore", "carnivore"]).toContain(c.creatureType);
+        expect(["herbivore", "carnivore", "bird", "monkey", "spider"]).toContain(c.creatureType);
         if (c.creatureType === "herbivore") herbCount++;
-        else carnCount++;
+        else if (c.creatureType === "carnivore") carnCount++;
+        else if (c.creatureType === "bird") birdCount++;
+        else if (c.creatureType === "monkey") monkeyCount++;
+        else if (c.creatureType === "spider") spiderCount++;
       });
       expect(herbCount).toBe(CREATURE_SPAWN.HERBIVORE_COUNT);
       expect(carnCount).toBe(CREATURE_SPAWN.CARNIVORE_COUNT);
+      expect(birdCount).toBe(CREATURE_SPAWN.BIRD_COUNT);
+      expect(monkeyCount).toBe(CREATURE_SPAWN.MONKEY_COUNT);
+      expect(spiderCount).toBe(CREATURE_SPAWN.SPIDER_COUNT);
     });
 
     it("wild creatures have basic state visible to HUD", () => {

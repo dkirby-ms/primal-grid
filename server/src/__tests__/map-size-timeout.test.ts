@@ -100,7 +100,8 @@ describe("Map Size Room Creation — Bug #126", () => {
     for (const size of sizes) {
       it(`spawns correct creature count on ${size}×${size} map`, () => {
         const room = createRoomWithCreatures(size);
-        const expectedTotal = CREATURE_SPAWN.HERBIVORE_COUNT + CREATURE_SPAWN.CARNIVORE_COUNT;
+        const expectedTotal = CREATURE_SPAWN.HERBIVORE_COUNT + CREATURE_SPAWN.CARNIVORE_COUNT + 
+                             CREATURE_SPAWN.BIRD_COUNT + CREATURE_SPAWN.MONKEY_COUNT + CREATURE_SPAWN.SPIDER_COUNT;
         expect(room.state.creatures.size).toBe(expectedTotal);
       });
 
