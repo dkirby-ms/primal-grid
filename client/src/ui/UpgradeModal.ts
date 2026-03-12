@@ -11,14 +11,34 @@ export class UpgradeModal {
   private room: Room | null = null;
 
   constructor() {
-    this.modal = document.getElementById('upgrade-modal')!;
+    // Use existing DOM elements or create them dynamically
+    let modal = document.getElementById('upgrade-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'upgrade-modal';
+      modal.className = 'modal-overlay';
+      modal.innerHTML = `
+        <div class="modal-panel">
+          <h2>🏹 Upgrade Outpost</h2>
+          <p>Add ranged defense to this outpost.</p>
+          <div class="upgrade-cost">
+            💰 Cost: ${OUTPOST_UPGRADE.COST_WOOD} 🪵 + ${OUTPOST_UPGRADE.COST_STONE} 🪨<br>
+            ⚔️ Damage: ${OUTPOST_UPGRADE.DAMAGE} &nbsp;|&nbsp; Range: ${OUTPOST_UPGRADE.ATTACK_RANGE} tiles
+          </div>
+          <div class="modal-actions">
+            <button id="upgrade-cancel-btn" class="modal-btn-cancel">Cancel</button>
+            <button id="upgrade-confirm-btn" class="modal-btn-confirm">Upgrade</button>
+          </div>
+        </div>`;
+      document.body.appendChild(modal);
+    }
+    this.modal = modal;
     this.confirmBtn = document.getElementById('upgrade-confirm-btn') as HTMLButtonElement;
     this.cancelBtn = document.getElementById('upgrade-cancel-btn') as HTMLButtonElement;
 
     this.confirmBtn.addEventListener('click', () => this.onConfirm());
     this.cancelBtn.addEventListener('click', () => this.hide());
 
-    // Close modal on Escape or click outside
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this.modal.classList.contains('visible')) {
         this.hide();
