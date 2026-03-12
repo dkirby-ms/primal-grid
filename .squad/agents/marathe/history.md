@@ -727,3 +727,69 @@ Issue #120 re-labeled from `squad:pemulis` to `squad:marathe` (release automatio
 - In dev→uat promotions, conflicts are typically version bumps — dev always wins since it's the source being promoted
 - `git merge origin/uat --no-commit` is the right pattern to inspect conflicts before committing
 - Remember: `--ours` = HEAD (current branch), `--theirs` = branch being merged in
+
+## 2026-03-11: Issue #159 — Discord Notifications Show Stale Changelog (Fixed)
+
+**Task:** Fix UAT and prod Discord deployment notifications showing previous release changelog instead of current release changes  
+**Status:** ✅ Completed  
+**Branch:** `squad/159-fix-ci-discord-notify`  
+**PR:** #162 (opened against dev)
+
+### The Bug
+
+Both `deploy-uat.yml` and `deploy.yml` used `HEAD~10..HEAD` for changelog generation, which simply showed the last 10 commits on the branch regardless of what was actually new in this deployment. This resulted in stale/previous release content appearing in Discord notifications.
+
+### Root Cause Analysis
+
+The workflows cloned the repo with `--depth 50` and ran:
+```bash
+CHANGELOG=$(bash .github/scripts/generate-changelog.sh "HEAD~10..HEAD" --format discord --max-lines 10)
+```
+
+Problem: `HEAD~10..HEAD` looks backward from current HEAD without considering what's already been deployed. It shows commits that may have been deployed days/weeks ago.
+
+### Solution
+
+**UAT workflow (deploy-uat.yml):**
+- Changed from: `HEAD~10..HEAD`
+- Changed to: `origin/prod..origin/uat`
+- **Rationale:** Shows commits that are in UAT but not yet promoted to prod — exactly what's new in this UAT deployment
+
+**Production workflow (deploy.yml):**
+- Changed from: `HEAD~10..HEAD`
+- Changed to: `${LAST_TAG}..origin/prod` (falls back to `origin/prod~10..origin/prod` if no tags)
+- **Rationale:** Shows commits from last production release tag to current — exactly what's in this production release
+- Uses `git describe --tags --abbrev=0 origin/prod` to find most recent prod tag
+
+### Technical Details
+
+- Added `git fetch --depth 50 origin prod` to UAT workflow (needed both branches for comparison)
+- Added `git fetch --tags` to prod workflow (needed for tag-based range)
+- Preserved all existing changelog features (categorization, Discord format, 10-line limit, jq escaping)
+- No changes to `generate-changelog.sh` script itself — only the commit range passed to it
+
+### Testing Strategy
+
+- Workflow YAML syntax validated
+- Changelog generation script already battle-tested in production
+- Git range logic verified: `origin/prod..origin/uat` and `${TAG}..origin/prod` both valid
+- Change is surgical: only affects commit range calculation, not notification logic
+
+### Key Learning
+
+**Pattern for deployment changelogs:** Always compare against the target/previous environment, not arbitrary history depth:
+- Dev → UAT: show `origin/dev..origin/uat`
+- UAT → Prod: show `origin/uat..origin/prod` OR `${LAST_PROD_TAG}..origin/prod`
+- Never use `HEAD~N..HEAD` for deployment notifications (shows arbitrary history, not delta)
+
+### Files Modified
+
+- `.github/workflows/deploy-uat.yml` (lines 123-130)
+- `.github/workflows/deploy.yml` (lines 102-118)
+
+### Related
+
+- Issue: #159 (mislabeled as squad:gately, corrected to squad:marathe)
+- Commit: 45b786f
+- PR: #162
+

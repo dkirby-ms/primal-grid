@@ -123,10 +123,11 @@ jobs:
           # Checkout with full history for changelog
           git clone --depth 50 https://github.com/${REPOSITORY}.git repo
           cd repo
-          git fetch --depth 50 origin uat
+          git fetch --depth 50 origin uat prod
 
-          # Generate categorized changelog (features/fixes first, chores excluded)
-          CHANGELOG=$(bash .github/scripts/generate-changelog.sh "HEAD~10..HEAD" --format discord --max-lines 10)
+          # Generate changelog comparing UAT against prod (what's new in UAT)
+          # This shows commits that are in UAT but not yet in prod
+          CHANGELOG=$(bash .github/scripts/generate-changelog.sh "origin/prod..origin/uat" --format discord --max-lines 10)
           if [ -z "$CHANGELOG" ]; then
             CHANGELOG="• No recent changes"
           fi
