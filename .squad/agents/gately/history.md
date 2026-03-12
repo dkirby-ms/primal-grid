@@ -46,6 +46,7 @@ Next: **2026-03-04 — Territory Control Redesign** (awaiting user mechanic sele
 - **Food HUD Implementation & Review Cycle (2026-03-14):** Implemented client-side food HUD for Issue #21: food count display (🍖 emoji) synced via Colyseus schema, spawn buttons updated with rebalanced costs (builder 8W/4S, defender 12W/8S, attacker 16W/12S, explorer 10W/6S), spawn gating at food ≤ 0. PR #153 submitted. Hal's review identified 3 issues. When unavailable for revisions, Steeply fixed all items (starvation check, tooltips, constants). PR merged to dev. Key decision: Food display kept minimal (count only, no upkeep rate) to avoid clutter; players learn mechanic through gameplay. Future enhancements possible if UAT shows need for upkeep indicator.
 - **Round Timer HUD (Sub-Issue 4, #161):** Added round timer display to HUD panel. Key patterns: TICK_RATE import from shared constants for tick-to-second conversion, `lastTimerSecond` field for throttling DOM updates to 1/sec (roundTimer changes every tick but display only needs per-second refresh), CSS `hidden` class on section for unlimited games (`roundTimer === -1`), CSS keyframe animation for urgency flash under 60s. Placed between territory and builders sections for visual prominence. This was a clean client-only change — no server files touched.
 - **End-Game Results Screen (Sub-Issue 3, #161):** Built EndGameScreen.ts following HudDOM pattern — DOM-based overlay at z-index 1050 (above game/scoreboard, below lobby). Victory/defeat banner, winner info with reason text, ranked scoreboard highlighting local player, Return to Lobby button, 60s auto-dismiss countdown. Key wiring: GAME_ENDED message handler compares winnerId to local sessionId for win/loss display; PLAYER_ELIMINATED posts to GameLog for eliminated players; return-to-lobby calls leaveGame() then reconnects via connectToLobbyAndShow(); disconnect handler hides overlay for server-side disposal. Matched existing dark panel CSS (rgba(17,17,34,0.95), #444466 borders, Courier New monospace, #ffd700 gold accents). No server files modified.
+- **Auto-Join Name Prompt Fix (#177, 2026-03-18):** Fixed invite link auto-join flow to show name prompt before joining. Bug: `?join=<gameId>` URL param sent JOIN_GAME immediately without set_name, causing players to join with default name. Fix: Created `join-name-modal` in index.html (modal-overlay pattern, centered input + submit button), added `showJoinNamePrompt()` helper in main.ts to display modal and handle submission. Key patterns: pre-fill input with current lobby name if available, support Enter key for quick submit, send `set_name` message before `JOIN_GAME` to match manual join flow (LobbyScreen.ts:325-335). Modal uses existing CSS (modal-panel styling from upgrade-modal), inline input styles for consistent look. Event listeners cleaned up after submission to prevent memory leaks. Client-only fix, no server changes needed.
 
 ### Territory Control Pivot — Rendering Analysis (2026-02-28)
 
@@ -524,3 +525,39 @@ Pemulis implemented Sub-Issue 2 (Win/Loss Engine) which provides the round timer
 - **main.ts wiring:** WaitingRoom created inside `connectToLobbyAndShow`. On "waiting" event: lobby hides, waiting room shows. On GAME_STARTED from waiting room: joins game room, sets up game session. On "leave" from waiting room: returns to lobby.
 - **CSS:** Matches existing dark/monospace lobby aesthetic (#1a1a2e bg, #444466 borders, #ffd700 gold, #7ecfff cyan, Courier New).
 - **No server changes.** All new shared types (SET_READY, GAME_PLAYERS, PreGamePlayerInfo, etc.) were already added by Pemulis.
+
+## Learnings
+
+### Issue #177: Invite Link Join Flow (Needs Research)
+
+**Date:** 2025-01-20
+
+Investigated bug where players joining via invite link have no way to enter a player name.
+
+**Root cause:** The auto-join flow for `?join=<gameId>` URL params bypasses name entry entirely:
+- `main.ts:110-119` immediately sends `JOIN_GAME` message when URL param detected
+- No name prompt shown to user
+- No `set_name` message sent to server
+- Server falls back to empty displayName → client renders "Player" as fallback in scoreboard
+
+**Contrast with working flows:**
+- **Manual join button** (`LobbyScreen.ts:321-335`): Explicitly sends `set_name` before `JOIN_GAME`
+- **Create game** (`LobbyScreen.ts:215-224`): Ensures name exists (typed value or "Explorer" placeholder) before creating
+
+**Key architecture insight:**
+- Lobby connection accepts optional `displayName` in join options (`network.ts:250-260`)
+- Server stores this in session (`LobbyRoom.ts:87-95`) and uses it for all game operations
+- `JOIN_GAME` message has NO name parameter — relies on pre-existing session displayName
+- GameRoom uses displayName from lobby session or connect options (`GameRoom.ts:215-219`)
+
+**Proposed fix:** Add name prompt overlay in auto-join path before sending `JOIN_GAME`. Reuse existing `set_name` message flow for consistency.
+
+**Complexity:** Small (1-2 files, ~30-50 lines)
+
+**Files involved:**
+- client/src/main.ts (auto-join logic)
+- client/src/ui/LobbyScreen.ts (reference implementation for name handling)
+- client/src/network.ts (lobby connect options)
+- server/src/rooms/LobbyRoom.ts (session management)
+
+**Decision:** Recommended client-only fix (Option A) to avoid protocol changes and maintain consistency with manual join UX.
