@@ -588,3 +588,15 @@ Hal completed comprehensive architecture design for single-tier outpost upgrade 
 **Hal's Review:** Both PR #164 (this work) and PR #165 (Gately) submitted to Hal for review. Will proceed to dev upon approval.
 
 **Decision Impact:** #156 approved (resource tuning unit costs + farms) — your implementation is locked in and documented in decisions.md. #161 deferred to backlog.
+
+### Game Lifecycle Schema — Sub-Issue 1 of #161 (2026-03-16)
+
+- Added `GameEndReason` enum to shared/types.ts: `LastStanding`, `TimeUp`, `Surrender`.
+- Added `GAME_ENDED` / `PLAYER_ELIMINATED` message constants + `GameEndedPayload` / `PlayerEliminatedPayload` interfaces to shared/messages.ts.
+- GameState schema: `winnerId: string`, `endReason: string` — `roundPhase` and `roundTimer` already existed.
+- PlayerState schema: `isEliminated: boolean`.
+- LobbyGameEntry schema: `gameDuration: number` (default 10 min).
+- CreateGamePayload: optional `gameDuration` field.
+- IPlayerState interface: `isEliminated` field.
+- All 901 tests pass (1 pre-existing timeout failure unrelated).
+- Branch: squad/161-game-lifecycle, commit e003953.
