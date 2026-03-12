@@ -1,3 +1,90 @@
+## 2026-01-24: Outpost Upgrade System — Design Spec
+
+**Author:** Hal  
+**Issue:** #154  
+**Date:** 2026-01-24  
+**Status:** Design Complete, Ready for Implementation  
+
+### Overview
+
+Players can upgrade outposts by spending wood and stone. Upgraded outposts gain ranged attack capability that automatically targets and damages nearby enemies. This is a late-game defensive investment — expensive but powerful.
+
+### Design Decisions
+
+**1. Single-Tier Upgrade (v1)**
+- Outposts have one upgrade level only — regular → upgraded
+- Simplest implementation that delivers core value
+- Can add tiers later if demand exists
+
+**2. Upgrade Cost: 40W + 30S**
+- Significant late-game investment (~4x farm cost)
+- Strategic decision point, not spam-able
+
+**3. Attack Range: 5 tiles (Manhattan distance)**
+- Matches defender pawn detection radius
+- Positions upgraded outposts as "automated defender"
+- Enemies can still approach from blind spots
+
+**4. Damage: 12 per attack**
+- Lower than pawns (20–25 damage) — outposts are stationary
+- Kills swarm in 2 hits, scouts in 2 hits, raiders in 4 hits
+- Effective for defense without replacing mobile units
+
+**5. Attack Interval: 8 ticks (2 seconds at 4 ticks/sec)**
+- Consistent with TILE_ATTACK_COOLDOWN_TICKS
+- Responsive but not machine-gun rate
+
+**6. Target Priority: Closest enemy**
+- Simplest algorithm — no state inspection
+- Works well for area denial
+- Predictable behavior for players
+
+**7. Upgrade Trigger: Right-click owned outpost**
+- Two-step flow: right-click → confirm modal
+- Fits "interact with structure" pattern
+- Keeps HUD clean
+
+**8. Visual Distinction: 🗼 → 🏹**
+- Clear signal that upgraded outpost has ranged attack
+- Minimal rendering change: check `tile.upgraded` flag
+
+### Constants
+
+Add to `shared/src/constants.ts`:
+
+```typescript
+export const OUTPOST_UPGRADE = {
+  COST_WOOD: 40,
+  COST_STONE: 30,
+  ATTACK_RANGE: 5,
+  DAMAGE: 12,
+  ATTACK_COOLDOWN_TICKS: 8,
+} as const;
+```
+
+### Schema & Implementation
+
+- **TileState:** Add `upgraded: boolean = false` field
+- **Server Handler:** Validate ownership, upgrade status, resources; deduct cost; set flag
+- **Combat Loop:** New `tickOutpostAttacks()` function that targets closest enemy within range
+- **Client Rendering:** Update STRUCTURE_ICONS mapping; check `tile.upgraded` for icon selection
+- **Client UI:** Right-click handler opens upgrade modal; confirm sends UPGRADE_OUTPOST message
+- **Message Protocol:** Define UPGRADE_OUTPOST and UpgradeOutpostPayload
+
+### Scope
+
+**In Scope (v1):** Single-tier, fixed cost, ranged attack (5 tiles, 12 damage, 8 tick interval), closest-enemy targeting, icon change, right-click UI.
+
+**Deferred (v2+):** Multi-tier upgrades, target priority options, attack visual effects, upgrade progress, sound, structure damage, upgrade other buildings, downgrade mechanics.
+
+### Sign-off
+
+This design delivers a simple, effective outpost upgrade system that adds strategic depth without feature creep. All implementation questions answered. Ready to ship.
+
+— Hal
+
+---
+
 ## 2026-03-12: Soft-Preference Anti-Clustering for All Pawn Types
 
 **Author:** Pemulis  
