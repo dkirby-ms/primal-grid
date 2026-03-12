@@ -148,7 +148,9 @@ describe("Food Economy System", () => {
       room.state.tick = STRUCTURE_INCOME.INTERVAL_TICKS;
       room.tickStructureIncome();
 
-      expect(player.food).toBe(foodBefore + STRUCTURE_INCOME.HQ_FOOD);
+      // HQ income (2) minus starting explorer upkeep (1)
+      const startingUpkeep = PAWN_TYPES.explorer.foodUpkeep;
+      expect(player.food).toBe(foodBefore + STRUCTURE_INCOME.HQ_FOOD - startingUpkeep);
       expect(STRUCTURE_INCOME.HQ_FOOD).toBe(2);
     });
   });
@@ -174,10 +176,11 @@ describe("Food Economy System", () => {
       room.state.tick = STRUCTURE_INCOME.INTERVAL_TICKS;
       room.tickStructureIncome();
 
-      // Farm produces food
+      // Farm produces food (minus starting explorer upkeep)
+      const startingUpkeep = PAWN_TYPES.explorer.foodUpkeep;
       expect(BUILDING_INCOME.farm.food).toBe(2);
       expect(player.food).toBeGreaterThanOrEqual(
-        foodBefore + STRUCTURE_INCOME.HQ_FOOD + BUILDING_INCOME.farm.food,
+        foodBefore + STRUCTURE_INCOME.HQ_FOOD + BUILDING_INCOME.farm.food - startingUpkeep,
       );
 
       // Farm does NOT produce wood or stone
@@ -214,10 +217,10 @@ describe("Food Economy System", () => {
       expect(BUILDING_INCOME.factory.wood).toBe(2);
       expect(BUILDING_INCOME.factory.stone).toBe(1);
 
-      // Food only comes from HQ (not factory), minus any upkeep
-      // With no pawns, food should only increase by HQ food
+      // Food only comes from HQ (not factory), minus starting explorer upkeep
+      const startingUpkeep = PAWN_TYPES.explorer.foodUpkeep;
       expect(player.food).toBeGreaterThanOrEqual(
-        foodBefore + STRUCTURE_INCOME.HQ_FOOD,
+        foodBefore + STRUCTURE_INCOME.HQ_FOOD - startingUpkeep,
       );
     });
   });
@@ -250,24 +253,27 @@ describe("Food Economy System", () => {
       const pos = findWalkableTile(room);
 
       // Add a mixed army: 1 builder (1) + 1 defender (2) + 1 attacker (3) = 6 upkeep
+      // Plus starting explorer (1) = 7 total upkeep
       addPawn(room, "p1", "builder", pos.x, pos.y);
       addPawn(room, "p1", "defender", pos.x, pos.y);
       addPawn(room, "p1", "attacker", pos.x, pos.y);
 
+      const startingUpkeep = PAWN_TYPES.explorer.foodUpkeep;
       const totalUpkeep =
         PAWN_TYPES.builder.foodUpkeep +
         PAWN_TYPES.defender.foodUpkeep +
-        PAWN_TYPES.attacker.foodUpkeep;
-      expect(totalUpkeep).toBe(6);
+        PAWN_TYPES.attacker.foodUpkeep +
+        startingUpkeep;
+      expect(totalUpkeep).toBe(7);
 
       const foodBefore = player.food;
 
-      // HQ food income is 2, upkeep is 6 → net = -4
+      // HQ food income is 2, upkeep is 7 → net = -5
       room.state.tick = STRUCTURE_INCOME.INTERVAL_TICKS;
       room.tickStructureIncome();
 
       const expectedNet = STRUCTURE_INCOME.HQ_FOOD - totalUpkeep;
-      expect(expectedNet).toBe(-4);
+      expect(expectedNet).toBe(-5);
       expect(player.food).toBe(foodBefore + expectedNet);
     });
   });
@@ -338,7 +344,13 @@ describe("Food Economy System", () => {
       giveResources(player, 100, 100, -20);
 
       const pawn = addPawn(room, "p1", "builder", pos.x, pos.y);
-      const healthBefore = pawn.health;
+
+      // Collect all player pawns (starting explorer + added builder)
+      const allPawns: CreatureState[] = [];
+      room.state.creatures.forEach((c) => {
+        if (c.ownerID === "p1" && c.pawnType !== "") allPawns.push(c);
+      });
+      const totalHealthBefore = allPawns.reduce((sum, c) => sum + c.health, 0);
 
       // Tick 1
       room.state.tick = STRUCTURE_INCOME.INTERVAL_TICKS;
@@ -348,9 +360,10 @@ describe("Food Economy System", () => {
       room.state.tick = STRUCTURE_INCOME.INTERVAL_TICKS * 2;
       room.tickStructureIncome();
 
-      // Two ticks of starvation damage (food stays negative with upkeep)
-      expect(pawn.health).toBeLessThanOrEqual(
-        healthBefore - 2 * STARVATION.DAMAGE_PER_TICK,
+      // Two ticks of starvation damage spread across all pawns
+      const totalHealthAfter = allPawns.reduce((sum, c) => sum + c.health, 0);
+      expect(totalHealthAfter).toBe(
+        totalHealthBefore - 2 * STARVATION.DAMAGE_PER_TICK,
       );
     });
   });
@@ -362,7 +375,7 @@ describe("Food Economy System", () => {
       const { player } = joinPlayer(room, "p1");
       const pos = findWalkableTile(room);
 
-      // Add expensive army: 3 attackers = 9 upkeep vs 2 HQ income = net -7
+      // Add expensive army: 3 attackers = 9 upkeep + starting explorer = 10 total
       addPawn(room, "p1", "attacker", pos.x, pos.y);
       addPawn(room, "p1", "attacker", pos.x, pos.y);
       addPawn(room, "p1", "attacker", pos.x, pos.y);
@@ -373,9 +386,10 @@ describe("Food Economy System", () => {
       room.state.tick = STRUCTURE_INCOME.INTERVAL_TICKS;
       room.tickStructureIncome();
 
-      // 1 + 2 (HQ) - 9 (upkeep) = -6
+      const startingUpkeep = PAWN_TYPES.explorer.foodUpkeep;
+      // 1 + 2 (HQ) - 9 (attackers) - 1 (explorer) = -7
       const expectedFood =
-        1 + STRUCTURE_INCOME.HQ_FOOD - 3 * PAWN_TYPES.attacker.foodUpkeep;
+        1 + STRUCTURE_INCOME.HQ_FOOD - 3 * PAWN_TYPES.attacker.foodUpkeep - startingUpkeep;
       expect(expectedFood).toBeLessThan(0);
       expect(player.food).toBe(expectedFood);
     });
@@ -389,9 +403,10 @@ describe("Food Economy System", () => {
 
       player.food = 0;
 
-      // Net per tick = 2 (HQ) - 6 (2 attackers) = -4
+      const startingUpkeep = PAWN_TYPES.explorer.foodUpkeep;
+      // Net per tick = 2 (HQ) - 6 (2 attackers) - 1 (explorer) = -5
       const netPerTick =
-        STRUCTURE_INCOME.HQ_FOOD - 2 * PAWN_TYPES.attacker.foodUpkeep;
+        STRUCTURE_INCOME.HQ_FOOD - 2 * PAWN_TYPES.attacker.foodUpkeep - startingUpkeep;
 
       room.state.tick = STRUCTURE_INCOME.INTERVAL_TICKS;
       room.tickStructureIncome();

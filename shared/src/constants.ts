@@ -90,6 +90,8 @@ export const TERRITORY = {
   STARTING_STONE: 15,
   /** Starting food for new players (~4 income ticks runway with 2 builders). */
   STARTING_FOOD: 50,
+  /** Pawn type automatically spawned (free) when a player joins. */
+  STARTING_PAWN: "explorer",
   /** Ticks to claim a tile (8 ticks ≈ 2 seconds at 4 ticks/sec). */
   CLAIM_TICKS: 8,
 } as const;

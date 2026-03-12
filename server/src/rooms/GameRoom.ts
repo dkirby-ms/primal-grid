@@ -224,6 +224,9 @@ export class GameRoom extends Room {
     const hqPos = this.findHQSpawnLocation();
     spawnHQ(this.state, player, hqPos.x, hqPos.y);
 
+    // Spawn a free starting pawn so the player isn't immediately eliminated
+    this.spawnPawnCore(client.sessionId, player, TERRITORY.STARTING_PAWN, undefined, true);
+
     // Restore earned progression and resources after HQ spawn.
     // Territory is spatial and can't transfer across map seeds, so score stays
     // at the actual tile count set by spawnHQ.
@@ -580,31 +583,36 @@ export class GameRoom extends Room {
     player: PlayerState,
     pawnType: string,
     buildMode?: string,
+    free?: boolean,
   ): CreatureState | null {
     const pawnDef = PAWN_TYPES[pawnType];
     if (!pawnDef) return null;
 
-    // Validate resources
-    if (player.wood < pawnDef.cost.wood || player.stone < pawnDef.cost.stone) return null;
+    if (!free) {
+      // Validate resources
+      if (player.wood < pawnDef.cost.wood || player.stone < pawnDef.cost.stone) return null;
 
-    // Block spawning when food is depleted (starvation)
-    if (player.food <= 0) return null;
+      // Block spawning when food is depleted (starvation)
+      if (player.food <= 0) return null;
 
-    // Validate pawn cap (per pawn type, boosted by buildings)
-    let pawnCount = 0;
-    this.state.creatures.forEach((c) => {
-      if (c.ownerID === playerId && c.pawnType === pawnType) pawnCount++;
-    });
-    const capBonus = this.getBuildingCapBonus(playerId);
-    if (pawnCount >= pawnDef.maxCount + capBonus) return null;
+      // Validate pawn cap (per pawn type, boosted by buildings)
+      let pawnCount = 0;
+      this.state.creatures.forEach((c) => {
+        if (c.ownerID === playerId && c.pawnType === pawnType) pawnCount++;
+      });
+      const capBonus = this.getBuildingCapBonus(playerId);
+      if (pawnCount >= pawnDef.maxCount + capBonus) return null;
+    }
 
     // Find walkable tile within HQ zone
     const spawnPos = this.findHQWalkableTile(player);
     if (!spawnPos) return null;
 
-    // Deduct cost
-    player.wood -= pawnDef.cost.wood;
-    player.stone -= pawnDef.cost.stone;
+    if (!free) {
+      // Deduct cost
+      player.wood -= pawnDef.cost.wood;
+      player.stone -= pawnDef.cost.stone;
+    }
 
     // Spawn pawn
     if (this.nextCreatureId == null) this.nextCreatureId = 0;
@@ -631,7 +639,9 @@ export class GameRoom extends Room {
     if (!this.creatureIdCounter) this.creatureIdCounter = { value: 0 };
     this.creatureIdCounter.value = this.nextCreatureId;
 
-    this.broadcast("game_log", { message: `${pawnDef.name} spawned`, type: "spawn" });
+    if (!free) {
+      this.broadcast("game_log", { message: `${pawnDef.name} spawned`, type: "spawn" });
+    }
 
     return creature;
   }
@@ -748,6 +758,9 @@ export class GameRoom extends Room {
     // Spawn HQ
     const hqPos = this.findHQSpawnLocation();
     spawnHQ(this.state, player, hqPos.x, hqPos.y);
+
+    // Spawn a free starting pawn so the CPU isn't immediately eliminated
+    this.spawnPawnCore(cpuId, player, TERRITORY.STARTING_PAWN, undefined, true);
 
     this.cpuPlayerIds.add(cpuId);
 

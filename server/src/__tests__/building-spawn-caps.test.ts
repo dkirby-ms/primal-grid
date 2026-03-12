@@ -250,8 +250,13 @@ describe("Building Spawn Caps", () => {
       // Each pawn type should get +1
       for (const pawnType of ["builder", "defender", "attacker", "explorer"]) {
         const baseCap = PAWN_TYPES[pawnType]!.maxCount;
+        // Count pre-existing pawns of this type (starting explorer)
+        let existing = 0;
+        room.state.creatures.forEach((c) => {
+          if (c.ownerID === "p1" && c.pawnType === pawnType) existing++;
+        });
         const spawned = fillPawnCap(room, "p1", player, pawnType);
-        expect(spawned).toBe(baseCap + BUILDING_CAP_BONUS["farm"]);
+        expect(spawned + existing).toBe(baseCap + BUILDING_CAP_BONUS["farm"]);
       }
     });
   });
