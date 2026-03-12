@@ -150,15 +150,15 @@ function aiTickN(room: GameRoom, n: number): void {
 
 // Stamina constants per creature type (from design spec)
 const HERBIVORE_STAMINA = {
-  maxStamina: 10,
-  costPerMove: 2,
+  maxStamina: 15,
+  costPerMove: 1,
   regenPerTick: 1,
   exhaustedThreshold: 5,
 };
 
 const CARNIVORE_STAMINA = {
-  maxStamina: 14,
-  costPerMove: 2,
+  maxStamina: 21,
+  costPerMove: 1,
   regenPerTick: 1,
   exhaustedThreshold: 6,
 };
@@ -865,7 +865,7 @@ describe("Creature Stamina System", () => {
       expect(carn.stamina).toBeLessThanOrEqual(CARNIVORE_STAMINA.maxStamina);
     });
 
-    it("builder exhausts after ~20 moves (maxStamina=20, cost=1)", () => {
+    it("builder exhausts after ~40 moves (maxStamina=40, cost=1)", () => {
       const room = createRoomWithMap(SEED);
       room.state.creatures.clear();
 
@@ -880,9 +880,9 @@ describe("Creature Stamina System", () => {
 
       // Builder has high stamina and low cost — should last many moves
       expect(builder.stamina).toBe(BUILDER_STAMINA.maxStamina);
-      // maxStamina(20) / costPerMove(1) = 20 moves to exhaust
+      // maxStamina(40) / costPerMove(1) = 40 moves to exhaust
       const expectedMoves = BUILDER_STAMINA.maxStamina / BUILDER_STAMINA.costPerMove;
-      expect(expectedMoves).toBe(20);
+      expect(expectedMoves).toBe(40);
     });
   });
 });
