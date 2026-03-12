@@ -892,14 +892,18 @@ describe("Pawn Types — Constants & Registry", () => {
     expect(PAWN_TYPES["attacker"]).toBeDefined();
   });
 
-  it("defender cost is higher than builder cost (wood and stone)", () => {
-    expect(PAWN_TYPES["defender"].cost.wood).toBeGreaterThan(PAWN_TYPES["builder"].cost.wood);
-    expect(PAWN_TYPES["defender"].cost.stone).toBeGreaterThan(PAWN_TYPES["builder"].cost.stone);
-  });
+  it("pawn types have differentiated resource costs for strategic choice", () => {
+    // Builder: wood-focused, cheap stone (economy unit)
+    expect(PAWN_TYPES["builder"].cost.wood).toBe(10);
+    expect(PAWN_TYPES["builder"].cost.stone).toBe(3);
 
-  it("attacker cost is higher than defender cost (wood and stone)", () => {
-    expect(PAWN_TYPES["attacker"].cost.wood).toBeGreaterThan(PAWN_TYPES["defender"].cost.wood);
-    expect(PAWN_TYPES["attacker"].cost.stone).toBeGreaterThan(PAWN_TYPES["defender"].cost.stone);
+    // Defender: stone-heavy, cheap wood (stone-sink defensive unit)
+    expect(PAWN_TYPES["defender"].cost.wood).toBe(8);
+    expect(PAWN_TYPES["defender"].cost.stone).toBe(12);
+
+    // Attacker: expensive wood, moderate stone (costly offensive unit)
+    expect(PAWN_TYPES["attacker"].cost.wood).toBe(18);
+    expect(PAWN_TYPES["attacker"].cost.stone).toBe(10);
   });
 
   it("each pawn type has damage, HP, and maxCount defined", () => {
