@@ -51,7 +51,7 @@ Build structures on your territory to shape your economy. Click the **Build Farm
 
 | Building | Cost | Income per tick | Spawn Cap Bonus |
 |----------|------|-----------------|-----------------|
-| 🌾 **Farm** | 12 Wood, 6 Stone | +2 Food | +1 |
+| 🌾 **Farm** | 18 Wood, 10 Stone | +2 Food | +1 |
 | 🏭 **Factory** | 20 Wood, 12 Stone | +2 Wood, +1 Stone | +2 |
 
 All your buildings combine their income and deposit it every **10 seconds**.
@@ -66,7 +66,7 @@ Pawns are your workers and warriors. Spawn them from the HUD panel on the right 
 
 | Stat | Value |
 |------|-------|
-| Cost | 8 Wood, 4 Stone (spawn); 1 Food/tick (upkeep) |
+| Cost | 10 Wood, 3 Stone (spawn); 1 Food/tick (upkeep) |
 | Max | 5 (base) |
 | Health | 50 |
 | Vision | 4 tiles |
@@ -77,7 +77,7 @@ Builders are your expansion force. They automatically scout for unclaimed tiles 
 
 | Stat | Value |
 |------|-------|
-| Cost | 12 Wood, 8 Stone + 2 Food/tick |
+| Cost | 8 Wood, 12 Stone + 2 Food/tick |
 | Max | 3 (base) |
 | Health | 80 |
 | Damage | 20 |
@@ -89,7 +89,7 @@ Defenders patrol your territory and will fight off any threat that enters — wh
 
 | Stat | Value |
 |------|-------|
-| Cost | 16 Wood, 12 Stone + 3 Food/tick |
+| Cost | 18 Wood, 10 Stone + 3 Food/tick |
 | Max | 2 (base) |
 | Health | 60 |
 | Damage | 25 |
@@ -114,7 +114,7 @@ Explorers roam the map to reveal the unknown. They're drawn to unexplored and un
 
 Your territory starts as a 5×5 square around your HQ. To expand:
 
-1. **Spawn a Builder** (8 Wood, 4 Stone)
+1. **Spawn a Builder** (10 Wood, 3 Stone)
 2. The builder automatically finds and claims nearby unclaimed tiles
 3. Each claim takes about 2 seconds
 4. You can only claim tiles **next to territory you already own** — no jumping across the map
