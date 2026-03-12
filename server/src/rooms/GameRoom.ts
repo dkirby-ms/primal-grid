@@ -640,7 +640,7 @@ export class GameRoom extends Room {
     this.creatureIdCounter.value = this.nextCreatureId;
 
     if (!free) {
-      this.broadcast("game_log", { message: `${pawnDef.name} spawned`, type: "spawn" });
+      this.broadcast("game_log", { message: `${player.displayName} spawned a ${pawnDef.name}`, type: "spawn" });
     }
 
     return creature;
