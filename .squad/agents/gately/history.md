@@ -44,6 +44,8 @@ Next: **2026-03-04 — Territory Control Redesign** (awaiting user mechanic sele
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 - **Food HUD Implementation & Review Cycle (2026-03-14):** Implemented client-side food HUD for Issue #21: food count display (🍖 emoji) synced via Colyseus schema, spawn buttons updated with rebalanced costs (builder 8W/4S, defender 12W/8S, attacker 16W/12S, explorer 10W/6S), spawn gating at food ≤ 0. PR #153 submitted. Hal's review identified 3 issues. When unavailable for revisions, Steeply fixed all items (starvation check, tooltips, constants). PR merged to dev. Key decision: Food display kept minimal (count only, no upkeep rate) to avoid clutter; players learn mechanic through gameplay. Future enhancements possible if UAT shows need for upkeep indicator.
+- **Round Timer HUD (Sub-Issue 4, #161):** Added round timer display to HUD panel. Key patterns: TICK_RATE import from shared constants for tick-to-second conversion, `lastTimerSecond` field for throttling DOM updates to 1/sec (roundTimer changes every tick but display only needs per-second refresh), CSS `hidden` class on section for unlimited games (`roundTimer === -1`), CSS keyframe animation for urgency flash under 60s. Placed between territory and builders sections for visual prominence. This was a clean client-only change — no server files touched.
+- **End-Game Results Screen (Sub-Issue 3, #161):** Built EndGameScreen.ts following HudDOM pattern — DOM-based overlay at z-index 1050 (above game/scoreboard, below lobby). Victory/defeat banner, winner info with reason text, ranked scoreboard highlighting local player, Return to Lobby button, 60s auto-dismiss countdown. Key wiring: GAME_ENDED message handler compares winnerId to local sessionId for win/loss display; PLAYER_ELIMINATED posts to GameLog for eliminated players; return-to-lobby calls leaveGame() then reconnects via connectToLobbyAndShow(); disconnect handler hides overlay for server-side disposal. Matched existing dark panel CSS (rgba(17,17,34,0.95), #444466 borders, Courier New monospace, #ffd700 gold accents). No server files modified.
 
 ### Territory Control Pivot — Rendering Analysis (2026-02-28)
 
@@ -468,3 +470,49 @@ Refs #154. Ready to open PR targeting `dev`.
 **Hal's Review:** Both PR #164 (Pemulis server) and PR #165 (this work) submitted to Hal for review. Will proceed to dev upon approval.
 
 **Decision Impact:** #156 approved (resource tuning unit costs + farms) — resource costs now locked in for validation. #161 deferred to backlog.
+
+---
+
+## 2026-03-16: Round Timer HUD Display (Epic #161, Sub-Issue 4)
+
+**Author:** Gately  
+**Status:** Complete  
+**Issue:** #161 (Sub-Issue 4)  
+**Branch:** squad/161-game-lifecycle
+
+### Sub-Issue 4: Round Timer HUD Display
+
+Implemented countdown timer display in the HUD for timed games.
+
+**Timer display UI**:
+- Added MM:SS countdown element to HUD panel (follows existing HudDOM pattern)
+- Reads `state.roundTimer` and converts to seconds: `roundTimer / TICK_RATE`
+- Hidden when `roundTimer === -1` (no limit / unlimited games)
+- Shows "∞" or completely hidden for unlimited games (cleaner UX)
+
+**Update mechanics**:
+- Listens to `state.roundTimer` changes via Colyseus schema sync
+- Throttled to 1/sec update (not every tick) for performance
+- Accurate countdown ticking synchronized with server
+
+**Visual urgency indicator**:
+- Added flash/highlight effect when `roundTimer < 60 seconds`
+- Red color or pulsing animation signals end-game pressure
+- Matches HUD visual language (dark background, light text)
+
+**Test result:** 902/902 tests pass.
+
+**Key files modified:**
+- client/src/ui/HudDOM.ts
+
+**Features**:
+- ✅ Timer displays correctly in timed games
+- ✅ Timer hidden in unlimited games
+- ✅ Countdown ticks down at correct rate
+- ✅ Visual urgency cue < 60s
+- ✅ Responsive to `state.roundTimer` changes
+- ✅ Performance-optimized (1/sec throttle)
+
+### Cross-Agent Notes
+
+Pemulis implemented Sub-Issue 2 (Win/Loss Engine) which provides the round timer countdown logic. This UI layer consumes the `roundTimer` field from GameState and presents it to the player. Dependency satisfied. Gately ready for Sub-Issue 3 (End-Game UI) once Pemulis completes engine work (already done).

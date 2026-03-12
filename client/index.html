@@ -61,6 +61,24 @@
         color: #ddd;
         font-weight: bold;
       }
+      /* Round timer */
+      #round-timer-display {
+        font-size: 18px;
+        font-weight: bold;
+        color: #e0e0e0;
+        text-align: center;
+        font-family: 'Courier New', monospace;
+        letter-spacing: 2px;
+      }
+      #section-round-timer.hidden { display: none; }
+      #section-round-timer.urgent #round-timer-display {
+        color: #ff4444;
+        animation: timer-flash 1s ease-in-out infinite;
+      }
+      @keyframes timer-flash {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+      }
       /* Creatures */
       .creature-row {
         font-size: 12px;
@@ -700,6 +718,87 @@
         border-color: #4a9a4a;
       }
 
+      /* End-game results overlay */
+      #endgame-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.8);
+        z-index: 1050;
+        justify-content: center;
+        align-items: center;
+        font-family: 'Courier New', monospace;
+      }
+      #endgame-overlay.visible { display: flex; }
+      #endgame-panel {
+        background: rgba(17,17,34,0.95);
+        border: 2px solid #444466;
+        border-radius: 8px;
+        padding: 24px 32px;
+        min-width: 420px;
+        max-width: 500px;
+        text-align: center;
+      }
+      .endgame-banner {
+        font-size: 28px;
+        font-weight: bold;
+        margin-bottom: 12px;
+        letter-spacing: 3px;
+      }
+      .endgame-banner.victory { color: #ffd700; }
+      .endgame-banner.defeat { color: #ff4444; }
+      #endgame-winner-info {
+        font-size: 13px;
+        color: #aaa;
+        margin-bottom: 20px;
+      }
+      #endgame-scoreboard {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        margin-bottom: 20px;
+      }
+      #endgame-scoreboard th {
+        text-align: left;
+        color: #888;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        padding: 4px 8px;
+        border-bottom: 1px solid #333;
+      }
+      #endgame-scoreboard td {
+        padding: 5px 8px;
+        color: #cccccc;
+        border-bottom: 1px solid #222;
+      }
+      #endgame-scoreboard tr:last-child td { border-bottom: none; }
+      #endgame-scoreboard tr.endgame-local-player td {
+        color: #ffd700;
+        font-weight: bold;
+      }
+      #endgame-return-btn {
+        padding: 10px 28px;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        background: #2a5a2a;
+        color: #fff;
+        border: 1px solid #3a7a3a;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-bottom: 10px;
+      }
+      #endgame-return-btn:hover {
+        background: #3a7a3a;
+        border-color: #4a9a4a;
+      }
+      #endgame-countdown {
+        font-size: 10px;
+        color: #666;
+      }
+
       /* App footer */
       #app-footer {
         width: 100%;
@@ -737,6 +836,10 @@
         <div class="hud-section" id="territory-count">
           <h3>Territory</h3>
           <div style="font-size:16px;font-weight:bold;color:#ffd700">🏰 <span id="territory-count-val">0</span> tiles</div>
+        </div>
+        <div class="hud-section hidden" id="section-round-timer">
+          <h3>Round Timer</h3>
+          <div id="round-timer-display">∞</div>
         </div>
         <div class="hud-section" id="section-builders">
           <h3>Pawns</h3>
@@ -928,6 +1031,20 @@
           <tbody id="scoreboard-body"></tbody>
         </table>
         <div id="scoreboard-hint">Press Tab to close</div>
+      </div>
+    </div>
+
+    <!-- End-game results overlay -->
+    <div id="endgame-overlay">
+      <div id="endgame-panel">
+        <div id="endgame-banner" class="endgame-banner"></div>
+        <div id="endgame-winner-info"></div>
+        <table id="endgame-scoreboard">
+          <thead><tr><th>Rank</th><th>Player</th><th>Score</th></tr></thead>
+          <tbody id="endgame-scoreboard-body"></tbody>
+        </table>
+        <button id="endgame-return-btn">Return to Lobby</button>
+        <div id="endgame-countdown"></div>
       </div>
     </div>
 

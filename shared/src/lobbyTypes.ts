@@ -48,6 +48,8 @@ export interface CreateGamePayload {
   mapSeed?: number;
   /** Number of CPU-controlled opponents to add at room creation (0–7). */
   cpuPlayers?: number;
+  /** Game duration in minutes. 0 = no limit, default 10. */
+  gameDuration?: number;
 }
 
 /** Client → Server: join an existing game. */

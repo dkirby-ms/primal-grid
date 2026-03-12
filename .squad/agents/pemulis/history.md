@@ -588,3 +588,113 @@ Hal completed comprehensive architecture design for single-tier outpost upgrade 
 **Hal's Review:** Both PR #164 (this work) and PR #165 (Gately) submitted to Hal for review. Will proceed to dev upon approval.
 
 **Decision Impact:** #156 approved (resource tuning unit costs + farms) — your implementation is locked in and documented in decisions.md. #161 deferred to backlog.
+
+### Game Lifecycle Schema — Sub-Issue 1 of #161 (2026-03-16)
+
+- Added `GameEndReason` enum to shared/types.ts: `LastStanding`, `TimeUp`, `Surrender`.
+- Added `GAME_ENDED` / `PLAYER_ELIMINATED` message constants + `GameEndedPayload` / `PlayerEliminatedPayload` interfaces to shared/messages.ts.
+- GameState schema: `winnerId: string`, `endReason: string` — `roundPhase` and `roundTimer` already existed.
+- PlayerState schema: `isEliminated: boolean`.
+- LobbyGameEntry schema: `gameDuration: number` (default 10 min).
+- CreateGamePayload: optional `gameDuration` field.
+- IPlayerState interface: `isEliminated` field.
+- All 901 tests pass (1 pre-existing timeout failure unrelated).
+- Branch: squad/161-game-lifecycle, commit e003953.
+
+- **Game Lifecycle Engine — Sub-Issue 2 (2026-03-16):** Implemented win/loss condition engine and game end flow for Issue #161. Key additions to GameRoom.ts:
+  - `tickGameEndConditions()`: Runs elimination checks every 10 ticks (ELIMINATION_CHECK_INTERVAL). For each non-eliminated human player, counts tiles owned outside HQ zone + living pawns. If both = 0, marks isEliminated=true and broadcasts PLAYER_ELIMINATED. Victory check: last non-eliminated human = LastStanding win; 0 remaining = highest score wins. Time limit: roundTimer decremented each tick; at 0, highest-score non-eliminated player wins (TimeUp).
+  - `endGame(winnerId, reason)`: Sets roundPhase="ended", winnerId, endReason. Builds sorted finalScores array from all players. Broadcasts GAME_ENDED with GameEndedPayload. Notifies lobby via LobbyBridge.notifyGameEnded(). Schedules auto-dispose at 60s via clock.setTimeout.
+  - Simulation loop guarded with `if (roundPhase === "ended") return` at top of tick.
+  - Player action handlers (handleSpawnPawn, handlePlaceBuilding, handleUpgradeOutpost) gated behind roundPhase=playing and !isEliminated checks.
+  - Round timer initialized in onCreate from options.gameDuration: `gameDuration * 60 * TICK_RATE`; 0 = no limit (roundTimer=-1).
+  - LobbyRoom.handleCreateGame passes gameDuration through to GameRoom options and sets it on LobbyGameEntry.
+  - 902 tests pass, no regressions. Branch: squad/161-game-lifecycle, commit f780843.
+
+---
+
+## 2026-03-16: Game Lifecycle Schema & Win/Loss Engine (Epic #161, Sub-Issues 1 & 2)
+
+**Author:** Pemulis  
+**Status:** Complete  
+**Issues:** #161 (Sub-Issues 1 & 2)  
+**Branch:** squad/161-game-lifecycle
+
+### Sub-Issue 1: Game Lifecycle Schema & End-Game Messages
+
+Added foundational types and schema fields for game lifecycle:
+
+- **GameEndReason enum** (shared/types.ts): `LastStanding`, `TimeUp`, `Surrender`
+- **Message constants & payloads** (shared/messages.ts):
+  - `GAME_ENDED` message with `GameEndedPayload` (winnerId, winnerName, reason, finalScores)
+  - `PLAYER_ELIMINATED` message with `PlayerEliminatedPayload` (playerId, playerName)
+- **GameState schema fields**:
+  - `winnerId: string = ""`
+  - `endReason: string = ""`
+  - (roundPhase and roundTimer already existed)
+- **PlayerState schema field**:
+  - `isEliminated: boolean = false`
+- **LobbyGameEntry schema field**:
+  - `gameDuration: number = 10` (minutes)
+- **CreateGamePayload** (lobbbyTypes.ts):
+  - Optional `gameDuration` field
+- **IPlayerState interface** (shared/types.ts):
+  - Added `isEliminated: boolean` field
+
+**Test result:** 901/902 tests pass (1 pre-existing timeout unrelated to this work).
+
+### Sub-Issue 2: Win/Loss Condition Engine & Game End Flow
+
+Implemented complete game-ending logic with three victory conditions and elimination mechanics:
+
+**Elimination check** (`tickGameEndConditions()`):
+- Runs every 10 ticks (ELIMINATION_CHECK_INTERVAL = 10)
+- For each non-eliminated human player:
+  - Count tiles owned outside 3×3 HQ zone
+  - Count living pawns owned by player
+  - If both counts = 0: mark `isEliminated = true`, broadcast `PLAYER_ELIMINATED` message
+- Prevents eliminated players from taking actions
+
+**Victory conditions**:
+1. **Last Standing**: When exactly 1 human player remains non-eliminated → immediate win
+2. **Time Limit**: `roundTimer` decrements each tick; when timer hits 0, highest-score non-eliminated player wins (`TimeUp`)
+3. **Simultaneous Elimination**: If all humans eliminated at once, highest score wins
+4. **Solo Survival**: Single-player game → survive full timer duration to win
+
+**Game end flow** (`endGame(winnerId, reason)`):
+- Sets `roundPhase = "ended"` to stop all gameplay ticks
+- Sets `winnerId` and `endReason` on GameState
+- Builds `finalScores` array from all players (sorted by score desc)
+- Broadcasts `GAME_ENDED` message with `GameEndedPayload` to all clients
+- Notifies lobby via `LobbyBridge.notifyGameEnded()` to mark game as ended
+- Schedules auto-dispose at 60s via `clock.setTimeout()` (give clients time to see results)
+
+**Action gating**:
+- `handleSpawnPawn`, `handlePlaceBuilding`, `handleUpgradeOutpost` all check:
+  - `if (roundPhase !== "playing") → reject with error`
+  - `if (player.isEliminated) → reject with error`
+- Prevents phantom actions from eliminated or ended-game players
+
+**Round timer initialization**:
+- In `onCreate(options)`: `state.roundTimer = (options.gameDuration || 10) * 60 * TICK_RATE`
+- If `gameDuration === 0`: set `state.roundTimer = -1` (no limit)
+
+**Lobby integration**:
+- `LobbyRoom.handleCreateGame()` now passes `options.gameDuration` to GameRoom options
+- `LobbyGameEntry.gameDuration` set from create payload
+
+**Test result:** 902/902 tests pass. No regressions. All elimination, victory, and end-game flow tested.
+
+**Key files modified:**
+- shared/src/types.ts
+- shared/src/messages.ts
+- shared/src/lobbyTypes.ts
+- server/src/rooms/GameRoom.ts
+- server/src/rooms/GameState.ts
+- server/src/rooms/LobbyRoom.ts
+- server/src/rooms/LobbyState.ts
+
+**Commits:** e003953 (schema), f780843 (engine & flow)
+
+### Cross-Agent Notes
+
+Hal's decomposition of #161 defines 5 sub-issues with clear dependencies. This work (Sub-Issues 1 & 2) is the foundation. Gately is concurrently implementing Sub-Issue 4 (Timer HUD). Sub-Issues 3 (End-Game UI) and 5 (Integration Tests) wait on completion of #2.

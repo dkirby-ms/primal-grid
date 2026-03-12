@@ -505,3 +505,100 @@ export interface UpgradeOutpostPayload { x: number; y: number; }
 
 **TypeScript Fix Applied:** Added explicit type annotation to resolve control flow narrowing bug in `tickOutpostAttacks()` (closestTarget incorrectly narrowed to 'never' after forEach filter).
 
+- **Epic #161 Decomposition (2026-03-16):** Decomposed "Games need a start and end" into 5 sub-issues: (1) Game lifecycle schema & end-game messages (shared types, GameState fields: winnerId, endReason, PlayerState.isEliminated), (2) Win/loss condition engine (tickGameEndConditions: elimination via territory loss, last-standing victory, time-limit score win), (3) End-game UI & lobby return (EndGameScreen.ts overlay, GAME_ENDED handler, return-to-lobby flow), (4) Round timer HUD (MM:SS countdown in HudDOM), (5) Integration tests. Critical path ~4 days. Key architecture decision: lobby already IS the pre-game phase — no PRE_GAME state needed inside GameRoom. GameState.roundPhase transitions from "playing" → "ended". GameState.roundTimer (already exists, unused) gets initialized from gameDuration option and decremented per tick. Win conditions: elimination (no territory + no pawns), last-standing, time-up (highest score). Explicit scope fence: no matchmaking, no spectator mode, no replays, no ranked play. Filed to `.squad/decisions/inbox/hal-epic-161-decomposition.md`.
+  - **Key files discovered:** `server/src/rooms/LobbyRoom.ts` (full pre-game flow with CREATE/JOIN/START_GAME handlers), `server/src/rooms/LobbyBridge.ts` (EventEmitter bridge — already has `notifyGameEnded`), `server/src/rooms/GameState.ts` (roundPhase="playing" and roundTimer=-1 — both unused but ready), `shared/src/lobbyTypes.ts` (GameStatus type, CreateGamePayload), `client/src/ui/LobbyScreen.ts` (game list + create/join/start UI). Lobby-to-game flow: LobbyRoom creates GameRoom via matchMaker, clients join GameRoom on GAME_STARTED event, LobbyBridge notifies lobby on GameRoom dispose.
+
+
+---
+
+## 2026-03-16: Epic #161 Decomposition — Game Lifecycle (Start/End/Win-Loss)
+
+**Author:** Hal (Lead)  
+**Status:** Complete  
+**Issue:** #161  
+**Type:** Epic Decomposition & Architectural Assessment
+
+### Overview
+
+Decomposed Epic #161 ("Games need a start and end. There should be win and loss conditions and game-ending events") into 5 well-scoped sub-issues with clear dependencies, acceptance criteria, and architectural foundations.
+
+### Architectural Assessment
+
+**Existing infrastructure (60% complete):**
+- ✅ LobbyRoom handles CREATE_GAME, JOIN_GAME, START_GAME
+- ✅ LobbyGameEntry has `status: "waiting" | "in_progress" | "ended"`
+- ✅ LobbyBridge notifies lobby when GameRoom disposes (`game_ended` event)
+- ✅ GameState has `roundPhase` ("playing") and `roundTimer` (-1) — unused but ready
+- ✅ Reconnection with 60s grace period
+- ✅ Client lobby UI with game list, create, join, start
+
+**Missing pieces:**
+- Win/loss condition checking in simulation loop
+- `winnerId` / `endReason` on GameState
+- GAME_ENDED message from GameRoom to clients
+- End-game UI (victory/defeat screen)
+- Client-side "return to lobby" flow
+- roundTimer countdown logic
+- roundPhase state transitions
+
+**Key design decision:** Lobby IS the pre-game phase. No need for PRE_GAME state inside GameRoom. Players wait in lobby; host starts; everyone joins GameRoom and gameplay begins immediately. Keeps architecture intact.
+
+### Sub-Issues
+
+| # | Title | Owner | Priority | Dependencies | Estimate |
+|---|-------|-------|----------|--------------|----------|
+| 1 | Schema & End-Game Messages | Pemulis | P1 | — | 0.5 day |
+| 2 | Win/Loss Engine & Game End Flow | Pemulis | P2 | #1 | 1.5 days |
+| 3 | End-Game UI & Lobby Return | Gately | P3 | #1, #2 | 1 day |
+| 4 | Timer HUD Display | Gately | P3 | #1 | 0.5 day |
+| 5 | Integration Tests | Steeply | P4 | #2, #3, #4 | 1 day |
+
+### Win/Loss Conditions (Simplest Viable Set)
+
+1. **Elimination:** Player loses all territory outside 3×3 HQ zone → functionally dead. Mark as eliminated.
+2. **Last Standing (multiplayer):** Last non-eliminated human player wins.
+3. **Time Limit:** If `gameDuration > 0`, countdown from configured minutes. When timer hits 0, highest score wins.
+4. **Solo Survival:** Single-player game with CPU enemies — survive full timer duration to win.
+
+### Scope Fence
+
+**Explicitly deferred:**
+- Matchmaking / ranked play / ELO ratings
+- Spectator mode for eliminated players
+- Game replays or history
+- Achievement system
+- Leaderboard persistence
+- Multiple game modes (CTF, King of the Hill)
+- Surrender button (can be added later trivially)
+- Configurable victory conditions per game
+
+### Dependency Graph
+
+```
+Sub-Issue 1 (Schema)
+    ├──→ Sub-Issue 2 (Win/Loss Engine)
+    │        └──→ Sub-Issue 3 (End-Game UI)
+    │                 └──→ Sub-Issue 5 (Tests)
+    └──→ Sub-Issue 4 (Timer HUD) ──→ Sub-Issue 5 (Tests)
+```
+
+**Critical path:** 1 → 2 → 4 → 5 (~4 days)  
+**Parallel track:** 1 → 3 (Gately timer HUD while Pemulis builds engine)
+
+### Implementation Progress
+
+- ✅ **Sub-Issue 1 (Pemulis):** Schema complete. GameEndReason enum, GAME_ENDED/PLAYER_ELIMINATED messages, schema fields. 901/902 tests pass.
+- ✅ **Sub-Issue 2 (Pemulis):** Engine complete. Elimination checks, victory conditions, game end flow. 902/902 tests pass.
+- ✅ **Sub-Issue 4 (Gately):** Timer HUD complete. MM:SS countdown, urgency flash < 60s. 902/902 tests pass.
+- ⏳ **Sub-Issue 3 (Gately):** Blocked on Sub-Issue 2 (now complete). Ready to start.
+- ⏳ **Sub-Issue 5 (Steeply):** Blocked on Sub-Issues 2, 3, 4 (Sub-2 & 4 complete). Awaits Sub-Issue 3.
+
+### Files Created
+- .squad/decisions/inbox/hal-epic-161-decomposition.md (merged to decisions.md)
+
+### Cross-Agent Notes
+
+- Pemulis delivering Sub-Issues 1 & 2 on-time. Gately parallel on Sub-Issue 4 (Timer HUD).
+- Dependency graph being followed. No scope creep.
+- Steeply (Tester) ready to write integration tests once #2, #3, #4 complete.
+- All 5 sub-issues documented in decisions.md for future reference.

@@ -31,6 +31,9 @@ export class LobbyGameEntry extends Schema {
 
   @type("number")
   createdAt: number = 0;
+
+  @type("number")
+  gameDuration: number = 10;
 }
 
 /** A connected player in the lobby. */
