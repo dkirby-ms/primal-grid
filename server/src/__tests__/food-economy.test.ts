@@ -406,19 +406,19 @@ describe("Food Economy System", () => {
   // ── 10. Rebalanced spawn costs ──────────────────────────────────
 
   describe("rebalanced pawn spawn costs", () => {
-    it("builder costs 8 wood, 4 stone", () => {
-      expect(PAWN_TYPES.builder.cost.wood).toBe(8);
-      expect(PAWN_TYPES.builder.cost.stone).toBe(4);
+    it("builder costs 10 wood, 3 stone", () => {
+      expect(PAWN_TYPES.builder.cost.wood).toBe(10);
+      expect(PAWN_TYPES.builder.cost.stone).toBe(3);
     });
 
-    it("defender costs 12 wood, 8 stone", () => {
-      expect(PAWN_TYPES.defender.cost.wood).toBe(12);
-      expect(PAWN_TYPES.defender.cost.stone).toBe(8);
+    it("defender costs 8 wood, 12 stone", () => {
+      expect(PAWN_TYPES.defender.cost.wood).toBe(8);
+      expect(PAWN_TYPES.defender.cost.stone).toBe(12);
     });
 
-    it("attacker costs 16 wood, 12 stone", () => {
-      expect(PAWN_TYPES.attacker.cost.wood).toBe(16);
-      expect(PAWN_TYPES.attacker.cost.stone).toBe(12);
+    it("attacker costs 18 wood, 10 stone", () => {
+      expect(PAWN_TYPES.attacker.cost.wood).toBe(18);
+      expect(PAWN_TYPES.attacker.cost.stone).toBe(10);
     });
 
     it("explorer costs 10 wood, 6 stone", () => {

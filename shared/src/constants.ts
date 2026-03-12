@@ -212,7 +212,7 @@ export const PAWN_TYPES: Record<string, PawnTypeDef> = {
     icon: "🔨",
     creatureType: "pawn_builder",
     health: 50,
-    cost: { wood: 8, stone: 4 },
+    cost: { wood: 10, stone: 3 },
     foodUpkeep: 1,
     maxCount: 5,
     damage: 0,
@@ -228,7 +228,7 @@ export const PAWN_TYPES: Record<string, PawnTypeDef> = {
     icon: "🛡",
     creatureType: "pawn_defender",
     health: 80,
-    cost: { wood: 12, stone: 8 },
+    cost: { wood: 8, stone: 12 },
     foodUpkeep: 2,
     maxCount: 3,
     damage: 20,
@@ -244,7 +244,7 @@ export const PAWN_TYPES: Record<string, PawnTypeDef> = {
     icon: "⚔",
     creatureType: "pawn_attacker",
     health: 60,
-    cost: { wood: 16, stone: 12 },
+    cost: { wood: 18, stone: 10 },
     foodUpkeep: 3,
     maxCount: 2,
     damage: 25,
@@ -324,7 +324,7 @@ export const STRUCTURE_INCOME = {
 
 /** Building placement costs (instant placement via PLACE_BUILDING). */
 export const BUILDING_COSTS: Record<string, { wood: number; stone: number }> = {
-  farm: { wood: 12, stone: 6 },
+  farm: { wood: 18, stone: 10 },
   factory: { wood: 20, stone: 12 },
 } as const;
 
