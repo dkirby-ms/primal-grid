@@ -469,3 +469,49 @@ Refs #154. Ready to open PR targeting `dev`.
 **Hal's Review:** Both PR #164 (Pemulis server) and PR #165 (this work) submitted to Hal for review. Will proceed to dev upon approval.
 
 **Decision Impact:** #156 approved (resource tuning unit costs + farms) — resource costs now locked in for validation. #161 deferred to backlog.
+
+---
+
+## 2026-03-16: Round Timer HUD Display (Epic #161, Sub-Issue 4)
+
+**Author:** Gately  
+**Status:** Complete  
+**Issue:** #161 (Sub-Issue 4)  
+**Branch:** squad/161-game-lifecycle
+
+### Sub-Issue 4: Round Timer HUD Display
+
+Implemented countdown timer display in the HUD for timed games.
+
+**Timer display UI**:
+- Added MM:SS countdown element to HUD panel (follows existing HudDOM pattern)
+- Reads `state.roundTimer` and converts to seconds: `roundTimer / TICK_RATE`
+- Hidden when `roundTimer === -1` (no limit / unlimited games)
+- Shows "∞" or completely hidden for unlimited games (cleaner UX)
+
+**Update mechanics**:
+- Listens to `state.roundTimer` changes via Colyseus schema sync
+- Throttled to 1/sec update (not every tick) for performance
+- Accurate countdown ticking synchronized with server
+
+**Visual urgency indicator**:
+- Added flash/highlight effect when `roundTimer < 60 seconds`
+- Red color or pulsing animation signals end-game pressure
+- Matches HUD visual language (dark background, light text)
+
+**Test result:** 902/902 tests pass.
+
+**Key files modified:**
+- client/src/ui/HudDOM.ts
+
+**Features**:
+- ✅ Timer displays correctly in timed games
+- ✅ Timer hidden in unlimited games
+- ✅ Countdown ticks down at correct rate
+- ✅ Visual urgency cue < 60s
+- ✅ Responsive to `state.roundTimer` changes
+- ✅ Performance-optimized (1/sec throttle)
+
+### Cross-Agent Notes
+
+Pemulis implemented Sub-Issue 2 (Win/Loss Engine) which provides the round timer countdown logic. This UI layer consumes the `roundTimer` field from GameState and presents it to the player. Dependency satisfied. Gately ready for Sub-Issue 3 (End-Game UI) once Pemulis completes engine work (already done).

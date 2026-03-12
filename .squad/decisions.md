@@ -3502,3 +3502,361 @@ The pawnBuilder test referenced legacy `PAWN.BUILDER_COST_WOOD` (10) which diver
 - Pemulis (Systems) and Gately (Game Dev) coordinating on shared outpost schema
 - Hal (Lead) reviewing both PRs in parallel; blockers to be noted in PR comments
 - No decision conflicts detected; implementation proceeding autonomously per charter
+# Epic #161 Decomposition: Game Start, End, Win/Loss Conditions
+
+**Author:** Hal (Lead)
+**Date:** 2026-03-16
+**Epic:** [Feature] Games need a start and end. There should be win and loss conditions and game-ending events.
+**Status:** Decomposition Complete — Ready for Implementation
+
+---
+
+## Architecture Assessment
+
+The lobby/game lifecycle is already 60% built. Key infrastructure that exists:
+
+- **LobbyRoom** handles CREATE_GAME, JOIN_GAME, START_GAME — full pre-game flow ✅
+- **LobbyGameEntry** has `status: "waiting" | "in_progress" | "ended"` ✅
+- **LobbyBridge** already notifies lobby when GameRoom disposes (`game_ended` event) ✅
+- **GameState** has `roundPhase` ("playing") and `roundTimer` (-1) — **unused but ready** ✅
+- **Reconnection** with 60s grace period ✅
+- **Client** has lobby UI with game list, create, join, start ✅
+
+**What's missing:**
+- No win/loss condition checking in simulation loop
+- No `winnerId` or `endReason` on GameState
+- No GAME_ENDED message from GameRoom to clients
+- No end-game UI (victory/defeat screen)
+- No client-side "return to lobby" flow after game ends
+- `roundTimer` never decremented
+- `roundPhase` hardcoded to "playing", never transitions
+
+**Design decision:** The lobby already IS the pre-game phase. No need for a PRE_GAME state inside GameRoom. Players wait in the lobby, host starts, everyone joins GameRoom and gameplay begins immediately. This keeps the existing architecture intact.
+
+---
+
+## Win/Loss Conditions (Simplest Viable Set)
+
+1. **Elimination:** A player loses all territory outside their 3×3 HQ zone → functionally dead (can't spawn pawns, no income, no expansion). Mark as eliminated.
+2. **Last Standing (multiplayer):** Last non-eliminated human player wins.
+3. **Time Limit:** If `gameDuration > 0`, countdown from configured minutes. When timer hits 0, highest score wins.
+4. **Solo Survival:** Single-player game with CPU enemies — survive the full timer duration to win.
+
+**What we're NOT building:** Matchmaking, ranked play, ELO, spectator mode, replays, achievements, leaderboards. All deferred.
+
+---
+
+## Sub-Issues
+
+### Sub-Issue 1: Game Lifecycle Schema & End-Game Messages
+
+**Title:** `[#161] Add game lifecycle schema fields and end-game message protocol`
+**Owner:** Pemulis (Systems/Backend)
+**Priority:** P1 — Foundation, must be first
+**Dependencies:** None
+**Estimate:** ~0.5 day
+
+**What to build:**
+
+1. **shared/src/types.ts** — Add:
+   ```typescript
+   enum GameEndReason {
+     LastStanding = "last_standing",
+     TimeUp = "time_up",
+     Surrender = "surrender",
+   }
+   ```
+
+2. **shared/src/messages.ts** — Add message constants and payload:
+   ```typescript
+   const GAME_ENDED = "game_ended"
+   const PLAYER_ELIMINATED = "player_eliminated"
+
+   interface GameEndedPayload {
+     winnerId: string
+     winnerName: string
+     reason: GameEndReason
+     finalScores: Array<{ playerId: string; name: string; score: number }>
+   }
+
+   interface PlayerEliminatedPayload {
+     playerId: string
+     playerName: string
+   }
+   ```
+
+3. **shared/src/lobbyTypes.ts** — Add to `CreateGamePayload`:
+   ```typescript
+   gameDuration?: number  // minutes, 0 = no limit, default 10
+   ```
+
+4. **server/src/rooms/GameState.ts** — Add schema fields:
+   ```typescript
+   @type("string") winnerId: string = ""
+   @type("string") endReason: string = ""
+   // roundPhase already exists — will use "playing" | "ended"
+   // roundTimer already exists — will decrement from gameDuration
+   ```
+
+5. **server/src/rooms/LobbyState.ts** — Add to `LobbyGameEntry`:
+   ```typescript
+   @type("number") gameDuration: number = 10
+   ```
+
+6. **server/src/rooms/GameState.ts** — Add to `PlayerState`:
+   ```typescript
+   @type("boolean") isEliminated: boolean = false
+   ```
+
+**Definition of done:** Schema compiles, shared types exported, no runtime changes yet. All existing tests pass.
+
+---
+
+### Sub-Issue 2: Win/Loss Condition Engine & Game End Flow
+
+**Title:** `[#161] Implement win/loss detection and game end flow on server`
+**Owner:** Pemulis (Systems/Backend)
+**Priority:** P2
+**Dependencies:** Sub-Issue 1
+**Estimate:** ~1.5 days
+
+**What to build:**
+
+1. **GameRoom.ts** — New `tickGameEndConditions()` added to simulation loop (after combat, before fog-of-war):
+
+   ```
+   Elimination check (every 10 ticks, not every tick):
+   - For each non-eliminated human player:
+     - Count tiles where ownerID === player.id AND !isHQTerritory
+     - If count === 0 AND player has no living pawns → mark eliminated
+     - Broadcast PLAYER_ELIMINATED to all clients
+     - Log to game_log
+
+   Victory check (after elimination):
+   - Count non-eliminated human players
+   - If exactly 1 remains → that player wins (LastStanding)
+   - If 0 remain (simultaneous elimination) → highest score wins
+
+   Time limit check:
+   - If roundTimer > 0: decrement each tick
+   - If roundTimer hits 0: highest-score non-eliminated player wins (TimeUp)
+   ```
+
+2. **GameRoom.ts** — New `endGame(winnerId, reason)` method:
+   ```
+   - Set state.roundPhase = "ended"
+   - Set state.winnerId = winnerId
+   - Set state.endReason = reason
+   - Build finalScores array from all players
+   - Broadcast GAME_ENDED to all clients
+   - Notify lobby via LobbyBridge.notifyGameEnded()
+   - Stop simulation interval (clearInterval or skip ticks)
+   - Set auto-dispose timer (60 seconds — give clients time to see results)
+   ```
+
+3. **GameRoom.ts** — Gate actions behind game phase:
+   ```
+   In handleSpawnPawn, handlePlaceBuilding, handleUpgradeOutpost:
+   - If state.roundPhase !== "playing" → reject with error message
+   - If player.isEliminated → reject with error message
+   ```
+
+4. **GameRoom.ts** — Initialize round timer from options:
+   ```
+   In onCreate(options):
+   - state.roundTimer = (options.gameDuration || 10) * 60 * TICK_RATE
+   - If gameDuration === 0: state.roundTimer = -1 (no limit)
+   ```
+
+5. **LobbyRoom.ts** — Pass `gameDuration` through to GameRoom options in `handleCreateGame`.
+
+**Key files to modify:** `server/src/rooms/GameRoom.ts`, `server/src/rooms/LobbyRoom.ts`
+**Key files to read:** `server/src/rooms/combat.ts` (elimination check pattern), `shared/src/constants.ts` (tick rates)
+
+**Definition of done:**
+- Solo game with timer: game ends at 0, player wins if alive
+- 2-player game: eliminate opponent → victory
+- 2-player game with timer: timer expires → highest score wins
+- Actions rejected after game ends
+- Eliminated players can't act
+- Lobby shows game as ended
+- All existing tests pass + new unit tests for endGame logic
+
+---
+
+### Sub-Issue 3: End-Game UI & Return to Lobby
+
+**Title:** `[#161] Build end-game results screen and lobby return flow`
+**Owner:** Gately (Game Dev/UI)
+**Priority:** P3
+**Dependencies:** Sub-Issues 1, 2
+**Estimate:** ~1 day
+
+**What to build:**
+
+1. **client/src/ui/EndGameScreen.ts** — New DOM overlay (follows HudDOM pattern):
+   ```
+   - Full-screen semi-transparent overlay (z-index above game)
+   - Victory banner ("VICTORY!") or defeat banner ("DEFEATED")
+   - Winner name and reason (e.g., "Last player standing" / "Highest score — time expired")
+   - Final scoreboard table: rank, name, score, territory count
+   - Highlight current player's row
+   - "Return to Lobby" button
+   - Auto-dismiss timer (60s countdown matching server dispose)
+   ```
+
+2. **client/src/main.ts** — Handle GAME_ENDED message:
+   ```
+   room.onMessage(GAME_ENDED, (payload: GameEndedPayload) => {
+     const isWinner = payload.winnerId === currentPlayerId
+     endGameScreen.show(isWinner, payload)
+   })
+   ```
+
+3. **client/src/main.ts** — Handle PLAYER_ELIMINATED message:
+   ```
+   room.onMessage(PLAYER_ELIMINATED, (payload) => {
+     if (payload.playerId === currentPlayerId) {
+       // Show "You have been eliminated" notification in game log
+       // Optionally dim/grey the game view
+     }
+   })
+   ```
+
+4. **client/src/main.ts** — "Return to Lobby" flow:
+   ```
+   endGameScreen.onReturnToLobby(() => {
+     leaveGame()                    // Disconnect from GameRoom
+     endGameScreen.hide()
+     setGameUIVisible(false)
+     connectToLobbyAndShow()        // Reconnect to lobby
+   })
+   ```
+
+5. **client/src/main.ts** — Handle server-side disposal:
+   ```
+   If GameRoom disconnects (onLeave with non-consent code) while game ended:
+   - Auto-return to lobby (same flow as above)
+   ```
+
+**Styling:** Match existing HUD DOM panel style (dark background, light text, consistent with side panel). Minimal CSS — functional, not fancy.
+
+**Definition of done:**
+- Victory screen shows on win with correct stats
+- Defeat screen shows on loss
+- Return to Lobby button works (disconnects, reconnects to lobby)
+- Eliminated player sees notification
+- Auto-return to lobby when server disposes room
+
+---
+
+### Sub-Issue 4: Round Timer HUD Display
+
+**Title:** `[#161] Display round timer countdown in game HUD`
+**Owner:** Gately (Game Dev/UI)
+**Priority:** P3 (can be done in parallel with Sub-Issue 2)
+**Dependencies:** Sub-Issue 1 (schema fields only)
+**Estimate:** ~0.5 day
+
+**What to build:**
+
+1. **client/src/ui/HudDOM.ts** — Add timer display:
+   ```
+   - New element in HUD panel showing remaining time (MM:SS format)
+   - Reads from state.roundTimer (convert ticks to seconds: roundTimer / TICK_RATE)
+   - Hidden when roundTimer === -1 (no limit)
+   - Flash/highlight when < 60 seconds remaining
+   - Show "∞" or hide entirely for unlimited games
+   ```
+
+2. **client/src/ui/HudDOM.ts** — Update on state change:
+   ```
+   - Listen to state.roundTimer changes
+   - Update display each tick (or throttle to 1/sec for performance)
+   ```
+
+**Definition of done:**
+- Timer visible during timed games
+- Timer hidden during unlimited games
+- Timer counts down correctly
+- Visual urgency indicator under 60 seconds
+
+---
+
+### Sub-Issue 5: Game Lifecycle Integration Tests
+
+**Title:** `[#161] Integration tests for game lifecycle: start → play → win/loss → end → lobby`
+**Owner:** Steeply (Tester)
+**Priority:** P4
+**Dependencies:** Sub-Issues 2, 3
+**Estimate:** ~1 day
+
+**What to build:**
+
+1. **Unit tests** (server-side, Vitest):
+   - `tickGameEndConditions()` correctly detects elimination
+   - `tickGameEndConditions()` correctly detects last-standing victory
+   - `tickGameEndConditions()` correctly handles time-up with score comparison
+   - `endGame()` sets correct state fields
+   - `endGame()` broadcasts GAME_ENDED message
+   - Actions rejected when `roundPhase === "ended"`
+   - Actions rejected for eliminated players
+   - Round timer decrements correctly
+   - Edge case: simultaneous elimination → highest score wins
+   - Edge case: all players leave → game disposes cleanly
+
+2. **Integration tests** (E2E or server-integration):
+   - Full lifecycle: create game → start → eliminate opponent → victory screen
+   - Timer game: create timed game → timer expires → highest score wins
+   - Lobby return: after game ends → player returns to lobby → can create new game
+   - Lobby state: ended game no longer appears in lobby game list (or appears as "ended")
+
+**Test file locations:** Follow existing patterns in `server/src/rooms/__tests__/` and `e2e/`
+
+**Definition of done:**
+- All new tests pass
+- All existing tests still pass
+- Coverage for happy paths and edge cases listed above
+
+---
+
+## Dependency Graph
+
+```
+Sub-Issue 1 (Schema)
+    ├──→ Sub-Issue 2 (Win/Loss Engine)
+    │        └──→ Sub-Issue 3 (End-Game UI)
+    │                 └──→ Sub-Issue 5 (Tests)
+    └──→ Sub-Issue 4 (Timer HUD) ──→ Sub-Issue 5 (Tests)
+```
+
+## Priority Order
+
+| Order | Sub-Issue | Owner | Blocked By |
+|-------|-----------|-------|------------|
+| 1 | Schema & Messages | Pemulis | — |
+| 2 | Win/Loss Engine | Pemulis | #1 |
+| 3 | Timer HUD | Gately | #1 (can parallel with #2) |
+| 4 | End-Game UI | Gately | #1, #2 |
+| 5 | Integration Tests | Steeply | #2, #3, #4 |
+
+**Critical path:** 1 → 2 → 4 → 5 (~4 days)
+**Parallel track:** 1 → 3 (Gately starts timer HUD while Pemulis builds engine)
+
+## Scope Fence
+
+**Explicitly deferred (do NOT build):**
+- Matchmaking / ranked play / ELO ratings
+- Spectator mode for eliminated players
+- Game replays or history
+- Achievement system
+- Leaderboard persistence across games
+- Multiple game modes (capture the flag, king of the hill, etc.)
+- Pre-game phase inside GameRoom (lobby handles this)
+- Surrender button (can be added later trivially)
+- Configurable victory conditions per game (v1 = score + elimination, always)
+
+**Future considerations (noted, not planned):**
+- Surrender button (trivial: send message → mark eliminated → check victory)
+- Post-game stats persistence (needs DB schema, separate issue)
+- Game mode selection in lobby (needs UI + server routing, separate epic)
