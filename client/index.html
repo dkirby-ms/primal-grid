@@ -443,6 +443,56 @@
       }
       #lobby-name-input:focus { border-color: #7ecfff; }
 
+      /* Filter tabs */
+      .lobby-filter-tabs {
+        display: flex;
+        gap: 0;
+        margin-bottom: 12px;
+        border-bottom: 1px solid #333;
+      }
+      .lobby-filter-tab {
+        padding: 6px 14px;
+        font-size: 11px;
+        font-family: 'Courier New', monospace;
+        background: transparent;
+        color: #888;
+        border: 1px solid transparent;
+        border-bottom: none;
+        border-radius: 4px 4px 0 0;
+        cursor: pointer;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        transition: color 0.15s, background 0.15s;
+      }
+      .lobby-filter-tab:hover {
+        color: #ccc;
+        background: rgba(255,255,255,0.03);
+      }
+      .lobby-filter-tab.active {
+        color: #ffd700;
+        font-weight: bold;
+        background: #1a1a2e;
+        border-color: #444466;
+        border-bottom: 1px solid #1a1a2e;
+        margin-bottom: -1px;
+      }
+      .lobby-filter-badge {
+        display: inline-block;
+        margin-left: 4px;
+        padding: 1px 5px;
+        font-size: 10px;
+        font-weight: normal;
+        background: #333;
+        color: #aaa;
+        border-radius: 8px;
+        min-width: 14px;
+        text-align: center;
+      }
+      .lobby-filter-tab.active .lobby-filter-badge {
+        background: #444422;
+        color: #ffd700;
+      }
+
       /* Game list table */
       #lobby-game-list {
         width: 100%;
@@ -932,6 +982,12 @@
             <label>Your Name</label>
             <input id="lobby-name-input" type="text" maxlength="20" placeholder="Explorer" autocomplete="off" />
           </div>
+        </div>
+
+        <div class="lobby-filter-tabs" id="lobby-filter-tabs">
+          <button class="lobby-filter-tab active" data-filter="all">All <span class="lobby-filter-badge" id="lobby-filter-count-all">0</span></button>
+          <button class="lobby-filter-tab" data-filter="waiting">Waiting <span class="lobby-filter-badge" id="lobby-filter-count-waiting">0</span></button>
+          <button class="lobby-filter-tab" data-filter="in_progress">In Progress <span class="lobby-filter-badge" id="lobby-filter-count-in_progress">0</span></button>
         </div>
 
         <table id="lobby-game-list">
