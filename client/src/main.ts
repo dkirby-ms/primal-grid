@@ -15,6 +15,7 @@ import { ChatPanel } from './ui/ChatPanel.js';
 import { HelpScreen } from './ui/HelpScreen.js';
 import { Scoreboard } from './ui/Scoreboard.js';
 import { LobbyScreen } from './ui/LobbyScreen.js';
+import { WaitingRoom } from './ui/WaitingRoom.js';
 import { UpgradeModal } from './ui/UpgradeModal.js';
 import { EndGameScreen } from './ui/EndGameScreen.js';
 import { connectToLobby, joinGameRoom, leaveGame, disconnect, onConnectionStatus, isDevMode, getRoom, loadReconnectToken, reconnectGameRoom, resetClient } from './network.js';
@@ -106,8 +107,28 @@ async function connectToLobbyAndShow(
     lobbyScreen.bindToRoom(lobby);
     lobbyScreen.show();
 
+    const waitingRoom = new WaitingRoom();
+
+    waitingRoom.onEvent(async (wrEvent) => {
+      if (wrEvent.type === "leave") {
+        // Player left waiting room — return to lobby
+        lobbyScreen.show();
+      } else if (wrEvent.type === "game_started") {
+        // Game started — join the game room
+        try {
+          const gameRoom = await joinGameRoom(wrEvent.roomId, lobbyScreen.getDisplayName());
+          setGameUIVisible(true);
+          setupGameSession(app, grid, camera, gameRoom, lobbyScreen);
+        } catch (err) {
+          console.error('[main] Failed to join game room from waiting room:', err);
+          lobbyScreen.show();
+        }
+      }
+    });
+
     lobbyScreen.onEvent(async (event) => {
-      if (event.type === "join_game" || event.type === "game_started") {
+      if (event.type === "join_game") {
+        // Has roomId — join game immediately (existing flow)
         try {
           const gameRoom = await joinGameRoom(event.roomId, lobbyScreen.getDisplayName());
           lobbyScreen.hide();
@@ -116,6 +137,10 @@ async function connectToLobbyAndShow(
         } catch (err) {
           console.error('[main] Failed to join game room:', err);
         }
+      } else if (event.type === "waiting") {
+        // No roomId — show waiting room
+        lobbyScreen.hide();
+        waitingRoom.show(lobby, event.gameId, event.gameInfo, event.isHost);
       } else if (event.type === "error") {
         console.warn('[main] Lobby error:', event.message);
       }

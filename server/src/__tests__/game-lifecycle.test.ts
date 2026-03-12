@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { GameState, PlayerState, CreatureState, TileState } from "../rooms/GameState.js";
+import { GameState, PlayerState, CreatureState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import { spawnHQ } from "../rooms/territory.js";
 import {
@@ -190,7 +190,7 @@ describe("Game Lifecycle — Elimination Detection", () => {
   });
 
   it("does NOT re-check already-eliminated players", () => {
-    const player = addPlayer(room, "p1", { isEliminated: true });
+    const _player = addPlayer(room, "p1", { isEliminated: true });
     // Even though player has no tiles/pawns, should not trigger again
     const broadcastSpy = room.broadcast as ReturnType<typeof vi.fn>;
     broadcastSpy.mockClear();
@@ -266,7 +266,7 @@ describe("Game Lifecycle — Victory Conditions", () => {
   it("last standing: 2 players, 1 eliminated → other wins with LastStanding", () => {
     addPlayer(room, "p1", { hqX: 10, hqY: 10 });
     // p1 has no non-HQ tiles, no pawns → will be eliminated
-    const p2 = addPlayer(room, "p2", { hqX: 25, hqY: 25 });
+    const _p2 = addPlayer(room, "p2", { hqX: 25, hqY: 25 });
     claimNonHQTile(room, 30, 30, "p2");
 
     setTickToEliminationCheck(room);
@@ -278,8 +278,8 @@ describe("Game Lifecycle — Victory Conditions", () => {
   });
 
   it("time up: roundTimer reaches 0 → highest score wins with TimeUp", () => {
-    const p1 = addPlayer(room, "p1", { score: 100 });
-    const p2 = addPlayer(room, "p2", { score: 200, hqX: 25, hqY: 25 });
+    const _p1 = addPlayer(room, "p1", { score: 100 });
+    const _p2 = addPlayer(room, "p2", { score: 200, hqX: 25, hqY: 25 });
     // Both have territory so neither is eliminated
 
     room.state.roundTimer = 1; // Will hit 0 on next tick

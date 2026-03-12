@@ -516,3 +516,11 @@ Implemented countdown timer display in the HUD for timed games.
 ### Cross-Agent Notes
 
 Pemulis implemented Sub-Issue 2 (Win/Loss Engine) which provides the round timer countdown logic. This UI layer consumes the `roundTimer` field from GameState and presents it to the player. Dependency satisfied. Gately ready for Sub-Issue 3 (End-Game UI) once Pemulis completes engine work (already done).
+
+### Pre-Game Waiting Room UI (Issue #2)
+
+- **WaitingRoom.ts:** New DOM-based overlay at z-index 1100 (same level as lobby). Shows game name, settings summary (map size, max players), live player list with ✅/⬜ ready indicators, host-only "Start Game" button (enabled when ≥1 player), non-host "Ready"/"Not Ready" toggle (sends SET_READY), and "Leave" button (sends LEAVE_GAME). Subscribes to GAME_PLAYERS and GAME_STARTED messages on the lobby Room.
+- **LobbyScreen flow change:** GAME_JOINED handler now checks for `roomId` presence. If roomId exists → immediate join (existing flow). If absent → emits new `"waiting"` event with gameInfo and isHost flag. The `isHost` flag is derived from the `isCreatingGame` state captured before `clearCreateGameState()`.
+- **main.ts wiring:** WaitingRoom created inside `connectToLobbyAndShow`. On "waiting" event: lobby hides, waiting room shows. On GAME_STARTED from waiting room: joins game room, sets up game session. On "leave" from waiting room: returns to lobby.
+- **CSS:** Matches existing dark/monospace lobby aesthetic (#1a1a2e bg, #444466 borders, #ffd700 gold, #7ecfff cyan, Courier New).
+- **No server changes.** All new shared types (SET_READY, GAME_PLAYERS, PreGamePlayerInfo, etc.) were already added by Pemulis.

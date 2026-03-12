@@ -1,4 +1,4 @@
-import type { GameEndedPayload, GameEndReason } from '@primal-grid/shared';
+import type { GameEndedPayload } from '@primal-grid/shared';
 
 const REASON_TEXT: Record<string, string> = {
   last_standing: 'Last player standing',

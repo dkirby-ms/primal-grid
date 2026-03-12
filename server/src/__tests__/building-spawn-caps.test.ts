@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GameState, PlayerState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import {
-  BUILDING_COSTS,
   BUILDING_CAP_BONUS,
   PAWN_TYPES,
   TileType,
@@ -123,7 +122,7 @@ describe("Building Spawn Caps", () => {
 
   describe("getBuildingCapBonus", () => {
     it("returns 0 when player has no buildings", () => {
-      const { player } = joinPlayer(room, "p1");
+      const { player: _player } = joinPlayer(room, "p1");
       expect(room.getBuildingCapBonus("p1")).toBe(0);
     });
 

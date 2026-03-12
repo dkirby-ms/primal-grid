@@ -9,7 +9,7 @@
  * once Gately/Pemulis implement their patches.
  */
 import { describe, it, expect, vi } from "vitest";
-import { GameState, TileState, CreatureState } from "../rooms/GameState.js";
+import { GameState, CreatureState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import { generateProceduralMap } from "../rooms/mapGenerator.js";
 import {

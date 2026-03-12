@@ -9,11 +9,11 @@
  * once Gately/Pemulis implement their patches.
  */
 import { describe, it, expect, vi } from "vitest";
-import { GameState, PlayerState, CreatureState, TileState } from "../rooms/GameState.js";
+import { GameState, CreatureState, TileState } from "../rooms/GameState.js";
 import { GameRoom } from "../rooms/GameRoom.js";
 import { computeVisibleTiles } from "../rooms/visibility.js";
 import {
-  TERRITORY, PAWN, DAY_NIGHT, FOG_OF_WAR, CREATURE_TYPES,
+  PAWN, DAY_NIGHT,
 } from "@primal-grid/shared";
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -151,7 +151,7 @@ describe("Phantom Buildings — Bug #128", () => {
     it("tile that was never built on shows empty structureType when revealed", () => {
       const room = createRoomWithMap(42);
       setDayPhase(room, "day");
-      const { player } = joinPlayer(room, "p1");
+      const { player: _player } = joinPlayer(room, "p1");
 
       // Find a fog tile
       const fogTile = findFogTile(room, "p1");
@@ -159,7 +159,7 @@ describe("Phantom Buildings — Bug #128", () => {
       expect(fogTile!.structureType).toBe("");
 
       // Move a pawn to reveal it
-      const pawn = addBuilder(room, "b1", "p1", fogTile!.x, fogTile!.y);
+      const _pawn = addBuilder(room, "b1", "p1", fogTile!.x, fogTile!.y);
       const newVisible = computeVisibleTiles(room.state, "p1");
       const tileIdx = fogTile!.y * room.state.mapWidth + fogTile!.x;
       expect(newVisible.has(tileIdx)).toBe(true);
@@ -400,7 +400,7 @@ describe("Phantom Buildings — Bug #128", () => {
     it("two players: tile visible to P1 but not P2 shows same server-side structureType", () => {
       const room = createRoomWithMap(42);
       setDayPhase(room, "day");
-      const { player: p1 } = joinPlayer(room, "p1");
+      const { player: _p1 } = joinPlayer(room, "p1");
       joinPlayer(room, "p2");
 
       // Find tile visible to p1 only
