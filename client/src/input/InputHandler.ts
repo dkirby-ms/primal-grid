@@ -102,22 +102,44 @@ export class InputHandler {
     return { x: tileX, y: tileY };
   }
 
+  /** Check if tile is an upgradeable outpost and show modal if so. */
+  private tryShowUpgradeModal(screenX: number, screenY: number): boolean {
+    const tile = this.screenToTile(screenX, screenY);
+    if (!tile) return false;
+
+    const tileData = this.gridRenderer?.getTileData(tile.x, tile.y);
+    if (!tileData) return false;
+
+    const localPlayerId = this.hud?.localSessionId ?? '';
+    const isOwnedOutpost = tileData.owner === localPlayerId && tileData.structure === 'outpost';
+    const isNotUpgraded = !tileData.upgraded;
+    const hasEnoughResources = this.currentWood >= OUTPOST_UPGRADE.COST_WOOD &&
+                                this.currentStone >= OUTPOST_UPGRADE.COST_STONE;
+
+    if (isOwnedOutpost && isNotUpgraded && hasEnoughResources) {
+      this.upgradeModal?.show(tile.x, tile.y);
+      return true;
+    }
+    return false;
+  }
+
   private bindClicks(): void {
     this._clickHandler = (e: MouseEvent) => {
-      // Only process left clicks
       if (e.button !== 0) return;
-
-      // Don't process if not in placement mode
-      if (!this.hud?.placementMode) return;
 
       const rect = this.canvas.getBoundingClientRect();
       const screenX = e.clientX - rect.left;
       const screenY = e.clientY - rect.top;
 
+      // Try upgrade modal first (works outside placement mode)
+      if (this.tryShowUpgradeModal(screenX, screenY)) return;
+
+      // Otherwise handle building placement
+      if (!this.hud?.placementMode) return;
+
       const tile = this.screenToTile(screenX, screenY);
       if (!tile) return;
 
-      // Validate placement client-side before sending
       if (!this.gridRenderer?.isValidPlacementTile(tile.x, tile.y)) return;
 
       this.hud.sendPlaceBuilding(tile.x, tile.y);
@@ -128,30 +150,13 @@ export class InputHandler {
 
   private bindContextMenu(): void {
     this._contextMenuHandler = (e: MouseEvent) => {
-      e.preventDefault(); // Prevent default context menu
+      e.preventDefault();
 
       const rect = this.canvas.getBoundingClientRect();
       const screenX = e.clientX - rect.left;
       const screenY = e.clientY - rect.top;
 
-      const tile = this.screenToTile(screenX, screenY);
-      if (!tile) return;
-
-      // Get tile data
-      const tileData = this.gridRenderer?.getTileData(tile.x, tile.y);
-      if (!tileData) return;
-
-      // Check if this is an owned, non-upgraded outpost
-      const localPlayerId = this.hud?.localSessionId ?? '';
-      const isOwnedOutpost = tileData.owner === localPlayerId && tileData.structure === 'outpost';
-      const isNotUpgraded = !tileData.upgraded;
-      const hasEnoughResources = this.currentWood >= OUTPOST_UPGRADE.COST_WOOD && 
-                                  this.currentStone >= OUTPOST_UPGRADE.COST_STONE;
-
-      // Show upgrade modal if all conditions met
-      if (isOwnedOutpost && isNotUpgraded && hasEnoughResources) {
-        this.upgradeModal?.show(tile.x, tile.y);
-      }
+      this.tryShowUpgradeModal(screenX, screenY);
     };
 
     this.canvas.addEventListener('contextmenu', this._contextMenuHandler);
