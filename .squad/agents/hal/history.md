@@ -469,3 +469,39 @@ export interface UpgradeOutpostPayload { x: number; y: number; }
 - Trade-offs documented (single-tier vs. multi-tier, closest-enemy targeting, instant upgrade)
 
 **Sign-off:** Design complete and validated. Ready to begin Phase 1 upon Hal's PR review completion.
+
+---
+
+### PR Reviews — Resource Tuning & Outpost Upgrades (2026-03-17)
+
+**PR #164 (Resource Tuning by Pemulis):**
+- **Status:** ✅ APPROVED
+- **Branch:** squad/156-resource-tuning
+- **Build:** Clean, all 902 tests passing
+- **Scope:** Matches approved HIGH-priority changes from #156
+- **Changes:** Unit cost differentiation (Builder 10W+3S, Defender 8W+12S, Attacker 18W+10S) + expensive farms (18W+10S)
+- **Strategic Impact:** Creates meaningful resource tensions — builders drain wood, defenders are stone sinks, attackers compete with economy, farms require deliberate investment
+- **Tests:** Properly updated to reflect new costs in combat-system.test.ts, food-economy.test.ts, pawnBuilder.test.ts
+- **Decision:** Ready to merge to dev
+
+**PR #165 (Outpost Upgrades by Gately):**
+- **Status:** 🔴 CHANGES REQUESTED
+- **Branch:** squad/154-outpost-upgrades
+- **Build:** Clean after TypeScript fix (closestTarget narrowing issue)
+- **Tests:** All 903 tests passing
+- **Critical Issue:** Client rendering incomplete — upgraded outposts render as 🗼 instead of 🏹
+- **Missing Implementation:**
+  1. `outpost_upgraded` key missing from STRUCTURE_ICONS map
+  2. `updateBuildingIcon()` doesn't check `tile.upgraded` flag
+  3. `upgraded` field never read from tile state (line 341-381)
+  4. ExploredTileCache doesn't store `upgraded` field
+  5. Fog-of-war silhouettes always show 🗼, never check upgrade status
+  6. `tileUpgraded` Map declared but never populated
+- **What Works:** Server logic solid (upgrade handler, combat tick, schema sync), UI modal functional, message protocol correct
+- **Fix Required:** 6-point implementation gap in GridRenderer.ts and ExploredTileCache.ts (icon selection, state sync, fog rendering)
+- **Decision:** Blocked pending client rendering fixes
+
+**Key Learning:** Server-client rendering contract requires explicit verification — schema sync alone doesn't guarantee visual correctness. Icon rendering paths (visible tiles, fog silhouettes, ExploredTileCache) must all handle state flags consistently.
+
+**TypeScript Fix Applied:** Added explicit type annotation to resolve control flow narrowing bug in `tickOutpostAttacks()` (closestTarget incorrectly narrowed to 'never' after forEach filter).
+
