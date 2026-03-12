@@ -472,3 +472,85 @@ Phase A foundation pivot complete. Server-side: removed avatar properties, imple
 - Server source (`server/src/rooms/`) compiles clean (zero errors)
 - Test files have expected errors — they reference removed methods (handleMove, handleGather, handleEat, tickPlayerSurvival, etc.) and removed fields (player.x, player.y, player.hunger, player.health). These tests need rewriting in a later task.
 
+
+### Creature Type System (2026-01-24, Issue #157)
+
+**Implementation:** Added three new creature types (bird, monkey, spider) with balanced stats and rebalanced spawn frequency.
+
+**New Creatures:**
+- **Bird (🦅):** Fast flyer (18 stamina, cost 1/move, regen 2/tick), high detection (8 tiles), flees carnivores/spiders, eats vegetation. Prefers Highland/Grassland. Health 60, Hunger 90.
+- **Monkey (🐒):** Forest herbivore (12 stamina, standard movement), medium detection (5 tiles), flees carnivores/spiders, eats vegetation. Prefers Forest only. Health 70, Hunger 95.
+- **Spider (🕷️):** Ambush predator (8 stamina, low exhaustion threshold 4), hunts herbivores/birds/monkeys/builders. Prefers Swamp/Forest. Health 50, Hunger 70, Detection 4.
+
+**Balance Changes:**
+- Total creature spawns kept at 96: 40 herbivores (was 64), 20 carnivores (was 32), 16 birds, 12 monkeys, 8 spiders.
+- Herbivore minPopulation reduced from 4 to 3 (less aggressive respawn).
+- New prey/predator relationships: spiders hunt all herbivore types + builders, birds/monkeys flee from carnivores AND spiders.
+
+**Technical Details:**
+- Shared constants: CREATURE_SPAWN expanded with BIRD_COUNT, MONKEY_COUNT, SPIDER_COUNT.
+- Data: CREATURE_TYPES in shared/src/data/creatures.ts now has 5 types.
+- Server AI: Added stepBird(), stepMonkey(), stepSpider() in creatureAI.ts. Added helper functions findNearestOfTypes() (multi-predator detection) and findNearestPreyForSpider().
+- Client rendering: Added color constants (BIRD_COLOR, MONKEY_COLOR, SPIDER_COLOR, etc.) and state-based coloring in getCreatureColor().
+- GameRoom spawn loop updated to spawn all 5 types.
+
+**Key Files Modified:**
+- shared/src/data/creatures.ts (creature definitions)
+- shared/src/constants.ts (spawn counts)
+- server/src/rooms/GameRoom.ts (spawn loop)
+- server/src/rooms/creatureAI.ts (AI behaviors, helper functions)
+- client/src/renderer/CreatureRenderer.ts (colors, rendering)
+
+### Resource Economy Analysis (2026-01-24, Issue #156)
+
+**Research Summary:** Analyzed current resource allocation, unit costs, income rates, and building economics. Wrote comprehensive design recommendations document.
+
+**Key Findings:**
+- **Food is too cheap:** Farm cost (12W+6S) has low opportunity cost once 2+ builders exist. Food scarcity ends by minute 3, removing strategic tension.
+- **Unit composition lacks strategic choice:** All pawns use similar W:S ratios (2:1 to 1.5:1). No resource-driven composition decisions (e.g., wood-heavy aggressive vs. stone-heavy defensive).
+- **Factories have unclear value:** Factory cost (20W+12S) has 100s+ ROI, rarely built. Players default to "more farms, more pawns."
+- **Starting resources are rigid:** 25W/15S/50F forces identical "2 builders → 2 farms → defender" build order every game.
+- **Stone accumulates late-game:** Stone income (2S/10s from HQ) exceeds demand past minute 10. Stone becomes non-factor.
+
+**Recommendations (Priority Order):**
+1. **Unit cost differentiation (HIGH):** Make builders wood-heavy (10W/3S), defenders stone-heavy (8W/12S), attackers wood-heavy (18W/10S). Creates wood-scarce vs. stone-scarce strategies.
+2. **Expensive farms (HIGH):** Increase farm cost to 18W/10S (50% more). Delays food abundance to minute 5-7, makes "farm vs. defender" a real choice.
+3. **Stronger factories (MEDIUM):** Increase factory income to 3W/2S/10s (50% more). Makes factory a clear mid-game power spike, ROI drops to 50-70s.
+4. **Stone-heavy outpost upgrade (MEDIUM):** Change planned upgrade cost to 30W/50S (from 40W/30S). Adds late-game stone sink.
+5. **Starting resource variance (LOW):** Add opening diversity (wood-start aggressive vs. stone-start defensive) or increase starting pool to 30W/20S/60F.
+
+**Document:** .squad/decisions/inbox/pemulis-resource-tuning.md (full analysis with strategic impact matrix, ROI calculations, and implementation order).
+
+---
+
+### Sprint Kickoff (2026-03-12) — Context Propagation
+
+**Completed Tasks This Sprint:**
+- **#157 Creature Types:** PR #163 opened. Unified creature type system across server/client.
+- **#156 Resource Tuning:** Analysis complete and merged into decisions.md. Awaiting implementation consensus.
+
+**New Context — Outpost Upgrades (#154):**
+Hal completed comprehensive architecture design for single-tier outpost upgrade feature. Design is stable and ready for Phase 1 implementation (server foundation):
+
+- **Cost:** 40W + 30S (late-game investment)
+- **Attack Range:** 5 tiles (Manhattan distance)
+- **Damage:** 12 per hit, 8-tick cooldown
+- **Constants:** Add OUTPOST_UPGRADE to shared/constants.ts
+- **Schema:** Add `upgraded: boolean` to TileState
+- **Server Logic:** Upgrade handler + ranged combat tick function
+- **Client:** Icon change (🗼 → 🏹), right-click UI modal
+
+**Phase 1 (Server Foundation) — Pemulis:**
+1. Add constants to constants.ts
+2. Add upgraded field to TileState schema
+3. Add UPGRADE_OUTPOST message protocol
+4. Implement upgrade handler (validation, cost, flag)
+5. Implement tickOutpostAttacks() function (targeting, damage, cooldown)
+6. Integrate into GameRoom update loop
+7. Unit tests
+
+**Timeline:** Phase 1 est. 1.5 days. Phase 2 (Gately) starts after schema lands.
+
+**Note:** Resource tuning recommendation #4 suggests stone-heavy outpost upgrade (30W/50S instead of 40W/30S) as a late-game stone sink. This can be implemented post-Phase 1 if consensus reached.
+
+**Design Document:** .squad/decisions.md (merged from inbox)

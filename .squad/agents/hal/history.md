@@ -440,3 +440,32 @@ export interface UpgradeOutpostPayload { x: number; y: number; }
 
 **Next Steps:** Implementer (Gately or Pemulis) can proceed directly from spec. All open questions resolved. Issue #154 ready for `go:yes` (label updated).
 
+
+---
+
+### Sprint Kickoff (2026-03-12) — Design Complete, Review In Progress
+
+**Completed:**
+- **#154 Outpost Upgrade Architecture Design** (2026-03-16 revalidation + spec)
+  - Single-tier outpost upgrade system with ranged defense
+  - 40W + 30S cost, 5-tile attack range, 12 damage, 8-tick cooldown
+  - Detailed implementation plan across 3 phases (1.5 days each)
+  - Design document merged into .squad/decisions.md
+  - Ready for Pemulis (Phase 1 server work)
+
+**In Progress:**
+- **PR Review:** #162 (Marathe CI fix) and #163 (Pemulis creature types)
+- Expected to complete within sprint
+
+**Context Propagation:**
+- Pemulis briefed on Phase 1 server tasks (constants, schema, upgrade handler, combat tick)
+- Gately briefed on Phase 2 client tasks (icon rendering, right-click modal, CSS)
+- All team aware of creature types PR (#163) and resource tuning recommendations
+
+**Design Validation:**
+- Revalidated against current codebase (TileState, combat system, resource economy)
+- No architectural conflicts with creature types (#157) or ongoing work
+- Design integrates cleanly with existing patterns (right-click interaction, Colyseus schema)
+- Trade-offs documented (single-tier vs. multi-tier, closest-enemy targeting, instant upgrade)
+
+**Sign-off:** Design complete and validated. Ready to begin Phase 1 upon Hal's PR review completion.

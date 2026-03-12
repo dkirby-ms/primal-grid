@@ -394,3 +394,36 @@ All 10 Phase A items (A1–A10) complete across all agents. Tests: 240/240 passi
 - **Interaction flow:** Click owned creature → select (gold ring) → G/D → click tile → sends ASSIGN_PAWN and deselects. Escape sends idle command and deselects.
 - Clean typecheck (exit 0, no real errors). Ready for C7 (Pawn HUD panel).
 
+
+---
+
+### Sprint Kickoff (2026-03-12) — Context Propagation
+
+**Upcoming Work — Outpost Upgrades (#154):**
+
+Hal completed comprehensive architecture design for single-tier outpost upgrade feature. **Phase 2 (Client Rendering & UI)** is assigned to Gately and will start after Phase 1 (server foundation) lands.
+
+**Phase 1 (Server — Pemulis):** 1.5 days
+- Schema: Add `upgraded` field to TileState
+- Server logic: Upgrade handler + ranged attack function
+- Constants: OUTPOST_UPGRADE
+
+**Phase 2 (Client — Gately):** 1.5 days (starts after Phase 1 lands)
+1. Update STRUCTURE_ICONS in GridRenderer.ts: add `outpost_upgraded: '🏹'`
+2. Extend tile rendering to check `tile.upgraded` flag and select icon
+3. Add right-click handler for outposts (detect owned, non-upgraded outpost)
+4. Implement upgrade modal UI (display cost, confirm/cancel buttons)
+5. Wire modal to UPGRADE_OUTPOST message send
+6. Add CSS styling for modal (centered overlay, semi-transparent backdrop)
+7. Integration tests (icon rendering, modal flow, message send)
+
+**Design Details:**
+- Icon change: 🗼 (regular) → 🏹 (upgraded)
+- Right-click interaction: triggers upgrade modal
+- Cost display: "Cost: 40 wood, 30 stone"
+- Modal buttons: "Upgrade" / "Cancel"
+- Scope defers: animations, particles, visual effects (v2+)
+
+**Timeline:** Phase 2 est. 1.5 days. Phase 3 (integration testing) follows.
+
+**Design Document:** .squad/decisions.md (merged from inbox)
