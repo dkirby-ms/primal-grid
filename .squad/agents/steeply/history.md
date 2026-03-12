@@ -510,3 +510,13 @@ Hal completed comprehensive architecture design for single-tier outpost upgrade 
 - **Edge cases tested:** Solo game elimination/timer, CPU-only room disposal, multi-player simultaneous elimination, early exit when game already ended.
 - **Test pattern:** `Object.create(GameRoom.prototype)` + `room.state = new GameState()` + `room.generateMap(seed)`. Mock `broadcast = vi.fn()` and `clock.setTimeout = vi.fn()`. Inline helpers (addPlayer, claimNonHQTile, addPawn, fakeClient). `ELIMINATION_CHECK_INTERVAL = 10` constant matches GameRoom internal.
 - **Key gotcha:** Tick 0 is a valid elimination-check boundary (0 % 10 === 0), so tests for non-elimination scenarios must ensure players have territory or pawns.
+
+### Pre-Game Lobby Flow — Issue #4 (Lobby Improvements)
+
+- **33 new tests** in `server/src/__tests__/lobby-pregame.test.ts`. Total suite: **977 tests, all passing.**
+- **Deferred room creation pattern:** LobbyRoom creates games in "waiting" status without calling `matchMaker.createRoom`. Room creation is deferred until the host calls START_GAME. Tests verify no GameRoom is created until start.
+- **Colyseus module mocking:** Used `vi.mock("colyseus")` with `vi.hoisted()` to mock `matchMaker.createRoom` and provide a minimal `Room` base class. This is different from GameRoom tests which don't need module mocking. Pattern: `vi.hoisted()` for mock refs + `vi.mock()` factory + dynamic `await import()`.
+- **Private field initialization:** `Object.create(LobbyRoom.prototype)` skips class field initializers, so private Maps (`sessions`, `waitingPlayers`, `pendingGameOptions`, `gameRoomIds`) must be manually initialized in the test helper.
+- **No host transfer on leave:** When host leaves a waiting game with other players, the game persists but no host transfer occurs. The remaining players are stranded with no one to start. This is a known gap in the implementation (not a test bug).
+- **Guard coverage:** Comprehensive rejection testing — unauthenticated, empty name, double-create, double-join, join full/started/nonexistent, non-host start, set-ready on started game.
+- **matchMaker failure handling:** Verified that when `matchMaker.createRoom` throws, the lobby sends an error to the host and the game stays in "waiting" status (recoverable).
