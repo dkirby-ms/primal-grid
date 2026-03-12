@@ -7,7 +7,7 @@ import type { PlaceBuildingPayload } from '@primal-grid/shared';
  * Same duck-typed bindToRoom() pattern.
  */
 export class HudDOM {
-  private localSessionId: string;
+  public readonly localSessionId: string;
 
   // DOM element references (cached for perf)
   private territoryCount: HTMLElement;
@@ -46,6 +46,8 @@ export class HudDOM {
   private _placementMode: 'farm' | 'factory' | null = null;
   /** Callback fired when placement mode changes; InputHandler subscribes. */
   public onPlacementModeChange: ((mode: 'farm' | 'factory' | null) => void) | null = null;
+  /** Callback fired when resources change; InputHandler subscribes. */
+  public onResourcesChange: ((wood: number, stone: number) => void) | null = null;
 
   /** HQ position for colony interactions. */
   public localHqX = 0;
@@ -261,6 +263,9 @@ export class HudDOM {
           this.invStone.textContent = String(this.currentStone);
           this.invFood.textContent = String(this.currentFood);
           this.updateSpawnButton();
+          
+          // Notify InputHandler of resource changes for upgrade validation
+          this.onResourcesChange?.(this.currentWood, this.currentStone);
         });
       }
 

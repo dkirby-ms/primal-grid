@@ -622,6 +622,84 @@
         font-family: 'Courier New', monospace;
       }
 
+      /* Upgrade Modal */
+      .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.6);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+      }
+      .modal-overlay.visible { display: flex; }
+      .modal-panel {
+        background: rgba(17,17,34,0.95);
+        border: 2px solid #ffd700;
+        border-radius: 8px;
+        padding: 20px 28px;
+        min-width: 320px;
+        box-shadow: 0 4px 16px rgba(255,215,0,0.2);
+      }
+      .modal-panel h2 {
+        font-size: 16px;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        color: #ffd700;
+        margin-bottom: 12px;
+        text-align: center;
+        font-family: 'Courier New', monospace;
+      }
+      .modal-panel p {
+        font-size: 13px;
+        color: #cccccc;
+        text-align: center;
+        margin-bottom: 16px;
+        font-family: 'Courier New', monospace;
+      }
+      .upgrade-cost {
+        background: rgba(0,0,0,0.3);
+        border: 1px solid #444;
+        border-radius: 4px;
+        padding: 10px;
+        margin-bottom: 16px;
+        text-align: center;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        color: #fff;
+      }
+      .modal-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+      }
+      .modal-actions button {
+        padding: 8px 20px;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        border: 1px solid #555;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .modal-btn-cancel {
+        background: #333;
+        color: #ccc;
+      }
+      .modal-btn-cancel:hover {
+        background: #444;
+        border-color: #666;
+      }
+      .modal-btn-confirm {
+        background: #2a5a2a;
+        color: #fff;
+        border-color: #3a7a3a;
+      }
+      .modal-btn-confirm:hover {
+        background: #3a7a3a;
+        border-color: #4a9a4a;
+      }
+
       /* App footer */
       #app-footer {
         width: 100%;

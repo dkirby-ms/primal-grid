@@ -80,6 +80,7 @@ export class GridRenderer {
   private tileOwners: Map<number, string> = new Map();
   private tileStructures: Map<number, string> = new Map();
   private tileTypes: Map<number, TileType> = new Map();
+  private tileUpgraded: Map<number, boolean> = new Map();
 
   // Viewport culling: tracks the last visible tile range to diff updates
   private lastCullBounds = { minX: 0, minY: 0, maxX: -1, maxY: -1 };
@@ -710,5 +711,16 @@ export class GridRenderer {
     }
 
     return true;
+  }
+
+  /** Get tile metadata for interaction (e.g., right-click upgrade). */
+  public getTileData(x: number, y: number): { owner: string; structure: string; upgraded: boolean } | null {
+    if (x < 0 || x >= this.mapSize || y < 0 || y >= this.mapSize) return null;
+    const idx = y * this.mapSize + x;
+    return {
+      owner: this.tileOwners.get(idx) ?? '',
+      structure: this.tileStructures.get(idx) ?? '',
+      upgraded: this.tileUpgraded.get(idx) ?? false,
+    };
   }
 }
