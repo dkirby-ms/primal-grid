@@ -969,16 +969,17 @@ export class GameRoom extends Room {
 
       // Attack target if found
       if (closestTarget) {
-        closestTarget.health -= OUTPOST_UPGRADE.DAMAGE;
+        const target: CreatureState = closestTarget; // Type assertion to fix TypeScript narrowing
+        target.health -= OUTPOST_UPGRADE.DAMAGE;
         tile.attackCooldown = OUTPOST_UPGRADE.ATTACK_COOLDOWN_TICKS;
 
         // Remove if dead
-        if (closestTarget.health <= 0) {
-          this.state.creatures.delete(closestTarget.id);
+        if (target.health <= 0) {
+          this.state.creatures.delete(target.id);
           
           // Handle base destruction
-          if (isEnemyBase(closestTarget.creatureType)) {
-            const baseType = ENEMY_BASE_TYPES[closestTarget.creatureType];
+          if (isEnemyBase(target.creatureType)) {
+            const baseType = ENEMY_BASE_TYPES[target.creatureType];
             if (baseType && tile.ownerID) {
               const player = this.state.players.get(tile.ownerID);
               if (player) {
