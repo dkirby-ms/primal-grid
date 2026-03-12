@@ -810,3 +810,58 @@ Problem: `HEAD~10..HEAD` looks backward from current HEAD without considering wh
 - Commit: 45b786f
 - PR: #162
 
+
+## CI Failure Auto-Issue Implementation (2026-03-12)
+
+**Issue:** #174
+**PR:** #175
+**Status:** ✅ IMPLEMENTED
+
+### Implementation
+
+Created `.github/workflows/ci-failure-issue.yml` to automatically create GitHub issues when CI workflows fail.
+
+**Key features:**
+- Triggers on `workflow_run` with `types: [completed]` and filters for `conclusion == 'failure'`
+- Monitors "Squad CI" and "E2E Tests" workflows
+- Creates issues with workflow name, branch, commit SHA, run ID, and failed job details
+- Searches for existing open issues before creating (by workflow + branch title match)
+- Updates existing issues with new comment instead of creating duplicates
+- Labels with `ci-failure` and `automated` for filtering
+- Includes deep links to failed workflow run and commit
+
+**Permissions required:**
+- `contents: read` (for checkout)
+- `issues: write` (for creating/commenting on issues)
+
+### Learnings
+
+**workflow_run Event Pattern:**
+- `workflow_run` triggers after specified workflows complete
+- Access failure state via `github.event.workflow_run.conclusion == 'failure'`
+- Provides context: `name`, `head_branch`, `head_sha`, `id`, `html_url`, `created_at`
+- Jobs API: `GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs` returns job details
+
+**Duplicate Detection Strategy:**
+- Use `gh issue list --search` with title matching: `"[$WORKFLOW_NAME] Workflow failure on $BRANCH in:title"`
+- Filter by labels: `--label "ci-failure" --label "automated" --state open`
+- Extract first issue number with `--jq '.[0].number // empty'`
+- If found, use `gh issue comment` to update; otherwise create new
+
+**Shell Script Patterns in GitHub Actions:**
+- YAML parser interprets heredoc content - avoid `**` at line start in heredocs
+- Solution: Use temp files with `cat > /tmp/file.md` and `--body-file` flag
+- Use `sed` for placeholder replacement in temp files to avoid shell quoting issues
+- Multi-line step outputs: use delimiter pattern `echo "var<<EOF" >> $GITHUB_OUTPUT`
+
+**gh CLI for Issue Management:**
+- `gh issue create --title "..." --body-file /path --label "..." --label "..."`
+- `gh issue comment <number> --body-file /path`
+- `gh issue list --label "..." --state open --search "query" --json field --jq '.[]'`
+- Always clean up temp files: `rm -f /tmp/issue-*.md`
+
+**Best Practices:**
+- Always validate YAML with `npx js-yaml <file>` before committing
+- Use temp files for complex markdown content to avoid shell expansion issues
+- Fetch only failed jobs from API to keep issue content focused
+- Limit output with `head -20` to prevent excessive issue length
