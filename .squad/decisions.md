@@ -1,4 +1,3 @@
-<<<<<<< uat
 ## 2026-03-12: Soft-Preference Anti-Clustering for All Pawn Types
 
 **Author:** Pemulis  
@@ -40,9 +39,10 @@ All pawn anti-clustering uses **soft preferences**, never hard blocks:
 
 ---
 
-=======
 ## 2026-03-09T23:43:26Z: Prod Default Branch & Squad File Policy
->>>>>>> prod
+
+---
+
 ## 2026-03-10T12:14Z: Filter CI, Chore & Squad Commits from Changelogs
 
 **Author:** dkirby-ms (via Copilot)  
