@@ -1,0 +1,155 @@
+name: CI Failure Auto-Issue
+
+on:
+  workflow_run:
+    workflows:
+      - "Squad CI"
+      - "E2E Tests"
+    types: [completed]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  create-failure-issue:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for existing issue
+        id: check-issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          
+          # Search for open issues with ci-failure label matching this workflow and branch
+          ISSUE_NUMBER=$(gh issue list \
+            --label "ci-failure" \
+            --label "automated" \
+            --state open \
+            --search "[$WORKFLOW_NAME] Workflow failure on $BRANCH in:title" \
+            --json number \
+            --jq '.[0].number // empty')
+          
+          if [ -n "$ISSUE_NUMBER" ]; then
+            echo "existing_issue=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+            echo "Found existing issue #$ISSUE_NUMBER"
+          else
+            echo "existing_issue=" >> $GITHUB_OUTPUT
+            echo "No existing issue found"
+          fi
+
+      - name: Get failed job details
+        id: job-details
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          REPO="${{ github.repository }}"
+          
+          # Fetch jobs for this run and filter for failures
+          FAILED_JOBS=$(gh api \
+            "/repos/$REPO/actions/runs/$RUN_ID/jobs" \
+            --jq '.jobs[] | select(.conclusion == "failure") | "- **\(.name)**: \(.conclusion)\n  - Started: \(.started_at)\n  - Completed: \(.completed_at)"' \
+            | head -20)
+          
+          if [ -z "$FAILED_JOBS" ]; then
+            FAILED_JOBS="No specific job failures detected (workflow-level failure)"
+          fi
+          
+          # Multi-line output using delimiter
+          echo "failed_jobs<<EOF" >> $GITHUB_OUTPUT
+          echo "$FAILED_JOBS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create or update issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          REPO: ${{ github.repository }}
+          CREATED_AT: ${{ github.event.workflow_run.created_at }}
+          FAILED_JOBS: ${{ steps.job-details.outputs.failed_jobs }}
+          EXISTING_ISSUE: ${{ steps.check-issue.outputs.existing_issue }}
+        run: |
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          COMMIT_URL="https://github.com/$REPO/commit/$COMMIT_SHA"
+          
+          # Create temporary files for body content to avoid shell quoting issues
+          cat > /tmp/issue-body.md << 'BODY_EOF'
+          ## Workflow Failure Details
+          
+          WORKFLOW_PLACEHOLDER
+          BRANCH_PLACEHOLDER
+          COMMIT_PLACEHOLDER
+          RUN_ID: RUN_ID_PLACEHOLDER
+          TRIGGERED_PLACEHOLDER
+          
+          ### 🔗 Links
+          - [View failed workflow run](RUN_URL_PLACEHOLDER)
+          - [View commit](COMMIT_URL_PLACEHOLDER)
+          
+          ### ❌ Failed Jobs
+          FAILED_JOBS_PLACEHOLDER
+          
+          ---
+          *This issue was automatically created by the CI Failure Auto-Issue workflow.*
+          *If this failure is resolved, please close this issue.*
+          BODY_EOF
+          
+          # Replace placeholders
+          sed -i "s|WORKFLOW_PLACEHOLDER|**Workflow:** $WORKFLOW_NAME|g" /tmp/issue-body.md
+          sed -i "s|BRANCH_PLACEHOLDER|**Branch:** \`$BRANCH\`|g" /tmp/issue-body.md
+          sed -i "s|COMMIT_PLACEHOLDER|**Commit:** [\`$SHORT_SHA\`]($COMMIT_URL)|g" /tmp/issue-body.md
+          sed -i "s|RUN_ID_PLACEHOLDER|$RUN_ID|g" /tmp/issue-body.md
+          sed -i "s|TRIGGERED_PLACEHOLDER|**Triggered at:** $CREATED_AT|g" /tmp/issue-body.md
+          sed -i "s|RUN_URL_PLACEHOLDER|$RUN_URL|g" /tmp/issue-body.md
+          sed -i "s|COMMIT_URL_PLACEHOLDER|$COMMIT_URL|g" /tmp/issue-body.md
+          sed -i "s|FAILED_JOBS_PLACEHOLDER|$FAILED_JOBS|g" /tmp/issue-body.md
+          
+          if [ -n "$EXISTING_ISSUE" ]; then
+            # Update existing issue with new comment
+            cat > /tmp/issue-comment.md << 'COMMENT_EOF'
+          ## 🔄 New Failure Detected
+          
+          COMMIT_PLACEHOLDER
+          RUN_PLACEHOLDER
+          TRIGGERED_PLACEHOLDER
+          
+          ### ❌ Failed Jobs
+          FAILED_JOBS_PLACEHOLDER
+          
+          ---
+          BRANCH_MSG_PLACEHOLDER
+          COMMENT_EOF
+            
+            sed -i "s|COMMIT_PLACEHOLDER|**Commit:** [\`$SHORT_SHA\`]($COMMIT_URL)|g" /tmp/issue-comment.md
+            sed -i "s|RUN_PLACEHOLDER|**Run:** [#$RUN_ID]($RUN_URL)|g" /tmp/issue-comment.md
+            sed -i "s|TRIGGERED_PLACEHOLDER|**Triggered at:** $CREATED_AT|g" /tmp/issue-comment.md
+            sed -i "s|FAILED_JOBS_PLACEHOLDER|$FAILED_JOBS|g" /tmp/issue-comment.md
+            sed -i "s|BRANCH_MSG_PLACEHOLDER|*Failure still occurring on \`$BRANCH\`. Please investigate.*|g" /tmp/issue-comment.md
+            
+            gh issue comment "$EXISTING_ISSUE" --body-file /tmp/issue-comment.md
+            echo "Updated existing issue #$EXISTING_ISSUE with new failure details"
+          else
+            # Create new issue
+            TITLE="[$WORKFLOW_NAME] Workflow failure on $BRANCH"
+            
+            gh issue create \
+              --title "$TITLE" \
+              --body-file /tmp/issue-body.md \
+              --label "ci-failure" \
+              --label "automated"
+            
+            echo "Created new issue for $WORKFLOW_NAME failure on $BRANCH"
+          fi
+          
+          # Clean up temp files
+          rm -f /tmp/issue-body.md /tmp/issue-comment.md
