@@ -4,11 +4,13 @@ export const CREATE_GAME = "create_game" as const;
 export const JOIN_GAME = "join_game" as const;
 export const LEAVE_GAME = "leave_game" as const;
 export const START_GAME = "start_game" as const;
+export const SET_READY = "set_ready" as const;
 export const GAME_LIST = "game_list" as const;
 export const GAME_UPDATED = "game_updated" as const;
 export const GAME_REMOVED = "game_removed" as const;
 export const GAME_STARTED = "game_started" as const;
 export const GAME_JOINED = "game_joined" as const;
+export const GAME_PLAYERS = "game_players" as const;
 export const LOBBY_ERROR = "lobby_error" as const;
 
 // --- Game session status ---
@@ -62,6 +64,24 @@ export interface LeaveGamePayload {
   gameId: string;
 }
 
+/** Client → Server: toggle ready status in a waiting game. */
+export interface SetReadyPayload {
+  ready: boolean;
+}
+
+/** Player info broadcast to participants of a waiting game. */
+export interface PreGamePlayerInfo {
+  userId: string;
+  displayName: string;
+  isReady: boolean;
+}
+
+/** Server → Client: player list update for a waiting game. */
+export interface GamePlayersPayload {
+  gameId: string;
+  players: PreGamePlayerInfo[];
+}
+
 /** Server → Client: game list update. */
 export interface GameListPayload {
   games: GameSessionInfo[];
@@ -77,10 +97,10 @@ export interface GameRemovedPayload {
   gameId: string;
 }
 
-/** Server → Client: game is ready to join (contains roomId). */
+/** Server → Client: game is ready to join (roomId undefined during waiting phase). */
 export interface GameJoinedPayload {
   gameId: string;
-  roomId: string;
+  roomId?: string;
 }
 
 /** Server → Client: game has started (for players in the game). */
