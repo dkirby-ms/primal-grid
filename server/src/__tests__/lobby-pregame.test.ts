@@ -389,7 +389,7 @@ describe("Pre-Game Lobby — Rejection Guards", () => {
   });
 
   it("cannot join second game while in one", async () => {
-    const gameId1 = await createGame(room, host);
+    const _gameId1 = await createGame(room, host);
 
     const host2 = fakeClient("host2-sess");
     registerPlayer(room, host2, { userId: "host2-uid", displayName: "Host2" });
