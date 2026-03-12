@@ -698,3 +698,6 @@ Implemented complete game-ending logic with three victory conditions and elimina
 ### Cross-Agent Notes
 
 Hal's decomposition of #161 defines 5 sub-issues with clear dependencies. This work (Sub-Issues 1 & 2) is the foundation. Gately is concurrently implementing Sub-Issue 4 (Timer HUD). Sub-Issues 3 (End-Game UI) and 5 (Integration Tests) wait on completion of #2.
+
+- **ESLint no-unused-vars Cleanup (2026-03-12):** Fixed all 47 `@typescript-eslint/no-unused-vars` errors. Removed 47 unused imports/vars; prefixed intentional non-use with `_`. Affected 9 test files: EndGameScreen (1), building-spawn-caps (2), explorer-ai (2), game-lifecycle (5), map-size-timeout (1), outpost-spacing (2), outpost-stability (17), pawn-clustering (5), phantom-buildings (7). Result: 0 lint errors, 944/944 tests pass. Decision merged to decisions.md.
+

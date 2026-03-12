@@ -3860,3 +3860,203 @@ Sub-Issue 1 (Schema)
 - Surrender button (trivial: send message → mark eliminated → check victory)
 - Post-game stats persistence (needs DB schema, separate issue)
 - Game mode selection in lobby (needs UI + server routing, separate epic)
+# Lobby Improvements — Decomposition
+
+**Author:** Hal  
+**Date:** 2026-03-16  
+**Requested by:** dkirby-ms  
+**Status:** Scoped, ready for implementation
+
+---
+
+## Problem Statement
+
+The lobby flow skips the "waiting" phase entirely. When a player creates a game, the GameRoom is spawned immediately and simulation starts ticking — there is never a window for other players to discover, browse, or join a game before it begins. The game browser table exists and renders both "waiting" and "in_progress" statuses, but no game ever sits in "waiting" because room creation is instant.
+
+The user wants:
+1. A game browser where players can see waiting and in-progress games
+2. The ability to join a game **before** it starts
+3. A pre-game lobby showing players in the room and their ready state
+4. A richer game creation experience
+
+## What Already Exists
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| `shared/src/lobbyTypes.ts` | ✅ Complete | Full message protocol (CREATE_GAME, JOIN_GAME, LEAVE_GAME, START_GAME, GAME_LIST, etc.), GameStatus type ("waiting" / "in_progress" / "ended"), GameSessionInfo, LobbyPlayerInfo |
+| `server/src/rooms/LobbyRoom.ts` | ✅ Solid | Handles create/join/leave/start. Tracks games (MapSchema), players (MapSchema). Bridge for GameRoom lifecycle events. START_GAME handler exists but game is already running by the time it's called. |
+| `server/src/rooms/LobbyState.ts` | ✅ Complete | LobbyGameEntry (id, name, host, status, playerCount, maxPlayers, mapSize, gameDuration), LobbyPlayer (displayName, userId, isGuest, activeGameId) |
+| `server/src/rooms/LobbyBridge.ts` | ✅ Complete | EventEmitter for GameRoom → LobbyRoom (player_count_changed, game_ended) |
+| `client/src/ui/LobbyScreen.ts` | ✅ Functional | DOM-based game list table with Join buttons for waiting games, Create Game form (name, max players, map size, CPU count), status icons (🟢 waiting, 🔵 in-progress), sorted waiting-first |
+| `client/src/network.ts` | ✅ Complete | connectToLobby(), joinGameRoom(), reconnection logic |
+| `client/src/main.ts` | ✅ Functional | Lobby → game transition. Both join_game and game_started events immediately call joinGameRoom() |
+
+## What's Missing
+
+1. **Deferred GameRoom creation** — `handleCreateGame` calls `matchMaker.createRoom()` immediately. Must defer until START_GAME.
+2. **Pre-game player tracking** — No server-side list of which players are in a waiting game (only playerCount, no identity).
+3. **Ready state** — No concept of player readiness. No SET_READY message, no ready tracking.
+4. **Pre-game player list broadcast** — No message type to push player list updates to waiting room participants.
+5. **Waiting room UI** — Client has no screen between "join" and "play". The join_game event immediately transitions to game.
+6. **Game browser filtering** — No filter/tabs for "Waiting" vs "In Progress" games (both render, but no way to filter).
+
+## Decomposition
+
+### Issue 1: Backend — Pre-game waiting phase with deferred room creation
+**Owner:** Pemulis  
+**Estimated effort:** 2–3 days  
+**Dependencies:** None (foundation issue)
+
+**Scope:**
+- **Shared types** (`shared/src/lobbyTypes.ts`):
+  - Add `SET_READY` message constant
+  - Add `GAME_PLAYERS` message constant (server → client: player list updates for a waiting game)
+  - Add `PreGamePlayerInfo` interface: `{ userId, displayName, isReady }`
+  - Add `GamePlayersPayload` interface: `{ gameId, players: PreGamePlayerInfo[] }`
+  - Add `SetReadyPayload` interface: `{ ready: boolean }`
+
+- **LobbyState** (`server/src/rooms/LobbyState.ts`):
+  - Add `LobbyWaitingPlayer` schema class: `{ userId, displayName, isReady }` — nested in a per-game collection
+  - Or: track waiting players server-side only (not in Colyseus schema) and broadcast via messages. **Recommended: message-based** — avoids schema bloat, keeps LobbyState lean.
+
+- **LobbyRoom** (`server/src/rooms/LobbyRoom.ts`):
+  - `handleCreateGame`: Do NOT call `matchMaker.createRoom()`. Create LobbyGameEntry in "waiting" status only. Track creator in a per-game player map. Send `GAME_JOINED` with `gameId` (no `roomId` yet — client uses this to show waiting room). Broadcast `GAME_UPDATED` to all lobby clients.
+  - `handleJoinGame`: Add joiner to per-game player map. Broadcast `GAME_PLAYERS` to all players in that game. Broadcast `GAME_UPDATED` (playerCount change) to all lobby clients.
+  - `handleLeaveGame`: Remove player from per-game player map. If host leaves and no players remain, remove the game. Broadcast `GAME_PLAYERS` and `GAME_UPDATED`.
+  - New `handleSetReady`: Toggle isReady for a player in a waiting game. Broadcast `GAME_PLAYERS`.
+  - `handleStartGame`: NOW call `matchMaker.createRoom()`. On success, send `GAME_STARTED` with `{ gameId, roomId }` to all players in the game. Transition status to "in_progress". Clean up per-game player map.
+  - Add `SET_READY` message handler registration.
+  - Private `waitingPlayers` map: `Map<gameId, Map<sessionId, PreGamePlayerInfo>>`.
+
+- **GameJoinedPayload** update: `roomId` becomes optional (undefined during waiting phase, present only when game actually starts).
+
+**Out of scope:** Any GameRoom.ts changes. The GameRoom keeps its current behavior — it starts simulation on create. The change is that create is deferred.
+
+**Risks:** Race condition if host disconnects between START_GAME and room creation. Mitigation: wrap in try/catch, clean up on failure.
+
+---
+
+### Issue 2: Frontend — Pre-game waiting room UI
+**Owner:** Gately  
+**Estimated effort:** 2 days  
+**Dependencies:** Issue 1 (needs GAME_PLAYERS message and deferred creation flow)
+
+**Scope:**
+- **New waiting room panel** (could be a new section in `LobbyScreen.ts` or a separate `WaitingRoom.ts`):
+  - Shown when player receives `GAME_JOINED` (with no roomId) after creating or joining a waiting game
+  - Displays: game name, game settings summary (map size, max players, CPU count, duration)
+  - Player list: names + ready indicator (✅ / ⬜)
+  - Host controls: "Start Game" button (enabled when at least 1 player, or optionally when all non-host players are ready)
+  - Non-host controls: "Ready" / "Not Ready" toggle button
+  - "Leave" button → sends LEAVE_GAME, returns to game browser
+  - Listens for `GAME_PLAYERS` to update player list in real time
+  - Listens for `GAME_STARTED` to transition: call `joinGameRoom(roomId)`, hide waiting room, show game
+
+- **LobbyScreen updates:**
+  - `onEvent` callback: distinguish between `GAME_JOINED` (waiting phase → show waiting room) vs `GAME_STARTED` (game phase → join GameRoom)
+  - The `join_game` LobbyEvent should carry enough info to render the waiting room (game name, settings)
+
+- **HTML/CSS additions** (`client/index.html`):
+  - Waiting room container (hidden by default)
+  - Player list element
+  - Ready toggle button
+  - Start Game button (host only)
+  - Leave button
+
+**Out of scope:** Chat in waiting room. Animated transitions. Settings editing after creation.
+
+---
+
+### Issue 3: Frontend — Game browser status filters
+**Owner:** Gately  
+**Estimated effort:** 0.5 day  
+**Dependencies:** None (independent enhancement, but more useful after Issue 1 lands)
+
+**Scope:**
+- Add filter tabs or toggle buttons above the game list: **All** | **Waiting** | **In Progress**
+- Default to "All" (current behavior)
+- Filter `renderGameList()` output based on selected tab
+- Persist filter selection in component state (not localStorage)
+- Show count badges on tabs: e.g., "Waiting (3)" "In Progress (2)"
+- Minor: Improve empty state text per filter ("No waiting games — create one!" vs "No games in progress")
+
+**Out of scope:** Search by name. Sorting controls. Pagination.
+
+---
+
+### Issue 4: Tests — Pre-game lobby flow
+**Owner:** Steeply  
+**Estimated effort:** 1.5 days  
+**Dependencies:** Issues 1 + 2 (needs both backend and frontend)
+
+**Scope:**
+- **Server unit tests** (extend `server/src/__tests__/game-lifecycle.test.ts` or new file):
+  - Create game → verify LobbyGameEntry in "waiting", no GameRoom created
+  - Join waiting game → verify player added, GAME_PLAYERS broadcast
+  - Set ready → verify ready state updated, GAME_PLAYERS broadcast
+  - Start game → verify GameRoom created, GAME_STARTED sent, status transitions to "in_progress"
+  - Leave waiting game → verify player removed, game removed if host + empty
+  - Reject: join full game, join started game, non-host start, start without game
+  - Edge case: host disconnects from waiting game
+
+- **Client integration tests** (if existing test infrastructure supports):
+  - Waiting room renders on GAME_JOINED (no roomId)
+  - Player list updates on GAME_PLAYERS
+  - Ready toggle sends SET_READY
+  - Start button visible only to host
+  - Transition to game on GAME_STARTED
+
+**Out of scope:** E2E multi-browser tests. Performance/load testing.
+
+---
+
+## Dependency Graph
+
+```
+Issue 1 (Backend: pre-game phase)
+  │
+  ├──► Issue 2 (Frontend: waiting room)  ──┐
+  │                                         ├──► Issue 4 (Tests)
+  └──► Issue 3 (Frontend: browser filters) ─┘
+                                           (independent, parallelizable)
+```
+
+Issue 3 is fully independent — can ship before, during, or after the others.
+Issues 1 and 2 are sequential (2 depends on 1).
+Issue 4 depends on both 1 and 2.
+
+## Explicit Scope Fence
+
+**In scope:**
+- Game browser showing waiting + in-progress games with filtering
+- Join flow for games that haven't started
+- Pre-game waiting room with player list and ready states
+- Host-controlled game start
+
+**Out of scope (do NOT implement):**
+- Matchmaking or auto-join
+- Ranked play or ELO
+- Spectator mode
+- Chat in waiting room (use existing in-game chat)
+- Game settings editing after creation
+- Password-protected games
+- Kick/ban in waiting room
+- Map preview in waiting room
+- Team assignment / color selection pre-game
+
+## Architecture Decisions
+
+**L1: Message-based player tracking (not schema)**  
+Track waiting room players via server-side Map + GAME_PLAYERS broadcasts, not Colyseus schema fields. Keeps LobbyState lean. Schema changes are expensive to migrate.
+
+**L2: Deferred room creation (not paused simulation)**  
+Don't create the GameRoom until START_GAME. Simpler than adding a pause/resume phase to GameRoom. GameRoom remains unchanged.
+
+**L3: Ready state is advisory**  
+The host can start regardless of ready states. Ready indicators help coordination but don't gate the start button. Keeps UX simple — no griefing via "never ready" players.
+
+**L4: GAME_JOINED payload change**  
+`roomId` becomes optional in GameJoinedPayload. Presence of `roomId` distinguishes "you're in the waiting room" (no roomId) from legacy/future direct-join flows.
+
+---
+
