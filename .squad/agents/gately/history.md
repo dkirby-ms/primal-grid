@@ -44,6 +44,7 @@ Next: **2026-03-04 — Territory Control Redesign** (awaiting user mechanic sele
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 - **Food HUD Implementation & Review Cycle (2026-03-14):** Implemented client-side food HUD for Issue #21: food count display (🍖 emoji) synced via Colyseus schema, spawn buttons updated with rebalanced costs (builder 8W/4S, defender 12W/8S, attacker 16W/12S, explorer 10W/6S), spawn gating at food ≤ 0. PR #153 submitted. Hal's review identified 3 issues. When unavailable for revisions, Steeply fixed all items (starvation check, tooltips, constants). PR merged to dev. Key decision: Food display kept minimal (count only, no upkeep rate) to avoid clutter; players learn mechanic through gameplay. Future enhancements possible if UAT shows need for upkeep indicator.
+- **Round Timer HUD (Sub-Issue 4, #161):** Added round timer display to HUD panel. Key patterns: TICK_RATE import from shared constants for tick-to-second conversion, `lastTimerSecond` field for throttling DOM updates to 1/sec (roundTimer changes every tick but display only needs per-second refresh), CSS `hidden` class on section for unlimited games (`roundTimer === -1`), CSS keyframe animation for urgency flash under 60s. Placed between territory and builders sections for visual prominence. This was a clean client-only change — no server files touched.
 
 ### Territory Control Pivot — Rendering Analysis (2026-02-28)
 
