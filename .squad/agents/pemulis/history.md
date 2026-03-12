@@ -600,3 +600,12 @@ Hal completed comprehensive architecture design for single-tier outpost upgrade 
 - IPlayerState interface: `isEliminated` field.
 - All 901 tests pass (1 pre-existing timeout failure unrelated).
 - Branch: squad/161-game-lifecycle, commit e003953.
+
+- **Game Lifecycle Engine — Sub-Issue 2 (2026-03-16):** Implemented win/loss condition engine and game end flow for Issue #161. Key additions to GameRoom.ts:
+  - `tickGameEndConditions()`: Runs elimination checks every 10 ticks (ELIMINATION_CHECK_INTERVAL). For each non-eliminated human player, counts tiles owned outside HQ zone + living pawns. If both = 0, marks isEliminated=true and broadcasts PLAYER_ELIMINATED. Victory check: last non-eliminated human = LastStanding win; 0 remaining = highest score wins. Time limit: roundTimer decremented each tick; at 0, highest-score non-eliminated player wins (TimeUp).
+  - `endGame(winnerId, reason)`: Sets roundPhase="ended", winnerId, endReason. Builds sorted finalScores array from all players. Broadcasts GAME_ENDED with GameEndedPayload. Notifies lobby via LobbyBridge.notifyGameEnded(). Schedules auto-dispose at 60s via clock.setTimeout.
+  - Simulation loop guarded with `if (roundPhase === "ended") return` at top of tick.
+  - Player action handlers (handleSpawnPawn, handlePlaceBuilding, handleUpgradeOutpost) gated behind roundPhase=playing and !isEliminated checks.
+  - Round timer initialized in onCreate from options.gameDuration: `gameDuration * 60 * TICK_RATE`; 0 = no limit (roundTimer=-1).
+  - LobbyRoom.handleCreateGame passes gameDuration through to GameRoom options and sets it on LobbyGameEntry.
+  - 902 tests pass, no regressions. Branch: squad/161-game-lifecycle, commit f780843.
