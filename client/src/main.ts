@@ -20,7 +20,7 @@ import { UpgradeModal } from './ui/UpgradeModal.js';
 import { EndGameScreen } from './ui/EndGameScreen.js';
 import { connectToLobby, joinGameRoom, leaveGame, disconnect, onConnectionStatus, isDevMode, getRoom, loadReconnectToken, reconnectGameRoom, resetClient } from './network.js';
 import type { GameLogPayload, GameEndedPayload, PlayerEliminatedPayload } from '@primal-grid/shared';
-import { GAME_ENDED, PLAYER_ELIMINATED } from '@primal-grid/shared';
+import { GAME_ENDED, PLAYER_ELIMINATED, JOIN_GAME } from '@primal-grid/shared';
 
 const WIDTH = 600;
 const HEIGHT = 600;
@@ -106,6 +106,17 @@ async function connectToLobbyAndShow(
     setGameUIVisible(false);
     lobbyScreen.bindToRoom(lobby);
     lobbyScreen.show();
+
+    // Auto-join if ?join=<gameId> is present in the URL
+    const joinParam = new URLSearchParams(window.location.search).get("join");
+    if (joinParam) {
+      // Clean the URL so reloads don't re-trigger auto-join
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("join");
+      window.history.replaceState({}, "", cleanUrl.toString());
+
+      lobby.send(JOIN_GAME, { gameId: joinParam });
+    }
 
     const waitingRoom = new WaitingRoom();
 

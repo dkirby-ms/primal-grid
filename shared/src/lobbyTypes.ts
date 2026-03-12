@@ -31,6 +31,8 @@ export interface GameSessionInfo {
   mapSize: number;
   mapSeed: number;
   createdAt: number;
+  /** Number of CPU opponents configured for this game. */
+  cpuPlayers?: number;
 }
 
 /** Player info as shown in the lobby. */
@@ -74,6 +76,8 @@ export interface PreGamePlayerInfo {
   userId: string;
   displayName: string;
   isReady: boolean;
+  /** True for CPU-controlled players. */
+  isCPU?: boolean;
 }
 
 /** Server → Client: player list update for a waiting game. */

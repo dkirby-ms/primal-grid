@@ -7,11 +7,11 @@ import {
   CREATE_GAME, JOIN_GAME, LEAVE_GAME, START_GAME, SET_READY,
   GAME_LIST, GAME_JOINED, GAME_STARTED, GAME_PLAYERS,
   GAME_UPDATED, GAME_REMOVED, LOBBY_ERROR,
-  LOBBY_DEFAULTS, DEFAULT_MAP_SIZE,
+  LOBBY_DEFAULTS, DEFAULT_MAP_SIZE, CPU_PLAYER,
 } from "@primal-grid/shared";
 import type {
   CreateGamePayload, JoinGamePayload,
-  GameSessionInfo, PreGamePlayerInfo,
+  GameSessionInfo, PreGamePlayerInfo, GamePlayersPayload,
 } from "@primal-grid/shared";
 
 /** Maps Colyseus sessionId → authenticated user info. */
@@ -210,6 +210,7 @@ export class LobbyRoom extends Room {
       gameInfo = await this.gameSessionRepo.create(
         name, session.userId, session.displayName, maxPlayers, mapSize, mapSeed,
       );
+      gameInfo.cpuPlayers = cpuPlayers;
     } else {
       // In-memory fallback (testing)
       gameInfo = {
@@ -223,6 +224,7 @@ export class LobbyRoom extends Room {
         mapSize,
         mapSeed,
         createdAt: Date.now(),
+        cpuPlayers,
       };
     }
 
@@ -468,7 +470,20 @@ export class LobbyRoom extends Room {
     if (!playerMap) return;
 
     const players: PreGamePlayerInfo[] = Array.from(playerMap.values());
-    const payload = { gameId, players };
+
+    // Append synthetic CPU player entries so they appear in the waiting room
+    const options = this.pendingGameOptions.get(gameId);
+    const cpuCount = typeof options?.cpuPlayers === "number" ? options.cpuPlayers : 0;
+    for (let i = 0; i < cpuCount; i++) {
+      players.push({
+        userId: `${CPU_PLAYER.SESSION_PREFIX}${i}`,
+        displayName: CPU_PLAYER.NAMES[i] ?? `CPU ${i + 1}`,
+        isReady: true,
+        isCPU: true,
+      });
+    }
+
+    const payload: GamePlayersPayload = { gameId, players };
 
     for (const [sessionId] of playerMap) {
       const playerClient = this.clients.find((c) => c.sessionId === sessionId);
@@ -501,6 +516,7 @@ export class LobbyRoom extends Room {
     entry.mapSize = info.mapSize;
     entry.mapSeed = info.mapSeed;
     entry.createdAt = info.createdAt;
+    entry.cpuPlayers = info.cpuPlayers ?? 0;
     this.state.games.set(info.id, entry);
   }
 
@@ -516,6 +532,7 @@ export class LobbyRoom extends Room {
       mapSize: entry.mapSize,
       mapSeed: entry.mapSeed,
       createdAt: entry.createdAt,
+      cpuPlayers: entry.cpuPlayers,
     };
   }
 

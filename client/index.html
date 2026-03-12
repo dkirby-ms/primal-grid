@@ -745,6 +745,61 @@
       }
       #waiting-room-leave-btn:hover { background: #4a3a3a; border-color: #cc4444; }
 
+      /* Invite link section */
+      #waiting-room-invite {
+        margin-bottom: 16px;
+        padding: 10px 12px;
+        background: #1e1e32;
+        border: 1px solid #333;
+        border-radius: 4px;
+      }
+      .invite-label {
+        display: block;
+        font-size: 0.85em;
+        color: #aaa;
+        margin-bottom: 6px;
+      }
+      .invite-link-row {
+        display: flex;
+        gap: 8px;
+      }
+      .invite-link-input {
+        flex: 1;
+        padding: 6px 8px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.8em;
+        background: #111;
+        color: #7ecfff;
+        border: 1px solid #444;
+        border-radius: 3px;
+        outline: none;
+      }
+      .invite-link-input:focus { border-color: #7ecfff; }
+      .invite-copy-btn {
+        padding: 6px 12px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.8em;
+        background: #2a2a4a;
+        color: #7ecfff;
+        border: 1px solid #555;
+        border-radius: 3px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .invite-copy-btn:hover { background: #3a3a5a; border-color: #7ecfff; }
+
+      /* CPU player styling */
+      .waiting-room-player.cpu-player .waiting-room-player-name {
+        color: #aaa;
+      }
+      .waiting-room-divider {
+        padding: 6px 12px;
+        font-size: 0.8em;
+        color: #888;
+        border-bottom: 1px solid #2a2a3a;
+        background: #16162a;
+      }
+
       /* Scoreboard overlay */
       #scoreboard-overlay {
         display: none;

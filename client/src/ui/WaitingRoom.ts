@@ -85,9 +85,15 @@ export class WaitingRoom {
       };
       addStat("Map", `${gameInfo.mapSize}×${gameInfo.mapSize}`);
       addStat("Players", `${gameInfo.maxPlayers} max`);
+      if (gameInfo.cpuPlayers) {
+        addStat("CPU", `${gameInfo.cpuPlayers}`);
+      }
     } else {
       this.settingsEl.textContent = "";
     }
+
+    // Invite link
+    this.renderInviteLink(gameId);
 
     // Reset ready button
     this.readyBtn.textContent = "Ready";
@@ -135,6 +141,54 @@ export class WaitingRoom {
     this.players = [];
   }
 
+  private renderInviteLink(gameId: string): void {
+    let section = document.getElementById("waiting-room-invite");
+    if (!section) {
+      section = document.createElement("div");
+      section.id = "waiting-room-invite";
+      // Insert before the player list
+      this.playerListEl.parentNode!.insertBefore(section, this.playerListEl);
+    }
+
+    const inviteUrl = `${window.location.origin}${window.location.pathname}?join=${gameId}`;
+
+    section.innerHTML = "";
+
+    const label = document.createElement("span");
+    label.className = "invite-label";
+    label.textContent = "🔗 Invite Link";
+    section.appendChild(label);
+
+    const linkRow = document.createElement("div");
+    linkRow.className = "invite-link-row";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.readOnly = true;
+    input.className = "invite-link-input";
+    input.value = inviteUrl;
+    input.addEventListener("click", () => input.select());
+    linkRow.appendChild(input);
+
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "invite-copy-btn";
+    copyBtn.textContent = "📋 Copy";
+    copyBtn.addEventListener("click", () => {
+      navigator.clipboard.writeText(inviteUrl).then(() => {
+        copyBtn.textContent = "✅ Copied!";
+        setTimeout(() => { copyBtn.textContent = "📋 Copy"; }, 2000);
+      }).catch(() => {
+        input.select();
+        document.execCommand("copy");
+        copyBtn.textContent = "✅ Copied!";
+        setTimeout(() => { copyBtn.textContent = "📋 Copy"; }, 2000);
+      });
+    });
+    linkRow.appendChild(copyBtn);
+
+    section.appendChild(linkRow);
+  }
+
   private renderPlayerList(): void {
     this.playerListEl.innerHTML = "";
 
@@ -146,22 +200,47 @@ export class WaitingRoom {
       return;
     }
 
-    for (const player of this.players) {
-      const li = document.createElement("li");
-      li.className = "waiting-room-player";
+    // Render human players first, then CPU players
+    const humans = this.players.filter((p) => !p.isCPU);
+    const cpus = this.players.filter((p) => p.isCPU);
 
-      const nameSpan = document.createElement("span");
-      nameSpan.className = "waiting-room-player-name";
-      nameSpan.textContent = player.displayName;
-      li.appendChild(nameSpan);
-
-      const statusSpan = document.createElement("span");
-      statusSpan.className = "waiting-room-player-status";
-      statusSpan.textContent = player.isReady ? "✅" : "⬜";
-      li.appendChild(statusSpan);
-
-      this.playerListEl.appendChild(li);
+    for (const player of humans) {
+      this.playerListEl.appendChild(this.createPlayerLi(player));
     }
+
+    if (cpus.length > 0) {
+      const divider = document.createElement("li");
+      divider.className = "waiting-room-divider";
+      divider.textContent = "🤖 CPU Players";
+      this.playerListEl.appendChild(divider);
+
+      for (const player of cpus) {
+        this.playerListEl.appendChild(this.createPlayerLi(player));
+      }
+    }
+  }
+
+  private createPlayerLi(player: PreGamePlayerInfo): HTMLLIElement {
+    const li = document.createElement("li");
+    li.className = "waiting-room-player";
+    if (player.isCPU) li.classList.add("cpu-player");
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "waiting-room-player-name";
+    nameSpan.textContent = player.isCPU
+      ? `🤖 ${player.displayName}`
+      : player.displayName;
+    li.appendChild(nameSpan);
+
+    const statusSpan = document.createElement("span");
+    statusSpan.className = "waiting-room-player-status";
+    statusSpan.textContent = player.isReady ? "✅" : "⬜";
+    li.appendChild(statusSpan);
+
+    li.appendChild(nameSpan);
+    li.appendChild(statusSpan);
+
+    return li;
   }
 
   private updateStartButton(): void {

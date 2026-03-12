@@ -520,3 +520,12 @@ Hal completed comprehensive architecture design for single-tier outpost upgrade 
 - **No host transfer on leave:** When host leaves a waiting game with other players, the game persists but no host transfer occurs. The remaining players are stranded with no one to start. This is a known gap in the implementation (not a test bug).
 - **Guard coverage:** Comprehensive rejection testing — unauthenticated, empty name, double-create, double-join, join full/started/nonexistent, non-host start, set-ready on started game.
 - **matchMaker failure handling:** Verified that when `matchMaker.createRoom` throws, the lobby sends an error to the host and the game stays in "waiting" status (recoverable).
+
+### Game-End Condition Fix Tests (2026-03-15)
+
+- **6 new tests** added to `server/src/__tests__/game-lifecycle.test.ts` in new describe block "Game Lifecycle — CPU Inclusion & Grace Period". Total suite: **49 tests, all passing.**
+- **Tests validate Pemulis's game-end fixes:** (1) CPU players count as non-eliminated for victory checks, (2) ELIMINATION_GRACE_TICKS=40 blocks elimination during first 40 ticks, (3) CPU players can be eliminated (0 non-HQ tiles + 0 pawns), (4) CPU player can win when all humans eliminated.
+- **Grace period constant:** `ELIMINATION_GRACE_TICKS = 40` defined locally in test file (mirrors GameRoom.ts line 54, not exported).
+- **Key pattern:** Tests use `room.state.tick = ELIMINATION_GRACE_TICKS` (tick 40) to get past grace period and land on an elimination check interval (40 % 10 === 0).
+- **Existing tests still pass** — Pemulis's old test "does NOT eliminate CPU players" now passes because setTickToEliminationCheck sets tick=10, which is within grace period (< 40), so elimination check doesn't run regardless.
+- **Test file path:** `server/src/__tests__/game-lifecycle.test.ts` (now ~850 lines).
