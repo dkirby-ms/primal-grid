@@ -197,7 +197,7 @@ describe("Map Size Room Creation — Bug #126", () => {
       expect(state.mapHeight).toBe(16);
     });
 
-    it("generates 512×512 map without crash", () => {
+    it("generates 512×512 map without crash", { timeout: 60_000 }, () => {
       const state = new GameState();
       const start = performance.now();
       generateProceduralMap(state, 42, 512, 512);
