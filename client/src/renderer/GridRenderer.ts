@@ -42,6 +42,7 @@ function parseColor(color: string): number {
 const STRUCTURE_ICONS: Record<string, string> = {
   hq: '🏰',
   outpost: '🗼',
+  outpost_upgraded: '🏹',
   farm: '🌾',
   factory: '⚙️',
 };
@@ -343,13 +344,14 @@ export class GridRenderer {
         const ty = (tile['y'] as number) ?? Math.floor(idx / this.mapSize);
         const type = (tile['type'] as TileType) ?? TileType.Grassland;
         const structureType = (tile['structureType'] as string) ?? '';
+        const upgraded = (tile['upgraded'] as boolean) ?? false;
         // Resource info passed to updateTile for background tinting
         const resType = tile['resourceType'] as number | undefined;
         const resAmount = tile['resourceAmount'] as number | undefined;
         this.updateTile(tx, ty, type, resType, resAmount);
 
         // Cache-on-add: store terrain info when tile enters the StateView
-        this.exploredCache.cacheTile(tx, ty, type, structureType);
+        this.exploredCache.cacheTile(tx, ty, type, structureType, upgraded);
         const tileIdx = ty * this.mapSize + tx;
         currentVisible.add(tileIdx);
 
@@ -376,6 +378,7 @@ export class GridRenderer {
         this.tileOwners.set(tileIdx2, ownerID);
         this.tileStructures.set(tileIdx2, structureType);
         this.tileTypes.set(tileIdx2, type);
+        this.tileUpgraded.set(tileIdx2, upgraded);
 
         // Render building icon on visible tiles (farm, factory, outpost — not hq which has its own renderer)
         this.updateBuildingIcon(tx, ty, structureType);
@@ -429,10 +432,13 @@ export class GridRenderer {
       // Show faded structure silhouette if the cached tile had a structure
       const cached = this.exploredCache.get(x, y);
       if (cached && cached.structureType && cached.structureType in STRUCTURE_ICONS) {
+        const iconKey = cached.structureType === 'outpost' && cached.upgraded
+          ? 'outpost_upgraded'
+          : cached.structureType;
         let icon = this.fogStructureIcons.get(idx);
         if (!icon) {
           icon = new Text({
-            text: STRUCTURE_ICONS[cached.structureType],
+            text: STRUCTURE_ICONS[iconKey],
             style: { fontSize: 14, fontFamily: 'sans-serif' },
           });
           icon.anchor?.set?.(0.5, 0.5);
@@ -442,7 +448,7 @@ export class GridRenderer {
           this.fogStructureIcons.set(idx, icon);
         } else {
           // Update icon if structure type changed
-          const expected = STRUCTURE_ICONS[cached.structureType];
+          const expected = STRUCTURE_ICONS[iconKey];
           if (icon.text !== expected) icon.text = expected;
         }
         icon.visible = true;
@@ -638,7 +644,10 @@ export class GridRenderer {
       return;
     }
 
-    const iconChar = STRUCTURE_ICONS[structureType] ?? '?';
+    const iconKey = structureType === 'outpost' && this.tileUpgraded.get(idx)
+      ? 'outpost_upgraded'
+      : structureType;
+    const iconChar = STRUCTURE_ICONS[iconKey] ?? '?';
     let icon = this.buildingIcons.get(idx);
     if (!icon) {
       icon = new Text({

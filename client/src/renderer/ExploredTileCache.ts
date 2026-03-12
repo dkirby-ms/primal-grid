@@ -9,6 +9,7 @@
 export interface CachedTile {
   tileType: number;
   structureType: string;
+  upgraded?: boolean;
 }
 
 export class ExploredTileCache {
@@ -28,9 +29,9 @@ export class ExploredTileCache {
   }
 
   /** Cache terrain data when a tile enters the StateView (onAdd). */
-  public cacheTile(x: number, y: number, tileType: number, structureType: string): void {
+  public cacheTile(x: number, y: number, tileType: number, structureType: string, upgraded?: boolean): void {
     const idx = y * this.mapWidth + x;
-    this.cache.set(idx, { tileType, structureType });
+    this.cache.set(idx, { tileType, structureType, upgraded });
 
     // Expand bounding box
     if (x < this._minX || x > this._maxX || y < this._minY || y > this._maxY) {
