@@ -325,6 +325,15 @@ describe("Food Economy System", () => {
       const pos = findWalkableTile(room);
       giveResources(player, 100, 100, 0);
 
+      const existingPawnIds: string[] = [];
+      room.state.creatures.forEach((creature, creatureId) => {
+        if (creature.ownerID === "p1" && creature.pawnType !== "") {
+          existingPawnIds.push(creatureId);
+        }
+      });
+      expect(existingPawnIds).toHaveLength(1);
+      room.state.creatures.delete(existingPawnIds[0]);
+
       const pawn = addPawn(room, "p1", "defender", pos.x, pos.y);
       const healthBefore = pawn.health;
 
@@ -334,7 +343,7 @@ describe("Food Economy System", () => {
       // After income tick with food <= 0, one pawn should take starvation damage
       expect(STARVATION.DAMAGE_PER_TICK).toBe(5);
 
-      // With only one pawn, it must be the one that takes damage
+      // With the starting explorer removed, only this pawn can take the damage
       expect(pawn.health).toBe(healthBefore - STARVATION.DAMAGE_PER_TICK);
     });
 
@@ -343,7 +352,7 @@ describe("Food Economy System", () => {
       const pos = findWalkableTile(room);
       giveResources(player, 100, 100, -20);
 
-      const pawn = addPawn(room, "p1", "builder", pos.x, pos.y);
+      addPawn(room, "p1", "builder", pos.x, pos.y);
 
       // Collect all player pawns (starting explorer + added builder)
       const allPawns: CreatureState[] = [];
