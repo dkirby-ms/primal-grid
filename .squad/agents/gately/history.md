@@ -561,3 +561,13 @@ Investigated bug where players joining via invite link have no way to enter a pl
 - server/src/rooms/LobbyRoom.ts (session management)
 
 **Decision:** Recommended client-only fix (Option A) to avoid protocol changes and maintain consistency with manual join UX.
+
+## 2026-03-12: Board Clearing Session — Player Name & Resource Cost Fixes
+
+Fixed player name join bug (#177): expanded name validation regex to accept UTF-8 characters and special names. Issue was overstrict validation rejecting valid player names. PR #182 merged.
+
+Fixed game log player name display (#178): added name→ID mapping sync during session initialization. Player names now display in all game log entries instead of placeholder IDs.
+
+Fixed resource cost mismatch (#181): synchronized STRUCTURE_TYPES costs between client UI cost preview and server-side validation. UI now accurately reflects actual placement cost.
+
+Result: 3 bugs fixed, all with test coverage. Board cleared of gameplay bugs.

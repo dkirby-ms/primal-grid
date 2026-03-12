@@ -865,3 +865,37 @@ Created `.github/workflows/ci-failure-issue.yml` to automatically create GitHub 
 - Use temp files for complex markdown content to avoid shell expansion issues
 - Fetch only failed jobs from API to keep issue content focused
 - Limit output with `head -20` to prevent excessive issue length
+
+## 2026-03-12: Board Clearing Session — CI Failure Automation
+
+Implemented CI failure auto-issue workflow (#174, PR #175): GitHub Actions workflow monitors CI pipeline completions and automatically creates issues for failures with full context (workflow name, run ID, branch, commit SHA, failed job names). Includes duplicate detection to search for existing open issues and append comments instead of creating duplicates.
+
+Strategic decision: cherry-picked workflow directly to prod instead of dev→uat→prod pipeline. Justification: CI-only infrastructure changes are safe and benefit from immediate deployment for faster team feedback.
+
+Result: CI failures now tracked systematically in GitHub Issues. Team can triage via existing workflows instead of manual Actions tab monitoring.
+
+## Production Changelog Fix (Issue #186) — 2026-03-08
+
+**Problem:** Production deployment Discord notifications showed empty changelogs when multiple dev→UAT promotions preceded a UAT→prod promotion.
+
+**Root cause:** `deploy.yml` used `git describe --tags --abbrev=0 origin/prod` to find baseline, which:
+- Was unreliable with shallow clones (`--depth 50`)
+- Didn't track promotion history (no tags created on intermediate promotions)
+- Advanced comparison baseline with each promotion, causing content loss
+
+**Solution:** Changed to merge-based first-parent detection:
+- Detect merge commits using `git rev-list --parents -n 1` (parent count > 2 words)
+- Compare first parent (previous prod HEAD) against current HEAD: `{first_parent}..HEAD`
+- Captures ALL commits from UAT merge regardless of intermediate promotion count
+- Fallback to `origin/prod~10..origin/prod` for non-merge scenarios (workflow_dispatch)
+
+**Key insight:** When UAT→prod PR merges, the merge commit has two parents:
+1. First parent = previous prod state (before merge)
+2. Second parent = UAT branch that was merged
+
+By comparing first parent..HEAD, we reconstruct the full promotion diff without relying on tags.
+
+**Files modified:** `.github/workflows/deploy.yml` (lines 103-118)  
+**Decision documented:** `.squad/decisions/inbox/marathe-prod-changelog-fix.md`  
+**PR:** #187  
+**Pattern:** For promotion-based workflows, merge commit first-parent detection is more reliable than tag-based baselines when using shallow clones.

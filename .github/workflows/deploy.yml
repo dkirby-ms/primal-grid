@@ -105,13 +105,21 @@ jobs:
           git fetch --depth 50 origin prod
           git fetch --tags
 
-          # Generate changelog from last production tag to current HEAD
-          # Find the most recent tag on prod branch
-          LAST_TAG=$(git describe --tags --abbrev=0 origin/prod 2>/dev/null || echo "")
-          if [ -n "$LAST_TAG" ]; then
-            RANGE="${LAST_TAG}..origin/prod"
+          # Generate changelog from the merge base to current HEAD
+          # When UAT is merged to prod, the merge commit has two parents:
+          # - First parent: previous prod HEAD (before merge)
+          # - Second parent: UAT branch that was merged
+          # By comparing first parent..HEAD, we capture ALL changes from UAT
+          # regardless of how many intermediate promotions occurred.
+          MERGE_COMMIT=$(git rev-parse origin/prod)
+          PARENT_COUNT=$(git rev-list --parents -n 1 $MERGE_COMMIT | wc -w)
+          
+          if [ "$PARENT_COUNT" -gt 2 ]; then
+            # This is a merge commit — use first parent as baseline
+            PREVIOUS_PROD=$(git rev-parse ${MERGE_COMMIT}^1)
+            RANGE="${PREVIOUS_PROD}..${MERGE_COMMIT}"
           else
-            # Fallback: compare against prod~10 if no tags exist
+            # Not a merge commit (workflow_dispatch?) — compare last 10 commits
             RANGE="origin/prod~10..origin/prod"
           fi
           

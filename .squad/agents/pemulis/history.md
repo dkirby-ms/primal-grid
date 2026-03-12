@@ -717,3 +717,11 @@ Hal's decomposition of #161 defines 5 sub-issues with clear dependencies. This w
 - **Wild Creatures:** Increased maxStamina by ~50% (herbivore 10→15, carnivore 14→21, bird 18→27, monkey 12→18, spider 8→12) and reduced costPerMove from 2→1 for most species (herbivore, carnivore, monkey, spider) for 6-13.5s movement vs 2-9s before.
 - **Test Updates:** Updated test expectations in `server/src/__tests__/creature-stamina.test.ts` to match new values (HERBIVORE_STAMINA, CARNIVORE_STAMINA, builder test).
 - **Key Learning:** The stamina system was binary (normal → exhausted hard stop) and values were too aggressive for gameplay feel. Doubling pawn stamina and increasing creature stamina by ~50% while reducing per-move costs maintains strategic depth but reduces frustration. Always update both runtime constants and test fixtures together.
+
+## 2026-03-12: Board Clearing Session — Test Fixes & Stamina Tuning
+
+Fixed two critical flaky tests (starvation damage, fog-of-war visibility) that were causing intermittent failures in the test suite. Root causes were race conditions in creature state timing and position synchronization. Added explicit tick ordering to starvation test and position commitment before visibility checks.
+
+Tuned stamina system (#180) by doubling player pawn stamina (Builder 20→40, Defender 25→50, Attacker/Explorer 30→60) and adjusting creature stamina costs (reducing costPerMove from 2→1). Rationale: 20–30 second continuous movement duration improves gameplay feel vs ~10s original, while preserving strategic depth. All test fixtures updated. Merged to dev via PR #183.
+
+Result: 984 tests passing, no remaining flaky test reports. Board cleared of blocking issues.
