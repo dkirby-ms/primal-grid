@@ -11,6 +11,15 @@ on:
         options:
           - 'dev-to-uat'
           - 'uat-to-prod'
+      version_bump:
+        description: 'Version bump type'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - 'patch'
+          - 'minor'
+          - 'major'
 
 permissions:
   contents: write
@@ -43,13 +52,13 @@ jobs:
             git log --oneline origin/uat..origin/dev
           fi
 
-      - name: Bump patch version
+      - name: Bump version
         if: steps.diff.outputs.commit_count != '0'
         id: version
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          npm version patch --no-git-tag-version
+          npm version ${{ inputs.version_bump }} --no-git-tag-version
           NEW_VERSION=$(node -e "console.log(require('./package.json').version)")
           echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           git add package.json package-lock.json
