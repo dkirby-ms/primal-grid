@@ -4,6 +4,171 @@
 - **Project:** Primal Grid: Survival of the Frontier — grid-based survival colony builder with dinosaurs, dynamic ecosystems, and base automation in the browser
 - **Stack:** TypeScript, HTML5 Canvas, browser-based web game
 - **Design Document:** docs/design-sketch.md
+**Phase 6 Preparation (2026-03-11):** Hal completed design spec for Outpost Upgrade System (issue #154). Single-tier upgrade, 40W/30S cost, 5-tile attack range, 12 damage, closest-enemy targeting, 🏹 icon. Full implementation roadmap provided in `.squad/decisions.md`. You and Pemulis can begin Phase 6 when ready.
+
+## Core Context
+
+**Pre-2026-03 Work Summary:**
+- **Phases 0–4.4 Complete:** Canvas scaffolding (Vite bundler, HMR), grid rendering (GridRenderer with pre-allocated overlays per tile), biome colors (8 biome types with distinct fill colors), resource indicators (5×5px colored dots), claiming animation (pulsing overlay), creature visuals (emoji + position tracking, 4-state animation FSM), HQ markers (filled square + castle icon), HUD redesign (HTML DOM side panel 200px × 600px with inventory, territory score, level, shape carousel).
+- **Rendering Patterns:** Overlay Graphics per tile (pre-allocated in buildGrid), state-driven opacity/color updates (no reallocation), sprite atlas not needed yet (tile-based rendering), camera pan/zoom follows HQ, viewport clipping for efficiency.
+- **Color Conventions:** Biome colors in HexColors object (Forest=#228B22, Desert=#EDC9AF, etc.), player territory colors dynamically assigned per player ID, creature types have icon mappings (Herbivore 🦕, Carnivore 🦖), UI uses white/black text on panels.
+- **Input Handling:** Click-to-place shapes with preview (transparent overlay), keyboard shortcuts (G=select, D=deselect, Esc=cancel), shape carousel rotation via arrow keys, tame creatures by clicking with overlay validation.
+- **Test Suite:** 244 integration tests, rendering tests validate overlay creation/visibility/color, HUD tests check DOM element updates.
+- **Key Files:** GridRenderer.ts (tile rendering, overlay management, camera), InputHandler.ts (click/keyboard routing), HudDOM.ts (DOM panel elements, state binding), Camera.ts (pan/zoom logic).
+- **Performance:** 60 FPS target, 10k+ sprites drawable with canvas batching, no lags observed on 64×64 map with 1000 creatures.
+
+## Learnings
+
+<!-- Append new learnings below. Each entry is something lasting about the project. -->
+- **Food HUD Implementation & Review Cycle (2026-03-14):** Implemented client-side food HUD for Issue #21: food count display (🍖 emoji) synced via Colyseus schema, spawn buttons updated with rebalanced costs (builder 8W/4S, defender 12W/8S, attacker 16W/12S, explorer 10W/6S), spawn gating at food ≤ 0. PR #153 submitted. Hal's review identified 3 issues. When unavailable for revisions, Steeply fixed all items (starvation check, tooltips, constants). PR merged to dev. Key decision: Food display kept minimal (count only, no upkeep rate) to avoid clutter; players learn mechanic through gameplay. Future enhancements possible if UAT shows need for upkeep indicator.
+- **Round Timer HUD (Sub-Issue 4, #161):** Added round timer display to HUD panel. Key patterns: TICK_RATE import from shared constants for tick-to-second conversion, `lastTimerSecond` field for throttling DOM updates to 1/sec (roundTimer changes every tick but display only needs per-second refresh), CSS `hidden` class on section for unlimited games (`roundTimer === -1`), CSS keyframe animation for urgency flash under 60s. Placed between territory and builders sections for visual prominence. This was a clean client-only change — no server files touched.
+- **End-Game Results Screen (Sub-Issue 3, #161):** Built EndGameScreen.ts following HudDOM pattern — DOM-based overlay at z-index 1050 (above game/scoreboard, below lobby). Victory/defeat banner, winner info with reason text, ranked scoreboard highlighting local player, Return to Lobby button, 60s auto-dismiss countdown. Key wiring: GAME_ENDED message handler compares winnerId to local sessionId for win/loss display; PLAYER_ELIMINATED posts to GameLog for eliminated players; return-to-lobby calls leaveGame() then reconnects via connectToLobbyAndShow(); disconnect handler hides overlay for server-side disposal. Matched existing dark panel CSS (rgba(17,17,34,0.95), #444466 borders, Courier New monospace, #ffd700 gold accents). No server files modified.
+- **Auto-Join Name Prompt Fix (#177, 2026-03-18):** Fixed invite link auto-join flow to show name prompt before joining. Bug: `?join=<gameId>` URL param sent JOIN_GAME immediately without set_name, causing players to join with default name. Fix: Created `join-name-modal` in index.html (modal-overlay pattern, centered input + submit button), added `showJoinNamePrompt()` helper in main.ts to display modal and handle submission. Key patterns: pre-fill input with current lobby name if available, support Enter key for quick submit, send `set_name` message before `JOIN_GAME` to match manual join flow (LobbyScreen.ts:325-335). Modal uses existing CSS (modal-panel styling from upgrade-modal), inline input styles for consistent look. Event listeners cleaned up after submission to prevent memory leaks. Client-only fix, no server changes needed.
+
+### Sprint Kickoff (2026-03-12) — Context Propagation
+
+**Upcoming Work — Outpost Upgrades (#154):**
+
+Hal completed comprehensive architecture design for single-tier outpost upgrade feature. **Phase 2 (Client Rendering & UI)** is assigned to Gately and will start after Phase 1 (server foundation) lands.
+
+**Phase 1 (Server — Pemulis):** 1.5 days
+- Schema: Add `upgraded` field to TileState
+- Server logic: Upgrade handler + ranged attack function
+- Constants: OUTPOST_UPGRADE
+
+**Phase 2 (Client — Gately):** 1.5 days (starts after Phase 1 lands)
+1. Update STRUCTURE_ICONS in GridRenderer.ts: add `outpost_upgraded: '🏹'`
+2. Extend tile rendering to check `tile.upgraded` flag and select icon
+3. Add right-click handler for outposts (detect owned, non-upgraded outpost)
+4. Implement upgrade modal UI (display cost, confirm/cancel buttons)
+5. Wire modal to UPGRADE_OUTPOST message send
+6. Add CSS styling for modal (centered overlay, semi-transparent backdrop)
+7. Integration tests (icon rendering, modal flow, message send)
+
+**Design Details:**
+- Icon change: 🗼 (regular) → 🏹 (upgraded)
+- Right-click interaction: triggers upgrade modal
+- Cost display: "Cost: 40 wood, 30 stone"
+- Modal buttons: "Upgrade" / "Cancel"
+- Scope defers: animations, particles, visual effects (v2+)
+
+**Timeline:** Phase 2 est. 1.5 days. Phase 3 (integration testing) follows.
+
+**Design Document:** .squad/decisions.md (merged from inbox)
+
+### Outpost Upgrade System — Client Implementation (2026-03-11)
+
+Implemented client-side for Issue #154 — outpost upgrades with ranged defense. Built on Pemulis's server-side foundation.
+
+**Implementation Details:**
+- **Icon Rendering:** Extended STRUCTURE_ICONS map with `outpost_upgraded: '🏹'`. Modified updateBuildingIcon() to check `tile.upgraded` flag and select correct icon. Works for both visible tiles and fog-of-war silhouettes.
+- **Fog-of-War Support:** Updated ExploredTileCache interface to store `upgraded?: boolean`. Modified cacheTile() and fog rendering (setFogState) to show correct icon in explored fog (grayed 🏹 for upgraded, 🗼 for regular).
+- **Right-Click Interaction:** Added contextmenu event handler in InputHandler. On right-click, checks if tile is owned outpost, not upgraded, and player has enough resources (40W/30S). If valid, shows upgrade modal.
+- **Upgrade Modal UI:** Created UpgradeModal.ts component. Dark themed modal with gold border, shows cost, confirm/cancel buttons. Sends UPGRADE_OUTPOST message with {x, y} payload on confirm. Closes on Escape or backdrop click.
+- **Resource Tracking:** Extended HudDOM to expose `localSessionId` (public readonly) and fire `onResourcesChange` callback. InputHandler subscribes to track current wood/stone for validation.
+- **Wiring:** main.ts creates UpgradeModal, wires it to InputHandler and room. HUD callback updates InputHandler resources on every state sync.
+
+**Files Modified:**
+- `client/src/renderer/GridRenderer.ts`: Icon selection logic, getTileData() method, tileUpgraded cache
+- `client/src/renderer/ExploredTileCache.ts`: Added upgraded field to CachedTile interface
+- `client/src/ui/UpgradeModal.ts`: New modal component
+- `client/src/input/InputHandler.ts`: Right-click handler, resource tracking, modal wiring
+- `client/src/ui/HudDOM.ts`: Exposed localSessionId, added onResourcesChange callback
+- `client/src/main.ts`: Modal instantiation and wiring
+- `client/index.html`: Modal HTML + CSS (dark theme, gold accents)
+
+**Rendering Patterns Used:**
+- Pre-allocated overlay pattern (no dynamic Graphics allocation)
+- Tile metadata caching (owner, structure, upgraded) in Map<number, T>
+- Fog silhouette rendering with cached state
+- Modal overlay pattern (same as scoreboard/help screen)
+
+**Validation:** Only shows upgrade option if player owns tile, has outpost, outpost not upgraded, and has 40W+30S. Server validates again on UPGRADE_OUTPOST receipt.
+
+**Build Status:** ✅ Compiles cleanly, no TypeScript errors. Ready for integration testing with server.
+
+Refs #154. Ready to open PR targeting `dev`.
+
+### Cross-Agent Sync: Round 2 (2026-03-12)
+
+**Pemulis's Server Integration:** Pemulis completed server-side foundation for #154 on branch `squad/154-outpost-upgrades` (PR #164). Ready for client integration. Both PRs awaiting Hal's review before merge to dev.
+
+**Hal's Review:** Both PR #164 (Pemulis server) and PR #165 (this work) submitted to Hal for review. Will proceed to dev upon approval.
+
+**Decision Impact:** #156 approved (resource tuning unit costs + farms) — resource costs now locked in for validation. #161 deferred to backlog.
+
+---
+
+## 2026-03-16: Round Timer HUD Display (Epic #161, Sub-Issue 4)
+
+**Author:** Gately  
+**Status:** Complete  
+**Issue:** #161 (Sub-Issue 4)  
+**Branch:** squad/161-game-lifecycle
+
+### Sub-Issue 4: Round Timer HUD Display
+
+Implemented countdown timer display in the HUD for timed games.
+
+**Timer display UI**:
+- Added MM:SS countdown element to HUD panel (follows existing HudDOM pattern)
+- Reads `state.roundTimer` and converts to seconds: `roundTimer / TICK_RATE`
+- Hidden when `roundTimer === -1` (no limit / unlimited games)
+- Shows "∞" or completely hidden for unlimited games (cleaner UX)
+
+**Update mechanics**:
+- Listens to `state.roundTimer` changes via Colyseus schema sync
+- Throttled to 1/sec update (not every tick) for performance
+- Accurate countdown ticking synchronized with server
+
+**Visual urgency indicator**:
+- Added flash/highlight effect when `roundTimer < 60 seconds`
+- Red color or pulsing animation signals end-game pressure
+- Matches HUD visual language (dark background, light text)
+
+**Test result:** 902/902 tests pass.
+
+**Key files modified:**
+- client/src/ui/HudDOM.ts
+
+**Features**:
+- ✅ Timer displays correctly in timed games
+- ✅ Timer hidden in unlimited games
+- ✅ Countdown ticks down at correct rate
+- ✅ Visual urgency cue < 60s
+- ✅ Responsive to `state.roundTimer` changes
+- ✅ Performance-optimized (1/sec throttle)
+
+### Cross-Agent Notes
+
+Pemulis implemented Sub-Issue 2 (Win/Loss Engine) which provides the round timer countdown logic. This UI layer consumes the `roundTimer` field from GameState and presents it to the player. Dependency satisfied. Gately ready for Sub-Issue 3 (End-Game UI) once Pemulis completes engine work (already done).
+
+### Pre-Game Waiting Room UI (Issue #2)
+
+- **WaitingRoom.ts:** New DOM-based overlay at z-index 1100 (same level as lobby). Shows game name, settings summary (map size, max players), live player list with ✅/⬜ ready indicators, host-only "Start Game" button (enabled when ≥1 player), non-host "Ready"/"Not Ready" toggle (sends SET_READY), and "Leave" button (sends LEAVE_GAME). Subscribes to GAME_PLAYERS and GAME_STARTED messages on the lobby Room.
+- **LobbyScreen flow change:** GAME_JOINED handler now checks for `roomId` presence. If roomId exists → immediate join (existing flow). If absent → emits new `"waiting"` event with gameInfo and isHost flag. The `isHost` flag is derived from the `isCreatingGame` state captured before `clearCreateGameState()`.
+- **main.ts wiring:** WaitingRoom created inside `connectToLobbyAndShow`. On "waiting" event: lobby hides, waiting room shows. On GAME_STARTED from waiting room: joins game room, sets up game session. On "leave" from waiting room: returns to lobby.
+- **CSS:** Matches existing dark/monospace lobby aesthetic (#1a1a2e bg, #444466 borders, #ffd700 gold, #7ecfff cyan, Courier New).
+- **No server changes.** All new shared types (SET_READY, GAME_PLAYERS, PreGamePlayerInfo, etc.) were already added by Pemulis.
+
+## Learnings
+
+### Issue #177: Invite Link Join Flow (Needs Research)
+
+## 2026-03-12: Board Clearing Session — Player Name & Resource Cost Fixes
+
+Fixed player name join bug (#177): expanded name validation regex to accept UTF-8 characters and special names. Issue was overstrict validation rejecting valid player names. PR #182 merged.
+
+Fixed game log player name display (#178): added name→ID mapping sync during session initialization. Player names now display in all game log entries instead of placeholder IDs.
+
+Fixed resource cost mismatch (#181): synchronized STRUCTURE_TYPES costs between client UI cost preview and server-side validation. UI now accurately reflects actual placement cost.
+
+Result: 3 bugs fixed, all with test coverage. Board cleared of gameplay bugs.
+
+## Core Context
+
+Historical entries (before 2026-03-10) summarized for reference:
+
 - **Created:** 2026-02-25T00:45:00Z
 
 ## Current Phase
@@ -26,27 +191,6 @@
 - B8–B9 Shape UI & rendering ✅
 
 Next: **2026-03-04 — Territory Control Redesign** (awaiting user mechanic selection)
-
-**Phase 6 Preparation (2026-03-11):** Hal completed design spec for Outpost Upgrade System (issue #154). Single-tier upgrade, 40W/30S cost, 5-tile attack range, 12 damage, closest-enemy targeting, 🏹 icon. Full implementation roadmap provided in `.squad/decisions.md`. You and Pemulis can begin Phase 6 when ready.
-
-## Core Context
-
-**Pre-2026-03 Work Summary:**
-- **Phases 0–4.4 Complete:** Canvas scaffolding (Vite bundler, HMR), grid rendering (GridRenderer with pre-allocated overlays per tile), biome colors (8 biome types with distinct fill colors), resource indicators (5×5px colored dots), claiming animation (pulsing overlay), creature visuals (emoji + position tracking, 4-state animation FSM), HQ markers (filled square + castle icon), HUD redesign (HTML DOM side panel 200px × 600px with inventory, territory score, level, shape carousel).
-- **Rendering Patterns:** Overlay Graphics per tile (pre-allocated in buildGrid), state-driven opacity/color updates (no reallocation), sprite atlas not needed yet (tile-based rendering), camera pan/zoom follows HQ, viewport clipping for efficiency.
-- **Color Conventions:** Biome colors in HexColors object (Forest=#228B22, Desert=#EDC9AF, etc.), player territory colors dynamically assigned per player ID, creature types have icon mappings (Herbivore 🦕, Carnivore 🦖), UI uses white/black text on panels.
-- **Input Handling:** Click-to-place shapes with preview (transparent overlay), keyboard shortcuts (G=select, D=deselect, Esc=cancel), shape carousel rotation via arrow keys, tame creatures by clicking with overlay validation.
-- **Test Suite:** 244 integration tests, rendering tests validate overlay creation/visibility/color, HUD tests check DOM element updates.
-- **Key Files:** GridRenderer.ts (tile rendering, overlay management, camera), InputHandler.ts (click/keyboard routing), HudDOM.ts (DOM panel elements, state binding), Camera.ts (pan/zoom logic).
-- **Performance:** 60 FPS target, 10k+ sprites drawable with canvas batching, no lags observed on 64×64 map with 1000 creatures.
-
-## Learnings
-
-<!-- Append new learnings below. Each entry is something lasting about the project. -->
-- **Food HUD Implementation & Review Cycle (2026-03-14):** Implemented client-side food HUD for Issue #21: food count display (🍖 emoji) synced via Colyseus schema, spawn buttons updated with rebalanced costs (builder 8W/4S, defender 12W/8S, attacker 16W/12S, explorer 10W/6S), spawn gating at food ≤ 0. PR #153 submitted. Hal's review identified 3 issues. When unavailable for revisions, Steeply fixed all items (starvation check, tooltips, constants). PR merged to dev. Key decision: Food display kept minimal (count only, no upkeep rate) to avoid clutter; players learn mechanic through gameplay. Future enhancements possible if UAT shows need for upkeep indicator.
-- **Round Timer HUD (Sub-Issue 4, #161):** Added round timer display to HUD panel. Key patterns: TICK_RATE import from shared constants for tick-to-second conversion, `lastTimerSecond` field for throttling DOM updates to 1/sec (roundTimer changes every tick but display only needs per-second refresh), CSS `hidden` class on section for unlimited games (`roundTimer === -1`), CSS keyframe animation for urgency flash under 60s. Placed between territory and builders sections for visual prominence. This was a clean client-only change — no server files touched.
-- **End-Game Results Screen (Sub-Issue 3, #161):** Built EndGameScreen.ts following HudDOM pattern — DOM-based overlay at z-index 1050 (above game/scoreboard, below lobby). Victory/defeat banner, winner info with reason text, ranked scoreboard highlighting local player, Return to Lobby button, 60s auto-dismiss countdown. Key wiring: GAME_ENDED message handler compares winnerId to local sessionId for win/loss display; PLAYER_ELIMINATED posts to GameLog for eliminated players; return-to-lobby calls leaveGame() then reconnects via connectToLobbyAndShow(); disconnect handler hides overlay for server-side disposal. Matched existing dark panel CSS (rgba(17,17,34,0.95), #444466 borders, Courier New monospace, #ffd700 gold accents). No server files modified.
-- **Auto-Join Name Prompt Fix (#177, 2026-03-18):** Fixed invite link auto-join flow to show name prompt before joining. Bug: `?join=<gameId>` URL param sent JOIN_GAME immediately without set_name, causing players to join with default name. Fix: Created `join-name-modal` in index.html (modal-overlay pattern, centered input + submit button), added `showJoinNamePrompt()` helper in main.ts to display modal and handle submission. Key patterns: pre-fill input with current lobby name if available, support Enter key for quick submit, send `set_name` message before `JOIN_GAME` to match manual join flow (LobbyScreen.ts:325-335). Modal uses existing CSS (modal-panel styling from upgrade-modal), inline input styles for consistent look. Event listeners cleaned up after submission to prevent memory leaks. Client-only fix, no server changes needed.
 
 ### Territory Control Pivot — Rendering Analysis (2026-02-28)
 
@@ -400,136 +544,6 @@ All 10 Phase A items (A1–A10) complete across all agents. Tests: 240/240 passi
 
 ---
 
-### Sprint Kickoff (2026-03-12) — Context Propagation
-
-**Upcoming Work — Outpost Upgrades (#154):**
-
-Hal completed comprehensive architecture design for single-tier outpost upgrade feature. **Phase 2 (Client Rendering & UI)** is assigned to Gately and will start after Phase 1 (server foundation) lands.
-
-**Phase 1 (Server — Pemulis):** 1.5 days
-- Schema: Add `upgraded` field to TileState
-- Server logic: Upgrade handler + ranged attack function
-- Constants: OUTPOST_UPGRADE
-
-**Phase 2 (Client — Gately):** 1.5 days (starts after Phase 1 lands)
-1. Update STRUCTURE_ICONS in GridRenderer.ts: add `outpost_upgraded: '🏹'`
-2. Extend tile rendering to check `tile.upgraded` flag and select icon
-3. Add right-click handler for outposts (detect owned, non-upgraded outpost)
-4. Implement upgrade modal UI (display cost, confirm/cancel buttons)
-5. Wire modal to UPGRADE_OUTPOST message send
-6. Add CSS styling for modal (centered overlay, semi-transparent backdrop)
-7. Integration tests (icon rendering, modal flow, message send)
-
-**Design Details:**
-- Icon change: 🗼 (regular) → 🏹 (upgraded)
-- Right-click interaction: triggers upgrade modal
-- Cost display: "Cost: 40 wood, 30 stone"
-- Modal buttons: "Upgrade" / "Cancel"
-- Scope defers: animations, particles, visual effects (v2+)
-
-**Timeline:** Phase 2 est. 1.5 days. Phase 3 (integration testing) follows.
-
-**Design Document:** .squad/decisions.md (merged from inbox)
-
-### Outpost Upgrade System — Client Implementation (2026-03-11)
-
-Implemented client-side for Issue #154 — outpost upgrades with ranged defense. Built on Pemulis's server-side foundation.
-
-**Implementation Details:**
-- **Icon Rendering:** Extended STRUCTURE_ICONS map with `outpost_upgraded: '🏹'`. Modified updateBuildingIcon() to check `tile.upgraded` flag and select correct icon. Works for both visible tiles and fog-of-war silhouettes.
-- **Fog-of-War Support:** Updated ExploredTileCache interface to store `upgraded?: boolean`. Modified cacheTile() and fog rendering (setFogState) to show correct icon in explored fog (grayed 🏹 for upgraded, 🗼 for regular).
-- **Right-Click Interaction:** Added contextmenu event handler in InputHandler. On right-click, checks if tile is owned outpost, not upgraded, and player has enough resources (40W/30S). If valid, shows upgrade modal.
-- **Upgrade Modal UI:** Created UpgradeModal.ts component. Dark themed modal with gold border, shows cost, confirm/cancel buttons. Sends UPGRADE_OUTPOST message with {x, y} payload on confirm. Closes on Escape or backdrop click.
-- **Resource Tracking:** Extended HudDOM to expose `localSessionId` (public readonly) and fire `onResourcesChange` callback. InputHandler subscribes to track current wood/stone for validation.
-- **Wiring:** main.ts creates UpgradeModal, wires it to InputHandler and room. HUD callback updates InputHandler resources on every state sync.
-
-**Files Modified:**
-- `client/src/renderer/GridRenderer.ts`: Icon selection logic, getTileData() method, tileUpgraded cache
-- `client/src/renderer/ExploredTileCache.ts`: Added upgraded field to CachedTile interface
-- `client/src/ui/UpgradeModal.ts`: New modal component
-- `client/src/input/InputHandler.ts`: Right-click handler, resource tracking, modal wiring
-- `client/src/ui/HudDOM.ts`: Exposed localSessionId, added onResourcesChange callback
-- `client/src/main.ts`: Modal instantiation and wiring
-- `client/index.html`: Modal HTML + CSS (dark theme, gold accents)
-
-**Rendering Patterns Used:**
-- Pre-allocated overlay pattern (no dynamic Graphics allocation)
-- Tile metadata caching (owner, structure, upgraded) in Map<number, T>
-- Fog silhouette rendering with cached state
-- Modal overlay pattern (same as scoreboard/help screen)
-
-**Validation:** Only shows upgrade option if player owns tile, has outpost, outpost not upgraded, and has 40W+30S. Server validates again on UPGRADE_OUTPOST receipt.
-
-**Build Status:** ✅ Compiles cleanly, no TypeScript errors. Ready for integration testing with server.
-
-Refs #154. Ready to open PR targeting `dev`.
-
-### Cross-Agent Sync: Round 2 (2026-03-12)
-
-**Pemulis's Server Integration:** Pemulis completed server-side foundation for #154 on branch `squad/154-outpost-upgrades` (PR #164). Ready for client integration. Both PRs awaiting Hal's review before merge to dev.
-
-**Hal's Review:** Both PR #164 (Pemulis server) and PR #165 (this work) submitted to Hal for review. Will proceed to dev upon approval.
-
-**Decision Impact:** #156 approved (resource tuning unit costs + farms) — resource costs now locked in for validation. #161 deferred to backlog.
-
----
-
-## 2026-03-16: Round Timer HUD Display (Epic #161, Sub-Issue 4)
-
-**Author:** Gately  
-**Status:** Complete  
-**Issue:** #161 (Sub-Issue 4)  
-**Branch:** squad/161-game-lifecycle
-
-### Sub-Issue 4: Round Timer HUD Display
-
-Implemented countdown timer display in the HUD for timed games.
-
-**Timer display UI**:
-- Added MM:SS countdown element to HUD panel (follows existing HudDOM pattern)
-- Reads `state.roundTimer` and converts to seconds: `roundTimer / TICK_RATE`
-- Hidden when `roundTimer === -1` (no limit / unlimited games)
-- Shows "∞" or completely hidden for unlimited games (cleaner UX)
-
-**Update mechanics**:
-- Listens to `state.roundTimer` changes via Colyseus schema sync
-- Throttled to 1/sec update (not every tick) for performance
-- Accurate countdown ticking synchronized with server
-
-**Visual urgency indicator**:
-- Added flash/highlight effect when `roundTimer < 60 seconds`
-- Red color or pulsing animation signals end-game pressure
-- Matches HUD visual language (dark background, light text)
-
-**Test result:** 902/902 tests pass.
-
-**Key files modified:**
-- client/src/ui/HudDOM.ts
-
-**Features**:
-- ✅ Timer displays correctly in timed games
-- ✅ Timer hidden in unlimited games
-- ✅ Countdown ticks down at correct rate
-- ✅ Visual urgency cue < 60s
-- ✅ Responsive to `state.roundTimer` changes
-- ✅ Performance-optimized (1/sec throttle)
-
-### Cross-Agent Notes
-
-Pemulis implemented Sub-Issue 2 (Win/Loss Engine) which provides the round timer countdown logic. This UI layer consumes the `roundTimer` field from GameState and presents it to the player. Dependency satisfied. Gately ready for Sub-Issue 3 (End-Game UI) once Pemulis completes engine work (already done).
-
-### Pre-Game Waiting Room UI (Issue #2)
-
-- **WaitingRoom.ts:** New DOM-based overlay at z-index 1100 (same level as lobby). Shows game name, settings summary (map size, max players), live player list with ✅/⬜ ready indicators, host-only "Start Game" button (enabled when ≥1 player), non-host "Ready"/"Not Ready" toggle (sends SET_READY), and "Leave" button (sends LEAVE_GAME). Subscribes to GAME_PLAYERS and GAME_STARTED messages on the lobby Room.
-- **LobbyScreen flow change:** GAME_JOINED handler now checks for `roomId` presence. If roomId exists → immediate join (existing flow). If absent → emits new `"waiting"` event with gameInfo and isHost flag. The `isHost` flag is derived from the `isCreatingGame` state captured before `clearCreateGameState()`.
-- **main.ts wiring:** WaitingRoom created inside `connectToLobbyAndShow`. On "waiting" event: lobby hides, waiting room shows. On GAME_STARTED from waiting room: joins game room, sets up game session. On "leave" from waiting room: returns to lobby.
-- **CSS:** Matches existing dark/monospace lobby aesthetic (#1a1a2e bg, #444466 borders, #ffd700 gold, #7ecfff cyan, Courier New).
-- **No server changes.** All new shared types (SET_READY, GAME_PLAYERS, PreGamePlayerInfo, etc.) were already added by Pemulis.
-
-## Learnings
-
-### Issue #177: Invite Link Join Flow (Needs Research)
-
 **Date:** 2025-01-20
 
 Investigated bug where players joining via invite link have no way to enter a player name.
@@ -562,12 +576,3 @@ Investigated bug where players joining via invite link have no way to enter a pl
 
 **Decision:** Recommended client-only fix (Option A) to avoid protocol changes and maintain consistency with manual join UX.
 
-## 2026-03-12: Board Clearing Session — Player Name & Resource Cost Fixes
-
-Fixed player name join bug (#177): expanded name validation regex to accept UTF-8 characters and special names. Issue was overstrict validation rejecting valid player names. PR #182 merged.
-
-Fixed game log player name display (#178): added name→ID mapping sync during session initialization. Player names now display in all game log entries instead of placeholder IDs.
-
-Fixed resource cost mismatch (#181): synchronized STRUCTURE_TYPES costs between client UI cost preview and server-side validation. UI now accurately reflects actual placement cost.
-
-Result: 3 bugs fixed, all with test coverage. Board cleared of gameplay bugs.
