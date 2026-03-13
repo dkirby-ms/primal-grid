@@ -258,6 +258,25 @@ Historical entries (before 2026-03-10) summarized for reference:
 
 Next: **2026-03-04 — Territory Control Redesign** (awaiting user mechanic selection)
 
+**Phase 6 Preparation (2026-03-11):** Hal completed design spec for Outpost Upgrade System (issue #154). Single-tier upgrade, 40W/30S cost, 5-tile attack range, 12 damage, closest-enemy targeting, 🏹 icon. Full implementation roadmap provided in `.squad/decisions.md`. You and Gately can begin Phase 6 when ready.
+
+## Core Context
+
+**Pre-2026-03 Work Summary:**
+- **Phases 0–4.4 Complete:** Full scaffolding (monorepo, Colyseus ESM v0.17, PixiJS v8, Vite, Jest), core simulation (biome map gen, resources, creatures, player survival), base building (placement, crafting, structures, farms), creature systems (schema, taming, pack commands, breeding), HUD redesign to HTML DOM panel.
+- **Data Patterns Established:** Flat inventory (wood/stone/fiber/berries/meat), Colyseus @type() schema decorators, data-driven constants (CREATURES, RESOURCES, RECIPES, STRUCTURES), FSM-based creature AI (idle→graze→hunt→flee), message-based player actions (PLACE, CRAFT, TAME, BREED).
+- **Architecture Decisions:** All data-driven constants in shared/src/data/, server-authoritative game state, no client prediction, creature AI runs every 2nd tick (decoupled from game ticks), pack selection stored as session state Map (not synced), trust decay + proximity gain per tick.
+- **Test Suite:** 244 integration tests passing across all phases. Key patterns: guard assertions for nil fields, creature pair finding helpers, farm growth assertions, pack membership validation.
+- **Key Files:** GameRoom.ts (main event loop), territory.ts (claim/adjacency logic), creatureAI.ts (FSM tick), GameState.ts (schema), types.ts (interfaces), constants.ts (tuning parameters), handlers/ (message processors).
+- **Performance:** 1000 creatures on 64×64 map at 4 ticks/sec, O(N) creature AI tick, no spatial partitioning yet (Phase 5 optimization).
+
+## Learnings
+
+<!-- Append new learnings below. Each entry is something lasting about the project. -->
+- **Food Economy Server Implementation (2026-03-14):** Implemented full food economy system for Issue #21 (903 tests passing). Schema: Added Food to ResourceType enum, foodUpkeep to PawnTypeDef, updated PAWN_TYPES with new costs (builder 8W/4S, defender 12W/8S, attacker 16W/12S, explorer 10W/6S) + upkeep values (1/1/2/3). Server logic: tickStructureIncome() grants HQ food + farm food, deducts upkeep, checks starvation. spawnPawnCore() blocks spawn at food ≤ 0. Persistence: food added to SerializedPlayerState, legacy saves deserialize with food: 0 (safe). Key decision: Starvation damage subtracts HP but delegated to existing death loop (not inline), food can go negative (debt model). Pawn spawn cost test refactored to use PAWN_TYPES instead of legacy constants.
+- **Starvation Flake Root Cause (2026-03-12):** `GameRoom.onJoin()` auto-spawns `TERRITORY.STARTING_PAWN` (currently the explorer), so food-economy tests do not start with an empty pawn roster. The flaky starvation test in `server/src/__tests__/food-economy.test.ts` was assuming the manually added defender was the only valid victim, but `tickStructureIncome()` in `server/src/rooms/GameRoom.ts` correctly picks a random living owned pawn and the starting explorer was sometimes selected instead. Fix pattern: when testing random per-pawn damage, explicitly control the candidate set in the fixture (here by removing the starting explorer) or assert aggregate damage across all eligible pawns. Key files: `server/src/__tests__/food-economy.test.ts`, `server/src/rooms/GameRoom.ts`, `shared/src/constants.ts`. User preference reinforced: rerun flaky-targeted tests multiple times before trusting the fix.
+- **Food Depletion Zero-Floor Model (2026-03-14):** Issue #189 replaced the old food debt behavior with a zero-floor starvation model. `server/src/rooms/GameRoom.ts` now clamps upkeep-driven food to 0, keeps starvation damage active while food stays depleted, and emits a one-time `game_log` depletion warning plus explicit spawn-denied messaging. Persistence also clamps legacy negative food on save/load in `server/src/persistence/playerStateSerde.ts`, and the HUD defensively clamps `#inv-food` in `client/src/ui/HudDOM.ts` while surfacing the starvation effect in the tooltip. Test pattern: cover the server tick, persistence boundary, and in-game feedback together (`server/src/__tests__/food-economy.test.ts`, `server/src/__tests__/player-state-serde.test.ts`).
+
 ### Project README (2026-03-09)
 
 - Created root `README.md` — public-facing project documentation.

@@ -117,6 +117,14 @@ function prepareBuildableTile(
   throw new Error("No buildable tile found on map");
 }
 
+function getGameLogs(room: GameRoom, logType?: string) {
+  const broadcast = room.broadcast as ReturnType<typeof vi.fn>;
+  return broadcast.mock.calls
+    .filter((call) => call[0] === "game_log")
+    .map((call) => call[1] as { message: string; type: string })
+    .filter((payload) => !logType || payload.type === logType);
+}
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 describe("Food Economy System", () => {
@@ -291,6 +299,13 @@ describe("Food Economy System", () => {
 
       // Spawn should be blocked — no new creature added
       expect(room.state.creatures.size).toBe(creaturesBefore);
+      expect(client.send).toHaveBeenCalledWith(
+        "game_log",
+        expect.objectContaining({
+          type: "error",
+          message: expect.stringContaining("Food depleted."),
+        }),
+      );
     });
 
     it("cannot spawn a pawn when food is negative", () => {
@@ -302,6 +317,13 @@ describe("Food Economy System", () => {
       room.handleSpawnPawn(client, { pawnType: "defender" });
 
       expect(room.state.creatures.size).toBe(creaturesBefore);
+      expect(client.send).toHaveBeenCalledWith(
+        "game_log",
+        expect.objectContaining({
+          type: "error",
+          message: expect.stringContaining("Food depleted."),
+        }),
+      );
     });
 
     it("can spawn a pawn when food is positive", () => {
@@ -377,10 +399,10 @@ describe("Food Economy System", () => {
     });
   });
 
-  // ── 9. Negative food (debt) ─────────────────────────────────────
+  // ── 9. Food depletion floor ─────────────────────────────────────
 
-  describe("negative food (debt)", () => {
-    it("food can go negative from upkeep exceeding income", () => {
+  describe("food depletion floor", () => {
+    it("clamps food to 0 when upkeep exceeds income", () => {
       const { player } = joinPlayer(room, "p1");
       const pos = findWalkableTile(room);
 
@@ -389,21 +411,15 @@ describe("Food Economy System", () => {
       addPawn(room, "p1", "attacker", pos.x, pos.y);
       addPawn(room, "p1", "attacker", pos.x, pos.y);
 
-      // Start with minimal food
       player.food = 1;
 
       room.state.tick = STRUCTURE_INCOME.INTERVAL_TICKS;
       room.tickStructureIncome();
 
-      const startingUpkeep = PAWN_TYPES.explorer.foodUpkeep;
-      // 1 + 2 (HQ) - 9 (attackers) - 1 (explorer) = -7
-      const expectedFood =
-        1 + STRUCTURE_INCOME.HQ_FOOD - 3 * PAWN_TYPES.attacker.foodUpkeep - startingUpkeep;
-      expect(expectedFood).toBeLessThan(0);
-      expect(player.food).toBe(expectedFood);
+      expect(player.food).toBe(0);
     });
 
-    it("food debt accumulates across multiple ticks", () => {
+    it("keeps food at 0 across repeated deficit ticks", () => {
       const { player } = joinPlayer(room, "p1");
       const pos = findWalkableTile(room);
 
@@ -412,18 +428,37 @@ describe("Food Economy System", () => {
 
       player.food = 0;
 
-      const startingUpkeep = PAWN_TYPES.explorer.foodUpkeep;
-      // Net per tick = 2 (HQ) - 6 (2 attackers) - 1 (explorer) = -5
-      const netPerTick =
-        STRUCTURE_INCOME.HQ_FOOD - 2 * PAWN_TYPES.attacker.foodUpkeep - startingUpkeep;
-
       room.state.tick = STRUCTURE_INCOME.INTERVAL_TICKS;
       room.tickStructureIncome();
-      expect(player.food).toBe(netPerTick);
+      expect(player.food).toBe(0);
 
       room.state.tick = STRUCTURE_INCOME.INTERVAL_TICKS * 2;
       room.tickStructureIncome();
-      expect(player.food).toBe(netPerTick * 2);
+      expect(player.food).toBe(0);
+    });
+
+    it("broadcasts the depletion warning once when food first hits 0", () => {
+      const { player } = joinPlayer(room, "p1");
+      const pos = findWalkableTile(room);
+
+      addPawn(room, "p1", "attacker", pos.x, pos.y);
+      addPawn(room, "p1", "attacker", pos.x, pos.y);
+      player.food = 1;
+
+      room.state.tick = STRUCTURE_INCOME.INTERVAL_TICKS;
+      room.tickStructureIncome();
+
+      expect(getGameLogs(room, "deplete")).toEqual([
+        expect.objectContaining({
+          message: expect.stringContaining("ran out of food"),
+          type: "deplete",
+        }),
+      ]);
+
+      room.state.tick = STRUCTURE_INCOME.INTERVAL_TICKS * 2;
+      room.tickStructureIncome();
+
+      expect(getGameLogs(room, "deplete")).toHaveLength(1);
     });
   });
 

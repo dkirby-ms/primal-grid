@@ -1,5 +1,5 @@
 import type { Room } from '@colyseus/sdk';
-import { PAWN_TYPES, BUILDING_COSTS, BUILDING_CAP_BONUS, PLACE_BUILDING, TICK_RATE, isEnemyBase } from '@primal-grid/shared';
+import { PAWN_TYPES, BUILDING_COSTS, BUILDING_CAP_BONUS, PLACE_BUILDING, STRUCTURE_INCOME, STARVATION, TICK_RATE, isEnemyBase } from '@primal-grid/shared';
 import type { PlaceBuildingPayload } from '@primal-grid/shared';
 
 /**
@@ -298,10 +298,14 @@ export class HudDOM {
           // Inventory (wood, stone & food)
           this.currentWood = (player['wood'] as number) ?? 0;
           this.currentStone = (player['stone'] as number) ?? 0;
-          this.currentFood = (player['food'] as number) ?? 0;
+          const reportedFood = (player['food'] as number) ?? 0;
+          this.currentFood = Math.max(0, reportedFood);
           this.invWood.textContent = String(this.currentWood);
           this.invStone.textContent = String(this.currentStone);
           this.invFood.textContent = String(this.currentFood);
+          this.invFood.title = this.currentFood === 0
+            ? `Food depleted: pawn spawning is disabled and one random living pawn loses ${STARVATION.DAMAGE_PER_TICK} HP every ${Math.round(STRUCTURE_INCOME.INTERVAL_TICKS / TICK_RATE)}s until food recovers.`
+            : 'Food available';
           this.updateSpawnButton();
           
           // Notify InputHandler of resource changes for upgrade validation
