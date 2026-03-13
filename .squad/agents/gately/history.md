@@ -153,6 +153,8 @@ Pemulis implemented Sub-Issue 2 (Win/Loss Engine) which provides the round timer
 
 ## Learnings
 
+- **2026-03-13 — Outpost upgrade click flow:** Keep click-to-upgrade on left-click for owned, unupgraded outposts outside placement mode, but let explicit building placement mode win when active. Preserve a `contextmenu` preventDefault handler so right-drag camera controls do not open the browser menu.
+
 ### Issue #177: Invite Link Join Flow (Needs Research)
 
 ## 2026-03-12: Board Clearing Session — Player Name & Resource Cost Fixes

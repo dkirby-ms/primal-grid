@@ -6,7 +6,9 @@ import { tickCreatureAI } from "./creatureAI.js";
 import { computeVisibleTiles } from "./visibility.js";
 import { tickCombat } from "./combat.js";
 import { tickGraveDecay } from "./graveDecay.js";
+import { onBaseDestroyed } from "./enemyBaseAI.js";
 import type { EnemyBaseTracker } from "./enemyBaseAI.js";
+import { clearCombatTracking } from "./combatTracking.js";
 import type { AttackerTracker } from "./attackerAI.js";
 import type { AuthProvider, AuthUser } from "../auth/AuthProvider.js";
 import type { PlayerStateRepository } from "../persistence/PlayerStateRepository.js";
@@ -503,6 +505,8 @@ export class GameRoom extends Room {
     player.stone -= cost.stone;
 
     // Place building
+    tile.upgraded = false;
+    tile.attackCooldown = 0;
     tile.structureType = buildingType;
 
     const displayName = player.displayName || client.sessionId;
@@ -1181,9 +1185,12 @@ export class GameRoom extends Room {
 
         // Remove if dead
         if (target.health <= 0) {
+          if (isEnemyBase(target.creatureType)) {
+            onBaseDestroyed(target.id, this.state, this.enemyBaseState);
+          }
+          clearCombatTracking(target.id, this.attackerState);
           this.state.creatures.delete(target.id);
-          
-          // Handle base destruction
+
           if (isEnemyBase(target.creatureType)) {
             const baseType = ENEMY_BASE_TYPES[target.creatureType];
             if (baseType && tile.ownerID) {
@@ -1193,6 +1200,10 @@ export class GameRoom extends Room {
                 player.stone += baseType.reward.stone;
                 player.food += baseType.reward.food;
               }
+              this.broadcast("game_log", {
+                message: `${baseType.name} destroyed! +${baseType.reward.wood}W +${baseType.reward.stone}S +${baseType.reward.food}F`,
+                type: "combat",
+              });
             }
           }
         }
@@ -1233,6 +1244,8 @@ export class GameRoom extends Room {
         // Clear any building from previous owner when ownership transfers
         if (tile.structureType !== "" && tile.structureType !== "hq") {
           tile.structureType = "";
+          tile.upgraded = false;
+          tile.attackCooldown = 0;
         }
         tile.ownerID = tile.claimingPlayerID;
         tile.shapeHP = SHAPE.BLOCK_HP;

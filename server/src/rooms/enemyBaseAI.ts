@@ -4,6 +4,7 @@ import {
   CREATURE_AI, DayPhase,
 } from "@primal-grid/shared";
 import type { Room } from "colyseus";
+import { clearCombatTracking } from "./combatTracking.js";
 
 /** Server-side tracking for each enemy base. */
 export interface EnemyBaseTracker {
@@ -120,6 +121,7 @@ export function onBaseDestroyed(
       const mob = state.creatures.get(mobId);
       if (mob) {
         mob.health = 0;
+        clearCombatTracking(mobId);
         state.creatures.delete(mobId);
       }
     }
