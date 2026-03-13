@@ -30,7 +30,11 @@ import {
   isEnemyBase, isEnemyMobile,
   CPU_PLAYER,
   STARVATION,
-  OUTPOST_UPGRADE,
+  OUTPOST_UPGRADE_COST_WOOD,
+  OUTPOST_UPGRADE_COST_STONE,
+  UPGRADED_OUTPOST_RANGE,
+  UPGRADED_OUTPOST_DAMAGE,
+  UPGRADED_OUTPOST_ATTACK_INTERVAL,
 } from "@primal-grid/shared";
 import type { SpawnPawnPayload, SetNamePayload, ChatPayload, PlaceBuildingPayload, UpgradeOutpostPayload, GameEndedPayload } from "@primal-grid/shared";
 import { spawnHQ } from "./territory.js";
@@ -552,20 +556,21 @@ export class GameRoom extends Room {
     }
 
     // Validate player has resources
-    if (player.wood < OUTPOST_UPGRADE.COST_WOOD || player.stone < OUTPOST_UPGRADE.COST_STONE) {
+    if (player.wood < OUTPOST_UPGRADE_COST_WOOD || player.stone < OUTPOST_UPGRADE_COST_STONE) {
       client.send("game_log", {
-        message: `Not enough resources. Need ${OUTPOST_UPGRADE.COST_WOOD} wood + ${OUTPOST_UPGRADE.COST_STONE} stone.`,
+        message: `Not enough resources. Need ${OUTPOST_UPGRADE_COST_WOOD} wood + ${OUTPOST_UPGRADE_COST_STONE} stone.`,
         type: "error",
       });
       return;
     }
 
     // Deduct resources
-    player.wood -= OUTPOST_UPGRADE.COST_WOOD;
-    player.stone -= OUTPOST_UPGRADE.COST_STONE;
+    player.wood -= OUTPOST_UPGRADE_COST_WOOD;
+    player.stone -= OUTPOST_UPGRADE_COST_STONE;
 
     // Upgrade outpost
     tile.upgraded = true;
+    tile.attackCooldown = 0;
 
     const displayName = player.displayName || client.sessionId;
     this.broadcast("game_log", {
@@ -1162,7 +1167,7 @@ export class GameRoom extends Room {
         if (creature.health <= 0) return;
 
         const dist = Math.abs(creature.x - tile.x) + Math.abs(creature.y - tile.y);
-        if (dist <= OUTPOST_UPGRADE.ATTACK_RANGE && dist < closestDist) {
+        if (dist <= UPGRADED_OUTPOST_RANGE && dist < closestDist) {
           closestDist = dist;
           closestTarget = creature;
         }
@@ -1171,8 +1176,8 @@ export class GameRoom extends Room {
       // Attack target if found
       if (closestTarget) {
         const target: CreatureState = closestTarget; // Type assertion to fix TypeScript narrowing
-        target.health -= OUTPOST_UPGRADE.DAMAGE;
-        tile.attackCooldown = OUTPOST_UPGRADE.ATTACK_COOLDOWN_TICKS;
+        target.health -= UPGRADED_OUTPOST_DAMAGE;
+        tile.attackCooldown = Math.max(UPGRADED_OUTPOST_ATTACK_INTERVAL - 1, 0);
 
         // Remove if dead
         if (target.health <= 0) {
