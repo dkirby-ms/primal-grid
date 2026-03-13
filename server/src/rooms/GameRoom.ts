@@ -6,7 +6,9 @@ import { tickCreatureAI } from "./creatureAI.js";
 import { computeVisibleTiles } from "./visibility.js";
 import { tickCombat } from "./combat.js";
 import { tickGraveDecay } from "./graveDecay.js";
+import { onBaseDestroyed } from "./enemyBaseAI.js";
 import type { EnemyBaseTracker } from "./enemyBaseAI.js";
+import { clearCombatTracking } from "./combatTracking.js";
 import type { AttackerTracker } from "./attackerAI.js";
 import type { AuthProvider, AuthUser } from "../auth/AuthProvider.js";
 import type { PlayerStateRepository } from "../persistence/PlayerStateRepository.js";
@@ -30,7 +32,11 @@ import {
   isEnemyBase, isEnemyMobile,
   CPU_PLAYER,
   STARVATION,
-  OUTPOST_UPGRADE,
+  OUTPOST_UPGRADE_COST_WOOD,
+  OUTPOST_UPGRADE_COST_STONE,
+  UPGRADED_OUTPOST_RANGE,
+  UPGRADED_OUTPOST_DAMAGE,
+  UPGRADED_OUTPOST_ATTACK_INTERVAL,
 } from "@primal-grid/shared";
 import type { SpawnPawnPayload, SetNamePayload, ChatPayload, PlaceBuildingPayload, UpgradeOutpostPayload, GameEndedPayload } from "@primal-grid/shared";
 import { spawnHQ } from "./territory.js";
@@ -81,6 +87,8 @@ export class GameRoom extends Room {
   cpuPlayerIds = new Set<string>();
   /** Session IDs with devMode enabled — persists across drop/reconnect. */
   private devModeSessions = new Set<string>();
+  /** Players currently at zero food so depletion warnings only fire on state changes. */
+  private depletedFoodPlayers = new Set<string>();
 
   override onCreate(options: Record<string, unknown>) {
     const seed = typeof options?.seed === "number" ? options.seed : DEFAULT_MAP_SEED;
@@ -425,6 +433,13 @@ export class GameRoom extends Room {
       client.send("game_log", { message: "You have been eliminated.", type: "error" });
       return;
     }
+    if (player.food <= 0) {
+      client.send("game_log", {
+        message: "Food depleted. Pawn spawning is disabled until food recovers, and living pawns take starvation damage each income tick.",
+        type: "error",
+      });
+      return;
+    }
 
     this.spawnPawnCore(client.sessionId, player, message.pawnType, message.buildMode);
   }
@@ -499,6 +514,8 @@ export class GameRoom extends Room {
     player.stone -= cost.stone;
 
     // Place building
+    tile.upgraded = false;
+    tile.attackCooldown = 0;
     tile.structureType = buildingType;
 
     const displayName = player.displayName || client.sessionId;
@@ -552,20 +569,21 @@ export class GameRoom extends Room {
     }
 
     // Validate player has resources
-    if (player.wood < OUTPOST_UPGRADE.COST_WOOD || player.stone < OUTPOST_UPGRADE.COST_STONE) {
+    if (player.wood < OUTPOST_UPGRADE_COST_WOOD || player.stone < OUTPOST_UPGRADE_COST_STONE) {
       client.send("game_log", {
-        message: `Not enough resources. Need ${OUTPOST_UPGRADE.COST_WOOD} wood + ${OUTPOST_UPGRADE.COST_STONE} stone.`,
+        message: `Not enough resources. Need ${OUTPOST_UPGRADE_COST_WOOD} wood + ${OUTPOST_UPGRADE_COST_STONE} stone.`,
         type: "error",
       });
       return;
     }
 
     // Deduct resources
-    player.wood -= OUTPOST_UPGRADE.COST_WOOD;
-    player.stone -= OUTPOST_UPGRADE.COST_STONE;
+    player.wood -= OUTPOST_UPGRADE_COST_WOOD;
+    player.stone -= OUTPOST_UPGRADE_COST_STONE;
 
     // Upgrade outpost
     tile.upgraded = true;
+    tile.attackCooldown = 0;
 
     const displayName = player.displayName || client.sessionId;
     this.broadcast("game_log", {
@@ -942,6 +960,8 @@ export class GameRoom extends Room {
   private tickStructureIncome() {
     if (this.state.tick % STRUCTURE_INCOME.INTERVAL_TICKS !== 0) return;
 
+    this.depletedFoodPlayers ??= new Set<string>();
+
     // Count buildings per player by type
     const buildingCounts = new Map<string, Map<string, number>>();
     const len = this.state.tiles.length;
@@ -980,26 +1000,33 @@ export class GameRoom extends Room {
 
       // Deduct food upkeep for all owned pawns
       let totalUpkeep = 0;
+      const livingPawns: CreatureState[] = [];
       this.state.creatures.forEach((c) => {
-        if (c.ownerID === playerId && c.pawnType !== "") {
-          const def = PAWN_TYPES[c.pawnType];
-          if (def) totalUpkeep += def.foodUpkeep;
-        }
+        if (c.ownerID !== playerId || c.pawnType === "") return;
+        const def = PAWN_TYPES[c.pawnType];
+        if (def) totalUpkeep += def.foodUpkeep;
+        if (c.health > 0) livingPawns.push(c);
       });
-      player.food -= totalUpkeep;
 
-      // Starvation: deal damage to one random living pawn when food <= 0
-      if (player.food <= 0) {
-        const livingPawns: CreatureState[] = [];
-        this.state.creatures.forEach((c) => {
-          if (c.ownerID === playerId && c.pawnType !== "" && c.health > 0) {
-            livingPawns.push(c);
-          }
-        });
-        if (livingPawns.length > 0) {
-          const victim = livingPawns[Math.floor(Math.random() * livingPawns.length)];
-          victim.health -= STARVATION.DAMAGE_PER_TICK;
-        }
+      const wasDepleted = this.depletedFoodPlayers.has(playerId);
+      player.food = Math.max(0, player.food - totalUpkeep);
+      const isDepleted = player.food === 0;
+
+      if (isDepleted && !wasDepleted) {
+        const displayName = player.displayName || playerId;
+        const warning = livingPawns.length > 0
+          ? `${displayName} ran out of food. Pawn spawning is disabled and one random living pawn loses ${STARVATION.DAMAGE_PER_TICK} HP each income tick until food recovers.`
+          : `${displayName} ran out of food. Pawn spawning is disabled until food recovers.`;
+        this.broadcast("game_log", { message: warning, type: "deplete" });
+        this.depletedFoodPlayers.add(playerId);
+      } else if (!isDepleted && wasDepleted) {
+        this.depletedFoodPlayers.delete(playerId);
+      }
+
+      // Starvation: deal damage to one random living pawn when food is depleted.
+      if (isDepleted && livingPawns.length > 0) {
+        const victim = livingPawns[Math.floor(Math.random() * livingPawns.length)];
+        victim.health -= STARVATION.DAMAGE_PER_TICK;
       }
     });
   }
@@ -1162,7 +1189,7 @@ export class GameRoom extends Room {
         if (creature.health <= 0) return;
 
         const dist = Math.abs(creature.x - tile.x) + Math.abs(creature.y - tile.y);
-        if (dist <= OUTPOST_UPGRADE.ATTACK_RANGE && dist < closestDist) {
+        if (dist <= UPGRADED_OUTPOST_RANGE && dist < closestDist) {
           closestDist = dist;
           closestTarget = creature;
         }
@@ -1171,14 +1198,17 @@ export class GameRoom extends Room {
       // Attack target if found
       if (closestTarget) {
         const target: CreatureState = closestTarget; // Type assertion to fix TypeScript narrowing
-        target.health -= OUTPOST_UPGRADE.DAMAGE;
-        tile.attackCooldown = OUTPOST_UPGRADE.ATTACK_COOLDOWN_TICKS;
+        target.health -= UPGRADED_OUTPOST_DAMAGE;
+        tile.attackCooldown = Math.max(UPGRADED_OUTPOST_ATTACK_INTERVAL - 1, 0);
 
         // Remove if dead
         if (target.health <= 0) {
+          if (isEnemyBase(target.creatureType)) {
+            onBaseDestroyed(target.id, this.state, this.enemyBaseState);
+          }
+          clearCombatTracking(target.id, this.attackerState);
           this.state.creatures.delete(target.id);
-          
-          // Handle base destruction
+
           if (isEnemyBase(target.creatureType)) {
             const baseType = ENEMY_BASE_TYPES[target.creatureType];
             if (baseType && tile.ownerID) {
@@ -1188,6 +1218,10 @@ export class GameRoom extends Room {
                 player.stone += baseType.reward.stone;
                 player.food += baseType.reward.food;
               }
+              this.broadcast("game_log", {
+                message: `${baseType.name} destroyed! +${baseType.reward.wood}W +${baseType.reward.stone}S +${baseType.reward.food}F`,
+                type: "combat",
+              });
             }
           }
         }
@@ -1228,6 +1262,8 @@ export class GameRoom extends Room {
         // Clear any building from previous owner when ownership transfers
         if (tile.structureType !== "" && tile.structureType !== "hq") {
           tile.structureType = "";
+          tile.upgraded = false;
+          tile.attackCooldown = 0;
         }
         tile.ownerID = tile.claimingPlayerID;
         tile.shapeHP = SHAPE.BLOCK_HP;

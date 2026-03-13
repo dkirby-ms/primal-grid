@@ -7,10 +7,13 @@ import type { Room } from "colyseus";
 import { onBaseDestroyed } from "./enemyBaseAI.js";
 import type { EnemyBaseTracker } from "./enemyBaseAI.js";
 import type { AttackerTracker } from "./attackerAI.js";
-
-/** Per-creature combat cooldown tracking (server-side, not synced). */
-const attackCooldowns = new Map<string, number>();
-const tileAttackCooldowns = new Map<string, number>();
+import {
+  clearCombatTracking,
+  getAttackCooldown,
+  getTileAttackCooldown,
+  setAttackCooldown,
+  setTileAttackCooldown,
+} from "./combatTracking.js";
 
 /**
  * Resolve all combat interactions for this tick.
@@ -42,7 +45,7 @@ export function tickCombat(
     if (dmg <= 0) return;
 
     // Check cooldown
-    const lastAttack = attackCooldowns.get(creature.id) ?? 0;
+    const lastAttack = getAttackCooldown(creature.id);
     if (state.tick - lastAttack < COMBAT.ATTACK_COOLDOWN_TICKS) return;
 
     // Find adjacent hostile target
@@ -58,9 +61,9 @@ export function tickCombat(
     target.health -= dmg;
     if (targetDmg > 0) {
       creature.health -= targetDmg;
-      attackCooldowns.set(target.id, state.tick);
+      setAttackCooldown(target.id, state.tick);
     }
-    attackCooldowns.set(creature.id, state.tick);
+    setAttackCooldown(creature.id, state.tick);
   });
 
   // Phase 2: Enemy mobile tile damage
@@ -72,18 +75,20 @@ export function tickCombat(
     const mobileDef = ENEMY_MOBILE_TYPES[creature.creatureType];
     if (!mobileDef) return;
 
-    const lastTileAttack = tileAttackCooldowns.get(creature.id) ?? 0;
+    const lastTileAttack = getTileAttackCooldown(creature.id);
     if (state.tick - lastTileAttack < COMBAT.TILE_ATTACK_COOLDOWN_TICKS) return;
 
     const tile = state.getTile(creature.targetX, creature.targetY);
     if (!tile || tile.ownerID === "" || tile.isHQTerritory) return;
 
     tile.shapeHP -= mobileDef.tileDamage;
-    tileAttackCooldowns.set(creature.id, state.tick);
+    setTileAttackCooldown(creature.id, state.tick);
 
     if (tile.shapeHP <= 0) {
       tile.ownerID = "";
       tile.structureType = "";
+      tile.upgraded = false;
+      tile.attackCooldown = 0;
       tile.shapeHP = 0;
       // Mobile should seek next target
       creature.currentState = "seek_territory";
@@ -149,9 +154,7 @@ export function tickCombat(
     }
 
     // Clean up cooldown and attacker tracking
-    attackCooldowns.delete(id);
-    tileAttackCooldowns.delete(id);
-    attackerState.delete(id);
+    clearCombatTracking(id, attackerState);
 
     state.creatures.delete(id);
   }

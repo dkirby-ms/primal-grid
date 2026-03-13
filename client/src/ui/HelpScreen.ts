@@ -19,6 +19,7 @@ const HOW_TO_PLAY: [string, string][] = [
   ['🪵 Gather', 'Pawns harvest Wood & Stone from terrain tiles'],
   ['🔨 Builders', 'Spawn (10W 3S) to claim adjacent tiles & expand territory'],
   ['🏗 Buildings', 'Farm (18W 10S → +2 Food +1 Cap) · Factory (20W 12S → +2W +1S +2 Cap)'],
+  ['🏹 Outposts', 'Click your outpost to upgrade it (40W 30S) into a ranged defense tower'],
   ['🛡 Defenders', 'Spawn (8W 12S) to patrol and guard your territory'],
   ['⚔ Attackers', 'Spawn (18W 10S) to raid enemy bases and destroy threats'],
   ['🔭 Explorers', 'Spawn (10W 6S) to scout with 6-tile vision'],

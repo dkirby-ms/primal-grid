@@ -447,16 +447,26 @@ export const STARVATION = {
   DAMAGE_PER_TICK: 5,
 } as const;
 
+/** Wood cost to upgrade an outpost. */
+export const OUTPOST_UPGRADE_COST_WOOD = 40;
+
+/** Stone cost to upgrade an outpost. */
+export const OUTPOST_UPGRADE_COST_STONE = 30;
+
+/** Attack range from upgraded outpost (Manhattan distance). */
+export const UPGRADED_OUTPOST_RANGE = 5;
+
+/** Damage dealt per attack. */
+export const UPGRADED_OUTPOST_DAMAGE = 12;
+
+/** Ticks between upgraded outpost attacks. */
+export const UPGRADED_OUTPOST_ATTACK_INTERVAL = 8;
+
 /** Outpost upgrade constants. */
 export const OUTPOST_UPGRADE = {
-  /** Wood cost to upgrade an outpost. */
-  COST_WOOD: 40,
-  /** Stone cost to upgrade an outpost. */
-  COST_STONE: 30,
-  /** Attack range from upgraded outpost (Manhattan distance). */
-  ATTACK_RANGE: 5,
-  /** Damage dealt per attack. */
-  DAMAGE: 12,
-  /** Ticks between attacks. */
-  ATTACK_COOLDOWN_TICKS: 8,
+  COST_WOOD: OUTPOST_UPGRADE_COST_WOOD,
+  COST_STONE: OUTPOST_UPGRADE_COST_STONE,
+  ATTACK_RANGE: UPGRADED_OUTPOST_RANGE,
+  DAMAGE: UPGRADED_OUTPOST_DAMAGE,
+  ATTACK_COOLDOWN_TICKS: UPGRADED_OUTPOST_ATTACK_INTERVAL,
 } as const;

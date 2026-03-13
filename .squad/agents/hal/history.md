@@ -4,6 +4,194 @@
 - **Project:** Primal Grid: Survival of the Frontier — grid-based survival colony builder with dinosaurs, dynamic ecosystems, and base automation in the browser
 - **Stack:** TypeScript, HTML5 Canvas, browser-based web game
 - **Design Document:** docs/design-sketch.md
+- **Outpost Upgrade Interaction Simplified (2026-03-13):** The codebase already implements outpost upgrades as a tile-targeted flow: `UPGRADE_OUTPOST { x, y }`, `tile.upgraded`, server-side validation in `server/src/rooms/GameRoom.ts`, and upgraded rendering in `client/src/renderer/GridRenderer.ts`. The stable pattern is **click tile → confirm modal**, not a generic context menu or random HUD skill. Right-click exists in `client/src/input/InputHandler.ts` but competes with camera interaction, so direct click should be treated as canonical and any HUD work should be discoverability-only. Key files: `client/src/input/InputHandler.ts`, `client/src/ui/UpgradeModal.ts`, `client/src/ui/HudDOM.ts`, `server/src/rooms/GameRoom.ts`, `server/src/rooms/GameState.ts`, `shared/src/messages.ts`, `shared/src/constants.ts`.
+
+- **Food Economy Design Approved (2026-03-14):** Completed audit → design → review cycle for Issue #21 (food economy as third resource). Design spec documented all constants (starting 50 food, HQ 2/tick, farm 2/tick, upkeep per unit, starvation mechanic at food ≤ 0). PR #153 reviewed, identified 3 issues (starvation check, tooltips, legacy constants), Steeply fixed all three (Gately unavailable). PR approved and merged to dev (squash). Key learning: Clear farm/factory role split (farms → food, factories → economy) creates natural strategic tension. Starvation damage delegated to existing death logic (single source of truth). Food can accrue as debt, players must repay before spawning resumes.
+
+- **GitHub Auto-Close Issue Process Gap Fixed (2026-03-12):** Four issues (#19, #31, #42, #74) had PRs merged to dev but stayed OPEN. Root cause: "Closes #N" syntax was placed in commit messages or PR titles, not PR bodies. GitHub only auto-closes on squash+merge when the close keyword appears in the PR body. Investigation found agents were ambiguous on placement. Fix: (1) Updated `.squad/copilot-instructions.md` to emphasize PR BODY as the only reliable location for auto-close keywords, (2) Added Rule 8 to `.squad/routing.md` explicitly requiring "Closes #N" in PR body, (3) Created decision file `.squad/decisions/inbox/hal-issue-auto-close.md` documenting the gap and enforcement points. Key learning: Single authoritative location (PR body) prevents process gaps — GitHub only reads PR body for squash merges, regardless of commit message content.
+
+- **Footer Feature UI Scoped (2026-03-13):** Issue #150 requests footer with version (from root package.json v0.1.6), published date, and link to submit issues. Research found: (1) Client HTML is flex-centered with game wrapper + HUD panel; footer naturally sits below in document flow. (2) No existing footer infrastructure. (3) Build-time injection via Vite is the minimal approach (version from package.json, date from git commit, link hardcoded to GitHub issues). Decision: This is client-side UI work — assigned to Gately. Key learning: Client structure is flex-based with centered game wrapper, making footer placement straightforward (no grid/absolute positioning needed). Build-time injection avoids runtime lookups and keeps the frontend lean.
+
+
+
+- **Documentation Accuracy Policy (2026-03-15):** Reviewed PR #158 (Docs Update). Found critical discrepancies between player-facing docs (`HOW-TO-PLAY.md`, `HelpScreen.ts`) and code (`constants.ts`) regarding pawn costs and unit naming ("Raider" vs "Attacker"). Documentation must reflect the codebase exactly to prevent player confusion. Enforced strict review on docs-only PRs: verify every number against constants.
+
+---
+
+### Sprint Kickoff (2026-03-12) — Design Complete, Review In Progress
+
+**Completed:**
+- **#154 Outpost Upgrade Architecture Design** (2026-03-16 revalidation + spec)
+  - Single-tier outpost upgrade system with ranged defense
+  - 40W + 30S cost, 5-tile attack range, 12 damage, 8-tick cooldown
+  - Detailed implementation plan across 3 phases (1.5 days each)
+  - Design document merged into .squad/decisions.md
+  - Ready for Pemulis (Phase 1 server work)
+
+**In Progress:**
+- **PR Review:** #162 (Marathe CI fix) and #163 (Pemulis creature types)
+- Expected to complete within sprint
+
+**Context Propagation:**
+- Pemulis briefed on Phase 1 server tasks (constants, schema, upgrade handler, combat tick)
+- Gately briefed on Phase 2 client tasks (icon rendering, right-click modal, CSS)
+- All team aware of creature types PR (#163) and resource tuning recommendations
+
+**Design Validation:**
+- Revalidated against current codebase (TileState, combat system, resource economy)
+- No architectural conflicts with creature types (#157) or ongoing work
+- Design integrates cleanly with existing patterns (right-click interaction, Colyseus schema)
+- Trade-offs documented (single-tier vs. multi-tier, closest-enemy targeting, instant upgrade)
+
+**Sign-off:** Design complete and validated. Ready to begin Phase 1 upon Hal's PR review completion.
+
+---
+
+### PR Reviews — Resource Tuning & Outpost Upgrades (2026-03-17)
+
+**PR #164 (Resource Tuning by Pemulis):**
+- **Status:** ✅ APPROVED
+- **Branch:** squad/156-resource-tuning
+- **Build:** Clean, all 902 tests passing
+- **Scope:** Matches approved HIGH-priority changes from #156
+- **Changes:** Unit cost differentiation (Builder 10W+3S, Defender 8W+12S, Attacker 18W+10S) + expensive farms (18W+10S)
+- **Strategic Impact:** Creates meaningful resource tensions — builders drain wood, defenders are stone sinks, attackers compete with economy, farms require deliberate investment
+- **Tests:** Properly updated to reflect new costs in combat-system.test.ts, food-economy.test.ts, pawnBuilder.test.ts
+- **Decision:** Ready to merge to dev
+
+**PR #165 (Outpost Upgrades by Gately):**
+- **Status:** 🔴 CHANGES REQUESTED
+- **Branch:** squad/154-outpost-upgrades
+- **Build:** Clean after TypeScript fix (closestTarget narrowing issue)
+- **Tests:** All 903 tests passing
+- **Critical Issue:** Client rendering incomplete — upgraded outposts render as 🗼 instead of 🏹
+- **Missing Implementation:**
+  1. `outpost_upgraded` key missing from STRUCTURE_ICONS map
+  2. `updateBuildingIcon()` doesn't check `tile.upgraded` flag
+  3. `upgraded` field never read from tile state (line 341-381)
+  4. ExploredTileCache doesn't store `upgraded` field
+  5. Fog-of-war silhouettes always show 🗼, never check upgrade status
+  6. `tileUpgraded` Map declared but never populated
+- **What Works:** Server logic solid (upgrade handler, combat tick, schema sync), UI modal functional, message protocol correct
+- **Fix Required:** 6-point implementation gap in GridRenderer.ts and ExploredTileCache.ts (icon selection, state sync, fog rendering)
+- **Decision:** Blocked pending client rendering fixes
+
+**Key Learning:** Server-client rendering contract requires explicit verification — schema sync alone doesn't guarantee visual correctness. Icon rendering paths (visible tiles, fog silhouettes, ExploredTileCache) must all handle state flags consistently.
+
+**TypeScript Fix Applied:** Added explicit type annotation to resolve control flow narrowing bug in `tickOutpostAttacks()` (closestTarget incorrectly narrowed to 'never' after forEach filter).
+
+- **Epic #161 Decomposition (2026-03-16):** Decomposed "Games need a start and end" into 5 sub-issues: (1) Game lifecycle schema & end-game messages (shared types, GameState fields: winnerId, endReason, PlayerState.isEliminated), (2) Win/loss condition engine (tickGameEndConditions: elimination via territory loss, last-standing victory, time-limit score win), (3) End-game UI & lobby return (EndGameScreen.ts overlay, GAME_ENDED handler, return-to-lobby flow), (4) Round timer HUD (MM:SS countdown in HudDOM), (5) Integration tests. Critical path ~4 days. Key architecture decision: lobby already IS the pre-game phase — no PRE_GAME state needed inside GameRoom. GameState.roundPhase transitions from "playing" → "ended". GameState.roundTimer (already exists, unused) gets initialized from gameDuration option and decremented per tick. Win conditions: elimination (no territory + no pawns), last-standing, time-up (highest score). Explicit scope fence: no matchmaking, no spectator mode, no replays, no ranked play. Filed to `.squad/decisions/inbox/hal-epic-161-decomposition.md`.
+  - **Key files discovered:** `server/src/rooms/LobbyRoom.ts` (full pre-game flow with CREATE/JOIN/START_GAME handlers), `server/src/rooms/LobbyBridge.ts` (EventEmitter bridge — already has `notifyGameEnded`), `server/src/rooms/GameState.ts` (roundPhase="playing" and roundTimer=-1 — both unused but ready), `shared/src/lobbyTypes.ts` (GameStatus type, CreateGamePayload), `client/src/ui/LobbyScreen.ts` (game list + create/join/start UI). Lobby-to-game flow: LobbyRoom creates GameRoom via matchMaker, clients join GameRoom on GAME_STARTED event, LobbyBridge notifies lobby on GameRoom dispose.
+
+
+---
+
+## 2026-03-16: Epic #161 Decomposition — Game Lifecycle (Start/End/Win-Loss)
+
+**Author:** Hal (Lead)  
+**Status:** Complete  
+**Issue:** #161  
+**Type:** Epic Decomposition & Architectural Assessment
+
+### Overview
+
+Decomposed Epic #161 ("Games need a start and end. There should be win and loss conditions and game-ending events") into 5 well-scoped sub-issues with clear dependencies, acceptance criteria, and architectural foundations.
+
+### Architectural Assessment
+
+**Existing infrastructure (60% complete):**
+- ✅ LobbyRoom handles CREATE_GAME, JOIN_GAME, START_GAME
+- ✅ LobbyGameEntry has `status: "waiting" | "in_progress" | "ended"`
+- ✅ LobbyBridge notifies lobby when GameRoom disposes (`game_ended` event)
+- ✅ GameState has `roundPhase` ("playing") and `roundTimer` (-1) — unused but ready
+- ✅ Reconnection with 60s grace period
+- ✅ Client lobby UI with game list, create, join, start
+
+**Missing pieces:**
+- Win/loss condition checking in simulation loop
+- `winnerId` / `endReason` on GameState
+- GAME_ENDED message from GameRoom to clients
+- End-game UI (victory/defeat screen)
+- Client-side "return to lobby" flow
+- roundTimer countdown logic
+- roundPhase state transitions
+
+**Key design decision:** Lobby IS the pre-game phase. No need for PRE_GAME state inside GameRoom. Players wait in lobby; host starts; everyone joins GameRoom and gameplay begins immediately. Keeps architecture intact.
+
+### Sub-Issues
+
+| # | Title | Owner | Priority | Dependencies | Estimate |
+|---|-------|-------|----------|--------------|----------|
+| 1 | Schema & End-Game Messages | Pemulis | P1 | — | 0.5 day |
+| 2 | Win/Loss Engine & Game End Flow | Pemulis | P2 | #1 | 1.5 days |
+| 3 | End-Game UI & Lobby Return | Gately | P3 | #1, #2 | 1 day |
+| 4 | Timer HUD Display | Gately | P3 | #1 | 0.5 day |
+| 5 | Integration Tests | Steeply | P4 | #2, #3, #4 | 1 day |
+
+### Win/Loss Conditions (Simplest Viable Set)
+
+1. **Elimination:** Player loses all territory outside 3×3 HQ zone → functionally dead. Mark as eliminated.
+2. **Last Standing (multiplayer):** Last non-eliminated human player wins.
+3. **Time Limit:** If `gameDuration > 0`, countdown from configured minutes. When timer hits 0, highest score wins.
+4. **Solo Survival:** Single-player game with CPU enemies — survive full timer duration to win.
+
+### Scope Fence
+
+**Explicitly deferred:**
+- Matchmaking / ranked play / ELO ratings
+- Spectator mode for eliminated players
+- Game replays or history
+- Achievement system
+- Leaderboard persistence
+- Multiple game modes (CTF, King of the Hill)
+- Surrender button (can be added later trivially)
+- Configurable victory conditions per game
+
+### Dependency Graph
+
+```
+Sub-Issue 1 (Schema)
+    ├──→ Sub-Issue 2 (Win/Loss Engine)
+    │        └──→ Sub-Issue 3 (End-Game UI)
+    │                 └──→ Sub-Issue 5 (Tests)
+    └──→ Sub-Issue 4 (Timer HUD) ──→ Sub-Issue 5 (Tests)
+```
+
+**Critical path:** 1 → 2 → 4 → 5 (~4 days)  
+**Parallel track:** 1 → 3 (Gately timer HUD while Pemulis builds engine)
+
+### Implementation Progress
+
+- ✅ **Sub-Issue 1 (Pemulis):** Schema complete. GameEndReason enum, GAME_ENDED/PLAYER_ELIMINATED messages, schema fields. 901/902 tests pass.
+- ✅ **Sub-Issue 2 (Pemulis):** Engine complete. Elimination checks, victory conditions, game end flow. 902/902 tests pass.
+- ✅ **Sub-Issue 4 (Gately):** Timer HUD complete. MM:SS countdown, urgency flash < 60s. 902/902 tests pass.
+- ⏳ **Sub-Issue 3 (Gately):** Blocked on Sub-Issue 2 (now complete). Ready to start.
+- ⏳ **Sub-Issue 5 (Steeply):** Blocked on Sub-Issues 2, 3, 4 (Sub-2 & 4 complete). Awaits Sub-Issue 3.
+
+### Files Created
+- .squad/decisions/inbox/hal-epic-161-decomposition.md (merged to decisions.md)
+
+### Cross-Agent Notes
+
+- Pemulis delivering Sub-Issues 1 & 2 on-time. Gately parallel on Sub-Issue 4 (Timer HUD).
+- Dependency graph being followed. No scope creep.
+- Steeply (Tester) ready to write integration tests once #2, #3, #4 complete.
+- All 5 sub-issues documented in decisions.md for future reference.
+
+- **Lobby Improvements Decomposed (2026-03-16):** User requested: game browser for waiting/in-progress games, join-before-start flow, pre-game waiting room with player list and ready states. Analysis found the infrastructure is 80% there — LobbyRoom has full create/join/leave/start handlers, LobbyState tracks games with "waiting" status, client game browser renders both statuses with Join buttons. The critical gap: `handleCreateGame` calls `matchMaker.createRoom()` immediately, so no game ever sits in "waiting" state. Decomposed into 4 issues: (1) Backend pre-game phase with deferred GameRoom creation + ready state tracking (Pemulis, 2-3d), (2) Frontend waiting room UI showing players/ready states (Gately, 2d, depends on #1), (3) Frontend game browser status filters (Gately, 0.5d, independent), (4) Tests for pre-game flow (Steeply, 1.5d, depends on #1+#2). Key architecture decisions: message-based player tracking (not schema), deferred room creation (not paused simulation), ready state is advisory (host can start anytime). Explicit scope fence: no matchmaking, no ranked, no spectator, no chat in waiting room, no kick/ban, no map preview. Decomposition filed to `.squad/decisions/inbox/hal-lobby-improvements-decomposition.md`.
+- **Key lobby files:** `server/src/rooms/LobbyRoom.ts` (404 lines, full message handling), `server/src/rooms/LobbyState.ts` (63 lines, schema), `server/src/rooms/LobbyBridge.ts` (22 lines, EventEmitter bridge), `shared/src/lobbyTypes.ts` (106 lines, full protocol), `client/src/ui/LobbyScreen.ts` (317 lines, DOM game browser + create form), `client/src/network.ts` (connectToLobby, joinGameRoom), `client/src/main.ts` (lobby→game transition flow).
+
+- **Lobby Improvements #161 Decomposed (2026-03-12):** Decomposed epic #161 into 4 sub-issues ready for team. **Issue 1 (Backend, Pemulis, 2-3d):** Deferred GameRoom creation, pre-game player tracking via message-based Map (not schema), SET_READY handler. **Issue 2 (Frontend, Gately, 2d):** Waiting room UI with player list, ready toggles, host Start button. **Issue 3 (Frontend, Gately, 0.5d):** Game browser status filters (All/Waiting/In Progress). **Issue 4 (Tests, Steeply, 1.5d):** Pre-game lifecycle tests. Dependency graph: #1→#2, #3 independent, #4 depends on #1+#2. Architecture decisions: message-based tracking, deferred creation, ready state advisory. Decision merged to decisions.md.
+
+- **Resource Depletion Review (2026-03-14):** Reviewed PR #190 (Food Zero-Floor). Confirmed the shift from "debt" to "zero-floor" model. Key patterns validated: (1)  for robust clamping, (2)  Set to track state transitions and de-duplicate warnings, (3) Persistence layer clamping to sanitize legacy data. This establishes the standard for handling critical resource depletion in the future.
+- **Resource Depletion Review (2026-03-14):** Reviewed PR #190 (Food Zero-Floor). Confirmed the shift from "debt" to "zero-floor" model. Key patterns validated: (1) `Math.max(0, current + income - upkeep)` for robust clamping, (2) `depletedFoodPlayers` Set to track state transitions and de-duplicate warnings, (3) Persistence layer clamping to sanitize legacy data. This establishes the standard for handling critical resource depletion in the future.
+
+- **PR #190 Review Gate (2026-03-13):** Led review gate for PR #190 (Food depletion zero-floor model, Issue #189). Found no blocking issues. Implementation correctly clamps food at 0 instead of negative, preserves starvation damage per income tick, clamps legacy negative persistence on deserialization, includes comprehensive tests, and all existing tests pass. Approved for merge to dev.
+
+## Core Context
+
+Historical entries (before 2026-03-10) summarized for reference:
+
 - **Created:** 2026-02-25T00:45:00Z
 
 ## Core Context
@@ -18,14 +206,6 @@
 ## Learnings
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
-- **Food Economy Design Approved (2026-03-14):** Completed audit → design → review cycle for Issue #21 (food economy as third resource). Design spec documented all constants (starting 50 food, HQ 2/tick, farm 2/tick, upkeep per unit, starvation mechanic at food ≤ 0). PR #153 reviewed, identified 3 issues (starvation check, tooltips, legacy constants), Steeply fixed all three (Gately unavailable). PR approved and merged to dev (squash). Key learning: Clear farm/factory role split (farms → food, factories → economy) creates natural strategic tension. Starvation damage delegated to existing death logic (single source of truth). Food can accrue as debt, players must repay before spawning resumes.
-
-- **GitHub Auto-Close Issue Process Gap Fixed (2026-03-12):** Four issues (#19, #31, #42, #74) had PRs merged to dev but stayed OPEN. Root cause: "Closes #N" syntax was placed in commit messages or PR titles, not PR bodies. GitHub only auto-closes on squash+merge when the close keyword appears in the PR body. Investigation found agents were ambiguous on placement. Fix: (1) Updated `.squad/copilot-instructions.md` to emphasize PR BODY as the only reliable location for auto-close keywords, (2) Added Rule 8 to `.squad/routing.md` explicitly requiring "Closes #N" in PR body, (3) Created decision file `.squad/decisions/inbox/hal-issue-auto-close.md` documenting the gap and enforcement points. Key learning: Single authoritative location (PR body) prevents process gaps — GitHub only reads PR body for squash merges, regardless of commit message content.
-
-- **Footer Feature UI Scoped (2026-03-13):** Issue #150 requests footer with version (from root package.json v0.1.6), published date, and link to submit issues. Research found: (1) Client HTML is flex-centered with game wrapper + HUD panel; footer naturally sits below in document flow. (2) No existing footer infrastructure. (3) Build-time injection via Vite is the minimal approach (version from package.json, date from git commit, link hardcoded to GitHub issues). Decision: This is client-side UI work — assigned to Gately. Key learning: Client structure is flex-based with centered game wrapper, making footer placement straightforward (no grid/absolute positioning needed). Build-time injection avoids runtime lookups and keeps the frontend lean.
-
-
-
 - **Pawn Builder Architecture proposed (2026-03-04):** dkirby-ms rejected all conquest mechanics (Influence Flooding, Resource Pressure, Creature Siege, Shape Overlap Invasion) in favor of autonomous pawn-based expansion. Architected full builder system: pawns reuse CreatureState schema (creatureType="builder", ownerID=player.id — same pattern as removed Phase B worker), 3-state FSM (IDLE→SEEK_SITE→BUILDING), 1×1 structures claim single tiles, builders spawned at HQ for 5W+5S cost. Direct shape placement removed — player role shifts from "Tetris player" to "commander" (spawn pawns, manage economy). PawnTypeDef registry enables future pawn types (gatherer, scout, soldier). MVP: ~255 lines added, ~200 removed, 2–3 days. Key trade-off: no rally points in MVP (builders pick their own targets). Deferred: multi-tile structures, pawn upgrades, rally points, population caps. Filed to `.squad/decisions/inbox/hal-pawn-builder-architecture.md`.
 
 - **Competitive Territory Spec authored (2026-03-02):** User confirmed B+C hybrid direction. Wrote full build spec at `docs/competitive-territory-spec.md`. Key decisions: territory contesting (place on opponent tiles, 4s vs 2s claim), wood upkeep (1 per 10 tiles/60s, decay from edges), neutral creatures (herbivore bonus income, carnivore border damage), 10-min timed rounds, HQ immunity (3×3 sacred). Implementation: 4 phases, ~553 lines, phases 1/2/4 parallelizable. Scope cuts: no taming, no fog of war, no biome scoring, no matchmaking. The critical code change is removing the `tile.ownerID !== player.id` rejection in `handlePlaceShape` (line 105 of GameRoom.ts) and adding contest timing. Decision filed to inbox.
@@ -62,10 +242,6 @@
 
 - **2026-03-06 Feature branch deployment plan (Issue #22):** Evaluated 3 approaches for test environment deployments: (A) separate Container App per branch in shared Environment, (B) revision labels on single Container App, (C) separate resource group per branch. Recommended **Option A** — separate Container Apps. Key reasons: full isolation, WebSocket/Colyseus compatibility (revision label routing is fragile for WS), simple lifecycle (create on PR open, delete on PR close), scale-to-zero for near-zero cost. New artifacts: `infra/test-app.bicep` (parameterized test app referencing existing ACR + Environment), `.github/workflows/deploy-test.yml` (PR-triggered deploy + cleanup). No changes to existing prod infra (`main.bicep`, `deploy.yml`). Branch name sanitization needed (Azure 32-char limit, lowercase, no special chars). Estimated cost: <$5/month for 3–5 active branches. Plan filed to `.squad/decisions/inbox/hal-feature-branch-deploy-plan.md`.
 - **Infra key files:** `infra/main.bicep` (prod ACR + Environment + Container App), `infra/main.bicepparam` (eastus/primal-grid/primalgridacr), `.github/workflows/deploy.yml` (master push → ACR → Container App update), `.github/workflows/ci.yml` (main push/PR → lint/typecheck/build/test). Azure auth via OIDC (3 secrets: client-id, tenant-id, subscription-id). ACR uses admin credentials (Basic SKU). Container App runs 0.25 vCPU / 0.5Gi, port 2567.
-
-- **Documentation Accuracy Policy (2026-03-15):** Reviewed PR #158 (Docs Update). Found critical discrepancies between player-facing docs (`HOW-TO-PLAY.md`, `HelpScreen.ts`) and code (`constants.ts`) regarding pawn costs and unit naming ("Raider" vs "Attacker"). Documentation must reflect the codebase exactly to prevent player confusion. Enforced strict review on docs-only PRs: verify every number against constants.
-
----
 
 ## Phase 4 Kickoff (2026-02-25T22:48:00Z)
 
@@ -442,169 +618,4 @@ export interface UpgradeOutpostPayload { x: number; y: number; }
 
 
 ---
-
-### Sprint Kickoff (2026-03-12) — Design Complete, Review In Progress
-
-**Completed:**
-- **#154 Outpost Upgrade Architecture Design** (2026-03-16 revalidation + spec)
-  - Single-tier outpost upgrade system with ranged defense
-  - 40W + 30S cost, 5-tile attack range, 12 damage, 8-tick cooldown
-  - Detailed implementation plan across 3 phases (1.5 days each)
-  - Design document merged into .squad/decisions.md
-  - Ready for Pemulis (Phase 1 server work)
-
-**In Progress:**
-- **PR Review:** #162 (Marathe CI fix) and #163 (Pemulis creature types)
-- Expected to complete within sprint
-
-**Context Propagation:**
-- Pemulis briefed on Phase 1 server tasks (constants, schema, upgrade handler, combat tick)
-- Gately briefed on Phase 2 client tasks (icon rendering, right-click modal, CSS)
-- All team aware of creature types PR (#163) and resource tuning recommendations
-
-**Design Validation:**
-- Revalidated against current codebase (TileState, combat system, resource economy)
-- No architectural conflicts with creature types (#157) or ongoing work
-- Design integrates cleanly with existing patterns (right-click interaction, Colyseus schema)
-- Trade-offs documented (single-tier vs. multi-tier, closest-enemy targeting, instant upgrade)
-
-**Sign-off:** Design complete and validated. Ready to begin Phase 1 upon Hal's PR review completion.
-
----
-
-### PR Reviews — Resource Tuning & Outpost Upgrades (2026-03-17)
-
-**PR #164 (Resource Tuning by Pemulis):**
-- **Status:** ✅ APPROVED
-- **Branch:** squad/156-resource-tuning
-- **Build:** Clean, all 902 tests passing
-- **Scope:** Matches approved HIGH-priority changes from #156
-- **Changes:** Unit cost differentiation (Builder 10W+3S, Defender 8W+12S, Attacker 18W+10S) + expensive farms (18W+10S)
-- **Strategic Impact:** Creates meaningful resource tensions — builders drain wood, defenders are stone sinks, attackers compete with economy, farms require deliberate investment
-- **Tests:** Properly updated to reflect new costs in combat-system.test.ts, food-economy.test.ts, pawnBuilder.test.ts
-- **Decision:** Ready to merge to dev
-
-**PR #165 (Outpost Upgrades by Gately):**
-- **Status:** 🔴 CHANGES REQUESTED
-- **Branch:** squad/154-outpost-upgrades
-- **Build:** Clean after TypeScript fix (closestTarget narrowing issue)
-- **Tests:** All 903 tests passing
-- **Critical Issue:** Client rendering incomplete — upgraded outposts render as 🗼 instead of 🏹
-- **Missing Implementation:**
-  1. `outpost_upgraded` key missing from STRUCTURE_ICONS map
-  2. `updateBuildingIcon()` doesn't check `tile.upgraded` flag
-  3. `upgraded` field never read from tile state (line 341-381)
-  4. ExploredTileCache doesn't store `upgraded` field
-  5. Fog-of-war silhouettes always show 🗼, never check upgrade status
-  6. `tileUpgraded` Map declared but never populated
-- **What Works:** Server logic solid (upgrade handler, combat tick, schema sync), UI modal functional, message protocol correct
-- **Fix Required:** 6-point implementation gap in GridRenderer.ts and ExploredTileCache.ts (icon selection, state sync, fog rendering)
-- **Decision:** Blocked pending client rendering fixes
-
-**Key Learning:** Server-client rendering contract requires explicit verification — schema sync alone doesn't guarantee visual correctness. Icon rendering paths (visible tiles, fog silhouettes, ExploredTileCache) must all handle state flags consistently.
-
-**TypeScript Fix Applied:** Added explicit type annotation to resolve control flow narrowing bug in `tickOutpostAttacks()` (closestTarget incorrectly narrowed to 'never' after forEach filter).
-
-- **Epic #161 Decomposition (2026-03-16):** Decomposed "Games need a start and end" into 5 sub-issues: (1) Game lifecycle schema & end-game messages (shared types, GameState fields: winnerId, endReason, PlayerState.isEliminated), (2) Win/loss condition engine (tickGameEndConditions: elimination via territory loss, last-standing victory, time-limit score win), (3) End-game UI & lobby return (EndGameScreen.ts overlay, GAME_ENDED handler, return-to-lobby flow), (4) Round timer HUD (MM:SS countdown in HudDOM), (5) Integration tests. Critical path ~4 days. Key architecture decision: lobby already IS the pre-game phase — no PRE_GAME state needed inside GameRoom. GameState.roundPhase transitions from "playing" → "ended". GameState.roundTimer (already exists, unused) gets initialized from gameDuration option and decremented per tick. Win conditions: elimination (no territory + no pawns), last-standing, time-up (highest score). Explicit scope fence: no matchmaking, no spectator mode, no replays, no ranked play. Filed to `.squad/decisions/inbox/hal-epic-161-decomposition.md`.
-  - **Key files discovered:** `server/src/rooms/LobbyRoom.ts` (full pre-game flow with CREATE/JOIN/START_GAME handlers), `server/src/rooms/LobbyBridge.ts` (EventEmitter bridge — already has `notifyGameEnded`), `server/src/rooms/GameState.ts` (roundPhase="playing" and roundTimer=-1 — both unused but ready), `shared/src/lobbyTypes.ts` (GameStatus type, CreateGamePayload), `client/src/ui/LobbyScreen.ts` (game list + create/join/start UI). Lobby-to-game flow: LobbyRoom creates GameRoom via matchMaker, clients join GameRoom on GAME_STARTED event, LobbyBridge notifies lobby on GameRoom dispose.
-
-
----
-
-## 2026-03-16: Epic #161 Decomposition — Game Lifecycle (Start/End/Win-Loss)
-
-**Author:** Hal (Lead)  
-**Status:** Complete  
-**Issue:** #161  
-**Type:** Epic Decomposition & Architectural Assessment
-
-### Overview
-
-Decomposed Epic #161 ("Games need a start and end. There should be win and loss conditions and game-ending events") into 5 well-scoped sub-issues with clear dependencies, acceptance criteria, and architectural foundations.
-
-### Architectural Assessment
-
-**Existing infrastructure (60% complete):**
-- ✅ LobbyRoom handles CREATE_GAME, JOIN_GAME, START_GAME
-- ✅ LobbyGameEntry has `status: "waiting" | "in_progress" | "ended"`
-- ✅ LobbyBridge notifies lobby when GameRoom disposes (`game_ended` event)
-- ✅ GameState has `roundPhase` ("playing") and `roundTimer` (-1) — unused but ready
-- ✅ Reconnection with 60s grace period
-- ✅ Client lobby UI with game list, create, join, start
-
-**Missing pieces:**
-- Win/loss condition checking in simulation loop
-- `winnerId` / `endReason` on GameState
-- GAME_ENDED message from GameRoom to clients
-- End-game UI (victory/defeat screen)
-- Client-side "return to lobby" flow
-- roundTimer countdown logic
-- roundPhase state transitions
-
-**Key design decision:** Lobby IS the pre-game phase. No need for PRE_GAME state inside GameRoom. Players wait in lobby; host starts; everyone joins GameRoom and gameplay begins immediately. Keeps architecture intact.
-
-### Sub-Issues
-
-| # | Title | Owner | Priority | Dependencies | Estimate |
-|---|-------|-------|----------|--------------|----------|
-| 1 | Schema & End-Game Messages | Pemulis | P1 | — | 0.5 day |
-| 2 | Win/Loss Engine & Game End Flow | Pemulis | P2 | #1 | 1.5 days |
-| 3 | End-Game UI & Lobby Return | Gately | P3 | #1, #2 | 1 day |
-| 4 | Timer HUD Display | Gately | P3 | #1 | 0.5 day |
-| 5 | Integration Tests | Steeply | P4 | #2, #3, #4 | 1 day |
-
-### Win/Loss Conditions (Simplest Viable Set)
-
-1. **Elimination:** Player loses all territory outside 3×3 HQ zone → functionally dead. Mark as eliminated.
-2. **Last Standing (multiplayer):** Last non-eliminated human player wins.
-3. **Time Limit:** If `gameDuration > 0`, countdown from configured minutes. When timer hits 0, highest score wins.
-4. **Solo Survival:** Single-player game with CPU enemies — survive full timer duration to win.
-
-### Scope Fence
-
-**Explicitly deferred:**
-- Matchmaking / ranked play / ELO ratings
-- Spectator mode for eliminated players
-- Game replays or history
-- Achievement system
-- Leaderboard persistence
-- Multiple game modes (CTF, King of the Hill)
-- Surrender button (can be added later trivially)
-- Configurable victory conditions per game
-
-### Dependency Graph
-
-```
-Sub-Issue 1 (Schema)
-    ├──→ Sub-Issue 2 (Win/Loss Engine)
-    │        └──→ Sub-Issue 3 (End-Game UI)
-    │                 └──→ Sub-Issue 5 (Tests)
-    └──→ Sub-Issue 4 (Timer HUD) ──→ Sub-Issue 5 (Tests)
-```
-
-**Critical path:** 1 → 2 → 4 → 5 (~4 days)  
-**Parallel track:** 1 → 3 (Gately timer HUD while Pemulis builds engine)
-
-### Implementation Progress
-
-- ✅ **Sub-Issue 1 (Pemulis):** Schema complete. GameEndReason enum, GAME_ENDED/PLAYER_ELIMINATED messages, schema fields. 901/902 tests pass.
-- ✅ **Sub-Issue 2 (Pemulis):** Engine complete. Elimination checks, victory conditions, game end flow. 902/902 tests pass.
-- ✅ **Sub-Issue 4 (Gately):** Timer HUD complete. MM:SS countdown, urgency flash < 60s. 902/902 tests pass.
-- ⏳ **Sub-Issue 3 (Gately):** Blocked on Sub-Issue 2 (now complete). Ready to start.
-- ⏳ **Sub-Issue 5 (Steeply):** Blocked on Sub-Issues 2, 3, 4 (Sub-2 & 4 complete). Awaits Sub-Issue 3.
-
-### Files Created
-- .squad/decisions/inbox/hal-epic-161-decomposition.md (merged to decisions.md)
-
-### Cross-Agent Notes
-
-- Pemulis delivering Sub-Issues 1 & 2 on-time. Gately parallel on Sub-Issue 4 (Timer HUD).
-- Dependency graph being followed. No scope creep.
-- Steeply (Tester) ready to write integration tests once #2, #3, #4 complete.
-- All 5 sub-issues documented in decisions.md for future reference.
-
-- **Lobby Improvements Decomposed (2026-03-16):** User requested: game browser for waiting/in-progress games, join-before-start flow, pre-game waiting room with player list and ready states. Analysis found the infrastructure is 80% there — LobbyRoom has full create/join/leave/start handlers, LobbyState tracks games with "waiting" status, client game browser renders both statuses with Join buttons. The critical gap: `handleCreateGame` calls `matchMaker.createRoom()` immediately, so no game ever sits in "waiting" state. Decomposed into 4 issues: (1) Backend pre-game phase with deferred GameRoom creation + ready state tracking (Pemulis, 2-3d), (2) Frontend waiting room UI showing players/ready states (Gately, 2d, depends on #1), (3) Frontend game browser status filters (Gately, 0.5d, independent), (4) Tests for pre-game flow (Steeply, 1.5d, depends on #1+#2). Key architecture decisions: message-based player tracking (not schema), deferred room creation (not paused simulation), ready state is advisory (host can start anytime). Explicit scope fence: no matchmaking, no ranked, no spectator, no chat in waiting room, no kick/ban, no map preview. Decomposition filed to `.squad/decisions/inbox/hal-lobby-improvements-decomposition.md`.
-- **Key lobby files:** `server/src/rooms/LobbyRoom.ts` (404 lines, full message handling), `server/src/rooms/LobbyState.ts` (63 lines, schema), `server/src/rooms/LobbyBridge.ts` (22 lines, EventEmitter bridge), `shared/src/lobbyTypes.ts` (106 lines, full protocol), `client/src/ui/LobbyScreen.ts` (317 lines, DOM game browser + create form), `client/src/network.ts` (connectToLobby, joinGameRoom), `client/src/main.ts` (lobby→game transition flow).
-
-- **Lobby Improvements #161 Decomposed (2026-03-12):** Decomposed epic #161 into 4 sub-issues ready for team. **Issue 1 (Backend, Pemulis, 2-3d):** Deferred GameRoom creation, pre-game player tracking via message-based Map (not schema), SET_READY handler. **Issue 2 (Frontend, Gately, 2d):** Waiting room UI with player list, ready toggles, host Start button. **Issue 3 (Frontend, Gately, 0.5d):** Game browser status filters (All/Waiting/In Progress). **Issue 4 (Tests, Steeply, 1.5d):** Pre-game lifecycle tests. Dependency graph: #1→#2, #3 independent, #4 depends on #1+#2. Architecture decisions: message-based tracking, deferred creation, ready state advisory. Decision merged to decisions.md.
 

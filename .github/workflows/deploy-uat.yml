@@ -62,7 +62,12 @@ jobs:
           az acr login --name ${{ secrets.ACR_NAME }}
           BRANCH_NAME=$(echo "${{ inputs.branch || github.ref_name }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
           TAG="uat-${BRANCH_NAME}-${{ github.sha }}"
-          docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/primal-grid:$TAG .
+          VITE_APP_VERSION=$(node --print "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")
+          VITE_BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          docker build \
+            --build-arg VITE_APP_VERSION="$VITE_APP_VERSION" \
+            --build-arg VITE_BUILD_DATE="$VITE_BUILD_DATE" \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/primal-grid:$TAG .
           docker push ${{ secrets.ACR_NAME }}.azurecr.io/primal-grid:$TAG
 
       - name: Deploy to UAT Container App
