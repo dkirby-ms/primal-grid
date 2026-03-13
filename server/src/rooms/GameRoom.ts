@@ -87,6 +87,8 @@ export class GameRoom extends Room {
   cpuPlayerIds = new Set<string>();
   /** Session IDs with devMode enabled — persists across drop/reconnect. */
   private devModeSessions = new Set<string>();
+  /** Players currently at zero food so depletion warnings only fire on state changes. */
+  private depletedFoodPlayers = new Set<string>();
 
   override onCreate(options: Record<string, unknown>) {
     const seed = typeof options?.seed === "number" ? options.seed : DEFAULT_MAP_SEED;
@@ -429,6 +431,13 @@ export class GameRoom extends Room {
     }
     if (player.isEliminated) {
       client.send("game_log", { message: "You have been eliminated.", type: "error" });
+      return;
+    }
+    if (player.food <= 0) {
+      client.send("game_log", {
+        message: "Food depleted. Pawn spawning is disabled until food recovers, and living pawns take starvation damage each income tick.",
+        type: "error",
+      });
       return;
     }
 
@@ -951,6 +960,8 @@ export class GameRoom extends Room {
   private tickStructureIncome() {
     if (this.state.tick % STRUCTURE_INCOME.INTERVAL_TICKS !== 0) return;
 
+    this.depletedFoodPlayers ??= new Set<string>();
+
     // Count buildings per player by type
     const buildingCounts = new Map<string, Map<string, number>>();
     const len = this.state.tiles.length;
@@ -989,26 +1000,33 @@ export class GameRoom extends Room {
 
       // Deduct food upkeep for all owned pawns
       let totalUpkeep = 0;
+      const livingPawns: CreatureState[] = [];
       this.state.creatures.forEach((c) => {
-        if (c.ownerID === playerId && c.pawnType !== "") {
-          const def = PAWN_TYPES[c.pawnType];
-          if (def) totalUpkeep += def.foodUpkeep;
-        }
+        if (c.ownerID !== playerId || c.pawnType === "") return;
+        const def = PAWN_TYPES[c.pawnType];
+        if (def) totalUpkeep += def.foodUpkeep;
+        if (c.health > 0) livingPawns.push(c);
       });
-      player.food -= totalUpkeep;
 
-      // Starvation: deal damage to one random living pawn when food <= 0
-      if (player.food <= 0) {
-        const livingPawns: CreatureState[] = [];
-        this.state.creatures.forEach((c) => {
-          if (c.ownerID === playerId && c.pawnType !== "" && c.health > 0) {
-            livingPawns.push(c);
-          }
-        });
-        if (livingPawns.length > 0) {
-          const victim = livingPawns[Math.floor(Math.random() * livingPawns.length)];
-          victim.health -= STARVATION.DAMAGE_PER_TICK;
-        }
+      const wasDepleted = this.depletedFoodPlayers.has(playerId);
+      player.food = Math.max(0, player.food - totalUpkeep);
+      const isDepleted = player.food === 0;
+
+      if (isDepleted && !wasDepleted) {
+        const displayName = player.displayName || playerId;
+        const warning = livingPawns.length > 0
+          ? `${displayName} ran out of food. Pawn spawning is disabled and one random living pawn loses ${STARVATION.DAMAGE_PER_TICK} HP each income tick until food recovers.`
+          : `${displayName} ran out of food. Pawn spawning is disabled until food recovers.`;
+        this.broadcast("game_log", { message: warning, type: "deplete" });
+        this.depletedFoodPlayers.add(playerId);
+      } else if (!isDepleted && wasDepleted) {
+        this.depletedFoodPlayers.delete(playerId);
+      }
+
+      // Starvation: deal damage to one random living pawn when food is depleted.
+      if (isDepleted && livingPawns.length > 0) {
+        const victim = livingPawns[Math.floor(Math.random() * livingPawns.length)];
+        victim.health -= STARVATION.DAMAGE_PER_TICK;
       }
     });
   }

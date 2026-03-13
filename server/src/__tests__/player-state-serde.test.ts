@@ -37,11 +37,13 @@ describe("Player State Serialization", () => {
         level: 5,
         xp: 500,
       });
+      player.food = 12;
       const json = serializePlayerState(player);
       const parsed = JSON.parse(json) as Record<string, unknown>;
       expect(parsed.displayName).toBe("Rex");
       expect(parsed.wood).toBe(77);
       expect(parsed.stone).toBe(44);
+      expect(parsed.food).toBe(12);
       expect(parsed.score).toBe(999);
       expect(parsed.level).toBe(5);
       expect(parsed.xp).toBe(500);
@@ -49,10 +51,12 @@ describe("Player State Serialization", () => {
 
     it("handles zero values without loss", () => {
       const player = makePlayer({ wood: 0, stone: 0, score: 0, level: 1, xp: 0 });
+      player.food = 0;
       const json = serializePlayerState(player);
       const parsed = JSON.parse(json) as Record<string, unknown>;
       expect(parsed.wood).toBe(0);
       expect(parsed.stone).toBe(0);
+      expect(parsed.food).toBe(0);
       expect(parsed.score).toBe(0);
       expect(parsed.xp).toBe(0);
     });
@@ -75,6 +79,7 @@ describe("Player State Serialization", () => {
   describe("deserializePlayerState", () => {
     it("round-trips through serialize → deserialize", () => {
       const player = makePlayer({ displayName: "RoundTrip", wood: 42, stone: 13 });
+      player.food = 9;
       const json = serializePlayerState(player);
       const result = deserializePlayerState(json);
 
@@ -82,6 +87,7 @@ describe("Player State Serialization", () => {
       expect(result!.displayName).toBe("RoundTrip");
       expect(result!.wood).toBe(42);
       expect(result!.stone).toBe(13);
+      expect(result!.food).toBe(9);
       expect(result!.score).toBe(100);
       expect(result!.level).toBe(3);
       expect(result!.xp).toBe(250);
@@ -131,6 +137,13 @@ describe("Player State Serialization", () => {
       const result = deserializePlayerState(json);
       expect(result).not.toBeNull();
       expect(result!.xp).toBe(0);
+    });
+
+    it("clamps persisted negative food to 0", () => {
+      const json = JSON.stringify({ wood: 10, stone: 5, food: -7 });
+      const result = deserializePlayerState(json);
+      expect(result).not.toBeNull();
+      expect(result!.food).toBe(0);
     });
 
     it("rejects array input", () => {
