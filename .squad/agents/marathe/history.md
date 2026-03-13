@@ -21,6 +21,8 @@
 - Script classifies commits by conventional commit type, strips prefixes for human readability, and groups into prioritized categories (features → fixes → improvements → maintenance)
 - Discord format excludes maintenance/chore/CI commits entirely; markdown format (for PR bodies) includes all categories
 - Script supports `--format discord|markdown` and `--max-lines N` flags for output control
+- Footer build metadata now lives in `client/src/buildMeta.ts` — production reads `import.meta.env.VITE_APP_VERSION` / `VITE_BUILD_DATE` with root `package.json` version as fallback, while local `npm run dev` forces `vdev`
+- Production deployment workflows (`.github/workflows/deploy.yml`, `.github/workflows/deploy-uat.yml`) pass Vite metadata into Docker with `--build-arg VITE_APP_VERSION` and `VITE_BUILD_DATE`, and the `Dockerfile` exports them before `npm run build -w client`
 
 ## 2026-03-10T00:25:00Z: Merge Conflict Resolution in Promotion Workflows (Pemulis)
 

@@ -46,7 +46,12 @@ jobs:
       - name: Build and push image to ACR
         run: |
           az acr login --name ${{ secrets.ACR_NAME }}
-          docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/primal-grid:${{ github.sha }} .
+          VITE_APP_VERSION=$(node --print "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")
+          VITE_BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          docker build \
+            --build-arg VITE_APP_VERSION="$VITE_APP_VERSION" \
+            --build-arg VITE_BUILD_DATE="$VITE_BUILD_DATE" \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/primal-grid:${{ github.sha }} .
           docker push ${{ secrets.ACR_NAME }}.azurecr.io/primal-grid:${{ github.sha }}
 
       - name: Deploy to Container Apps
