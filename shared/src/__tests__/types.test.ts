@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { TileType, isWaterTile } from "../types.js";
+import { TileType, ResourceType, isWaterTile } from "../types.js";
+import type { ITileState } from "../types.js";
 
 describe("TileType enum", () => {
   it("has expected terrain values", () => {
@@ -25,5 +26,26 @@ describe("TileType enum", () => {
     expect(isWaterTile(TileType.DeepWater)).toBe(true);
     expect(isWaterTile(TileType.Grassland)).toBe(false);
     expect(isWaterTile(TileType.Rock)).toBe(false);
+  });
+
+  it("ITileState supports upgraded outpost fields", () => {
+    const tile: ITileState = {
+      type: TileType.Grassland,
+      x: 4,
+      y: 7,
+      fertility: 0.5,
+      moisture: 0.4,
+      resourceType: ResourceType.Wood,
+      resourceAmount: 3,
+      shapeHP: 0,
+      ownerID: "p1",
+      isHQTerritory: false,
+      structureType: "outpost",
+      upgraded: true,
+      attackCooldown: 0,
+    };
+
+    expect(tile.upgraded).toBe(true);
+    expect(tile.attackCooldown).toBe(0);
   });
 });

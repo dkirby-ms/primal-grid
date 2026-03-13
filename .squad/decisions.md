@@ -6,92 +6,6 @@
 
 ---
 
-## 2026-01-24: Outpost Upgrade System — Design Spec
-
-**Author:** Hal  
-**Issue:** #154  
-**Date:** 2026-01-24  
-**Status:** Design Complete, Ready for Implementation  
-
-### Overview
-
-Players can upgrade outposts by spending wood and stone. Upgraded outposts gain ranged attack capability that automatically targets and damages nearby enemies. This is a late-game defensive investment — expensive but powerful.
-
-### Design Decisions
-
-**1. Single-Tier Upgrade (v1)**
-- Outposts have one upgrade level only — regular → upgraded
-- Simplest implementation that delivers core value
-- Can add tiers later if demand exists
-
-**2. Upgrade Cost: 40W + 30S**
-- Significant late-game investment (~4x farm cost)
-- Strategic decision point, not spam-able
-
-**3. Attack Range: 5 tiles (Manhattan distance)**
-- Matches defender pawn detection radius
-- Positions upgraded outposts as "automated defender"
-- Enemies can still approach from blind spots
-
-**4. Damage: 12 per attack**
-- Lower than pawns (20–25 damage) — outposts are stationary
-- Kills swarm in 2 hits, scouts in 2 hits, raiders in 4 hits
-- Effective for defense without replacing mobile units
-
-**5. Attack Interval: 8 ticks (2 seconds at 4 ticks/sec)**
-- Consistent with TILE_ATTACK_COOLDOWN_TICKS
-- Responsive but not machine-gun rate
-
-**6. Target Priority: Closest enemy**
-- Simplest algorithm — no state inspection
-- Works well for area denial
-- Predictable behavior for players
-
-**7. Upgrade Trigger: Right-click owned outpost**
-- Two-step flow: right-click → confirm modal
-- Fits "interact with structure" pattern
-- Keeps HUD clean
-
-**8. Visual Distinction: 🗼 → 🏹**
-- Clear signal that upgraded outpost has ranged attack
-- Minimal rendering change: check `tile.upgraded` flag
-
-### Constants
-
-Add to `shared/src/constants.ts`:
-
-```typescript
-export const OUTPOST_UPGRADE = {
-  COST_WOOD: 40,
-  COST_STONE: 30,
-  ATTACK_RANGE: 5,
-  DAMAGE: 12,
-  ATTACK_COOLDOWN_TICKS: 8,
-} as const;
-```
-
-### Schema & Implementation
-
-- **TileState:** Add `upgraded: boolean = false` field
-- **Server Handler:** Validate ownership, upgrade status, resources; deduct cost; set flag
-- **Combat Loop:** New `tickOutpostAttacks()` function that targets closest enemy within range
-- **Client Rendering:** Update STRUCTURE_ICONS mapping; check `tile.upgraded` for icon selection
-- **Client UI:** Right-click handler opens upgrade modal; confirm sends UPGRADE_OUTPOST message
-- **Message Protocol:** Define UPGRADE_OUTPOST and UpgradeOutpostPayload
-
-### Scope
-
-**In Scope (v1):** Single-tier, fixed cost, ranged attack (5 tiles, 12 damage, 8 tick interval), closest-enemy targeting, icon change, right-click UI.
-
-**Deferred (v2+):** Multi-tier upgrades, target priority options, attack visual effects, upgrade progress, sound, structure damage, upgrade other buildings, downgrade mechanics.
-
-### Sign-off
-
-This design delivers a simple, effective outpost upgrade system that adds strategic depth without feature creep. All implementation questions answered. Ready to ship.
-
-— Hal
-
----
 
 ## 2026-03-12: Soft-Preference Anti-Clustering for All Pawn Types
 
@@ -4293,4 +4207,309 @@ To add more workflows, update the workflows array in .github/workflows/ci-failur
 ### Deployment Strategy
 
 **Cherry-picked directly to prod** instead of dev→uat→prod pipeline. Justification: CI-only changes don't impact game code and benefit from immediate deployment. This is a safe exception to the normal pipeline for infrastructure changes.
+
+
+---
+
+## 2026-03-13: Outpost Upgrade v2 — Direct Click, Not Random Skill
+
+**Author:** Hal  
+**Issue:** #179  
+**Status:** Ready for implementation
+
+### Decision
+
+Ship the smallest thing that matches the architecture already in the game:
+
+- **Primary interaction:** left-click an owned, unupgraded outpost
+- **UI flow:** open the existing upgrade confirmation modal
+- **Server action:** send `UPGRADE_OUTPOST { x, y }`
+- **Optional shortcut:** right-click may remain as a secondary shortcut if it does not fight camera controls
+- **Rejected for v1:** random HUD/skill-bar upgrade
+
+This is a deliberate change from the old **"right-click context menu"** framing. We are **not** building a generic context menu. We are **not** adding a random-skill mechanic. We are standardizing on **targeted click-to-upgrade**.
+
+### Why
+
+1. **The architecture is already tile-targeted.** The protocol, modal, tile schema, rendering, and attack loop all target a specific outpost by `{ x, y }`.
+2. **The game already uses HUD buttons for deterministic global actions** (spawn, build mode), not for hidden/random structure selection.
+3. **Random upgrade is bad feedback.** Players pay resources but do not control which defense point gets stronger, and the current UI has no strong reveal pattern for "which outpost was chosen?"
+4. **"Context menu" is the wrong abstraction.** There is no reusable context-menu system in this game. The codebase already has a simpler, shippable pattern: click tile → confirm modal.
+5. **Right-click is overloaded.** It is already tied to camera interaction, so it should be treated as a shortcut at most, not the only path.
+
+### Constants
+
+Keep the existing values:
+
+- **Cost:** 40 wood + 30 stone
+- **Range:** 5 tiles (Manhattan)
+- **Damage:** 12
+- **Attack interval:** 8 ticks
+- **Target priority:** closest enemy
+- **Upgrade tiers:** one tier only (`outpost` → `upgraded outpost`)
+- **Visual:** `🗼` → `🏹`
+
+### Player-Facing Spec (v1)
+
+- Players upgrade an outpost by **clicking their own outpost**.
+- If the outpost is eligible, show the upgrade modal with cost and combat stats.
+- Confirming spends resources and upgrades that exact outpost.
+- If the player cannot afford it, is not the owner, or the outpost is already upgraded, the upgrade does not proceed.
+- The HUD may include a **hint/help line** explaining the interaction, but **not** a random-upgrade button.
+
+### Implementation Plan
+
+#### Gately — client/UI/input
+
+**Goal:** Make targeted outpost upgrade obvious and reliable.
+
+Files:
+- `client/src/input/InputHandler.ts`
+- `client/src/ui/UpgradeModal.ts`
+- `client/src/ui/HudDOM.ts`
+- `client/src/ui/HelpScreen.ts`
+- `client/index.html`
+- `client/src/main.ts` (only if wiring needs cleanup)
+- `client/src/renderer/GridRenderer.ts` (only if a minimal highlight/cursor affordance is added)
+
+Work:
+1. Treat **left-click on owned outpost** as the canonical interaction.
+2. Remove "context menu" language from UI/help text; call it **click to upgrade**.
+3. Keep or drop right-click based on camera feel; it is a shortcut, not a requirement.
+4. Add one lightweight discoverability cue:
+   - help text, or
+   - HUD hint text, or
+   - both if trivial.
+5. Reuse the existing modal. Do **not** build a generic structure panel or skill bar for v1.
+6. Preserve build-placement flow: upgrade click resolves before placement only when the tile is an eligible owned outpost.
+
+#### Pemulis — server/simulation/protocol
+
+**Goal:** Keep the upgrade mechanic targeted, deterministic, and server-authoritative.
+
+Files:
+- `server/src/rooms/GameRoom.ts`
+- `server/src/rooms/GameState.ts`
+- `shared/src/types.ts`
+- `shared/src/messages.ts`
+- `shared/src/constants.ts`
+- existing outpost upgrade tests / server room tests
+
+Work:
+1. Keep the message contract **tile-targeted**: `UPGRADE_OUTPOST { x, y }`.
+2. Keep validation server-side: ownership, structure type, already-upgraded check, resource check, round-state check.
+3. Keep the existing attack behavior/constants unless a bug is found.
+4. Add or tighten tests around:
+   - successful upgrade resource spend
+   - rejection for non-owner / non-outpost / already upgraded / insufficient resources
+   - closest-enemy targeting and cooldown behavior
+5. Do **not** add random selection logic in v1.
+
+### Scope Fence
+
+**In scope:** targeted click-to-upgrade flow, modal confirmation, existing combat constants, upgraded icon, discoverability copy.
+
+**Out of scope:** random upgrades, player skill bar, upgrade-all button, generic context menu system, building selection framework, multi-tier outposts, attack FX polish.
+
+### Sign-off
+
+We already have most of the right system. The fix is to **simplify the interaction model**, not invent a new one. Ship **click owned outpost → confirm → upgrade that outpost** and move on.
+
+— Hal
+
+---
+
+## 2026-03-13: Production Changelog — Merge-Based Range Calculation
+
+**Date:** 2026-03-08  
+**Author:** Marathe  
+**Status:** Implemented  
+**PR:** #187
+
+### Context
+
+The production deployment workflow (`deploy.yml`) was generating empty changelogs when multiple dev→UAT promotions preceded a single UAT→prod promotion. The issue stemmed from using `git describe --tags` to find the baseline for changelog generation, which:
+
+1. Is unreliable with shallow clones (`--depth 50`)
+2. Doesn't align with our promotion model (no git tags created on intermediate promotions)
+3. Advances the comparison baseline with each intermediate promotion, causing data loss
+
+### Decision
+
+**Changed production changelog generation to use merge commit first-parent detection.**
+
+Instead of relying on git tags, the workflow now:
+
+1. Detects if the current prod commit is a merge commit (>2 parents)
+2. If yes: compares first parent (previous prod state) against HEAD
+3. If no: falls back to last 10 commits (for workflow_dispatch scenarios)
+
+### Rationale
+
+#### Why First-Parent Detection?
+
+When UAT→prod promotions are merged via GitHub PR, the merge commit structure is:
+- **First parent:** Previous prod HEAD (before merge)
+- **Second parent:** UAT branch that was merged
+
+By using `{first_parent}..HEAD`, we capture **all** commits from UAT in a single range, regardless of how many intermediate dev→UAT promotions occurred. This aligns with our promotion model and ensures no changelog content is lost.
+
+#### Why Not Tags?
+
+Our current workflow doesn't create git tags at intermediate promotion steps:
+- `squad-promote.yml` bumps `package.json` version with `npm version patch --no-git-tag-version` (note the flag)
+- Only final prod releases might receive tags (not standardized)
+- Tags are not a reliable source of truth for promotion history
+
+#### Why Not `origin/prod..origin/uat`?
+
+This would work at promotion time (and does work in `squad-promote.yml`), but `deploy.yml` runs **after** the merge to prod. At that point, `origin/uat` and `origin/prod` point to the same commit (or very close), making the comparison useless.
+
+### Implementation
+
+```bash
+MERGE_COMMIT=$(git rev-parse origin/prod)
+PARENT_COUNT=$(git rev-list --parents -n 1 $MERGE_COMMIT | wc -w)
+
+if [ "$PARENT_COUNT" -gt 2 ]; then
+  # This is a merge commit — use first parent as baseline
+  PREVIOUS_PROD=$(git rev-parse ${MERGE_COMMIT}^1)
+  RANGE="${PREVIOUS_PROD}..${MERGE_COMMIT}"
+else
+  # Not a merge commit (workflow_dispatch?) — compare last 10 commits
+  RANGE="origin/prod~10..origin/prod"
+fi
+```
+
+### Alternatives Considered
+
+1. **Tag after each prod deploy** — Considered but rejected. Adds complexity and doesn't fix the root issue (shallow clone depth limits).
+2. **Increase clone depth to 200** — Mitigates but doesn't solve. Still fails if >200 commits accumulate between promotions.
+3. **Extract changelog from merged PR body** — Interesting but fragile. PR bodies can be edited post-merge, and parsing PR descriptions adds brittleness.
+
+### Impact
+
+- ✅ Fixes #186 — Prod changelogs now include all changes since last prod release
+- ✅ Works reliably with shallow clones (no tag dependency)
+- ✅ Aligns with existing promotion model (no workflow changes needed)
+- ✅ Maintains fallback behavior for non-merge scenarios (workflow_dispatch)
+
+### Related Files
+
+- `.github/workflows/deploy.yml` — Discord notification step (lines 103-118)
+- `.github/workflows/squad-promote.yml` — UAT→prod promotion (correctly uses `origin/prod..origin/uat`)
+- `.github/scripts/generate-changelog.sh` — Shared changelog generator (unchanged)
+
+### Future Considerations
+
+If we move to a tag-based release strategy in the future:
+- Consider creating git tags at UAT promotion time (not just prod)
+- Or use GitHub Releases API to track deploy history
+- Current merge-based approach will continue to work regardless
+
+---
+
+## 2026-03-13: Version Bump Selector for squad-promote.yml
+
+**Author:** Marathe  
+**Status:** Implemented  
+**PR:** #189 (cherry-picked to prod and dev)
+
+### Decision
+
+Add `version_bump` workflow_dispatch input to allow users to choose patch/minor/major when promoting dev→uat.
+
+### Rationale
+
+Previously, the `squad-promote.yml` workflow hardcoded `npm version patch` during dev→uat promotion, forcing all promotions to be patch releases. This is inflexible for:
+- **Minor releases** when new features are included
+- **Major releases** when breaking changes are needed
+- **Quick hotfixes** that shouldn't bump minor/major unnecessarily
+
+### Changes
+
+1. Added `version_bump` input with type `choice`:
+   - Options: `patch`, `minor`, `major`
+   - Default: `patch` (preserves existing behavior)
+   - Optional (not required)
+
+2. Updated dev-to-uat job to use `npm version ${{ inputs.version_bump }}` instead of hardcoded `npm version patch`
+
+3. uat-to-prod job unaffected (no version bumping there)
+
+### Implementation Details
+
+- Committed to `prod` branch first (workflow-only change)
+- Cherry-picked to `dev` for consistency
+- Step name changed from "Bump patch version" → "Bump version" (more accurate)
+- Both branches now have the same capability
+
+### Notes
+
+- Default is `patch` to maintain backwards compatibility
+- Users can override via workflow dispatch UI when needed
+- No code changes required to support major/minor bumps (npm version handles it)
+
+---
+
+## 2026-03-13: Vite Build Metadata for Footer Version
+
+**Author:** Marathe  
+**Issue:** #188  
+**Status:** Accepted
+
+### Decision
+
+Frontend build metadata for the footer should come from Vite environment variables, not `define`-injected globals guarded by `typeof` checks.
+
+- `client/src/buildMeta.ts` reads `import.meta.env.VITE_APP_VERSION` and `import.meta.env.VITE_BUILD_DATE`
+- Production falls back to the root `package.json` version if `VITE_APP_VERSION` is missing
+- Local `npm run dev` always shows `vdev`
+- Deploy workflows must pass `VITE_APP_VERSION` and `VITE_BUILD_DATE` into Docker builds
+
+### Rationale
+
+The previous footer logic depended on `typeof __APP_VERSION__ !== 'undefined'`, which left production bundles able to fall back to `vdev`. Using Vite env metadata makes the production path explicit in CI/CD while keeping local development behavior intentional.
+
+### Implementation Notes
+
+- `.github/workflows/deploy.yml`
+- `.github/workflows/deploy-uat.yml`
+- `Dockerfile`
+- `client/src/buildMeta.ts`
+- `client/src/main.ts`
+
+---
+
+## 2026-03-14: Food Depletion Uses a Zero-Floor Model
+
+**Author:** Pemulis  
+**Issue:** #189  
+**Status:** Approved (PR #190)  
+**PR:** #190
+
+### Context
+
+Food could fall below zero, which made the HUD confusing and left starvation behavior unclear to players.
+
+### Decision
+
+Food is now clamped at 0 instead of accruing debt. When upkeep would push food below zero, `GameRoom.tickStructureIncome()` floors it at 0, starvation damage still applies while food is depleted, and the server emits a one-time depletion `game_log` warning. Spawn attempts at 0 food return an explicit error, and player-state serialization/deserialization clamps legacy negative food values back to 0.
+
+### Impact
+
+- ✅ Simulation, persistence, and HUD now agree on the same invariant: food is never displayed or persisted as negative
+- ✅ Player feedback is clearer because starvation explains both the spawn lockout and the per-income-tick HP loss
+- ✅ Legacy negative food values are clamped to 0 on deserialization
+- ✅ Comprehensive test coverage included
+- ✅ All existing tests pass
+
+### Implementation Details
+
+- `server/src/rooms/GameRoom.ts` (tickStructureIncome)
+- `shared/src/types.ts` (player state schema)
+- `server/src/rooms/GameState.ts` (spawn validation)
+- Player state deserialization (clamp legacy negatives)
+- HUD feedback updated
+- Test suite expanded and all passing
 

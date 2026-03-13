@@ -144,6 +144,11 @@
       #build-placement-hint.visible {
         display: block;
       }
+      #outpost-upgrade-hint {
+        margin-top: 6px;
+        font-size: 10px;
+        color: #7ecfff;
+      }
       /* Outer container for centering game-wrapper + log together */
       #game-outer {
         display: flex;
@@ -935,6 +940,20 @@
         background: #3a7a3a;
         border-color: #4a9a4a;
       }
+      .modal-btn-confirm:disabled {
+        background: #3a3a3a;
+        color: #888888;
+        border-color: #555555;
+        cursor: not-allowed;
+      }
+      .modal-status {
+        margin-top: -4px;
+        margin-bottom: 16px;
+        color: #7ecfff;
+      }
+      .modal-status.insufficient {
+        color: #ffb366;
+      }
 
       /* End-game results overlay */
       #endgame-overlay {
@@ -1080,6 +1099,7 @@
           <button id="build-farm-btn" class="build-btn" disabled>🌾 Build Farm (18W, 10S)</button>
           <button id="build-factory-btn" class="build-btn" disabled>⚙️ Build Factory (20W, 12S)</button>
           <div id="build-placement-hint">Click a tile to place · ESC to cancel</div>
+          <div id="outpost-upgrade-hint">🏹 Click your outpost to upgrade it (40W, 30S)</div>
         </div>
 
         <div class="hud-section" id="section-combat">
@@ -1252,11 +1272,12 @@
     <div id="upgrade-modal" class="modal-overlay">
       <div class="modal-panel">
         <h2>🏹 Upgrade Outpost</h2>
-        <p>Add ranged defense to this outpost.</p>
+        <p id="upgrade-modal-description">Turns this outpost into a ranged tower that auto-attacks the closest enemy every 8 ticks.</p>
         <div class="upgrade-cost">
           💰 Cost: 40 🪵 + 30 🪨<br>
-          ⚔️ Damage: 12 &nbsp;|&nbsp; Range: 5 tiles
+          ⚔️ Damage: 12 &nbsp;|&nbsp; Range: 5 tiles &nbsp;|&nbsp; Rate: every 8 ticks
         </div>
+        <p id="upgrade-modal-status" class="modal-status">Ready to upgrade this outpost.</p>
         <div class="modal-actions">
           <button id="upgrade-cancel-btn" class="modal-btn-cancel">Cancel</button>
           <button id="upgrade-confirm-btn" class="modal-btn-confirm">Upgrade</button>

@@ -87,6 +87,8 @@ export function stepBuilder(creature: CreatureState, state: GameState): void {
         // Build complete — claim the tile
         buildTile.ownerID = creature.ownerID;
         buildTile.shapeHP = SHAPE.BLOCK_HP;
+        buildTile.upgraded = false;
+        buildTile.attackCooldown = 0;
         if (creature.buildMode === "farm") {
           buildTile.structureType = "farm";
         } else if (!hasNearbyOutpost(state, creature.ownerID, creature.targetX, creature.targetY)) {

@@ -102,7 +102,7 @@ export class InputHandler {
     return { x: tileX, y: tileY };
   }
 
-  /** Check if tile is an upgradeable outpost and show modal if so. */
+  /** Check if tile is an owned, unupgraded outpost and show the upgrade modal. */
   private tryShowUpgradeModal(screenX: number, screenY: number): boolean {
     const tile = this.screenToTile(screenX, screenY);
     if (!tile) return false;
@@ -111,16 +111,19 @@ export class InputHandler {
     if (!tileData) return false;
 
     const localPlayerId = this.hud?.localSessionId ?? '';
-    const isOwnedOutpost = tileData.owner === localPlayerId && tileData.structure === 'outpost';
-    const isNotUpgraded = !tileData.upgraded;
-    const hasEnoughResources = this.currentWood >= OUTPOST_UPGRADE.COST_WOOD &&
-                                this.currentStone >= OUTPOST_UPGRADE.COST_STONE;
+    const isUpgradeableOutpost =
+      tileData.owner === localPlayerId &&
+      tileData.structure === 'outpost' &&
+      !tileData.upgraded;
 
-    if (isOwnedOutpost && isNotUpgraded && hasEnoughResources) {
-      this.upgradeModal?.show(tile.x, tile.y);
-      return true;
-    }
-    return false;
+    if (!isUpgradeableOutpost) return false;
+
+    const canAfford =
+      this.currentWood >= OUTPOST_UPGRADE.COST_WOOD &&
+      this.currentStone >= OUTPOST_UPGRADE.COST_STONE;
+
+    this.upgradeModal?.show(tile.x, tile.y, canAfford);
+    return true;
   }
 
   private bindClicks(): void {
@@ -131,18 +134,15 @@ export class InputHandler {
       const screenX = e.clientX - rect.left;
       const screenY = e.clientY - rect.top;
 
-      // Try upgrade modal first (works outside placement mode)
-      if (this.tryShowUpgradeModal(screenX, screenY)) return;
+      if (this.hud?.placementMode) {
+        const tile = this.screenToTile(screenX, screenY);
+        if (!tile) return;
+        if (!this.gridRenderer?.isValidPlacementTile(tile.x, tile.y)) return;
+        this.hud.sendPlaceBuilding(tile.x, tile.y);
+        return;
+      }
 
-      // Otherwise handle building placement
-      if (!this.hud?.placementMode) return;
-
-      const tile = this.screenToTile(screenX, screenY);
-      if (!tile) return;
-
-      if (!this.gridRenderer?.isValidPlacementTile(tile.x, tile.y)) return;
-
-      this.hud.sendPlaceBuilding(tile.x, tile.y);
+      this.tryShowUpgradeModal(screenX, screenY);
     };
 
     this.canvas.addEventListener('click', this._clickHandler);
@@ -151,12 +151,6 @@ export class InputHandler {
   private bindContextMenu(): void {
     this._contextMenuHandler = (e: MouseEvent) => {
       e.preventDefault();
-
-      const rect = this.canvas.getBoundingClientRect();
-      const screenX = e.clientX - rect.left;
-      const screenY = e.clientY - rect.top;
-
-      this.tryShowUpgradeModal(screenX, screenY);
     };
 
     this.canvas.addEventListener('contextmenu', this._contextMenuHandler);

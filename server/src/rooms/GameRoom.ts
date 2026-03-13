@@ -6,7 +6,9 @@ import { tickCreatureAI } from "./creatureAI.js";
 import { computeVisibleTiles } from "./visibility.js";
 import { tickCombat } from "./combat.js";
 import { tickGraveDecay } from "./graveDecay.js";
+import { onBaseDestroyed } from "./enemyBaseAI.js";
 import type { EnemyBaseTracker } from "./enemyBaseAI.js";
+import { clearCombatTracking } from "./combatTracking.js";
 import type { AttackerTracker } from "./attackerAI.js";
 import type { AuthProvider, AuthUser } from "../auth/AuthProvider.js";
 import type { PlayerStateRepository } from "../persistence/PlayerStateRepository.js";
@@ -30,7 +32,11 @@ import {
   isEnemyBase, isEnemyMobile,
   CPU_PLAYER,
   STARVATION,
-  OUTPOST_UPGRADE,
+  OUTPOST_UPGRADE_COST_WOOD,
+  OUTPOST_UPGRADE_COST_STONE,
+  UPGRADED_OUTPOST_RANGE,
+  UPGRADED_OUTPOST_DAMAGE,
+  UPGRADED_OUTPOST_ATTACK_INTERVAL,
 } from "@primal-grid/shared";
 import type { SpawnPawnPayload, SetNamePayload, ChatPayload, PlaceBuildingPayload, UpgradeOutpostPayload, GameEndedPayload } from "@primal-grid/shared";
 import { spawnHQ } from "./territory.js";
@@ -499,6 +505,8 @@ export class GameRoom extends Room {
     player.stone -= cost.stone;
 
     // Place building
+    tile.upgraded = false;
+    tile.attackCooldown = 0;
     tile.structureType = buildingType;
 
     const displayName = player.displayName || client.sessionId;
@@ -552,20 +560,21 @@ export class GameRoom extends Room {
     }
 
     // Validate player has resources
-    if (player.wood < OUTPOST_UPGRADE.COST_WOOD || player.stone < OUTPOST_UPGRADE.COST_STONE) {
+    if (player.wood < OUTPOST_UPGRADE_COST_WOOD || player.stone < OUTPOST_UPGRADE_COST_STONE) {
       client.send("game_log", {
-        message: `Not enough resources. Need ${OUTPOST_UPGRADE.COST_WOOD} wood + ${OUTPOST_UPGRADE.COST_STONE} stone.`,
+        message: `Not enough resources. Need ${OUTPOST_UPGRADE_COST_WOOD} wood + ${OUTPOST_UPGRADE_COST_STONE} stone.`,
         type: "error",
       });
       return;
     }
 
     // Deduct resources
-    player.wood -= OUTPOST_UPGRADE.COST_WOOD;
-    player.stone -= OUTPOST_UPGRADE.COST_STONE;
+    player.wood -= OUTPOST_UPGRADE_COST_WOOD;
+    player.stone -= OUTPOST_UPGRADE_COST_STONE;
 
     // Upgrade outpost
     tile.upgraded = true;
+    tile.attackCooldown = 0;
 
     const displayName = player.displayName || client.sessionId;
     this.broadcast("game_log", {
@@ -1162,7 +1171,7 @@ export class GameRoom extends Room {
         if (creature.health <= 0) return;
 
         const dist = Math.abs(creature.x - tile.x) + Math.abs(creature.y - tile.y);
-        if (dist <= OUTPOST_UPGRADE.ATTACK_RANGE && dist < closestDist) {
+        if (dist <= UPGRADED_OUTPOST_RANGE && dist < closestDist) {
           closestDist = dist;
           closestTarget = creature;
         }
@@ -1171,14 +1180,17 @@ export class GameRoom extends Room {
       // Attack target if found
       if (closestTarget) {
         const target: CreatureState = closestTarget; // Type assertion to fix TypeScript narrowing
-        target.health -= OUTPOST_UPGRADE.DAMAGE;
-        tile.attackCooldown = OUTPOST_UPGRADE.ATTACK_COOLDOWN_TICKS;
+        target.health -= UPGRADED_OUTPOST_DAMAGE;
+        tile.attackCooldown = Math.max(UPGRADED_OUTPOST_ATTACK_INTERVAL - 1, 0);
 
         // Remove if dead
         if (target.health <= 0) {
+          if (isEnemyBase(target.creatureType)) {
+            onBaseDestroyed(target.id, this.state, this.enemyBaseState);
+          }
+          clearCombatTracking(target.id, this.attackerState);
           this.state.creatures.delete(target.id);
-          
-          // Handle base destruction
+
           if (isEnemyBase(target.creatureType)) {
             const baseType = ENEMY_BASE_TYPES[target.creatureType];
             if (baseType && tile.ownerID) {
@@ -1188,6 +1200,10 @@ export class GameRoom extends Room {
                 player.stone += baseType.reward.stone;
                 player.food += baseType.reward.food;
               }
+              this.broadcast("game_log", {
+                message: `${baseType.name} destroyed! +${baseType.reward.wood}W +${baseType.reward.stone}S +${baseType.reward.food}F`,
+                type: "combat",
+              });
             }
           }
         }
@@ -1228,6 +1244,8 @@ export class GameRoom extends Room {
         // Clear any building from previous owner when ownership transfers
         if (tile.structureType !== "" && tile.structureType !== "hq") {
           tile.structureType = "";
+          tile.upgraded = false;
+          tile.attackCooldown = 0;
         }
         tile.ownerID = tile.claimingPlayerID;
         tile.shapeHP = SHAPE.BLOCK_HP;

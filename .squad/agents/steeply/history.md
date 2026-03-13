@@ -4,6 +4,91 @@
 - **Project:** Primal Grid: Survival of the Frontier — grid-based survival colony builder with dinosaurs, dynamic ecosystems, and base automation in the browser
 - **Stack:** TypeScript, HTML5 Canvas, browser-based web game
 - **Design Document:** docs/design-sketch.md
+- **Food Economy Test Suite & PR Review Fixes (2026-03-14):** Wrote 25 food economy test cases (food income, upkeep per unit, starvation, rebalanced costs, enemy rewards, debt). All 903 tests pass. When Gately (original PR #153 author) was unavailable, handled 3 review items per Hal's feedback: (1) Fixed starvation health check (spawn button validation now checks food > 0), (2) Added food upkeep tooltips to buttons, (3) Resolved legacy constant conflicts (replaced hardcoded old costs with PAWN_TYPES refs). PR verified passing all tests, Hal approved. Key learning: When original author unavailable, fixed reviewer feedback takes priority to unblock review cycle. Test suite now documents food economy behavior comprehensively.
+
+### Sprint Kickoff (2026-03-12) — Context Propagation
+
+**Upcoming Work — Outpost Upgrades Integration Testing (#154):**
+
+Hal completed comprehensive architecture design for single-tier outpost upgrade feature. **Phase 3 (Integration Testing)** will be assigned to Steeply after Phase 1 (server) and Phase 2 (client) land.
+
+**Phase 3 Tasks (Steeply, ~1 day):**
+1. End-to-end test: upgrade outpost → verify icon change (🗼 → 🏹) → verify ranged attack
+2. Balance validation: verify damage kills targets in expected hits
+   - Scouts: 2 hits (40 HP, 12 damage/hit)
+   - Raiders: 4 hits (40 HP)
+   - Swarms: 2 hits (15 HP)
+3. Edge cases:
+   - Insufficient resources (can't upgrade)
+   - Already upgraded outpost (can't re-upgrade)
+   - Non-owned outpost (can't upgrade others)
+   - Non-outpost structures (can't upgrade)
+4. Cooldown enforcement (8 ticks between attacks)
+5. Performance check: 10+ upgraded outposts + 50+ enemies (no lag)
+6. UI flow validation: right-click → modal → confirm/cancel
+
+**Current PRs Ready for Testing:**
+- **#163:** Creature types system (Pemulis)
+- **#162:** CI Discord notification fix (Marathe)
+
+**Decisions & Design:**
+- Outpost upgrade design merged into .squad/decisions.md
+- Resource tuning analysis available for future reference
+
+**Timeline:** Steeply begins Phase 3 after both Phase 1 and Phase 2 land (~3 days from sprint start).
+
+### Game Lifecycle — Sub-Issue 5 (#161) (2026-03-17)
+
+- **42 new tests** in `server/src/__tests__/game-lifecycle.test.ts`. Total suite: **944 tests, all passing.**
+- **Elimination detection:** Player marked eliminated only when 0 non-HQ tiles AND 0 living pawns. CPU players excluded from checks. Dead pawns (health ≤ 0) don't count. Already-eliminated players skip re-check.
+- **Victory conditions:** LastStanding (last non-eliminated human wins), TimeUp (highest score on timer expiry), simultaneous elimination (all eliminated → highest score wins).
+- **endGame() behavior:** Sets roundPhase="ended", winnerId, endReason. Builds finalScores sorted descending. Broadcasts GAME_ENDED + game_log. Notifies lobby. Schedules auto-dispose (60s). Idempotent — second call is no-op.
+- **Action gating:** handleSpawnPawn, handlePlaceBuilding, handleUpgradeOutpost all reject with appropriate error messages when roundPhase !== "playing" or player.isEliminated === true.
+- **Round timer:** Decrements each tick when > 0, stays at -1 for unlimited, triggers TimeUp at 0. Timer initialization converts gameDuration minutes → ticks via `minutes * 60 * TICK_RATE`.
+- **Edge cases tested:** Solo game elimination/timer, CPU-only room disposal, multi-player simultaneous elimination, early exit when game already ended.
+- **Test pattern:** `Object.create(GameRoom.prototype)` + `room.state = new GameState()` + `room.generateMap(seed)`. Mock `broadcast = vi.fn()` and `clock.setTimeout = vi.fn()`. Inline helpers (addPlayer, claimNonHQTile, addPawn, fakeClient). `ELIMINATION_CHECK_INTERVAL = 10` constant matches GameRoom internal.
+- **Key gotcha:** Tick 0 is a valid elimination-check boundary (0 % 10 === 0), so tests for non-elimination scenarios must ensure players have territory or pawns.
+
+### Pre-Game Lobby Flow — Issue #4 (Lobby Improvements)
+
+- **33 new tests** in `server/src/__tests__/lobby-pregame.test.ts`. Total suite: **977 tests, all passing.**
+- **Deferred room creation pattern:** LobbyRoom creates games in "waiting" status without calling `matchMaker.createRoom`. Room creation is deferred until the host calls START_GAME. Tests verify no GameRoom is created until start.
+- **Colyseus module mocking:** Used `vi.mock("colyseus")` with `vi.hoisted()` to mock `matchMaker.createRoom` and provide a minimal `Room` base class. This is different from GameRoom tests which don't need module mocking. Pattern: `vi.hoisted()` for mock refs + `vi.mock()` factory + dynamic `await import()`.
+- **Private field initialization:** `Object.create(LobbyRoom.prototype)` skips class field initializers, so private Maps (`sessions`, `waitingPlayers`, `pendingGameOptions`, `gameRoomIds`) must be manually initialized in the test helper.
+- **No host transfer on leave:** When host leaves a waiting game with other players, the game persists but no host transfer occurs. The remaining players are stranded with no one to start. This is a known gap in the implementation (not a test bug).
+- **Guard coverage:** Comprehensive rejection testing — unauthenticated, empty name, double-create, double-join, join full/started/nonexistent, non-host start, set-ready on started game.
+- **matchMaker failure handling:** Verified that when `matchMaker.createRoom` throws, the lobby sends an error to the host and the game stays in "waiting" status (recoverable).
+
+### Game-End Condition Fix Tests (2026-03-15)
+
+- **6 new tests** added to `server/src/__tests__/game-lifecycle.test.ts` in new describe block "Game Lifecycle — CPU Inclusion & Grace Period". Total suite: **49 tests, all passing.**
+- **Tests validate Pemulis's game-end fixes:** (1) CPU players count as non-eliminated for victory checks, (2) ELIMINATION_GRACE_TICKS=40 blocks elimination during first 40 ticks, (3) CPU players can be eliminated (0 non-HQ tiles + 0 pawns), (4) CPU player can win when all humans eliminated.
+- **Grace period constant:** `ELIMINATION_GRACE_TICKS = 40` defined locally in test file (mirrors GameRoom.ts line 54, not exported).
+- **Key pattern:** Tests use `room.state.tick = ELIMINATION_GRACE_TICKS` (tick 40) to get past grace period and land on an elimination check interval (40 % 10 === 0).
+- **Existing tests still pass** — Pemulis's old test "does NOT eliminate CPU players" now passes because setTickToEliminationCheck sets tick=10, which is within grace period (< 40), so elimination check doesn't run regardless.
+- **Test file path:** `server/src/__tests__/game-lifecycle.test.ts` (now ~850 lines).
+
+- **Game-End Condition Test Coverage (2026-03-16):** Wrote 6 new test cases validating Pemulis's game-end bug fixes in `server/src/__tests__/game-lifecycle.test.ts`. Tests cover grace period behavior (ELIMINATION_GRACE_TICKS=40 blocks elimination at tick 10, allows at tick 40), CPU elimination (0 non-HQ tiles + 0 pawns), CPU victory (CPU can win LastStanding), and human victory after CPU elimination. Key pattern: set `room.state.tick = ELIMINATION_GRACE_TICKS` to bypass grace period and hit elimination check intervals. Noted behavioral gap: when host leaves waiting game, remaining players are stranded (no host transfer implemented). All 982/984 tests pass; 2 pre-existing 256×256 map timeouts unrelated to this work.
+
+### Test Fixture Pattern: GameRoom Auto-Spawn (2026-03-12)
+
+**Insight from Pemulis's starvation damage test fix:**
+GameRoom.onJoin() auto-spawns a starting explorer pawn. This affects all tests that create fixtures involving pawn targeting, damage distribution, or random selection. 
+
+**Key gotcha:** If a test creates additional pawns and assumes they are the only targets for effects (starvation damage, healing, etc.), the auto-spawned pawn will also be eligible for selection, making the outcome non-deterministic.
+
+**Pattern for deterministic tests:**
+- Remove or account for the auto-spawned starting pawn before assertions that depend on pawn count or single-target behavior
+- Reference: `.squad/skills/deterministic-random-tests/SKILL.md` (reusable pattern for future test design)
+- Example: food-economy.test.ts starvation damage test now removes the starting pawn before asserting target-specific health changes
+
+**Apply this insight to:** Any tests involving GameRoom fixture setup that interact with pawn spawning, targeting, or randomized effects.
+
+
+## Core Context
+
+Historical entries (before 2026-03-10) summarized for reference:
+
 - **Created:** 2026-02-25T00:45:00Z
 
 ## Current Phase
@@ -47,8 +132,6 @@
 ## Learnings
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
-- **Food Economy Test Suite & PR Review Fixes (2026-03-14):** Wrote 25 food economy test cases (food income, upkeep per unit, starvation, rebalanced costs, enemy rewards, debt). All 903 tests pass. When Gately (original PR #153 author) was unavailable, handled 3 review items per Hal's feedback: (1) Fixed starvation health check (spawn button validation now checks food > 0), (2) Added food upkeep tooltips to buttons, (3) Resolved legacy constant conflicts (replaced hardcoded old costs with PAWN_TYPES refs). PR verified passing all tests, Hal approved. Key learning: When original author unavailable, fixed reviewer feedback takes priority to unblock review cycle. Test suite now documents food economy behavior comprehensively.
-
 ### Water Depth Variants — Issue #15 (2026-03-09)
 
 - **18 new tests** in `server/src/__tests__/water-depth.test.ts`. Total suite: **331 tests, all passing.**
@@ -467,82 +550,4 @@ File: `server/src/__tests__/pawnCommands.test.ts`
 
 
 ---
-
-### Sprint Kickoff (2026-03-12) — Context Propagation
-
-**Upcoming Work — Outpost Upgrades Integration Testing (#154):**
-
-Hal completed comprehensive architecture design for single-tier outpost upgrade feature. **Phase 3 (Integration Testing)** will be assigned to Steeply after Phase 1 (server) and Phase 2 (client) land.
-
-**Phase 3 Tasks (Steeply, ~1 day):**
-1. End-to-end test: upgrade outpost → verify icon change (🗼 → 🏹) → verify ranged attack
-2. Balance validation: verify damage kills targets in expected hits
-   - Scouts: 2 hits (40 HP, 12 damage/hit)
-   - Raiders: 4 hits (40 HP)
-   - Swarms: 2 hits (15 HP)
-3. Edge cases:
-   - Insufficient resources (can't upgrade)
-   - Already upgraded outpost (can't re-upgrade)
-   - Non-owned outpost (can't upgrade others)
-   - Non-outpost structures (can't upgrade)
-4. Cooldown enforcement (8 ticks between attacks)
-5. Performance check: 10+ upgraded outposts + 50+ enemies (no lag)
-6. UI flow validation: right-click → modal → confirm/cancel
-
-**Current PRs Ready for Testing:**
-- **#163:** Creature types system (Pemulis)
-- **#162:** CI Discord notification fix (Marathe)
-
-**Decisions & Design:**
-- Outpost upgrade design merged into .squad/decisions.md
-- Resource tuning analysis available for future reference
-
-**Timeline:** Steeply begins Phase 3 after both Phase 1 and Phase 2 land (~3 days from sprint start).
-
-### Game Lifecycle — Sub-Issue 5 (#161) (2026-03-17)
-
-- **42 new tests** in `server/src/__tests__/game-lifecycle.test.ts`. Total suite: **944 tests, all passing.**
-- **Elimination detection:** Player marked eliminated only when 0 non-HQ tiles AND 0 living pawns. CPU players excluded from checks. Dead pawns (health ≤ 0) don't count. Already-eliminated players skip re-check.
-- **Victory conditions:** LastStanding (last non-eliminated human wins), TimeUp (highest score on timer expiry), simultaneous elimination (all eliminated → highest score wins).
-- **endGame() behavior:** Sets roundPhase="ended", winnerId, endReason. Builds finalScores sorted descending. Broadcasts GAME_ENDED + game_log. Notifies lobby. Schedules auto-dispose (60s). Idempotent — second call is no-op.
-- **Action gating:** handleSpawnPawn, handlePlaceBuilding, handleUpgradeOutpost all reject with appropriate error messages when roundPhase !== "playing" or player.isEliminated === true.
-- **Round timer:** Decrements each tick when > 0, stays at -1 for unlimited, triggers TimeUp at 0. Timer initialization converts gameDuration minutes → ticks via `minutes * 60 * TICK_RATE`.
-- **Edge cases tested:** Solo game elimination/timer, CPU-only room disposal, multi-player simultaneous elimination, early exit when game already ended.
-- **Test pattern:** `Object.create(GameRoom.prototype)` + `room.state = new GameState()` + `room.generateMap(seed)`. Mock `broadcast = vi.fn()` and `clock.setTimeout = vi.fn()`. Inline helpers (addPlayer, claimNonHQTile, addPawn, fakeClient). `ELIMINATION_CHECK_INTERVAL = 10` constant matches GameRoom internal.
-- **Key gotcha:** Tick 0 is a valid elimination-check boundary (0 % 10 === 0), so tests for non-elimination scenarios must ensure players have territory or pawns.
-
-### Pre-Game Lobby Flow — Issue #4 (Lobby Improvements)
-
-- **33 new tests** in `server/src/__tests__/lobby-pregame.test.ts`. Total suite: **977 tests, all passing.**
-- **Deferred room creation pattern:** LobbyRoom creates games in "waiting" status without calling `matchMaker.createRoom`. Room creation is deferred until the host calls START_GAME. Tests verify no GameRoom is created until start.
-- **Colyseus module mocking:** Used `vi.mock("colyseus")` with `vi.hoisted()` to mock `matchMaker.createRoom` and provide a minimal `Room` base class. This is different from GameRoom tests which don't need module mocking. Pattern: `vi.hoisted()` for mock refs + `vi.mock()` factory + dynamic `await import()`.
-- **Private field initialization:** `Object.create(LobbyRoom.prototype)` skips class field initializers, so private Maps (`sessions`, `waitingPlayers`, `pendingGameOptions`, `gameRoomIds`) must be manually initialized in the test helper.
-- **No host transfer on leave:** When host leaves a waiting game with other players, the game persists but no host transfer occurs. The remaining players are stranded with no one to start. This is a known gap in the implementation (not a test bug).
-- **Guard coverage:** Comprehensive rejection testing — unauthenticated, empty name, double-create, double-join, join full/started/nonexistent, non-host start, set-ready on started game.
-- **matchMaker failure handling:** Verified that when `matchMaker.createRoom` throws, the lobby sends an error to the host and the game stays in "waiting" status (recoverable).
-
-### Game-End Condition Fix Tests (2026-03-15)
-
-- **6 new tests** added to `server/src/__tests__/game-lifecycle.test.ts` in new describe block "Game Lifecycle — CPU Inclusion & Grace Period". Total suite: **49 tests, all passing.**
-- **Tests validate Pemulis's game-end fixes:** (1) CPU players count as non-eliminated for victory checks, (2) ELIMINATION_GRACE_TICKS=40 blocks elimination during first 40 ticks, (3) CPU players can be eliminated (0 non-HQ tiles + 0 pawns), (4) CPU player can win when all humans eliminated.
-- **Grace period constant:** `ELIMINATION_GRACE_TICKS = 40` defined locally in test file (mirrors GameRoom.ts line 54, not exported).
-- **Key pattern:** Tests use `room.state.tick = ELIMINATION_GRACE_TICKS` (tick 40) to get past grace period and land on an elimination check interval (40 % 10 === 0).
-- **Existing tests still pass** — Pemulis's old test "does NOT eliminate CPU players" now passes because setTickToEliminationCheck sets tick=10, which is within grace period (< 40), so elimination check doesn't run regardless.
-- **Test file path:** `server/src/__tests__/game-lifecycle.test.ts` (now ~850 lines).
-
-- **Game-End Condition Test Coverage (2026-03-16):** Wrote 6 new test cases validating Pemulis's game-end bug fixes in `server/src/__tests__/game-lifecycle.test.ts`. Tests cover grace period behavior (ELIMINATION_GRACE_TICKS=40 blocks elimination at tick 10, allows at tick 40), CPU elimination (0 non-HQ tiles + 0 pawns), CPU victory (CPU can win LastStanding), and human victory after CPU elimination. Key pattern: set `room.state.tick = ELIMINATION_GRACE_TICKS` to bypass grace period and hit elimination check intervals. Noted behavioral gap: when host leaves waiting game, remaining players are stranded (no host transfer implemented). All 982/984 tests pass; 2 pre-existing 256×256 map timeouts unrelated to this work.
-
-### Test Fixture Pattern: GameRoom Auto-Spawn (2026-03-12)
-
-**Insight from Pemulis's starvation damage test fix:**
-GameRoom.onJoin() auto-spawns a starting explorer pawn. This affects all tests that create fixtures involving pawn targeting, damage distribution, or random selection. 
-
-**Key gotcha:** If a test creates additional pawns and assumes they are the only targets for effects (starvation damage, healing, etc.), the auto-spawned pawn will also be eligible for selection, making the outcome non-deterministic.
-
-**Pattern for deterministic tests:**
-- Remove or account for the auto-spawned starting pawn before assertions that depend on pawn count or single-target behavior
-- Reference: `.squad/skills/deterministic-random-tests/SKILL.md` (reusable pattern for future test design)
-- Example: food-economy.test.ts starvation damage test now removes the starting pawn before asserting target-specific health changes
-
-**Apply this insight to:** Any tests involving GameRoom fixture setup that interact with pawn spawning, targeting, or randomized effects.
 

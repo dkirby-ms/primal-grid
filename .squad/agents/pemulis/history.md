@@ -4,6 +4,238 @@
 - **Project:** Primal Grid: Survival of the Frontier — grid-based survival colony builder with dinosaurs, dynamic ecosystems, and base automation in the browser
 - **Stack:** TypeScript, HTML5 Canvas, browser-based web game
 - **Design Document:** docs/design-sketch.md
+**Phase 6 Preparation (2026-03-11):** Hal completed design spec for Outpost Upgrade System (issue #154). Single-tier upgrade, 40W/30S cost, 5-tile attack range, 12 damage, closest-enemy targeting, 🏹 icon. Full implementation roadmap provided in `.squad/decisions.md`. You and Gately can begin Phase 6 when ready.
+
+## Core Context
+
+**Pre-2026-03 Work Summary:**
+- **Phases 0–4.4 Complete:** Full scaffolding (monorepo, Colyseus ESM v0.17, PixiJS v8, Vite, Jest), core simulation (biome map gen, resources, creatures, player survival), base building (placement, crafting, structures, farms), creature systems (schema, taming, pack commands, breeding), HUD redesign to HTML DOM panel.
+- **Data Patterns Established:** Flat inventory (wood/stone/fiber/berries/meat), Colyseus @type() schema decorators, data-driven constants (CREATURES, RESOURCES, RECIPES, STRUCTURES), FSM-based creature AI (idle→graze→hunt→flee), message-based player actions (PLACE, CRAFT, TAME, BREED).
+- **Architecture Decisions:** All data-driven constants in shared/src/data/, server-authoritative game state, no client prediction, creature AI runs every 2nd tick (decoupled from game ticks), pack selection stored as session state Map (not synced), trust decay + proximity gain per tick.
+- **Test Suite:** 244 integration tests passing across all phases. Key patterns: guard assertions for nil fields, creature pair finding helpers, farm growth assertions, pack membership validation.
+- **Key Files:** GameRoom.ts (main event loop), territory.ts (claim/adjacency logic), creatureAI.ts (FSM tick), GameState.ts (schema), types.ts (interfaces), constants.ts (tuning parameters), handlers/ (message processors).
+- **Performance:** 1000 creatures on 64×64 map at 4 ticks/sec, O(N) creature AI tick, no spatial partitioning yet (Phase 5 optimization).
+
+## Learnings
+
+<!-- Append new learnings below. Each entry is something lasting about the project. -->
+- **Outpost Upgrade Cooldown Semantics (2026-03-18):** `tile.attackCooldown` is modeled as the number of wait ticks remaining after the current upgraded-outpost shot, so an advertised 8-tick interval must write back `UPGRADED_OUTPOST_ATTACK_INTERVAL - 1` after firing; writing back the full interval delays the next shot by 9 simulation ticks. `shared/src/constants.ts` now exports both named outpost-upgrade tuning constants (`OUTPOST_UPGRADE_COST_*`, `UPGRADED_OUTPOST_*`) and the legacy `OUTPOST_UPGRADE` object as compatibility aliases, so new code should prefer the named exports while older client/server call sites stay stable during branch overlap.
+- **Food Economy Server Implementation (2026-03-14):** Implemented full food economy system for Issue #21 (903 tests passing). Schema: Added Food to ResourceType enum, foodUpkeep to PawnTypeDef, updated PAWN_TYPES with new costs (builder 8W/4S, defender 12W/8S, attacker 16W/12S, explorer 10W/6S) + upkeep values (1/1/2/3). Server logic: tickStructureIncome() grants HQ food + farm food, deducts upkeep, checks starvation. spawnPawnCore() blocks spawn at food ≤ 0. Persistence: food added to SerializedPlayerState, legacy saves deserialize with food: 0 (safe). Key decision: Starvation damage subtracts HP but delegated to existing death loop (not inline), food can go negative (debt model). Pawn spawn cost test refactored to use PAWN_TYPES instead of legacy constants.
+- **Starvation Flake Root Cause (2026-03-12):** `GameRoom.onJoin()` auto-spawns `TERRITORY.STARTING_PAWN` (currently the explorer), so food-economy tests do not start with an empty pawn roster. The flaky starvation test in `server/src/__tests__/food-economy.test.ts` was assuming the manually added defender was the only valid victim, but `tickStructureIncome()` in `server/src/rooms/GameRoom.ts` correctly picks a random living owned pawn and the starting explorer was sometimes selected instead. Fix pattern: when testing random per-pawn damage, explicitly control the candidate set in the fixture (here by removing the starting explorer) or assert aggregate damage across all eligible pawns. Key files: `server/src/__tests__/food-economy.test.ts`, `server/src/rooms/GameRoom.ts`, `shared/src/constants.ts`. User preference reinforced: rerun flaky-targeted tests multiple times before trusting the fix.
+
+### Deployment & CI/CD Documentation (2026-03-11)
+
+- Added "🚀 Deployment & Environments" section to README, inserted between 🛠 Development and 🏗 Architecture sections.
+- Documents full CI/CD pipeline: feature → UAT → master branch strategy, environment table (prod vs UAT), infrastructure sharing (ACR, Log Analytics), and deployment workflows (ci.yml, deploy.yml, deploy-uat.yml).
+- Includes branch protection rules for UAT, emergency UAT override workflow, and initial UAT provisioning steps.
+- Clarifies scaling differences: UAT idle (~$1/month), prod always has ≥1 replica.
+
+### Sprint Kickoff (2026-03-12) — Context Propagation
+
+**Completed Tasks This Sprint:**
+- **#157 Creature Types:** PR #163 opened. Unified creature type system across server/client.
+- **#156 Resource Tuning:** Analysis complete and merged into decisions.md. Awaiting implementation consensus.
+
+**New Context — Outpost Upgrades (#154):**
+Hal completed comprehensive architecture design for single-tier outpost upgrade feature. Design is stable and ready for Phase 1 implementation (server foundation):
+
+- **Cost:** 40W + 30S (late-game investment)
+- **Attack Range:** 5 tiles (Manhattan distance)
+- **Damage:** 12 per hit, 8-tick cooldown
+- **Constants:** Add OUTPOST_UPGRADE to shared/constants.ts
+- **Schema:** Add `upgraded: boolean` to TileState
+- **Server Logic:** Upgrade handler + ranged combat tick function
+- **Client:** Icon change (🗼 → 🏹), right-click UI modal
+
+**Phase 1 (Server Foundation) — Pemulis:**
+1. Add constants to constants.ts
+2. Add upgraded field to TileState schema
+3. Add UPGRADE_OUTPOST message protocol
+4. Implement upgrade handler (validation, cost, flag)
+5. Implement tickOutpostAttacks() function (targeting, damage, cooldown)
+6. Integrate into GameRoom update loop
+7. Unit tests
+
+**Timeline:** Phase 1 est. 1.5 days. Phase 2 (Gately) starts after schema lands.
+
+**Note:** Resource tuning recommendation #4 suggests stone-heavy outpost upgrade (30W/50S instead of 40W/30S) as a late-game stone sink. This can be implemented post-Phase 1 if consensus reached.
+
+**Design Document:** .squad/decisions.md (merged from inbox)
+
+### Resource Tuning Implementation (2026-03-12, Issue #156, PR #164)
+
+**Implementation:** Implemented HIGH-priority resource tuning changes from approved analysis — unit cost differentiation and expensive farms.
+
+**Unit Cost Changes (Strategic Differentiation):**
+- **Builder:** 8W/4S → 10W/3S (wood-focused economy unit, cheap stone)
+- **Defender:** 12W/8S → 8W/12S (stone-heavy defensive unit, cheap wood)
+- **Attacker:** 16W/12S → 18W/10S (expensive wood, moderate stone)
+- **Farm:** 12W/6S → 18W/10S (50% cost increase)
+
+**Design Shift:** Broke the old linear cost progression model (builder < defender < attacker) in favor of differentiated resource profiles. Each unit now has a unique resource identity:
+- Defender-heavy strategies are stone-starved
+- Attacker-heavy strategies are wood-starved
+- Builders are balanced but not trivial
+- Farms are now a real strategic investment (delays food abundance, forces "farm vs defender" tradeoffs)
+
+**Test Updates:**
+- Updated food-economy.test.ts, pawnBuilder.test.ts to assert new cost values
+- Rewrote combat-system.test.ts to validate strategic differentiation rather than linear ordering (removed "defender > builder" and "attacker > defender" tests, replaced with explicit cost validation that documents the strategic identity of each unit type)
+- All resource-related tests pass (903 tests total, 2 pre-existing timeout failures unrelated)
+
+**Deferred Items:** Factory income buff, outpost upgrade cost adjustment, starting resource variance all deferred pending playtesting as approved by Hal.
+
+**Branch:** squad/156-resource-tuning → dev
+**Status:** PR #164 open, awaiting review
+
+### Cross-Agent Sync: Round 2 (2026-03-12)
+
+**Gately's Client Integration:** Gately completed client-side implementation for #154 (PR #165). Tested with `tile.upgraded` flag and ExploredTileCache integration. Waiting on server merge to dev before client testing. No blockers identified.
+
+**Hal's Review:** Both PR #164 (this work) and PR #165 (Gately) submitted to Hal for review. Will proceed to dev upon approval.
+
+**Decision Impact:** #156 approved (resource tuning unit costs + farms) — your implementation is locked in and documented in decisions.md. #161 deferred to backlog.
+
+### Game Lifecycle Schema — Sub-Issue 1 of #161 (2026-03-16)
+
+- Added `GameEndReason` enum to shared/types.ts: `LastStanding`, `TimeUp`, `Surrender`.
+- Added `GAME_ENDED` / `PLAYER_ELIMINATED` message constants + `GameEndedPayload` / `PlayerEliminatedPayload` interfaces to shared/messages.ts.
+- GameState schema: `winnerId: string`, `endReason: string` — `roundPhase` and `roundTimer` already existed.
+- PlayerState schema: `isEliminated: boolean`.
+- LobbyGameEntry schema: `gameDuration: number` (default 10 min).
+- CreateGamePayload: optional `gameDuration` field.
+- IPlayerState interface: `isEliminated` field.
+- All 901 tests pass (1 pre-existing timeout failure unrelated).
+- Branch: squad/161-game-lifecycle, commit e003953.
+
+- **Game Lifecycle Engine — Sub-Issue 2 (2026-03-16):** Implemented win/loss condition engine and game end flow for Issue #161. Key additions to GameRoom.ts:
+  - `tickGameEndConditions()`: Runs elimination checks every 10 ticks (ELIMINATION_CHECK_INTERVAL). For each non-eliminated human player, counts tiles owned outside HQ zone + living pawns. If both = 0, marks isEliminated=true and broadcasts PLAYER_ELIMINATED. Victory check: last non-eliminated human = LastStanding win; 0 remaining = highest score wins. Time limit: roundTimer decremented each tick; at 0, highest-score non-eliminated player wins (TimeUp).
+  - `endGame(winnerId, reason)`: Sets roundPhase="ended", winnerId, endReason. Builds sorted finalScores array from all players. Broadcasts GAME_ENDED with GameEndedPayload. Notifies lobby via LobbyBridge.notifyGameEnded(). Schedules auto-dispose at 60s via clock.setTimeout.
+  - Simulation loop guarded with `if (roundPhase === "ended") return` at top of tick.
+  - Player action handlers (handleSpawnPawn, handlePlaceBuilding, handleUpgradeOutpost) gated behind roundPhase=playing and !isEliminated checks.
+  - Round timer initialized in onCreate from options.gameDuration: `gameDuration * 60 * TICK_RATE`; 0 = no limit (roundTimer=-1).
+  - LobbyRoom.handleCreateGame passes gameDuration through to GameRoom options and sets it on LobbyGameEntry.
+  - 902 tests pass, no regressions. Branch: squad/161-game-lifecycle, commit f780843.
+
+---
+
+## 2026-03-16: Game Lifecycle Schema & Win/Loss Engine (Epic #161, Sub-Issues 1 & 2)
+
+**Author:** Pemulis  
+**Status:** Complete  
+**Issues:** #161 (Sub-Issues 1 & 2)  
+**Branch:** squad/161-game-lifecycle
+
+### Sub-Issue 1: Game Lifecycle Schema & End-Game Messages
+
+Added foundational types and schema fields for game lifecycle:
+
+- **GameEndReason enum** (shared/types.ts): `LastStanding`, `TimeUp`, `Surrender`
+- **Message constants & payloads** (shared/messages.ts):
+  - `GAME_ENDED` message with `GameEndedPayload` (winnerId, winnerName, reason, finalScores)
+  - `PLAYER_ELIMINATED` message with `PlayerEliminatedPayload` (playerId, playerName)
+- **GameState schema fields**:
+  - `winnerId: string = ""`
+  - `endReason: string = ""`
+  - (roundPhase and roundTimer already existed)
+- **PlayerState schema field**:
+  - `isEliminated: boolean = false`
+- **LobbyGameEntry schema field**:
+  - `gameDuration: number = 10` (minutes)
+- **CreateGamePayload** (lobbbyTypes.ts):
+  - Optional `gameDuration` field
+- **IPlayerState interface** (shared/types.ts):
+  - Added `isEliminated: boolean` field
+
+**Test result:** 901/902 tests pass (1 pre-existing timeout unrelated to this work).
+
+### Sub-Issue 2: Win/Loss Condition Engine & Game End Flow
+
+Implemented complete game-ending logic with three victory conditions and elimination mechanics:
+
+**Elimination check** (`tickGameEndConditions()`):
+- Runs every 10 ticks (ELIMINATION_CHECK_INTERVAL = 10)
+- For each non-eliminated human player:
+  - Count tiles owned outside 3×3 HQ zone
+  - Count living pawns owned by player
+  - If both counts = 0: mark `isEliminated = true`, broadcast `PLAYER_ELIMINATED` message
+- Prevents eliminated players from taking actions
+
+**Victory conditions**:
+1. **Last Standing**: When exactly 1 human player remains non-eliminated → immediate win
+2. **Time Limit**: `roundTimer` decrements each tick; when timer hits 0, highest-score non-eliminated player wins (`TimeUp`)
+3. **Simultaneous Elimination**: If all humans eliminated at once, highest score wins
+4. **Solo Survival**: Single-player game → survive full timer duration to win
+
+**Game end flow** (`endGame(winnerId, reason)`):
+- Sets `roundPhase = "ended"` to stop all gameplay ticks
+- Sets `winnerId` and `endReason` on GameState
+- Builds `finalScores` array from all players (sorted by score desc)
+- Broadcasts `GAME_ENDED` message with `GameEndedPayload` to all clients
+- Notifies lobby via `LobbyBridge.notifyGameEnded()` to mark game as ended
+- Schedules auto-dispose at 60s via `clock.setTimeout()` (give clients time to see results)
+
+**Action gating**:
+- `handleSpawnPawn`, `handlePlaceBuilding`, `handleUpgradeOutpost` all check:
+  - `if (roundPhase !== "playing") → reject with error`
+  - `if (player.isEliminated) → reject with error`
+- Prevents phantom actions from eliminated or ended-game players
+
+**Round timer initialization**:
+- In `onCreate(options)`: `state.roundTimer = (options.gameDuration || 10) * 60 * TICK_RATE`
+- If `gameDuration === 0`: set `state.roundTimer = -1` (no limit)
+
+**Lobby integration**:
+- `LobbyRoom.handleCreateGame()` now passes `options.gameDuration` to GameRoom options
+- `LobbyGameEntry.gameDuration` set from create payload
+
+**Test result:** 902/902 tests pass. No regressions. All elimination, victory, and end-game flow tested.
+
+**Key files modified:**
+- shared/src/types.ts
+- shared/src/messages.ts
+- shared/src/lobbyTypes.ts
+- server/src/rooms/GameRoom.ts
+- server/src/rooms/GameState.ts
+- server/src/rooms/LobbyRoom.ts
+- server/src/rooms/LobbyState.ts
+
+**Commits:** e003953 (schema), f780843 (engine & flow)
+
+### Cross-Agent Notes
+
+Hal's decomposition of #161 defines 5 sub-issues with clear dependencies. This work (Sub-Issues 1 & 2) is the foundation. Gately is concurrently implementing Sub-Issue 4 (Timer HUD). Sub-Issues 3 (End-Game UI) and 5 (Integration Tests) wait on completion of #2.
+
+- **ESLint no-unused-vars Cleanup (2026-03-12):** Fixed all 47 `@typescript-eslint/no-unused-vars` errors. Removed 47 unused imports/vars; prefixed intentional non-use with `_`. Affected 9 test files: EndGameScreen (1), building-spawn-caps (2), explorer-ai (2), game-lifecycle (5), map-size-timeout (1), outpost-spacing (2), outpost-stability (17), pawn-clustering (5), phantom-buildings (7). Result: 0 lint errors, 944/944 tests pass. Decision merged to decisions.md.
+
+
+- **Lobby Pre-Game Waiting Phase (2026-03-15):** Implemented deferred room creation for Issue #1 (lobby improvements). Key change: `handleCreateGame` no longer calls `matchMaker.createRoom()` immediately. Instead, game options are stored in `pendingGameOptions` map and players are tracked in `waitingPlayers` map (`Map<gameId, Map<sessionId, PreGamePlayerInfo>>`). Room is only created when host calls `handleStartGame`. New message types: `SET_READY` (client→server toggle), `GAME_PLAYERS` (server→client player list broadcast). `GameJoinedPayload.roomId` is now optional (undefined during waiting phase — client update deferred to Gately). `broadcastGamePlayers()` sends targeted messages only to participants of a specific game, not the entire lobby. All 941 existing tests pass; 3 pre-existing timeout failures in map-size/territory tests are resource-contention issues unrelated to lobby changes.
+
+- **Game-End Bug Fix — CPU Elimination & Grace Period (2026-03-16):** Fixed four bugs causing 1-human + N-CPU games to end immediately. (1) Victory condition now counts all non-eliminated players, not just humans. (2) Added `ELIMINATION_GRACE_TICKS = 40` (~10 seconds) constant so new players aren't eliminated before spawning pawns. (3) CPU players are now eliminable — removed the `player.isCPU` guard from the elimination check. (4) `getHighestScorePlayer()` now considers CPU players too. Key files: `server/src/rooms/GameRoom.ts` (constants at lines 50-54, elimination logic ~lines 812-879). Tests updated in `server/src/__tests__/game-lifecycle.test.ts`. The grace period constant lives next to `ELIMINATION_CHECK_INTERVAL`. `spawnHQ()` creates only `isHQTerritory` tiles (excluded from elimination tile counts) and no pawns, which is why the grace period is necessary.
+
+- **Waiting Room UX Enhancements & Game-End Bug Fix (2026-03-16):** Extended pre-game lobby with shareable invite links (URL format `{origin}?join={gameId}`) and CPU player display in waiting room. Simultaneously fixed four critical bugs in `tickGameEndConditions()` that caused 1-human + N-CPU games to end immediately: (1) victory condition now counts all non-eliminated players (humans + CPUs), (2) added `ELIMINATION_GRACE_TICKS = 40` to allow new players to spawn pawns, (3) removed CPU immortality guard in elimination logic, (4) made `getHighestScorePlayer()` player-type-agnostic. Implementation required type additions (`isCPU` to PreGamePlayerInfo, `cpuPlayers` to GameSessionInfo), URL parameter auto-join on client, and comprehensive game-end logic refactor in GameRoom.ts. Steeply wrote 6 new test cases validating grace period and CPU participation. Commits: b207abc (waiting room), 4047e9d (decision update), b7f40ea (game-end fixes). All 982/984 tests pass (2 pre-existing 256×256 timeouts).
+- **HQ Spawn Non-Determinism & Test Flakiness (2026-03-16):** Fixed flaky fog-of-war test at line 491 (`server/src/__tests__/fog-of-war.test.ts`). Root cause: `findHQSpawnLocation()` in `GameRoom.ts` uses `Math.random()`, not the map seed, so HQ can spawn anywhere on the map. On a 128-wide map, HQ can spawn as far right as x=125. The test used `player.hqX + 3` to place a builder, which creates out-of-bounds coordinates (>= 129) when HQ spawns near the right edge. `computeVisibleTiles` never includes out-of-bounds tiles, causing the assertion to fail. Fix pattern: Always use dynamic offsets from HQ in tests — check bounds and choose direction (e.g., `const dx = player.hqX + 3 < room.state.mapWidth ? 3 : -3`). Never assume a fixed direction is safe. This preserves test semantics (builder overlapping with HQ vision at distance 3, which is within HQ_RADIUS=5) while handling edge spawns. Verified by running the test 5 times with no failures.
+
+### Stamina Tuning (2026-03-18)
+
+- **Issue #180:** Units get tired too quickly — fixed by tuning stamina constants in `shared/src/constants.ts` (PAWN_TYPES) and `shared/src/data/creatures.ts` (CREATURE_TYPES).
+- **Player Pawns:** Doubled maxStamina (builder 20→40, defender 25→50, attacker 30→60, explorer 30→60) for 20-30s continuous movement vs 10-15s before.
+- **Wild Creatures:** Increased maxStamina by ~50% (herbivore 10→15, carnivore 14→21, bird 18→27, monkey 12→18, spider 8→12) and reduced costPerMove from 2→1 for most species (herbivore, carnivore, monkey, spider) for 6-13.5s movement vs 2-9s before.
+- **Test Updates:** Updated test expectations in `server/src/__tests__/creature-stamina.test.ts` to match new values (HERBIVORE_STAMINA, CARNIVORE_STAMINA, builder test).
+- **Key Learning:** The stamina system was binary (normal → exhausted hard stop) and values were too aggressive for gameplay feel. Doubling pawn stamina and increasing creature stamina by ~50% while reducing per-move costs maintains strategic depth but reduces frustration. Always update both runtime constants and test fixtures together.
+
+## 2026-03-12: Board Clearing Session — Test Fixes & Stamina Tuning
+
+Fixed two critical flaky tests (starvation damage, fog-of-war visibility) that were causing intermittent failures in the test suite. Root causes were race conditions in creature state timing and position synchronization. Added explicit tick ordering to starvation test and position commitment before visibility checks.
+
+Tuned stamina system (#180) by doubling player pawn stamina (Builder 20→40, Defender 25→50, Attacker/Explorer 30→60) and adjusting creature stamina costs (reducing costPerMove from 2→1). Rationale: 20–30 second continuous movement duration improves gameplay feel vs ~10s original, while preserving strategic depth. All test fixtures updated. Merged to dev via PR #183.
+
+Result: 984 tests passing, no remaining flaky test reports. Board cleared of blocking issues.
+
+## Core Context
+
+Historical entries (before 2026-03-10) summarized for reference:
+
 - **Created:** 2026-02-25T00:45:00Z
 
 ## Current Phase
@@ -26,24 +258,6 @@
 
 Next: **2026-03-04 — Territory Control Redesign** (awaiting user mechanic selection)
 
-**Phase 6 Preparation (2026-03-11):** Hal completed design spec for Outpost Upgrade System (issue #154). Single-tier upgrade, 40W/30S cost, 5-tile attack range, 12 damage, closest-enemy targeting, 🏹 icon. Full implementation roadmap provided in `.squad/decisions.md`. You and Gately can begin Phase 6 when ready.
-
-## Core Context
-
-**Pre-2026-03 Work Summary:**
-- **Phases 0–4.4 Complete:** Full scaffolding (monorepo, Colyseus ESM v0.17, PixiJS v8, Vite, Jest), core simulation (biome map gen, resources, creatures, player survival), base building (placement, crafting, structures, farms), creature systems (schema, taming, pack commands, breeding), HUD redesign to HTML DOM panel.
-- **Data Patterns Established:** Flat inventory (wood/stone/fiber/berries/meat), Colyseus @type() schema decorators, data-driven constants (CREATURES, RESOURCES, RECIPES, STRUCTURES), FSM-based creature AI (idle→graze→hunt→flee), message-based player actions (PLACE, CRAFT, TAME, BREED).
-- **Architecture Decisions:** All data-driven constants in shared/src/data/, server-authoritative game state, no client prediction, creature AI runs every 2nd tick (decoupled from game ticks), pack selection stored as session state Map (not synced), trust decay + proximity gain per tick.
-- **Test Suite:** 244 integration tests passing across all phases. Key patterns: guard assertions for nil fields, creature pair finding helpers, farm growth assertions, pack membership validation.
-- **Key Files:** GameRoom.ts (main event loop), territory.ts (claim/adjacency logic), creatureAI.ts (FSM tick), GameState.ts (schema), types.ts (interfaces), constants.ts (tuning parameters), handlers/ (message processors).
-- **Performance:** 1000 creatures on 64×64 map at 4 ticks/sec, O(N) creature AI tick, no spatial partitioning yet (Phase 5 optimization).
-
-## Learnings
-
-<!-- Append new learnings below. Each entry is something lasting about the project. -->
-- **Food Economy Server Implementation (2026-03-14):** Implemented full food economy system for Issue #21 (903 tests passing). Schema: Added Food to ResourceType enum, foodUpkeep to PawnTypeDef, updated PAWN_TYPES with new costs (builder 8W/4S, defender 12W/8S, attacker 16W/12S, explorer 10W/6S) + upkeep values (1/1/2/3). Server logic: tickStructureIncome() grants HQ food + farm food, deducts upkeep, checks starvation. spawnPawnCore() blocks spawn at food ≤ 0. Persistence: food added to SerializedPlayerState, legacy saves deserialize with food: 0 (safe). Key decision: Starvation damage subtracts HP but delegated to existing death loop (not inline), food can go negative (debt model). Pawn spawn cost test refactored to use PAWN_TYPES instead of legacy constants.
-- **Starvation Flake Root Cause (2026-03-12):** `GameRoom.onJoin()` auto-spawns `TERRITORY.STARTING_PAWN` (currently the explorer), so food-economy tests do not start with an empty pawn roster. The flaky starvation test in `server/src/__tests__/food-economy.test.ts` was assuming the manually added defender was the only valid victim, but `tickStructureIncome()` in `server/src/rooms/GameRoom.ts` correctly picks a random living owned pawn and the starting explorer was sometimes selected instead. Fix pattern: when testing random per-pawn damage, explicitly control the candidate set in the fixture (here by removing the starting explorer) or assert aggregate damage across all eligible pawns. Key files: `server/src/__tests__/food-economy.test.ts`, `server/src/rooms/GameRoom.ts`, `shared/src/constants.ts`. User preference reinforced: rerun flaky-targeted tests multiple times before trusting the fix.
-
 ### Project README (2026-03-09)
 
 - Created root `README.md` — public-facing project documentation.
@@ -51,13 +265,6 @@ Next: **2026-03-04 — Territory Control Redesign** (awaiting user mechanic sele
 - Scripts documented from actual `package.json`: `npm run dev`, `npm run build`, `npm run lint`, `npm run typecheck`, `npx vitest run`.
 - Includes the shared/ `tsconfig.tsbuildinfo` rebuild gotcha.
 - No LICENSE file exists yet — noted as "not yet specified."
-
-### Deployment & CI/CD Documentation (2026-03-11)
-
-- Added "🚀 Deployment & Environments" section to README, inserted between 🛠 Development and 🏗 Architecture sections.
-- Documents full CI/CD pipeline: feature → UAT → master branch strategy, environment table (prod vs UAT), infrastructure sharing (ACR, Log Analytics), and deployment workflows (ci.yml, deploy.yml, deploy-uat.yml).
-- Includes branch protection rules for UAT, emergency UAT override workflow, and initial UAT provisioning steps.
-- Clarifies scaling differences: UAT idle (~$1/month), prod always has ≥1 replica.
 
 ### Copilot Coding Agent Instructions File (2026-03-08)
 
@@ -524,204 +731,3 @@ Phase A foundation pivot complete. Server-side: removed avatar properties, imple
 
 ---
 
-### Sprint Kickoff (2026-03-12) — Context Propagation
-
-**Completed Tasks This Sprint:**
-- **#157 Creature Types:** PR #163 opened. Unified creature type system across server/client.
-- **#156 Resource Tuning:** Analysis complete and merged into decisions.md. Awaiting implementation consensus.
-
-**New Context — Outpost Upgrades (#154):**
-Hal completed comprehensive architecture design for single-tier outpost upgrade feature. Design is stable and ready for Phase 1 implementation (server foundation):
-
-- **Cost:** 40W + 30S (late-game investment)
-- **Attack Range:** 5 tiles (Manhattan distance)
-- **Damage:** 12 per hit, 8-tick cooldown
-- **Constants:** Add OUTPOST_UPGRADE to shared/constants.ts
-- **Schema:** Add `upgraded: boolean` to TileState
-- **Server Logic:** Upgrade handler + ranged combat tick function
-- **Client:** Icon change (🗼 → 🏹), right-click UI modal
-
-**Phase 1 (Server Foundation) — Pemulis:**
-1. Add constants to constants.ts
-2. Add upgraded field to TileState schema
-3. Add UPGRADE_OUTPOST message protocol
-4. Implement upgrade handler (validation, cost, flag)
-5. Implement tickOutpostAttacks() function (targeting, damage, cooldown)
-6. Integrate into GameRoom update loop
-7. Unit tests
-
-**Timeline:** Phase 1 est. 1.5 days. Phase 2 (Gately) starts after schema lands.
-
-**Note:** Resource tuning recommendation #4 suggests stone-heavy outpost upgrade (30W/50S instead of 40W/30S) as a late-game stone sink. This can be implemented post-Phase 1 if consensus reached.
-
-**Design Document:** .squad/decisions.md (merged from inbox)
-
-### Resource Tuning Implementation (2026-03-12, Issue #156, PR #164)
-
-**Implementation:** Implemented HIGH-priority resource tuning changes from approved analysis — unit cost differentiation and expensive farms.
-
-**Unit Cost Changes (Strategic Differentiation):**
-- **Builder:** 8W/4S → 10W/3S (wood-focused economy unit, cheap stone)
-- **Defender:** 12W/8S → 8W/12S (stone-heavy defensive unit, cheap wood)
-- **Attacker:** 16W/12S → 18W/10S (expensive wood, moderate stone)
-- **Farm:** 12W/6S → 18W/10S (50% cost increase)
-
-**Design Shift:** Broke the old linear cost progression model (builder < defender < attacker) in favor of differentiated resource profiles. Each unit now has a unique resource identity:
-- Defender-heavy strategies are stone-starved
-- Attacker-heavy strategies are wood-starved
-- Builders are balanced but not trivial
-- Farms are now a real strategic investment (delays food abundance, forces "farm vs defender" tradeoffs)
-
-**Test Updates:**
-- Updated food-economy.test.ts, pawnBuilder.test.ts to assert new cost values
-- Rewrote combat-system.test.ts to validate strategic differentiation rather than linear ordering (removed "defender > builder" and "attacker > defender" tests, replaced with explicit cost validation that documents the strategic identity of each unit type)
-- All resource-related tests pass (903 tests total, 2 pre-existing timeout failures unrelated)
-
-**Deferred Items:** Factory income buff, outpost upgrade cost adjustment, starting resource variance all deferred pending playtesting as approved by Hal.
-
-**Branch:** squad/156-resource-tuning → dev
-**Status:** PR #164 open, awaiting review
-
-### Cross-Agent Sync: Round 2 (2026-03-12)
-
-**Gately's Client Integration:** Gately completed client-side implementation for #154 (PR #165). Tested with `tile.upgraded` flag and ExploredTileCache integration. Waiting on server merge to dev before client testing. No blockers identified.
-
-**Hal's Review:** Both PR #164 (this work) and PR #165 (Gately) submitted to Hal for review. Will proceed to dev upon approval.
-
-**Decision Impact:** #156 approved (resource tuning unit costs + farms) — your implementation is locked in and documented in decisions.md. #161 deferred to backlog.
-
-### Game Lifecycle Schema — Sub-Issue 1 of #161 (2026-03-16)
-
-- Added `GameEndReason` enum to shared/types.ts: `LastStanding`, `TimeUp`, `Surrender`.
-- Added `GAME_ENDED` / `PLAYER_ELIMINATED` message constants + `GameEndedPayload` / `PlayerEliminatedPayload` interfaces to shared/messages.ts.
-- GameState schema: `winnerId: string`, `endReason: string` — `roundPhase` and `roundTimer` already existed.
-- PlayerState schema: `isEliminated: boolean`.
-- LobbyGameEntry schema: `gameDuration: number` (default 10 min).
-- CreateGamePayload: optional `gameDuration` field.
-- IPlayerState interface: `isEliminated` field.
-- All 901 tests pass (1 pre-existing timeout failure unrelated).
-- Branch: squad/161-game-lifecycle, commit e003953.
-
-- **Game Lifecycle Engine — Sub-Issue 2 (2026-03-16):** Implemented win/loss condition engine and game end flow for Issue #161. Key additions to GameRoom.ts:
-  - `tickGameEndConditions()`: Runs elimination checks every 10 ticks (ELIMINATION_CHECK_INTERVAL). For each non-eliminated human player, counts tiles owned outside HQ zone + living pawns. If both = 0, marks isEliminated=true and broadcasts PLAYER_ELIMINATED. Victory check: last non-eliminated human = LastStanding win; 0 remaining = highest score wins. Time limit: roundTimer decremented each tick; at 0, highest-score non-eliminated player wins (TimeUp).
-  - `endGame(winnerId, reason)`: Sets roundPhase="ended", winnerId, endReason. Builds sorted finalScores array from all players. Broadcasts GAME_ENDED with GameEndedPayload. Notifies lobby via LobbyBridge.notifyGameEnded(). Schedules auto-dispose at 60s via clock.setTimeout.
-  - Simulation loop guarded with `if (roundPhase === "ended") return` at top of tick.
-  - Player action handlers (handleSpawnPawn, handlePlaceBuilding, handleUpgradeOutpost) gated behind roundPhase=playing and !isEliminated checks.
-  - Round timer initialized in onCreate from options.gameDuration: `gameDuration * 60 * TICK_RATE`; 0 = no limit (roundTimer=-1).
-  - LobbyRoom.handleCreateGame passes gameDuration through to GameRoom options and sets it on LobbyGameEntry.
-  - 902 tests pass, no regressions. Branch: squad/161-game-lifecycle, commit f780843.
-
----
-
-## 2026-03-16: Game Lifecycle Schema & Win/Loss Engine (Epic #161, Sub-Issues 1 & 2)
-
-**Author:** Pemulis  
-**Status:** Complete  
-**Issues:** #161 (Sub-Issues 1 & 2)  
-**Branch:** squad/161-game-lifecycle
-
-### Sub-Issue 1: Game Lifecycle Schema & End-Game Messages
-
-Added foundational types and schema fields for game lifecycle:
-
-- **GameEndReason enum** (shared/types.ts): `LastStanding`, `TimeUp`, `Surrender`
-- **Message constants & payloads** (shared/messages.ts):
-  - `GAME_ENDED` message with `GameEndedPayload` (winnerId, winnerName, reason, finalScores)
-  - `PLAYER_ELIMINATED` message with `PlayerEliminatedPayload` (playerId, playerName)
-- **GameState schema fields**:
-  - `winnerId: string = ""`
-  - `endReason: string = ""`
-  - (roundPhase and roundTimer already existed)
-- **PlayerState schema field**:
-  - `isEliminated: boolean = false`
-- **LobbyGameEntry schema field**:
-  - `gameDuration: number = 10` (minutes)
-- **CreateGamePayload** (lobbbyTypes.ts):
-  - Optional `gameDuration` field
-- **IPlayerState interface** (shared/types.ts):
-  - Added `isEliminated: boolean` field
-
-**Test result:** 901/902 tests pass (1 pre-existing timeout unrelated to this work).
-
-### Sub-Issue 2: Win/Loss Condition Engine & Game End Flow
-
-Implemented complete game-ending logic with three victory conditions and elimination mechanics:
-
-**Elimination check** (`tickGameEndConditions()`):
-- Runs every 10 ticks (ELIMINATION_CHECK_INTERVAL = 10)
-- For each non-eliminated human player:
-  - Count tiles owned outside 3×3 HQ zone
-  - Count living pawns owned by player
-  - If both counts = 0: mark `isEliminated = true`, broadcast `PLAYER_ELIMINATED` message
-- Prevents eliminated players from taking actions
-
-**Victory conditions**:
-1. **Last Standing**: When exactly 1 human player remains non-eliminated → immediate win
-2. **Time Limit**: `roundTimer` decrements each tick; when timer hits 0, highest-score non-eliminated player wins (`TimeUp`)
-3. **Simultaneous Elimination**: If all humans eliminated at once, highest score wins
-4. **Solo Survival**: Single-player game → survive full timer duration to win
-
-**Game end flow** (`endGame(winnerId, reason)`):
-- Sets `roundPhase = "ended"` to stop all gameplay ticks
-- Sets `winnerId` and `endReason` on GameState
-- Builds `finalScores` array from all players (sorted by score desc)
-- Broadcasts `GAME_ENDED` message with `GameEndedPayload` to all clients
-- Notifies lobby via `LobbyBridge.notifyGameEnded()` to mark game as ended
-- Schedules auto-dispose at 60s via `clock.setTimeout()` (give clients time to see results)
-
-**Action gating**:
-- `handleSpawnPawn`, `handlePlaceBuilding`, `handleUpgradeOutpost` all check:
-  - `if (roundPhase !== "playing") → reject with error`
-  - `if (player.isEliminated) → reject with error`
-- Prevents phantom actions from eliminated or ended-game players
-
-**Round timer initialization**:
-- In `onCreate(options)`: `state.roundTimer = (options.gameDuration || 10) * 60 * TICK_RATE`
-- If `gameDuration === 0`: set `state.roundTimer = -1` (no limit)
-
-**Lobby integration**:
-- `LobbyRoom.handleCreateGame()` now passes `options.gameDuration` to GameRoom options
-- `LobbyGameEntry.gameDuration` set from create payload
-
-**Test result:** 902/902 tests pass. No regressions. All elimination, victory, and end-game flow tested.
-
-**Key files modified:**
-- shared/src/types.ts
-- shared/src/messages.ts
-- shared/src/lobbyTypes.ts
-- server/src/rooms/GameRoom.ts
-- server/src/rooms/GameState.ts
-- server/src/rooms/LobbyRoom.ts
-- server/src/rooms/LobbyState.ts
-
-**Commits:** e003953 (schema), f780843 (engine & flow)
-
-### Cross-Agent Notes
-
-Hal's decomposition of #161 defines 5 sub-issues with clear dependencies. This work (Sub-Issues 1 & 2) is the foundation. Gately is concurrently implementing Sub-Issue 4 (Timer HUD). Sub-Issues 3 (End-Game UI) and 5 (Integration Tests) wait on completion of #2.
-
-- **ESLint no-unused-vars Cleanup (2026-03-12):** Fixed all 47 `@typescript-eslint/no-unused-vars` errors. Removed 47 unused imports/vars; prefixed intentional non-use with `_`. Affected 9 test files: EndGameScreen (1), building-spawn-caps (2), explorer-ai (2), game-lifecycle (5), map-size-timeout (1), outpost-spacing (2), outpost-stability (17), pawn-clustering (5), phantom-buildings (7). Result: 0 lint errors, 944/944 tests pass. Decision merged to decisions.md.
-
-
-- **Lobby Pre-Game Waiting Phase (2026-03-15):** Implemented deferred room creation for Issue #1 (lobby improvements). Key change: `handleCreateGame` no longer calls `matchMaker.createRoom()` immediately. Instead, game options are stored in `pendingGameOptions` map and players are tracked in `waitingPlayers` map (`Map<gameId, Map<sessionId, PreGamePlayerInfo>>`). Room is only created when host calls `handleStartGame`. New message types: `SET_READY` (client→server toggle), `GAME_PLAYERS` (server→client player list broadcast). `GameJoinedPayload.roomId` is now optional (undefined during waiting phase — client update deferred to Gately). `broadcastGamePlayers()` sends targeted messages only to participants of a specific game, not the entire lobby. All 941 existing tests pass; 3 pre-existing timeout failures in map-size/territory tests are resource-contention issues unrelated to lobby changes.
-
-- **Game-End Bug Fix — CPU Elimination & Grace Period (2026-03-16):** Fixed four bugs causing 1-human + N-CPU games to end immediately. (1) Victory condition now counts all non-eliminated players, not just humans. (2) Added `ELIMINATION_GRACE_TICKS = 40` (~10 seconds) constant so new players aren't eliminated before spawning pawns. (3) CPU players are now eliminable — removed the `player.isCPU` guard from the elimination check. (4) `getHighestScorePlayer()` now considers CPU players too. Key files: `server/src/rooms/GameRoom.ts` (constants at lines 50-54, elimination logic ~lines 812-879). Tests updated in `server/src/__tests__/game-lifecycle.test.ts`. The grace period constant lives next to `ELIMINATION_CHECK_INTERVAL`. `spawnHQ()` creates only `isHQTerritory` tiles (excluded from elimination tile counts) and no pawns, which is why the grace period is necessary.
-
-- **Waiting Room UX Enhancements & Game-End Bug Fix (2026-03-16):** Extended pre-game lobby with shareable invite links (URL format `{origin}?join={gameId}`) and CPU player display in waiting room. Simultaneously fixed four critical bugs in `tickGameEndConditions()` that caused 1-human + N-CPU games to end immediately: (1) victory condition now counts all non-eliminated players (humans + CPUs), (2) added `ELIMINATION_GRACE_TICKS = 40` to allow new players to spawn pawns, (3) removed CPU immortality guard in elimination logic, (4) made `getHighestScorePlayer()` player-type-agnostic. Implementation required type additions (`isCPU` to PreGamePlayerInfo, `cpuPlayers` to GameSessionInfo), URL parameter auto-join on client, and comprehensive game-end logic refactor in GameRoom.ts. Steeply wrote 6 new test cases validating grace period and CPU participation. Commits: b207abc (waiting room), 4047e9d (decision update), b7f40ea (game-end fixes). All 982/984 tests pass (2 pre-existing 256×256 timeouts).
-- **HQ Spawn Non-Determinism & Test Flakiness (2026-03-16):** Fixed flaky fog-of-war test at line 491 (`server/src/__tests__/fog-of-war.test.ts`). Root cause: `findHQSpawnLocation()` in `GameRoom.ts` uses `Math.random()`, not the map seed, so HQ can spawn anywhere on the map. On a 128-wide map, HQ can spawn as far right as x=125. The test used `player.hqX + 3` to place a builder, which creates out-of-bounds coordinates (>= 129) when HQ spawns near the right edge. `computeVisibleTiles` never includes out-of-bounds tiles, causing the assertion to fail. Fix pattern: Always use dynamic offsets from HQ in tests — check bounds and choose direction (e.g., `const dx = player.hqX + 3 < room.state.mapWidth ? 3 : -3`). Never assume a fixed direction is safe. This preserves test semantics (builder overlapping with HQ vision at distance 3, which is within HQ_RADIUS=5) while handling edge spawns. Verified by running the test 5 times with no failures.
-
-### Stamina Tuning (2026-03-18)
-
-- **Issue #180:** Units get tired too quickly — fixed by tuning stamina constants in `shared/src/constants.ts` (PAWN_TYPES) and `shared/src/data/creatures.ts` (CREATURE_TYPES).
-- **Player Pawns:** Doubled maxStamina (builder 20→40, defender 25→50, attacker 30→60, explorer 30→60) for 20-30s continuous movement vs 10-15s before.
-- **Wild Creatures:** Increased maxStamina by ~50% (herbivore 10→15, carnivore 14→21, bird 18→27, monkey 12→18, spider 8→12) and reduced costPerMove from 2→1 for most species (herbivore, carnivore, monkey, spider) for 6-13.5s movement vs 2-9s before.
-- **Test Updates:** Updated test expectations in `server/src/__tests__/creature-stamina.test.ts` to match new values (HERBIVORE_STAMINA, CARNIVORE_STAMINA, builder test).
-- **Key Learning:** The stamina system was binary (normal → exhausted hard stop) and values were too aggressive for gameplay feel. Doubling pawn stamina and increasing creature stamina by ~50% while reducing per-move costs maintains strategic depth but reduces frustration. Always update both runtime constants and test fixtures together.
-
-## 2026-03-12: Board Clearing Session — Test Fixes & Stamina Tuning
-
-Fixed two critical flaky tests (starvation damage, fog-of-war visibility) that were causing intermittent failures in the test suite. Root causes were race conditions in creature state timing and position synchronization. Added explicit tick ordering to starvation test and position commitment before visibility checks.
-
-Tuned stamina system (#180) by doubling player pawn stamina (Builder 20→40, Defender 25→50, Attacker/Explorer 30→60) and adjusting creature stamina costs (reducing costPerMove from 2→1). Rationale: 20–30 second continuous movement duration improves gameplay feel vs ~10s original, while preserving strategic depth. All test fixtures updated. Merged to dev via PR #183.
-
-Result: 984 tests passing, no remaining flaky test reports. Board cleared of blocking issues.
