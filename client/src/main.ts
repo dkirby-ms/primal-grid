@@ -1,6 +1,3 @@
-declare const __APP_VERSION__: string;
-declare const __BUILD_DATE__: string;
-
 import { Application } from 'pixi.js';
 import { Room } from '@colyseus/sdk';
 import { GridRenderer } from './renderer/GridRenderer.js';
@@ -18,6 +15,7 @@ import { LobbyScreen } from './ui/LobbyScreen.js';
 import { WaitingRoom } from './ui/WaitingRoom.js';
 import { UpgradeModal } from './ui/UpgradeModal.js';
 import { EndGameScreen } from './ui/EndGameScreen.js';
+import { APP_VERSION, BUILD_DATE } from './buildMeta.js';
 import { connectToLobby, joinGameRoom, leaveGame, disconnect, onConnectionStatus, isDevMode, getRoom, loadReconnectToken, reconnectGameRoom, resetClient } from './network.js';
 import type { GameLogPayload, GameEndedPayload, PlayerEliminatedPayload } from '@primal-grid/shared';
 import { GAME_ENDED, PLAYER_ELIMINATED, JOIN_GAME } from '@primal-grid/shared';
@@ -378,12 +376,8 @@ bootstrap().catch(console.error);
 (function initFooter() {
   const footer = document.getElementById('app-footer');
   if (!footer) return;
-  const version =
-    typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev';
-  const buildDate =
-    typeof __BUILD_DATE__ !== 'undefined'
-      ? new Date(__BUILD_DATE__).toLocaleDateString()
-      : '';
+  const version = APP_VERSION;
+  const buildDate = BUILD_DATE ? new Date(BUILD_DATE).toLocaleDateString() : '';
   const dateStr = buildDate ? ` · Built ${buildDate}` : '';
   footer.innerHTML =
     `v${version}${dateStr} · <a href="https://github.com/dkirby-ms/primal-grid/issues" target="_blank" rel="noopener">Report an Issue</a>`;

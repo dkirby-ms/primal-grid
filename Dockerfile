@@ -1,6 +1,9 @@
 # Stage 1: Build
 FROM node:22-alpine AS build
 
+ARG VITE_APP_VERSION
+ARG VITE_BUILD_DATE
+
 WORKDIR /app
 
 # Copy package files for dependency installation
@@ -18,7 +21,14 @@ COPY server/ server/
 COPY client/ client/
 
 # Build in dependency order: shared → server → client
-RUN npm run build -w shared && npm run build -w server && npm run build -w client
+RUN if [ -z "$VITE_APP_VERSION" ]; then \
+      VITE_APP_VERSION=$(node --print "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version"); \
+    fi && \
+    if [ -z "$VITE_BUILD_DATE" ]; then \
+      VITE_BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ); \
+    fi && \
+    export VITE_APP_VERSION VITE_BUILD_DATE && \
+    npm run build -w shared && npm run build -w server && npm run build -w client
 
 # Stage 2: Production
 FROM node:22-alpine
